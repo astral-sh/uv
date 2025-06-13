@@ -82,8 +82,8 @@ fn tool_install() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -168,7 +168,7 @@ fn tool_install() {
         [tool]
         requirements = [{ name = "flask" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -382,8 +382,8 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
         ]
         build-constraint-dependencies = [{ name = "setuptools", specifier = ">=40" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -449,9 +449,9 @@ fn tool_install_suggest_other_packages_with_executable() {
     uv_snapshot!(filters, context.tool_install()
         .arg("fastapi==0.111.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
     No executables are provided by `fastapi`
     However, an executable with the name `fastapi` is available via dependency `fastapi-cli`.
@@ -495,7 +495,8 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    "###);
+    error: Failed to install entrypoints for `fastapi`
+    ");
 }
 
 /// Test installing a tool at a version
@@ -566,8 +567,8 @@ fn tool_install_version() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -650,7 +651,7 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -691,7 +692,7 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -734,8 +735,8 @@ fn tool_install_editable() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -782,8 +783,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -822,9 +823,9 @@ fn tool_install_remove_on_empty() -> Result<()> {
         .arg(black.path())
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
     No executables are provided by `black`
 
@@ -840,7 +841,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
-    "###);
+    error: Failed to install entrypoints for `black`
+    ");
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -872,8 +874,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -950,7 +952,7 @@ fn tool_install_editable_from() {
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
 
         [tool.options]
@@ -1102,8 +1104,8 @@ fn tool_install_already_installed() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1138,8 +1140,8 @@ fn tool_install_already_installed() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1429,8 +1431,8 @@ fn tool_install_force() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1467,8 +1469,8 @@ fn tool_install_force() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1650,9 +1652,9 @@ fn tool_install_no_entrypoints() {
         .arg("iniconfig")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
     No executables are provided by `iniconfig`
 
@@ -1661,7 +1663,8 @@ fn tool_install_no_entrypoints() {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    error: Failed to install entrypoints for `iniconfig`
+    ");
 
     // Ensure the tool environment is not created.
     tool_dir
@@ -1796,8 +1799,8 @@ fn tool_install_unnamed_package() {
         [tool]
         requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -1911,8 +1914,8 @@ fn tool_install_unnamed_from() {
         [tool]
         requirements = [{ name = "black", url = "https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2005,8 +2008,8 @@ fn tool_install_unnamed_with() {
             { name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2074,8 +2077,8 @@ fn tool_install_requirements_txt() {
             { name = "iniconfig" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2119,8 +2122,8 @@ fn tool_install_requirements_txt() {
             { name = "idna" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2183,8 +2186,8 @@ fn tool_install_requirements_txt_arguments() {
             { name = "idna" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2297,8 +2300,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2331,8 +2334,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2371,8 +2374,8 @@ fn tool_install_upgrade() {
             { name = "iniconfig", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2411,8 +2414,8 @@ fn tool_install_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -2722,7 +2725,7 @@ fn tool_install_warn_path() {
         .arg("black==24.1.1")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env_remove(EnvVars::PATH), @r###"
+        .env_remove(EnvVars::PATH), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2739,7 +2742,7 @@ fn tool_install_warn_path() {
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run `export PATH="[TEMP_DIR]/bin:$PATH"` or `uv tool update-shell`.
-    "###);
+    "#);
 }
 
 /// Test installing and reinstalling with an invalid receipt.
@@ -2876,16 +2879,16 @@ fn tool_install_malformed_dist_info() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
         ]
 
         [tool.options]
         exclude-newer = "2025-01-18T00:00:00Z"
-        "###);
+        "#);
     });
 }
 
@@ -2960,7 +2963,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -2993,7 +2996,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -3033,7 +3036,7 @@ fn tool_install_settings() {
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
-            { name = "flask", install-path = "[TEMP_DIR]/bin/flask" },
+            { name = "flask", install-path = "[TEMP_DIR]/bin/flask", from = "flask" },
         ]
 
         [tool.options]
@@ -3082,8 +3085,8 @@ fn tool_install_at_version() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3148,8 +3151,8 @@ fn tool_install_at_latest() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3190,16 +3193,16 @@ fn tool_install_from_at_latest() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
         ]
 
         [tool.options]
         exclude-newer = "2025-01-18T00:00:00Z"
-        "###);
+        "#);
     });
 }
 
@@ -3235,16 +3238,16 @@ fn tool_install_from_at_version() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application", specifier = "==0.2.0" }]
         entrypoints = [
-            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app", from = "executable-application" },
         ]
 
         [tool.options]
         exclude-newer = "2025-01-18T00:00:00Z"
-        "###);
+        "#);
     });
 }
 
@@ -3288,8 +3291,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3322,8 +3325,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3359,8 +3362,8 @@ fn tool_install_at_latest_upgrade() {
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3421,8 +3424,8 @@ fn tool_install_constraints() -> Result<()> {
             { name = "anyio", specifier = ">=3" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3528,8 +3531,8 @@ fn tool_install_overrides() -> Result<()> {
             { name = "anyio", specifier = ">=3" },
         ]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -3629,5 +3632,101 @@ fn tool_install_mismatched_name() {
 
     ----- stderr -----
     error: Package name (`black`) provided with `--from` does not match install request (`flask`)
+    "###);
+}
+
+/// Test installing a tool together with some additional entrypoints
+/// from other packages.
+#[test]
+fn tool_install_additional_entrypoints() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-executables-from")
+        .arg("ansible-core")
+        .arg("--with-executables-from")
+        .arg("black")
+        .arg("ansible==9.3.0")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + ansible==9.3.0
+     + ansible-core==2.16.4
+     + black==24.3.0
+     + cffi==1.16.0
+     + click==8.1.7
+     + cryptography==42.0.5
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + pycparser==2.21
+     + pyyaml==6.0.1
+     + resolvelib==1.0.1
+    Installed 11 executables from `ansible-core`: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
+    Installed 2 executables from `black`: black, blackd
+    Installed 1 executable: ansible-community
+    ");
+
+    // NOTE(lucab): on Windows `name` values contain an `.exe` suffix,
+    // which is hidden in the snapshot but results in a different sorting.
+    #[cfg(not(target_family = "windows"))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ansible").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [
+            { name = "ansible", specifier = "==9.3.0" },
+            { name = "ansible-core" },
+            { name = "black" },
+        ]
+        entrypoints = [
+            { name = "ansible", install-path = "[TEMP_DIR]/bin/ansible", from = "ansible-core" },
+            { name = "ansible-community", install-path = "[TEMP_DIR]/bin/ansible-community", from = "ansible" },
+            { name = "ansible-config", install-path = "[TEMP_DIR]/bin/ansible-config", from = "ansible-core" },
+            { name = "ansible-connection", install-path = "[TEMP_DIR]/bin/ansible-connection", from = "ansible-core" },
+            { name = "ansible-console", install-path = "[TEMP_DIR]/bin/ansible-console", from = "ansible-core" },
+            { name = "ansible-doc", install-path = "[TEMP_DIR]/bin/ansible-doc", from = "ansible-core" },
+            { name = "ansible-galaxy", install-path = "[TEMP_DIR]/bin/ansible-galaxy", from = "ansible-core" },
+            { name = "ansible-inventory", install-path = "[TEMP_DIR]/bin/ansible-inventory", from = "ansible-core" },
+            { name = "ansible-playbook", install-path = "[TEMP_DIR]/bin/ansible-playbook", from = "ansible-core" },
+            { name = "ansible-pull", install-path = "[TEMP_DIR]/bin/ansible-pull", from = "ansible-core" },
+            { name = "ansible-test", install-path = "[TEMP_DIR]/bin/ansible-test", from = "ansible-core" },
+            { name = "ansible-vault", install-path = "[TEMP_DIR]/bin/ansible-vault", from = "ansible-core" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.tool_uninstall()
+        .arg("ansible")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 14 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault, black, blackd
     "###);
 }
