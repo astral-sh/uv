@@ -20,6 +20,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-configuration = { workspace = true }
 uv-fs = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }

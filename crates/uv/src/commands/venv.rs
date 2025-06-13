@@ -44,7 +44,7 @@ use crate::settings::NetworkSettings;
 pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
-    python_request: Option<&str>,
+    python_request: Option<PythonRequest>,
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -127,7 +127,7 @@ enum VenvError {
 async fn venv_impl(
     project_dir: &Path,
     path: Option<PathBuf>,
-    python_request: Option<&str>,
+    python_request: Option<PythonRequest>,
     install_mirrors: PythonInstallMirrors,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
@@ -202,7 +202,7 @@ async fn venv_impl(
         python_request,
         requires_python,
     } = WorkspacePython::from_request(
-        python_request.map(PythonRequest::parse),
+        python_request,
         project.as_ref().map(VirtualProject::workspace),
         project_dir,
         no_config,
@@ -223,6 +223,7 @@ async fn venv_impl(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
+            preview,
         )
         .await
         .into_diagnostic()?;
@@ -264,6 +265,11 @@ async fn venv_impl(
     )
     .into_diagnostic()?;
 
+    let upgradeable = preview.is_enabled()
+        && python_request
+            .as_ref()
+            .is_none_or(|request| !request.includes_patch());
+
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
         &path,
@@ -273,6 +279,8 @@ async fn venv_impl(
         allow_existing,
         relocatable,
         seed,
+        upgradeable,
+        preview,
     )
     .map_err(VenvError::Creation)?;
 
