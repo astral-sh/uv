@@ -6740,7 +6740,7 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 [[package]]
 name = "wiremock"
 version = "0.6.3"
-source = "git+https://github.com/konstin/wiremock-rs?rev=131ad0a3e7a247c867fc290319047fc086995271#131ad0a3e7a247c867fc290319047fc086995271"
+source = "git+https://github.com/astral-sh/wiremock-rs?rev=b79b69f62521df9f83a54e866432397562eae789#b79b69f62521df9f83a54e866432397562eae789"
 dependencies = [
  "assert-json-diff",
  "async-trait",
