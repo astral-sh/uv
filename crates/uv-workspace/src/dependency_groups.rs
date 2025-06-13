@@ -203,6 +203,15 @@ impl FlatDependencyGroups {
             Ok(())
         }
 
+        // Validate the settings
+        for (group_name, ..) in settings {
+            if !groups.contains_key(group_name) {
+                return Err(DependencyGroupErrorInner::SettingsGroupNotFound(
+                    group_name.clone(),
+                ));
+            }
+        }
+
         let mut resolved = BTreeMap::new();
         for name in groups.keys() {
             let mut parents = Vec::new();
@@ -277,6 +286,12 @@ pub enum DependencyGroupErrorInner {
     DependencyGroupCycle(Cycle),
     #[error("Group `{0}` contains an unknown dependency object specifier: {1:?}")]
     DependencyObjectSpecifierNotSupported(GroupName, BTreeMap<String, String>),
+    #[error("Failed to find group `{0}` specified in `[tool.uv.dependency-groups]`")]
+    SettingsGroupNotFound(GroupName),
+    #[error(
+        "`[tool.uv.dependency-groups]` specifies the `dev` group, but only `tool.uv.dev-dependencies` was found. To reference the `dev` group, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead."
+    )]
+    SettingsDevGroupInclude,
 }
 
 impl DependencyGroupErrorInner {
@@ -291,6 +306,11 @@ impl DependencyGroupErrorInner {
                 if dev_dependencies.is_some() && group == *DEV_DEPENDENCIES =>
             {
                 Self::DevGroupInclude(parent)
+            }
+            Self::SettingsGroupNotFound(group)
+                if dev_dependencies.is_some() && group == *DEV_DEPENDENCIES =>
+            {
+                Self::SettingsDevGroupInclude
             }
             _ => self,
         }

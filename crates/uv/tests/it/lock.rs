@@ -20928,6 +20928,74 @@ fn lock_group_includes_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// Referring to a dependency-group with group-requires-python that does not exist
+#[test]
+fn lock_group_requires_undefined_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        bar = ["sortedcontainers"]
+
+        [tool.uv.dependency-groups]
+        foo = { requires-python = ">=3.13" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project `myproject` has malformed dependency groups
+      Caused by: Failed to find group `foo` specified in `[tool.uv.dependency-groups]`
+    ");
+    Ok(())
+}
+
+/// The legacy dev-dependencies cannot be referred to by group-requires-python
+#[test]
+fn lock_group_requires_dev_dep() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [tool.uv]
+        dev-dependencies = ["sortedcontainers"]
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project `myproject` has malformed dependency groups
+      Caused by: `[tool.uv.dependency-groups]` specifies the `dev` group, but only `tool.uv.dev-dependencies` was found. To reference the `dev` group, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.
+    ");
+    Ok(())
+}
+
 #[test]
 fn lock_group_includes_requires_python_contradiction() -> Result<()> {
     let context = TestContext::new("3.12");
