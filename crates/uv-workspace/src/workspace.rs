@@ -8,6 +8,7 @@ use glob::{GlobError, PatternError, glob};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
@@ -17,7 +18,7 @@ use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
+use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups};
 use crate::pyproject::{
     Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources, ToolUvWorkspace,
 };
@@ -94,6 +95,8 @@ pub struct DiscoveryOptions {
     /// The strategy to use when discovering workspace members.
     pub members: MemberDiscovery,
 }
+
+pub type RequiresPythonSources = BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>;
 
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
 #[derive(Debug, Clone)]
@@ -413,15 +416,44 @@ impl Workspace {
     }
 
     /// Returns an iterator over the `requires-python` values for each member of the workspace.
-    pub fn requires_python(&self) -> impl Iterator<Item = (&PackageName, &VersionSpecifiers)> {
-        self.packages().iter().filter_map(|(name, member)| {
-            member
+    pub fn requires_python(
+        &self,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> Result<RequiresPythonSources, DependencyGroupError> {
+        let mut requires = RequiresPythonSources::new();
+        for (name, member) in self.packages() {
+            // Get the top-level requires-python for this package, which is always active
+            //
+            // Arguably we could check groups.prod() to disable this, since, the requires-python
+            // of the project is *technically* not relevant if you're doing `--only-group`, but,
+            // that would be a big surprising change so let's *not* do that until someone asks!
+            let top_requires = member
                 .pyproject_toml()
                 .project
                 .as_ref()
                 .and_then(|project| project.requires_python.as_ref())
-                .map(|requires_python| (name, requires_python))
-        })
+                .map(|requires_python| ((name.to_owned(), None), requires_python.clone()));
+            requires.extend(top_requires);
+
+            // Get the requires-python for each enabled group on this package
+            // We need to do full flattening here because include-group can transfer requires-python
+            let dependency_groups =
+                FlatDependencyGroups::from_pyproject_toml(member.root(), &member.pyproject_toml)?;
+            let group_requires =
+                dependency_groups
+                    .into_iter()
+                    .filter_map(move |(group_name, flat_group)| {
+                        if groups.contains(&group_name) {
+                            flat_group.requires_python.map(|requires_python| {
+                                ((name.to_owned(), Some(group_name)), requires_python)
+                            })
+                        } else {
+                            None
+                        }
+                    });
+            requires.extend(group_requires);
+        }
+        Ok(requires)
     }
 
     /// Returns any requirements that are exclusive to the workspace root, i.e., not included in
@@ -439,12 +471,9 @@ impl Workspace {
     /// corresponding `pyproject.toml`.
     ///
     /// Otherwise, returns an empty list.
-    pub fn dependency_groups(
+    pub fn workspace_dependency_groups(
         &self,
-    ) -> Result<
-        BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-        DependencyGroupError,
-    > {
+    ) -> Result<BTreeMap<GroupName, FlatDependencyGroup>, DependencyGroupError> {
         if self
             .packages
             .values()
@@ -455,35 +484,10 @@ impl Workspace {
             Ok(BTreeMap::default())
         } else {
             // Otherwise, return the dependency groups in the non-project workspace root.
-            // First, collect `tool.uv.dev_dependencies`
-            let dev_dependencies = self
-                .pyproject_toml
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dev_dependencies.as_ref());
-
-            // Then, collect `dependency-groups`
-            let dependency_groups = self
-                .pyproject_toml
-                .dependency_groups
-                .iter()
-                .flatten()
-                .collect::<BTreeMap<_, _>>();
-
-            // Flatten the dependency groups.
-            let mut dependency_groups =
-                FlatDependencyGroups::from_dependency_groups(&dependency_groups)
-                    .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
-
-            // Add the `dev` group, if `dev-dependencies` is defined.
-            if let Some(dev_dependencies) = dev_dependencies {
-                dependency_groups
-                    .entry(DEV_DEPENDENCIES.clone())
-                    .or_insert_with(Vec::new)
-                    .extend(dev_dependencies.clone());
-            }
-
+            let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+                &self.install_path,
+                &self.pyproject_toml,
+            )?;
             Ok(dependency_groups.into_inner())
         }
     }
@@ -1818,6 +1822,7 @@ mod tests {
                       "managed": null,
                       "package": null,
                       "default-groups": null,
+                      "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
@@ -1913,6 +1918,7 @@ mod tests {
                       "managed": null,
                       "package": null,
                       "default-groups": null,
+                      "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
@@ -2123,6 +2129,7 @@ mod tests {
                       "managed": null,
                       "package": null,
                       "default-groups": null,
+                      "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
@@ -2230,6 +2237,7 @@ mod tests {
                       "managed": null,
                       "package": null,
                       "default-groups": null,
+                      "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
@@ -2350,6 +2358,7 @@ mod tests {
                       "managed": null,
                       "package": null,
                       "default-groups": null,
+                      "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,
@@ -2444,6 +2453,7 @@ mod tests {
                       "managed": null,
                       "package": null,
                       "default-groups": null,
+                      "dependency-groups": null,
                       "dev-dependencies": null,
                       "override-dependencies": null,
                       "constraint-dependencies": null,

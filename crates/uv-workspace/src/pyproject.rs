@@ -353,6 +353,24 @@ pub struct ToolUv {
     )]
     pub default_groups: Option<DefaultGroups>,
 
+    /// Additional settings for `dependency-groups`.
+    ///
+    /// Currently this can only be used to add `requires-python` constraints
+    /// to dependency groups (typically to inform uv that your dev tooling
+    /// has a higher python requirement than your actual project).
+    ///
+    /// This cannot be used to define dependency groups, use the top-level
+    /// `[dependency-groups]` table for that.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [tool.uv.dependency-groups]
+            my-group = {requires-python = ">=3.12"}
+        "#
+    )]
+    pub dependency_groups: Option<ToolUvDependencyGroups>,
+
     /// The project's development dependencies.
     ///
     /// Development dependencies will be installed by default in `uv run` and `uv sync`, but will
@@ -651,6 +669,77 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
 
         deserializer.deserialize_map(SourcesVisitor)
     }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ToolUvDependencyGroups(BTreeMap<GroupName, DependencyGroupSettings>);
+
+impl ToolUvDependencyGroups {
+    /// Returns the underlying `BTreeMap` of group names to settings.
+    pub fn inner(&self) -> &BTreeMap<GroupName, DependencyGroupSettings> {
+        &self.0
+    }
+
+    /// Convert the [`ToolUvDependencyGroups`] into its inner `BTreeMap`.
+    #[must_use]
+    pub fn into_inner(self) -> BTreeMap<GroupName, DependencyGroupSettings> {
+        self.0
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SourcesVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
+            type Value = ToolUvDependencyGroups;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map with unique keys")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut groups = BTreeMap::new();
+                while let Some((key, value)) =
+                    access.next_entry::<GroupName, DependencyGroupSettings>()?
+                {
+                    match groups.entry(key) {
+                        std::collections::btree_map::Entry::Occupied(entry) => {
+                            return Err(serde::de::Error::custom(format!(
+                                "duplicate settings for dependency group `{}`",
+                                entry.key()
+                            )));
+                        }
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(value);
+                        }
+                    }
+                }
+                Ok(ToolUvDependencyGroups(groups))
+            }
+        }
+
+        deserializer.deserialize_map(SourcesVisitor)
+    }
+}
+
+#[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub struct DependencyGroupSettings {
+    /// Version of python to require when installing this group
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
+    pub requires_python: Option<VersionSpecifiers>,
 }
 
 #[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]

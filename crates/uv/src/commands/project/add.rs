@@ -17,8 +17,9 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DevMode, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, PreviewMode, SourceStrategy,
+    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
+    PreviewMode, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -29,7 +30,7 @@ use uv_distribution_types::{
 use uv_fs::{LockedFile, Simplified};
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -79,7 +80,7 @@ pub(crate) async fn add(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
-    extras: Vec<ExtraName>,
+    extras_of_dependency: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -121,6 +122,34 @@ pub(crate) async fn add(
     }
 
     let reporter = PythonDownloadReporter::single(printer);
+
+    // Determine what defaults/extras we're explicitly enabling
+    let (extras, groups) = match &dependency_type {
+        DependencyType::Production => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Exclude);
+            (extras, groups)
+        }
+        DependencyType::Dev => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Include);
+            (extras, groups)
+        }
+        DependencyType::Optional(extra_name) => {
+            let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Exclude);
+            (extras, groups)
+        }
+        DependencyType::Group(group_name) => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_group(group_name.clone());
+            (extras, groups)
+        }
+    };
+    // Default extras currently always disabled
+    let defaulted_extras = extras.with_defaults(DefaultExtras::default());
+    // Default groups we need the actual project for, interpreter discovery will use this!
+    let defaulted_groups;
 
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -171,6 +200,9 @@ pub(crate) async fn add(
                 Pep723Script::init(&path, requires_python.specifiers()).await?
             }
         };
+
+        // Scripts don't actually have groups
+        defaulted_groups = groups.with_defaults(DefaultGroups::default());
 
         // Discover the interpreter.
         let interpreter = ScriptInterpreter::discover(
@@ -234,11 +266,16 @@ pub(crate) async fn add(
             }
         }
 
+        // Enable the default groups of the project
+        defaulted_groups =
+            groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
+
         if frozen || no_sync {
             // Discover the interpreter.
             let interpreter = ProjectInterpreter::discover(
                 project.workspace(),
                 project_dir,
+                &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -258,6 +295,7 @@ pub(crate) async fn add(
             // Discover or create the virtual environment.
             let environment = ProjectEnvironment::get_or_init(
                 project.workspace(),
+                &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &network_settings,
@@ -468,7 +506,7 @@ pub(crate) async fn add(
         rev.as_deref(),
         tag.as_deref(),
         branch.as_deref(),
-        &extras,
+        &extras_of_dependency,
         index,
         &mut toml,
     )?;
@@ -551,7 +589,8 @@ pub(crate) async fn add(
         lock_state,
         sync_state,
         locked,
-        &dependency_type,
+        &defaulted_extras,
+        &defaulted_groups,
         raw,
         bounds,
         constraints,
@@ -778,7 +817,8 @@ async fn lock_and_sync(
     lock_state: UniversalState,
     sync_state: PlatformState,
     locked: bool,
-    dependency_type: &DependencyType,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
     raw: bool,
     bound_kind: Option<AddBoundsKind>,
     constraints: Vec<NameRequirementSpecification>,
@@ -942,36 +982,6 @@ async fn lock_and_sync(
         return Ok(());
     };
 
-    // Sync the environment.
-    let (extras, dev) = match dependency_type {
-        DependencyType::Production => {
-            let extras = ExtrasSpecification::from_extra(vec![]);
-            let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
-            (extras, dev)
-        }
-        DependencyType::Dev => {
-            let extras = ExtrasSpecification::from_extra(vec![]);
-            let dev = DependencyGroups::from_dev_mode(DevMode::Include);
-            (extras, dev)
-        }
-        DependencyType::Optional(extra_name) => {
-            let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
-            let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
-            (extras, dev)
-        }
-        DependencyType::Group(group_name) => {
-            let extras = ExtrasSpecification::from_extra(vec![]);
-            let dev = DependencyGroups::from_group(group_name.clone());
-            (extras, dev)
-        }
-    };
-
-    // Determine the default groups to include.
-    let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-    // Determine the default extras to include.
-    let default_extras = DefaultExtras::default();
-
     // Identify the installation target.
     let target = match &project {
         VirtualProject::Project(project) => InstallTarget::Project {
@@ -988,8 +998,8 @@ async fn lock_and_sync(
     project::sync::do_sync(
         target,
         venv,
-        &extras.with_defaults(default_extras),
-        &dev.with_defaults(default_groups),
+        extras,
+        groups,
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
