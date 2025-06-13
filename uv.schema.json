@@ -152,7 +152,7 @@
       ]
     },
     "dependency-groups": {
-      "description": "Additional settings for `dependency-groups`.",
+      "description": "Additional settings for `dependency-groups`.\n\nCurrently this can only be used to add `requires-python` constraints to dependency groups (typically to inform uv that your dev tooling has a higher python requirement than your actual project).\n\nThis cannot be used to define dependency groups, use the top-level `[dependency-groups]` table for that.",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvDependencyGroups"

@@ -354,6 +354,13 @@ pub struct ToolUv {
     pub default_groups: Option<DefaultGroups>,
 
     /// Additional settings for `dependency-groups`.
+    ///
+    /// Currently this can only be used to add `requires-python` constraints
+    /// to dependency groups (typically to inform uv that your dev tooling
+    /// has a higher python requirement than your actual project).
+    ///
+    /// This cannot be used to define dependency groups, use the top-level
+    /// `[dependency-groups]` table for that.
     #[option(
         default = "[]",
         value_type = "dict",

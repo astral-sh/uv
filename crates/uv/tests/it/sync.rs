@@ -352,6 +352,251 @@ fn mixed_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that group requires-python solves an actual problem
+#[test]
+fn group_requires_python_useful_defaults() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.9"]);
+
+    // Require 3.8 for our project, but have a dev-dependency on a version of sphinx that needs 3.9
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pharaohs-tomp"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["sphinx>=7.2.6"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // Running `uv sync --no-dev` should succeed, locking for Python 3.8.
+    // ...but it doesn't! HRM! Is this a bug in sync?
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-dev"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Creating virtual environment at: .venv
+      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+          And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    ");
+
+    // Running `uv sync` should fail, as now sphinx is involved
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+          And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    ");
+
+    // Adding group requires python should fix it
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pharaohs-tomp"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["sphinx>=7.2.6"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.9"}
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 29 packages in [TIME]
+    Prepared 27 packages in [TIME]
+    Installed 27 packages in [TIME]
+     + alabaster==0.7.16
+     + anyio==4.3.0
+     + babel==2.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + docutils==0.20.1
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + imagesize==1.4.1
+     + importlib-metadata==7.1.0
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + packaging==24.0
+     + pygments==2.17.2
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + snowballstemmer==2.2.0
+     + sphinx==7.2.6
+     + sphinxcontrib-applehelp==1.0.8
+     + sphinxcontrib-devhelp==1.0.6
+     + sphinxcontrib-htmlhelp==2.0.5
+     + sphinxcontrib-jsmath==1.0.1
+     + sphinxcontrib-qthelp==1.0.7
+     + sphinxcontrib-serializinghtml==1.1.10
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+     + zipp==3.18.1
+    ");
+
+    Ok(())
+}
+
+/// Ensure that group requires-python solves an actual problem
+#[test]
+fn group_requires_python_useful_non_defaults() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.9"]);
+
+    // Require 3.8 for our project, but have a dev-dependency on a version of sphinx that needs 3.9
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pharaohs-tomp"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        mygroup = ["sphinx>=7.2.6"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // Running `uv sync` should succeed, locking for Python 3.8.
+    // ...but it doesn't! HRM! Is this a bug in sync?
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Creating virtual environment at: .venv
+      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+          And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    ");
+
+    // Running `uv sync --group mygroup` should fail, as now sphinx is involved
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("mygroup"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+          And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    ");
+
+    // Adding group requires python should fix it
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pharaohs-tomp"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        mygroup = ["sphinx>=7.2.6"]
+
+        [tool.uv.dependency-groups]
+        mygroup = {requires-python = ">=3.9"}
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("mygroup"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 29 packages in [TIME]
+    Prepared 27 packages in [TIME]
+    Installed 27 packages in [TIME]
+     + alabaster==0.7.16
+     + anyio==4.3.0
+     + babel==2.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + docutils==0.20.1
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + imagesize==1.4.1
+     + importlib-metadata==7.1.0
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + packaging==24.0
+     + pygments==2.17.2
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + snowballstemmer==2.2.0
+     + sphinx==7.2.6
+     + sphinxcontrib-applehelp==1.0.8
+     + sphinxcontrib-devhelp==1.0.6
+     + sphinxcontrib-htmlhelp==2.0.5
+     + sphinxcontrib-jsmath==1.0.1
+     + sphinxcontrib-qthelp==1.0.7
+     + sphinxcontrib-serializinghtml==1.1.10
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+     + zipp==3.18.1
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn check() -> Result<()> {
     let context = TestContext::new("3.12");
