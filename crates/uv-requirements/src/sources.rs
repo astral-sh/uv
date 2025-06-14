@@ -152,7 +152,37 @@ impl RequirementsSource {
         }
         Ok(Self::RequirementsTxt(path))
     }
-
+    /// Parse a [`RequirementsSource`] from an `excludes.txt` file.
+    pub fn from_exclude_txt(path: PathBuf) -> Result<Self> {
+        for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
+            if path.ends_with(file_name) {
+                return Err(anyhow::anyhow!(
+                    "The file `{}` appears to be a `{}` file, but excludes must be specified in `requirements.txt` format",
+                    path.user_display(),
+                    file_name
+                ));
+            }
+        }
+        if path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .is_some_and(is_pylock_toml)
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a `pylock.toml` file, but excludes must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a TOML file, but excludes must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        }
+        Ok(Self::RequirementsTxt(path))
+    }
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a positional
     /// package (e.g., `uv pip install flask`).
     ///

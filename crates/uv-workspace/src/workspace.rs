@@ -502,6 +502,19 @@ impl Workspace {
         overrides.clone()
     }
 
+    /// Returns the set of excludes for the workspace.
+    pub fn exclude(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+        let Some(exclude) = self
+            .pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.excluded_dependencies.as_ref())
+        else {
+            return vec![];
+        };
+        exclude.clone()
+    }
     /// Returns the set of constraints for the workspace.
     pub fn constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         let Some(constraints) = self

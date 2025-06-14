@@ -65,13 +65,13 @@ impl<'lock> LockTarget<'lock> {
     /// Returns the set of excludes for the [`LockTarget`].
     pub(crate) fn excludes(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         match self {
-            Self::Workspace(workspace) => workspace.overrides(),
+            Self::Workspace(workspace) => workspace.exclude(),
             Self::Script(script) => script
                 .metadata
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.override_dependencies.as_ref())
+                .and_then(|uv| uv.exclude_dependencies.as_ref())
                 .into_iter()
                 .flatten()
                 .cloned()

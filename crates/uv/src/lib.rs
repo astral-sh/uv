@@ -1267,7 +1267,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let excludes = args
                 .excludes
                 .into_iter()
-                .map(RequirementsSource::from_overrides_txt)
+                .map(RequirementsSource::from_exclude_txt)
                 .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
