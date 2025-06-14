@@ -7,6 +7,7 @@ use serde::Deserialize;
 use tracing::{debug, warn};
 
 use crate::git_info::{Commit, Tags};
+use crate::glob::cluster_globs;
 use crate::timestamp::Timestamp;
 
 #[derive(Debug, thiserror::Error)]
@@ -212,34 +213,39 @@ impl CacheInfo {
             }
         }
 
-        // If we have any globs, process them in a single pass.
+        // If we have any globs, first cluster them using LCP and then do a single pass on each group.
         if !globs.is_empty() {
-            let walker = globwalk::GlobWalkerBuilder::from_patterns(directory, &globs)
+            for (glob_base, glob_patterns) in cluster_globs(&globs) {
+                let walker = globwalk::GlobWalkerBuilder::from_patterns(
+                    directory.join(glob_base),
+                    &glob_patterns,
+                )
                 .file_type(globwalk::FileType::FILE | globwalk::FileType::SYMLINK)
                 .build()?;
-            for entry in walker {
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    Err(err) => {
-                        warn!("Failed to read glob entry: {err}");
+                for entry in walker {
+                    let entry = match entry {
+                        Ok(entry) => entry,
+                        Err(err) => {
+                            warn!("Failed to read glob entry: {err}");
+                            continue;
+                        }
+                    };
+                    let metadata = match entry.metadata() {
+                        Ok(metadata) => metadata,
+                        Err(err) => {
+                            warn!("Failed to read metadata for glob entry: {err}");
+                            continue;
+                        }
+                    };
+                    if !metadata.is_file() {
+                        warn!(
+                            "Expected file for cache key, but found directory: `{}`",
+                            entry.path().display()
+                        );
                         continue;
                     }
-                };
-                let metadata = match entry.metadata() {
-                    Ok(metadata) => metadata,
-                    Err(err) => {
-                        warn!("Failed to read metadata for glob entry: {err}");
-                        continue;
-                    }
-                };
-                if !metadata.is_file() {
-                    warn!(
-                        "Expected file for cache key, but found directory: `{}`",
-                        entry.path().display()
-                    );
-                    continue;
+                    timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
                 }
-                timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
             }
         }
 
