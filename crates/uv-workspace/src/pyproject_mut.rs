@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
@@ -8,12 +9,11 @@ use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
 };
-
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
 use uv_normalize::GroupName;
-use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionDigit, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use uv_redacted::DisplaySafeUrl;
 
@@ -258,6 +258,17 @@ pub enum DependencyTarget {
     PyProjectToml,
 }
 
+type UpgradeResult = (
+    usize,
+    String,
+    Requirement,
+    Requirement,
+    Version,
+    bool,
+    DependencyType,
+    Option<usize>,
+);
+
 impl PyProjectTomlMut {
     /// Initialize a [`PyProjectTomlMut`] from a [`str`].
     pub fn from_toml(raw: &str, target: DependencyTarget) -> Result<Self, Error> {
@@ -328,6 +339,13 @@ impl PyProjectTomlMut {
                 .transpose()?,
         };
         Ok(doc)
+    }
+
+    pub fn get_requires_python(&self) -> Option<&str> {
+        self.doc
+            .get("project")
+            .and_then(|project| project.get("requires-python"))
+            .and_then(|item| item.as_str())
     }
 
     /// Adds a dependency to `project.dependencies`.
@@ -1034,8 +1052,8 @@ impl PyProjectTomlMut {
     /// Returns all the places in this `pyproject.toml` that contain a dependency with the given
     /// name.
     ///
-    /// This method searches `project.dependencies`, `tool.uv.dev-dependencies`, and
-    /// `tool.uv.optional-dependencies`.
+    /// This method searches `project.dependencies`, `project.optional-dependencies`,
+    /// `dependency-groups` and `tool.uv.dev-dependencies`.
     pub fn find_dependency(
         &self,
         name: &PackageName,
@@ -1103,6 +1121,283 @@ impl PyProjectTomlMut {
         }
 
         types
+    }
+
+    /// Returns package names of all dependencies with version constraints.
+    ///
+    /// This method searches `project.dependencies`, `project.optional-dependencies`,
+    /// `dependency-groups` and `tool.uv.dev-dependencies`.
+    pub fn find_versioned_dependencies(&self) -> FxHashSet<PackageName> {
+        let mut versioned_dependencies = FxHashSet::default();
+
+        if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
+            // Check `project.dependencies`.
+            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
+                Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies);
+            }
+
+            // Check `project.optional-dependencies`.
+            if let Some(extras) = project
+                .get("optional-dependencies")
+                .and_then(Item::as_table)
+            {
+                for (extra, dependencies) in extras {
+                    let Some(dependencies) = dependencies.as_array() else {
+                        continue;
+                    };
+                    let Ok(_extra) = ExtraName::from_str(extra) else {
+                        continue;
+                    };
+                    Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies);
+                }
+            }
+        }
+
+        // Check `dependency-groups`.
+        if let Some(groups) = self.doc.get("dependency-groups").and_then(Item::as_table) {
+            for (group, dependencies) in groups {
+                let Ok(_group) = GroupName::from_str(group) else {
+                    continue;
+                };
+                let Some(dependencies) = dependencies.as_array() else {
+                    continue;
+                };
+                Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies);
+            }
+        }
+
+        // Check `tool.uv.dev-dependencies`.
+        if let Some(dependencies) = self
+            .doc
+            .get("tool")
+            .and_then(Item::as_table)
+            .and_then(|tool| tool.get("uv"))
+            .and_then(Item::as_table)
+            .and_then(|uv| uv.get("dev-dependencies"))
+            .and_then(Item::as_array)
+        {
+            Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies);
+        }
+
+        versioned_dependencies
+    }
+
+    fn extract_names_if_versioned(types: &mut FxHashSet<PackageName>, dependencies: &Array) {
+        for dep in dependencies {
+            let Some(req) = dep.as_str().and_then(try_parse_requirement) else {
+                continue;
+            };
+            let name = req.name;
+            if types.contains(&name) {
+                continue;
+            }
+            // Skip requirements without version constraints
+            if let Some(VersionOrUrl::VersionSpecifier(_)) = req.version_or_url {
+                types.insert(name);
+            }
+        }
+    }
+
+    /// Returns all dependencies in this `pyproject.toml`.
+    ///
+    /// This method searches `project.dependencies`, `project.optional-dependencies`,
+    /// `dependency-groups` and `tool.uv.dev-dependencies`.
+    pub fn upgrade_all_dependencies(
+        &mut self,
+        latest_versions: &FxHashMap<&PackageName, Version>,
+        tables: &[DependencyType],
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+    ) -> (usize, Vec<UpgradeResult>) {
+        let mut all_upgrades = Vec::new();
+        let mut found = 0;
+
+        // Check `project.dependencies`
+        if let Some(item) = tables
+            .contains(&DependencyType::Production)
+            .then(|| {
+                self.project_mut()
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.get_mut("dependencies"))
+            })
+            .flatten()
+        {
+            found += item.as_array().map_or(0, Array::len);
+            Self::replace_dependencies(
+                latest_versions,
+                &mut all_upgrades,
+                item,
+                &DependencyType::Production,
+                allow,
+                skipped,
+            );
+        }
+
+        // Check `project.optional-dependencies`
+        if let Some(groups) = tables
+            .iter()
+            .find(|t| matches!(t, DependencyType::Optional(_)))
+            .and_then(|_| {
+                self.project_mut()
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.get_mut("optional-dependencies"))
+                    .and_then(Item::as_table_like_mut)
+            })
+        {
+            for (extra, item) in groups
+                .iter_mut()
+                .map(|(key, value)| (ExtraName::from_str(key.get()).ok(), value))
+            {
+                if let Some(_extra) = extra {
+                    found += item.as_array().map_or(0, Array::len);
+                    Self::replace_dependencies(
+                        latest_versions,
+                        &mut all_upgrades,
+                        item,
+                        &DependencyType::Optional(_extra),
+                        allow,
+                        skipped,
+                    );
+                }
+            }
+        }
+
+        // Check `dependency-groups`.
+        if let Some(groups) = tables
+            .iter()
+            .find(|t| matches!(t, DependencyType::Group(_)))
+            .and_then(|_| {
+                self.doc
+                    .get_mut("dependency-groups")
+                    .and_then(Item::as_table_like_mut)
+            })
+        {
+            for (group, item) in groups
+                .iter_mut()
+                .map(|(key, value)| (GroupName::from_str(key.get()).ok(), value))
+            {
+                if let Some(_group) = group {
+                    found += item.as_array().map_or(0, Array::len);
+                    Self::replace_dependencies(
+                        latest_versions,
+                        &mut all_upgrades,
+                        item,
+                        &DependencyType::Group(_group),
+                        allow,
+                        skipped,
+                    );
+                }
+            }
+        }
+
+        // Check `tool.uv.dev-dependencies`
+        if let Some(item) = tables
+            .contains(&DependencyType::Dev)
+            .then(|| {
+                self.doc
+                    .get_mut("tool")
+                    .and_then(Item::as_table_mut)
+                    .and_then(|tool| tool.get_mut("uv"))
+                    .and_then(Item::as_table_mut)
+                    .and_then(|uv| uv.get_mut("dev-dependencies"))
+            })
+            .flatten()
+        {
+            found += item.as_array().map_or(0, Array::len);
+            Self::replace_dependencies(
+                latest_versions,
+                &mut all_upgrades,
+                item,
+                &DependencyType::Dev,
+                allow,
+                skipped,
+            );
+        }
+
+        (found, all_upgrades)
+    }
+
+    fn replace_dependencies(
+        latest_versions: &FxHashMap<&PackageName, Version>,
+        all_upgrades: &mut Vec<UpgradeResult>,
+        item: &mut Item,
+        dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+    ) {
+        if let Some(dependencies) = item.as_array_mut().filter(|d| !d.is_empty()) {
+            Self::replace_upgrades(
+                latest_versions,
+                all_upgrades,
+                dependencies,
+                dependency_type,
+                allow,
+                skipped,
+            );
+        }
+    }
+
+    fn find_upgrades(
+        latest_versions: &FxHashMap<&PackageName, Version>,
+        dependencies: &mut Array,
+        dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+    ) -> Vec<UpgradeResult> {
+        let mut upgrades = Vec::new();
+        for (i, dep) in dependencies.iter().enumerate() {
+            let Some(mut req) = dep.as_str().and_then(try_parse_requirement) else {
+                continue;
+            };
+            let old = req.clone();
+            // Skip requirements without version constraints
+            let Some(VersionOrUrl::VersionSpecifier(mut version_specifiers)) = req.version_or_url
+            else {
+                continue;
+            };
+            if let Some(upgrade) = latest_versions.get(&old.name) {
+                let (bumped, upgraded, semver) =
+                    version_specifiers.bump_last(upgrade, allow, skipped);
+                if bumped {
+                    req.version_or_url = Some(VersionOrUrl::VersionSpecifier(version_specifiers));
+                    upgrades.push((
+                        i,
+                        dep.as_str().unwrap().to_string(),
+                        old,
+                        req,
+                        upgrade.clone(),
+                        upgraded,
+                        dependency_type.clone(),
+                        semver,
+                    ));
+                }
+            }
+        }
+        upgrades
+    }
+
+    fn replace_upgrades(
+        latest_versions: &FxHashMap<&PackageName, Version>,
+        all_upgrades: &mut Vec<UpgradeResult>,
+        dependencies: &mut Array,
+        dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+    ) {
+        let upgrades = Self::find_upgrades(
+            latest_versions,
+            dependencies,
+            dependency_type,
+            allow,
+            skipped,
+        );
+        for (i, _dep, _old, new, _upgrade, _upgraded, _, _) in &upgrades {
+            let string = new.to_string();
+            dependencies.replace(*i, toml_edit::Value::from(string));
+        }
+        all_upgrades.extend(upgrades);
     }
 
     pub fn version(&mut self) -> Result<Version, Error> {
@@ -1468,7 +1763,7 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     removed
 }
 
-/// Returns a `Vec` containing the all dependencies with the given name, along with their positions
+/// Returns a `Vec` containing all dependencies with the given name, along with their positions
 /// in the array.
 fn find_dependencies(
     name: &PackageName,
