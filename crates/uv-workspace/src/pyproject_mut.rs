@@ -1291,7 +1291,7 @@ impl PyProjectTomlMut {
     /// `dependency-groups` and `tool.uv.dev-dependencies`.
     pub fn upgrade_all_dependencies(
         &mut self,
-        latest_versions: &FxHashMap<PackageName, Version>,
+        latest_versions: &FxHashMap<&PackageName, Version>,
         tables: &[DependencyType],
         allow: &[usize],
         skipped: &mut VersionDigit,
@@ -1407,7 +1407,7 @@ impl PyProjectTomlMut {
     }
 
     fn replace_dependencies(
-        latest_versions: &FxHashMap<PackageName, Version>,
+        latest_versions: &FxHashMap<&PackageName, Version>,
         all_upgrades: &mut Vec<UpgradeResult>,
         item: &mut Item,
         dependency_type: &DependencyType,
@@ -1427,7 +1427,7 @@ impl PyProjectTomlMut {
     }
 
     fn find_upgrades(
-        latest_versions: &FxHashMap<PackageName, Version>,
+        latest_versions: &FxHashMap<&PackageName, Version>,
         dependencies: &mut Array,
         dependency_type: &DependencyType,
         allow: &[usize],
@@ -1466,7 +1466,7 @@ impl PyProjectTomlMut {
     }
 
     fn replace_upgrades(
-        latest_versions: &FxHashMap<PackageName, Version>,
+        latest_versions: &FxHashMap<&PackageName, Version>,
         all_upgrades: &mut Vec<UpgradeResult>,
         dependencies: &mut Array,
         dependency_type: &DependencyType,

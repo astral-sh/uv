@@ -8,6 +8,7 @@ use owo_colors::OwoColorize;
 use prettytable::format::FormatBuilder;
 use prettytable::row;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fmt::Write;
 use std::io::ErrorKind;
@@ -16,7 +17,7 @@ use std::str::FromStr;
 use tokio::sync::Semaphore;
 use uv_cache::Cache;
 use uv_cli::{Maybe, UpgradeProjectArgs};
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClient, RegistryClientBuilder};
 use uv_configuration::Concurrency;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations};
@@ -78,28 +79,50 @@ pub(crate) async fn upgrade_project_dependencies(
         (false, 0, 0, VersionDigit::default());
 
     let mut all_latest_versions = FxHashMap::default();
+    let mut all_versioned = FxHashMap::default();
+    let mut required_python_downloaded = FxHashSet::default();
+    let mut toml_contents = BTreeMap::default();
 
     for toml_dir in &tomls {
         let pyproject_toml = Path::new(toml_dir).join("pyproject.toml");
-        let mut toml = match read_pyproject_toml(&pyproject_toml).await {
+        let toml = match read_pyproject_toml(&pyproject_toml).await {
             Ok(value) => value,
             Err(value) => return value,
         };
-
+        let versioned = toml.find_versioned_dependencies();
+        if versioned.is_empty() {
+            continue; // Skip pyproject.toml without versioned dependencies
+        }
         let python = get_python(&args, &toml);
         let requires_python = create_requires_python(python);
+        all_versioned
+            .entry(requires_python.to_string())
+            .or_insert_with(FxHashSet::default)
+            .extend(versioned);
+        toml_contents.insert(toml_dir, toml);
+    }
 
-        // Initialize the client to fetch the latest version of each package.
-        let client = LatestClient {
-            client: &client,
-            capabilities: &capabilities,
-            prerelease: PrereleaseMode::Disallow,
-            exclude_newer: None,
-            tags: None,
-            requires_python: &requires_python,
-        };
+    for (toml_dir, toml) in &mut toml_contents {
+        let pyproject_toml = Path::new(*toml_dir).join("pyproject.toml");
+        let python = get_python(&args, toml);
+        let requires_python = create_requires_python(python);
+        let requires_python_str = requires_python.to_string();
 
-        let relative = if toml_dir == "." {
+        if !required_python_downloaded.contains(&requires_python_str) {
+            let query_versions = &all_versioned[&requires_python_str];
+            let latest_versions = find_latest(
+                &client,
+                &capabilities,
+                &requires_python,
+                query_versions,
+                concurrency.downloads,
+            )
+            .await;
+            all_latest_versions.extend(latest_versions);
+            required_python_downloaded.insert(requires_python_str);
+        }
+
+        let relative = if *toml_dir == "." {
             String::new()
         } else {
             format!("{}/", &toml_dir[2..])
@@ -107,16 +130,8 @@ pub(crate) async fn upgrade_project_dependencies(
         let subpath = format!("{relative}pyproject.toml");
         let mut skipped = VersionDigit::default();
 
-        let versioned = toml.find_versioned_dependencies();
-        let query_versions = versioned
-            .into_iter()
-            .filter(|p| !all_latest_versions.contains_key(p))
-            .collect();
-        let latest_versions = find_latest(&client, &query_versions, concurrency.downloads).await;
-        all_latest_versions.extend(latest_versions.clone());
-
         let (found, upgrades) =
-            toml.upgrade_all_dependencies(&latest_versions, &tables, &allow, &mut skipped);
+            toml.upgrade_all_dependencies(&all_latest_versions, &tables, &allow, &mut skipped);
         all_skipped.add_other(&skipped);
         let bumped = upgrades.len();
         all_found += found;
@@ -286,25 +301,36 @@ async fn read_pyproject_toml(
     Ok(toml)
 }
 
-async fn find_latest(
-    client: &LatestClient<'_>,
-    names: &FxHashSet<PackageName>,
+async fn find_latest<'a>(
+    client: &RegistryClient,
+    capabilities: &IndexCapabilities,
+    requires_python: &RequiresPython,
+    names: &'a FxHashSet<PackageName>,
     downloads: usize,
-) -> FxHashMap<PackageName, Version> {
+) -> FxHashMap<&'a PackageName, Version> {
+    let latest_client = LatestClient {
+        client,
+        capabilities,
+        prerelease: PrereleaseMode::Disallow,
+        exclude_newer: None,
+        tags: None,
+        requires_python,
+    };
+
     let download_concurrency = Semaphore::new(downloads);
-    let mut fetches = futures::stream::iter(names.iter())
-        .map(async |name| {
-            let latest = client
-                .find_latest(name, None, &download_concurrency)
+    let mut fetches = futures::stream::iter(names)
+        .map(async |package| {
+            let latest = latest_client
+                .find_latest(package, None, &download_concurrency)
                 .await?;
-            Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((name, latest))
+            Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((package, latest))
         })
         .buffer_unordered(downloads);
 
     let mut map = FxHashMap::default();
     while let Ok(Some((package, version))) = fetches.next().await.transpose() {
         if let Some(version) = version.as_ref() {
-            map.insert(package.clone(), version.clone().into_version());
+            map.insert(package, version.clone().into_version());
         }
     }
     map
