@@ -8,25 +8,27 @@ use owo_colors::OwoColorize;
 use prettytable::format::FormatBuilder;
 use prettytable::row;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fmt::Write;
 use std::io::ErrorKind;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use tokio::sync::Semaphore;
 use uv_cache::Cache;
 use uv_cli::{Maybe, UpgradeProjectArgs};
 use uv_client::{BaseClientBuilder, RegistryClient, RegistryClientBuilder};
 use uv_configuration::Concurrency;
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{IndexCapabilities, IndexLocations};
-use uv_pep440::{Version, VersionDigit, VersionSpecifiers};
+use uv_distribution_types::{IndexCapabilities, IndexLocations, RequiresPython};
+use uv_pep440::{Version, VersionDigit};
 use uv_pep508::{PackageName, Requirement};
-use uv_resolver::{PrereleaseMode, RequiresPython};
+use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::DependencyType;
-use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
+use uv_workspace::pyproject_mut::{DependencyTarget, PackageVersions, PyProjectTomlMut};
 use walkdir::WalkDir;
 
 /// Upgrade all dependencies in the project requirements (pyproject.toml).
@@ -65,6 +67,7 @@ pub(crate) async fn upgrade_project_dependencies(
 
     let printer = Printer::Default;
     let info = format!("{}{}", "info".cyan().bold(), ":".bold());
+    let uv_sync = format!("{}", "`uv sync -U`".green().bold());
 
     let capabilities = IndexCapabilities::default();
     let client_builder = BaseClientBuilder::default();
@@ -75,14 +78,21 @@ pub(crate) async fn upgrade_project_dependencies(
         .build();
     let concurrency = Concurrency::default();
 
-    let (mut item_written, mut all_found, mut all_bumped, mut all_skipped) =
-        (false, 0, 0, VersionDigit::default());
+    let mut item_written = false;
+    let mut all_found = 0;
+    let mut all_bumped = 0;
+    let mut files_bumped = 0;
+    let mut all_count_skipped = 0;
+    let mut all_skipped = VersionDigit::default();
 
-    let mut all_latest_versions = FxHashMap::default();
+    // 1. args (override) 2. group (tool.uv.dependency-groups) 3. toml (project.requires-python)
+    let python_args = args
+        .python
+        .clone()
+        .and_then(Maybe::into_option)
+        .and_then(|v| RequiresPython::from_str(&v).ok());
     let mut all_versioned = FxHashMap::default();
-    let mut required_python_downloaded = FxHashSet::default();
     let mut toml_contents = BTreeMap::default();
-
     for toml_dir in &tomls {
         let pyproject_toml = Path::new(toml_dir).join("pyproject.toml");
         let toml = match read_pyproject_toml(&pyproject_toml).await {
@@ -93,35 +103,35 @@ pub(crate) async fn upgrade_project_dependencies(
         if versioned.is_empty() {
             continue; // Skip pyproject.toml without versioned dependencies
         }
-        let python = get_python(&args, &toml);
-        let requires_python = create_requires_python(python);
-        all_versioned
-            .entry(requires_python.to_string())
-            .or_insert_with(FxHashSet::default)
-            .extend(versioned);
+        let python_toml = get_requires_python(&toml);
+        for (python_group, packages) in versioned {
+            let python = python_args.clone().or(python_group).or(python_toml.clone());
+            all_versioned
+                .entry(python)
+                .or_insert_with(FxHashSet::default)
+                .extend(packages);
+        }
         toml_contents.insert(toml_dir, toml);
+    }
+
+    let mut package_versions = PackageVersions::default();
+    for (requires_python, packages) in all_versioned {
+        let latest_versions = find_latest(
+            &client,
+            &capabilities,
+            requires_python.clone(),
+            &packages,
+            concurrency.downloads,
+        )
+        .await;
+        // A package can be downloaded multiple times (one time per requires_python)
+        for (name, version) in latest_versions {
+            package_versions.insert(name.clone(), version, requires_python.clone());
+        }
     }
 
     for (toml_dir, toml) in &mut toml_contents {
         let pyproject_toml = Path::new(*toml_dir).join("pyproject.toml");
-        let python = get_python(&args, toml);
-        let requires_python = create_requires_python(python);
-        let requires_python_str = requires_python.to_string();
-
-        if !required_python_downloaded.contains(&requires_python_str) {
-            let query_versions = &all_versioned[&requires_python_str];
-            let latest_versions = find_latest(
-                &client,
-                &capabilities,
-                &requires_python,
-                query_versions,
-                concurrency.downloads,
-            )
-            .await;
-            all_latest_versions.extend(latest_versions);
-            required_python_downloaded.insert(requires_python_str);
-        }
-
         let relative = if *toml_dir == "." {
             String::new()
         } else {
@@ -130,16 +140,28 @@ pub(crate) async fn upgrade_project_dependencies(
         let subpath = format!("{relative}pyproject.toml");
         let mut skipped = VersionDigit::default();
 
-        let (found, upgrades) =
-            toml.upgrade_all_dependencies(&all_latest_versions, &tables, &allow, &mut skipped);
+        let python_toml = get_requires_python(toml);
+        let requires_python = python_args.clone().or(python_toml);
+        let (upgrades, found, count_skipped) = toml.upgrade_all_dependencies(
+            &package_versions,
+            &tables,
+            &allow,
+            &mut skipped,
+            &requires_python,
+        );
         all_skipped.add_other(&skipped);
+        all_count_skipped += count_skipped;
         let bumped = upgrades.len();
         all_found += found;
         all_bumped += bumped;
+        files_bumped += min(bumped, 1);
         if upgrades.is_empty() {
             if args.recursive && bumped == 0 {
                 if !skipped.is_empty() {
-                    writeln!(printer.stderr(), "{info} Skipped {skipped} in {subpath}")?;
+                    writeln!(
+                        printer.stderr(),
+                        "{info} Skipped {skipped} ({count_skipped} upgrades) of {found} dependencies in {subpath}"
+                    )?;
                 }
                 continue; // Skip intermediate messages if nothing was changed
             }
@@ -151,8 +173,8 @@ pub(crate) async fn upgrade_project_dependencies(
             } else {
                 writeln!(
                     printer.stderr(),
-                    "{info} No upgrades found in {subpath}, check manually if not committed yet{}",
-                    skipped.format(" (skipped ", ")")
+                    "{info} No upgrades found for {found} dependencies in {subpath}, check manually if not committed yet{}",
+                    skipped.format(" (skipped ", &format!(" of {count_skipped} upgrades)"))
                 )?;
             }
             continue;
@@ -168,7 +190,7 @@ pub(crate) async fn upgrade_project_dependencies(
             if args.dry_run { "dry-run" } else { "upgraded" }
         );
         table.add_row(
-            row![r->"#", rb->"name", Fr->"-old", bFg->"+new", "latest", "S", "type", dry_run],
+            row![r->"#", rb->"name", Fr->"-old", bFg->"+new", "latest", "S", "type", "py", dry_run],
         ); // diff-like
         let remove_spaces = |v: &Requirement| {
             v.clone()
@@ -180,7 +202,7 @@ pub(crate) async fn upgrade_project_dependencies(
         upgrades
             .iter()
             .enumerate()
-            .for_each(|(i, (_, _dep, old, new, version, upgraded, dependency_type, semver_change))| {
+            .for_each(|(i, (_, _dep, old, new, version, upgraded, dependency_type, semver_change, python))| {
                 let from = remove_spaces(old);
                 let to = remove_spaces(new);
                 let upordown = if *upgraded { "✅ up" } else { "❌ down" };
@@ -191,8 +213,9 @@ pub(crate) async fn upgrade_project_dependencies(
                     DependencyType::Group(group) => format!("{group} [group]"),
                 };
                 let semver = semver_change.map_or(String::new(), |s| s.to_string());
+                let _python = format_requires_python(python.clone());
                 table.add_row(
-                    row![r->i + 1, rb->old.name, Fr->from, bFg->to, version.to_string(), semver, _type, upordown],
+                    row![r->i + 1, rb->old.name, Fr->from, bFg->to, version.to_string(), semver, _type, _python, upordown],
                 );
             });
         table.printstd();
@@ -202,12 +225,14 @@ pub(crate) async fn upgrade_project_dependencies(
             }
             writeln!(
                 printer.stderr(),
-                "{info} Upgraded {subpath} 🚀 Check manually, update {} and run tests{}",
-                "`uv sync -U`".green().bold(),
-                skipped.format(" (skipped ", ")")
+                "{info} Upgraded {bumped}/{found} in {subpath} 🚀 Check manually, update {uv_sync} and run tests{}",
+                skipped.format(" (skipped ", &format!(" of {count_skipped} upgrades)"))
             )?;
         } else if !skipped.is_empty() {
-            writeln!(printer.stderr(), "{info} Skipped {skipped} in {subpath}")?;
+            writeln!(
+                printer.stderr(),
+                "{info} Skipped {skipped} ({count_skipped} upgrades), upgraded {bumped} of {found} dependencies in {subpath}"
+            )?;
         }
         if !item_written {
             item_written = true;
@@ -218,7 +243,7 @@ pub(crate) async fn upgrade_project_dependencies(
         tomls.len(),
         if tomls.len() == 1 { "" } else { "s" }
     );
-    if args.recursive {
+    if args.recursive && files_bumped != 1 {
         if tomls.is_empty() {
             warn_user!("No pyproject.toml files found recursively");
             return Ok(ExitStatus::Error);
@@ -228,30 +253,29 @@ pub(crate) async fn upgrade_project_dependencies(
                     printer.stderr(),
                     "{info} No dependencies in {files} found recursively"
                 )?;
+            } else if !all_skipped.is_empty() {
+                writeln!(
+                    printer.stderr(),
+                    "{info} Skipped {all_skipped} ({all_count_skipped} upgrades), {all_found} dependencies in {files} not upgraded for --allow={}",
+                    format_allow(&allow)
+                )?;
             } else {
                 writeln!(
                     printer.stderr(),
-                    "{info} No upgrades in {all_found} dependencies and {files} found, check manually if not committed yet{}",
-                    all_skipped.format(" (skipped ", ")")
+                    "{info} No upgrades in {all_found} dependencies and {files} found, check manually if not committed yet"
                 )?;
             }
         } else if !all_skipped.is_empty() {
             writeln!(
                 printer.stderr(),
-                "{info} Skipped {all_skipped} in {all_bumped} upgrades for --allow={}",
-                allow
-                    .iter()
-                    .sorted()
-                    .map(std::string::ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",")
+                "{info} Total: Skipped {all_skipped} ({all_count_skipped} upgrades), upgraded {all_bumped} of {all_found} dependencies for --allow={}",
+                format_allow(&allow)
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "{info} Upgraded {all_bumped} dependencies in {files} 🚀 Check manually, update {} and run tests{}",
-                "`uv sync -U`".green().bold(),
-                all_skipped.format(" (skipped ", ")")
+                "{info} Upgraded {all_bumped}/{all_found} dependencies in {files} 🚀 Check manually, update {uv_sync} and run tests{}",
+                all_skipped.format(" (skipped ", &format!(" of {all_count_skipped} upgrades)"))
             )?;
         }
     }
@@ -259,23 +283,29 @@ pub(crate) async fn upgrade_project_dependencies(
     Ok(ExitStatus::Success)
 }
 
-fn create_requires_python(python: Option<String>) -> RequiresPython {
-    let version_specifiers = python.and_then(|s| VersionSpecifiers::from_str(&s).ok());
-    version_specifiers
-        .map(|v| RequiresPython::from_specifiers(&v))
-        .unwrap_or_else(|| RequiresPython::greater_than_equal_version(&Version::new([4]))) // allow any by default
+fn get_requires_python(toml: &PyProjectTomlMut) -> Option<RequiresPython> {
+    toml.get_requires_python()
+        .map(RequiresPython::from_str)
+        .transpose()
+        .ok()
+        .flatten()
 }
 
-fn get_python(args: &UpgradeProjectArgs, toml: &PyProjectTomlMut) -> Option<String> {
-    let python = args
-        .python
-        .clone()
-        .and_then(Maybe::into_option)
-        .or_else(|| {
-            toml.get_requires_python()
-                .map(std::string::ToString::to_string)
-        });
-    python
+fn format_requires_python(python: Option<RequiresPython>) -> String {
+    match python.map(|r| r.remove_zeroes()) {
+        Some(s) if s == ">4" => String::new(), // hide default value
+        Some(s) => s,
+        _ => String::new(),
+    }
+}
+
+fn format_allow(allow: &[usize]) -> String {
+    allow
+        .iter()
+        .sorted()
+        .map(std::string::ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 async fn read_pyproject_toml(
@@ -304,17 +334,19 @@ async fn read_pyproject_toml(
 async fn find_latest<'a>(
     client: &RegistryClient,
     capabilities: &IndexCapabilities,
-    requires_python: &RequiresPython,
+    requires_python: Option<RequiresPython>,
     names: &'a FxHashSet<PackageName>,
     downloads: usize,
 ) -> FxHashMap<&'a PackageName, Version> {
+    static DEFAULT_PYTHON: LazyLock<RequiresPython> =
+        LazyLock::new(|| RequiresPython::from_str(">4").ok().unwrap());
     let latest_client = LatestClient {
         client,
         capabilities,
         prerelease: PrereleaseMode::Disallow,
-        exclude_newer: None,
+        exclude_newer: &ExcludeNewer::new(None, ExcludeNewerPackage::default()),
         tags: None,
-        requires_python,
+        requires_python: requires_python.as_ref().or_else(|| Some(&*DEFAULT_PYTHON)),
     };
 
     let download_concurrency = Semaphore::new(downloads);
