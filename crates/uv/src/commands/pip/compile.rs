@@ -241,16 +241,6 @@ pub(crate) async fn pip_compile(
         )
         .collect();
 
-    let _excludes: Vec<UnresolvedRequirementSpecification> = excludes
-        .iter()
-        .cloned()
-        .chain(
-            excludes_from_workspace
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from),
-        )
-        .collect();
-
     // Read build constraints.
     let build_constraints: Vec<NameRequirementSpecification> =
         operations::read_constraints(build_constraints, &client_builder)
