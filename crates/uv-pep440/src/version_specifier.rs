@@ -141,7 +141,7 @@ impl VersionSpecifiers {
         latest: &Version,
         allow: &[usize],
         skipped: &mut VersionDigit,
-    ) -> (bool, bool, Option<usize>) {
+    ) -> (bool, bool, Option<usize>, bool) {
         match self.last_mut().filter(|last| !last.contains(latest)) {
             Some(last) => {
                 let last_copy = last.clone();
@@ -158,18 +158,32 @@ impl VersionSpecifiers {
                 let mut semver = bumped
                     .then(|| old.semver_change(&new, last_new.operator))
                     .flatten();
+                let mut skip = false;
                 if matches!(semver, Some(i) if i > 0 && allow.contains(&i)) {
                     *last = last_new;
                 } else if bumped {
                     bumped = false;
                     upgraded = false;
-                    skipped.add(semver.unwrap_or(0)); // Skip forbidden digits
+                    skip = skipped.add(semver.unwrap_or(0)); // Skip forbidden digits
                     semver = None;
                 }
-                (bumped, upgraded, semver)
+                (bumped, upgraded, semver, skip)
             }
-            _ => (false, false, None),
+            _ => (false, false, None, false),
         }
+    }
+
+    /// Remove trailing zeroes from all specifiers
+    #[must_use]
+    pub fn remove_zeroes(&self) -> Self {
+        Self::from_unsorted(
+            self.iter()
+                .map(|v| {
+                    VersionSpecifier::from_version(*v.operator(), v.version().remove_zeroes())
+                        .unwrap()
+                })
+                .collect(),
+        )
     }
 }
 
@@ -2110,6 +2124,8 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             (0, "1.2.3", "==1.2.3", "", 0),
             (0, "1.2.3.4", "==1.2.3.*", "", 0),
             (0, "1.2.3.4", "==1.2.3.4", "", 0),
+            (2, "0.1", "<0.1.0", "<0.2", 1), // irregular versions (i.e. pydantic 0.1)
+            (2, "0.1", ">0.1", ">=0.1", 2),  // irregular versions (i.e. pydantic 0.1)
         ];
         for (i, tuple) in success.iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
@@ -2121,7 +2137,7 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             let new = VersionSpecifiers::from_str(new).unwrap();
             let latest = Version::from_str(latest).unwrap();
             let mut skipped = VersionDigit::default();
-            let (bumped, upgraded, semver_change) =
+            let (bumped, upgraded, semver_change, _skip) =
                 modified.bump_last(&latest, &[1, 2, 3, 4], &mut skipped);
             let should_bump = !new.to_string().is_empty();
             let not = if should_bump { "not " } else { "" };

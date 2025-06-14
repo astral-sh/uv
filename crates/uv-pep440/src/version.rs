@@ -1,4 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use std::cmp::min;
 use std::fmt::{Display, Formatter};
 use std::num::NonZero;
 use std::ops::Deref;
@@ -882,7 +883,8 @@ impl Version {
             && (operator == Operator::GreaterThan
                 || operator == Operator::GreaterThanEqual
                 || operator == Operator::Equal
-                || operator == Operator::EqualStar);
+                || operator == Operator::EqualStar)
+            || ordering == Ordering::Equal && operator == Operator::GreaterThan;
 
         let new = &*latest.release();
         let old = &*self.release();
@@ -905,7 +907,7 @@ impl Version {
         let addsub = |v: u64| if subtract { v - delta } else { v + delta };
         if downgrade || orle {
             let minor = oplt || ople && zero;
-            let upgrade = match old.len() {
+            let upgrade = match min(old.len(), new.len()) {
                 // <1     to <=1.0.0 : <2
                 1 => Self::new([addsub(new[0])]),
                 // <1.2   to <=1.2.3 : <1.3
@@ -924,6 +926,21 @@ impl Version {
             return (true, !downgrade);
         }
         (false, false)
+    }
+
+    /// Remove trailing zeroes from the release
+    #[must_use]
+    pub fn remove_zeroes(&self) -> Self {
+        let mut r = vec![];
+        let mut found = false;
+        for d in self.release().to_vec().iter().rev() {
+            if !found && *d == 0 {
+                continue;
+            }
+            found = true;
+            r.push(*d);
+        }
+        Self::new(r.iter().rev())
     }
 }
 
@@ -2860,14 +2877,15 @@ pub struct VersionDigit {
 
 impl VersionDigit {
     /// Increase a digit
-    pub fn add(&mut self, digit: usize) {
+    pub fn add(&mut self, digit: usize) -> bool {
         match digit {
             1 => self.major += 1,
             2 => self.minor += 1,
             3 => self.patch += 1,
             4 => self.build += 1,
-            _ => {}
+            _ => return false,
         }
+        true
     }
 
     /// Increase all digits from `other`
