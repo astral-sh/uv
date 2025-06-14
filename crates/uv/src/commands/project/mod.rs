@@ -1184,14 +1184,14 @@ enum ProjectEnvironment {
     /// requirements. A new environment would've been created, but `--dry-run` mode is enabled; as
     /// such, a temporary environment was created instead.
     WouldReplace(
-        PathBuf,
+        #[allow(dead_code)] PathBuf,
         PythonEnvironment,
         #[allow(unused)] tempfile::TempDir,
     ),
     /// A new [`PythonEnvironment`] would've been created, but `--dry-run` mode is enabled; as such,
     /// a temporary environment was created instead.
     WouldCreate(
-        PathBuf,
+        #[allow(dead_code)] PathBuf,
         PythonEnvironment,
         #[allow(unused)] tempfile::TempDir,
     ),
@@ -1392,14 +1392,14 @@ enum ScriptEnvironment {
     /// requirements. A new environment would've been created, but `--dry-run` mode is enabled; as
     /// such, a temporary environment was created instead.
     WouldReplace(
-        PathBuf,
+        #[allow(dead_code)] PathBuf,
         PythonEnvironment,
         #[allow(unused)] tempfile::TempDir,
     ),
     /// A new [`PythonEnvironment`] would've been created, but `--dry-run` mode is enabled; as such,
     /// a temporary environment was created instead.
     WouldCreate(
-        PathBuf,
+        #[allow(dead_code)] PathBuf,
         PythonEnvironment,
         #[allow(unused)] tempfile::TempDir,
     ),

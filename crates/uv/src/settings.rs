@@ -11,8 +11,8 @@ use uv_cli::{
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
-    ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
-    VersionArgs, VersionBump, VersionFormat,
+    SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
+    TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
@@ -1108,6 +1108,7 @@ pub(crate) struct SyncSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) format: SyncFormat,
 }
 
 impl SyncSettings {
@@ -1147,6 +1148,7 @@ impl SyncSettings {
             python,
             check,
             no_check,
+            format,
         } = args;
         let install_mirrors = filesystem
             .clone()
@@ -1166,6 +1168,7 @@ impl SyncSettings {
         };
 
         Self {
+            format,
             locked,
             frozen,
             dry_run,
