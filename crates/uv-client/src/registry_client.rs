@@ -1108,10 +1108,14 @@ impl SimpleMetadata {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
             };
-            let version = match filename {
-                DistFilename::SourceDistFilename(ref inner) => &inner.version,
-                DistFilename::WheelFilename(ref inner) => &inner.version,
-            };
+            if filename.name() != package_name {
+                warn!(
+                    "Skipping file with mismatched package name: `{}` vs. `{}`",
+                    filename.name(),
+                    package_name
+                );
+                continue;
+            }
             let file = match File::try_from(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
@@ -1120,7 +1124,7 @@ impl SimpleMetadata {
                     continue;
                 }
             };
-            match map.entry(version.clone()) {
+            match map.entry(filename.version().clone()) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     entry.get_mut().push(filename, file);
                 }
