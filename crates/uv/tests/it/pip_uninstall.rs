@@ -100,6 +100,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn uninstall() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -142,6 +143,7 @@ fn uninstall() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn missing_record() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -180,6 +182,7 @@ fn missing_record() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn uninstall_editable_by_name() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -228,6 +231,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn uninstall_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -276,6 +280,7 @@ fn uninstall_by_path() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn uninstall_duplicate_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -326,6 +331,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
 
 /// Uninstall a duplicate package in a virtual environment.
 #[test]
+#[cfg(feature = "pypi")]
 fn uninstall_duplicate() -> Result<()> {
     use uv_fs::copy_dir_all;
 

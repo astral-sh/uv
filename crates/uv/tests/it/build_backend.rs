@@ -24,6 +24,7 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
 ///
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -83,6 +84,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_direct() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -160,6 +162,7 @@ fn built_by_uv_direct() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");

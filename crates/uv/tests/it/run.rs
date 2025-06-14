@@ -2732,7 +2732,7 @@ fn run_without_output() -> Result<()> {
 /// Ensure that we can import from the root project when layering `--with` requirements.
 #[test]
 fn run_isolated_python_version() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2766,10 +2766,10 @@ fn run_isolated_python_version() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    (3, 8)
+    (3, 9)
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -2786,7 +2786,7 @@ fn run_isolated_python_version() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    (3, 8)
+    (3, 9)
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -3281,7 +3281,7 @@ fn run_exit_code() -> Result<()> {
 
 #[test]
 fn run_invalid_project_table() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.8"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"

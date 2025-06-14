@@ -348,6 +348,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 ),
                 variant: None,
             },
+            uv_platform_tags::Arch::Wasm32 => Self {
+                family: target_lexicon::Architecture::Wasm32,
+                variant: None,
+            },
         }
     }
 }
@@ -380,6 +384,9 @@ impl From<&uv_platform_tags::Os> for Os {
             uv_platform_tags::Os::NetBsd { .. } => Self(target_lexicon::OperatingSystem::Netbsd),
             uv_platform_tags::Os::OpenBsd { .. } => Self(target_lexicon::OperatingSystem::Openbsd),
             uv_platform_tags::Os::Windows => Self(target_lexicon::OperatingSystem::Windows),
+            uv_platform_tags::Os::Pyodide { .. } => {
+                Self(target_lexicon::OperatingSystem::Emscripten)
+            }
         }
     }
 }

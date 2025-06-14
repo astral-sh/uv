@@ -11408,6 +11408,41 @@ fn add_invalid_ignore_error_code() -> Result<()> {
     Ok(())
 }
 
+/// uv should fail to parse `pyproject.toml` if `require-python`
+/// contains an invalid specifier and try to return a helpful hint.
+#[test]
+fn add_invalid_requires_python() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = "3.12"
+        dependencies = []
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 4, column 19
+      |
+    4 | requires-python = "3.12"
+      |                   ^^^^^^
+    Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
+    3.12
+    ^^^^
+    "#);
+
+    Ok(())
+}
+
 /// In authentication "always", the normal authentication flow should still work.
 #[test]
 fn add_auth_policy_always_with_credentials() -> Result<()> {
