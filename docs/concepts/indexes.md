@@ -18,7 +18,33 @@ name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 ```
 
-Indexes are prioritized in the order in which they’re defined, such that the first index listed in
+### Environment variable expansion
+
+Index URLs support environment variable expansion using `${VARIABLE}` or `${VARIABLE:-default}`
+syntax, as well as tilde (`~`) expansion for home directories. This is particularly useful for
+injecting authentication credentials or configuring different environments:
+
+```toml
+[[tool.uv.index]]
+name = "artifactory"
+# Environment variables with default values
+url = "https://${ARTIFACTORY_HOST:-artifactory.company.com}/artifactory/api/pypi/pypi-local/simple"
+# Environment variables for authentication
+publish-url = "https://${ARTIFACTORY_USER}:${ARTIFACTORY_API_TOKEN}@artifactory.company.com/artifactory/api/pypi/pypi-local"
+
+[[tool.uv.index]]
+name = "local-packages"
+# Home directory expansion
+url = "file://${HOME}/my-packages"
+# Tilde expansion (equivalent to above)
+url = "file://~/my-packages"
+```
+
+The `${VARIABLE:-default}` syntax provides a fallback value when the environment variable is not
+set. If an environment variable is referenced without a default (e.g., `${REQUIRED_VAR}`) and is not
+set, uv will return an error when parsing the configuration.
+
+Indexes are prioritized in the order in which they're defined, such that the first index listed in
 the configuration file is the first index consulted when resolving dependencies, with indexes
 provided via the command line taking precedence over those in the configuration file.
 
@@ -122,7 +148,7 @@ malicious package to be installed instead of the internal package. See, for exam
 [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/) from
 December 2022.
 
-To opt in to alternate index behaviors, use the`--index-strategy` command-line option, or the
+To opt in to alternate index behaviors, use the `--index-strategy` command-line option, or the
 `UV_INDEX_STRATEGY` environment variable, which supports the following values:
 
 - `first-index` (default): Search for each package across all indexes, limiting the candidate
@@ -275,7 +301,7 @@ follow the same prioritization rules:
 - The default index is always treated as lowest priority, whether defined via the legacy
   `--index-url` argument, the recommended `--default-index` argument, or a `[[tool.uv.index]]` entry
   with `default = true`.
-- Indexes are consulted in the order in which they’re defined, either via the legacy
+- Indexes are consulted in the order in which they're defined, either via the legacy
   `--extra-index-url` argument, the recommended `--index` argument, or `[[tool.uv.index]]` entries.
 
 In effect, `--index-url` and `--extra-index-url` can be thought of as unnamed `[[tool.uv.index]]`
