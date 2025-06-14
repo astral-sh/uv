@@ -414,7 +414,19 @@ pub struct ToolUv {
     )]
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 
-    /// Exclude
+    /// Excludes to apply when resolving the project's dependencies.
+    ///
+    /// Excludes are used to prevent installation of a specific package, even if other dependencies
+    /// require it.
+    ///
+    /// Including a package as an exclude will _not_ trigger installation of the package on its
+    /// own; instead, the package must be requested elsewhere in the project's first-party or
+    ///  transitive dependencies.
+    ///
+    /// !!! note
+    ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
+    ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    ///     workspace members or `uv.toml` files.
     #[cfg_attr(
         feature = "schemars",
         schemars(
