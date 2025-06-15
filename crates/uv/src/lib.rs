@@ -1290,6 +1290,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_version_specifiers,
                 args.show_with,
                 args.show_extras,
+                args.output_format,
                 &cache,
                 printer,
             )
