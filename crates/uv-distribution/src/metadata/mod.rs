@@ -12,11 +12,13 @@ use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{WorkspaceCache, WorkspaceError};
 
 pub use crate::metadata::build_requires::BuildRequires;
+pub use crate::metadata::dependency_groups::SourcedDependencyGroups;
 pub use crate::metadata::lowering::LoweredRequirement;
 pub use crate::metadata::lowering::LoweringError;
 pub use crate::metadata::requires_dist::{FlatRequiresDist, RequiresDist};
 
 mod build_requires;
+mod dependency_groups;
 mod lowering;
 mod requires_dist;
 

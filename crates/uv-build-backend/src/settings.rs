@@ -1,9 +1,6 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::Display;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::str::FromStr;
 use uv_macros::OptionsMetadata;
-use uv_pypi_types::Identifier;
 
 /// Settings for the uv build backend (`uv_build`).
 ///
@@ -38,6 +35,9 @@ pub struct BuildBackendSettings {
     /// `__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
     /// being the module name, and which contain a `__init__.pyi` file.
     ///
+    /// For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
+    /// `foo-stubs.bar`.
+    ///
     /// Note that using this option runs the risk of creating two packages with different names but
     /// the same module names. Installing such packages together leads to unspecified behavior,
     /// often with corrupted files or directory trees.
@@ -46,7 +46,7 @@ pub struct BuildBackendSettings {
         value_type = "str",
         example = r#"module-name = "sklearn""#
     )]
-    pub module_name: Option<ModuleName>,
+    pub module_name: Option<String>,
 
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
@@ -84,6 +84,56 @@ pub struct BuildBackendSettings {
         example = r#"wheel-exclude = ["*.bin"]"#
     )]
     pub wheel_exclude: Vec<String>,
+
+    /// Build a namespace package.
+    ///
+    /// Build a PEP 420 implicit namespace package, allowing more than one root `__init__.py`.
+    ///
+    /// Use this option when the namespace package contains multiple root `__init__.py`, for
+    /// namespace packages with a single root `__init__.py` use a dotted `module-name` instead.
+    ///
+    /// To compare dotted `module-name` and `namespace = true`, the first example below can be
+    /// expressed with `module-name = "cloud.database"`: There is one root `__init__.py` `database`.
+    /// In the second example, we have three roots (`cloud.database`, `cloud.database_pro`,
+    /// `billing.modules.database_pro`), so `namespace = true` is required.
+    ///
+    /// ```text
+    /// src
+    /// └── cloud
+    ///     └── database
+    ///         ├── __init__.py
+    ///         ├── query_builder
+    ///         │   └── __init__.py
+    ///         └── sql
+    ///             ├── parser.py
+    ///             └── __init__.py
+    /// ```
+    ///
+    /// ```text
+    /// src
+    /// ├── cloud
+    /// │   ├── database
+    /// │   │   ├── __init__.py
+    /// │   │   ├── query_builder
+    /// │   │   │   └── __init__.py
+    /// │   │   └── sql
+    /// │   │       ├── __init__.py
+    /// │   │       └── parser.py
+    /// │   └── database_pro
+    /// │       ├── __init__.py
+    /// │       └── query_builder.py
+    /// └── billing
+    ///     └── modules
+    ///         └── database_pro
+    ///             ├── __init__.py
+    ///             └── sql.py
+    /// ```
+    #[option(
+        default = r#"false"#,
+        value_type = "bool",
+        example = r#"namespace = true"#
+    )]
+    pub namespace: bool,
 
     /// Data includes for wheels.
     ///
@@ -129,85 +179,9 @@ impl Default for BuildBackendSettings {
             default_excludes: true,
             source_exclude: Vec::new(),
             wheel_exclude: Vec::new(),
+            namespace: false,
             data: WheelDataIncludes::default(),
         }
-    }
-}
-
-/// Packages come in two kinds: Regular packages, where the name must be a valid Python identifier,
-/// and stubs packages.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ModuleName {
-    /// A Python module name, which needs to be a valid Python identifier to be used with `import`.
-    Identifier(Identifier),
-    /// A type stubs package, whose name ends with `-stubs` with the stem being the module name.
-    Stubs(String),
-}
-
-impl Display for ModuleName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ModuleName::Identifier(module_name) => Display::fmt(module_name, f),
-            ModuleName::Stubs(module_name) => Display::fmt(module_name, f),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for ModuleName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let module_name = String::deserialize(deserializer)?;
-        if let Some(stem) = module_name.strip_suffix("-stubs") {
-            // Check that the stubs belong to a valid module.
-            Identifier::from_str(stem)
-                .map(ModuleName::Identifier)
-                .map_err(serde::de::Error::custom)?;
-            Ok(ModuleName::Stubs(module_name))
-        } else {
-            Identifier::from_str(&module_name)
-                .map(ModuleName::Identifier)
-                .map_err(serde::de::Error::custom)
-        }
-    }
-}
-
-impl Serialize for ModuleName {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            ModuleName::Identifier(module_name) => module_name.serialize(serializer),
-            ModuleName::Stubs(module_name) => module_name.serialize(serializer),
-        }
-    }
-}
-
-#[cfg(feature = "schemars")]
-impl schemars::JsonSchema for ModuleName {
-    fn schema_name() -> String {
-        "ModuleName".to_string()
-    }
-
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            string: Some(Box::new(schemars::schema::StringValidation {
-                // Best-effort Unicode support (https://stackoverflow.com/a/68844380/3549270)
-                pattern: Some(r"^[_\p{Alphabetic}][_0-9\p{Alphabetic}]*(-stubs)?$".to_string()),
-                ..schemars::schema::StringValidation::default()
-            })),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "The name of the module, or the name of a stubs package".to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
     }
 }
 

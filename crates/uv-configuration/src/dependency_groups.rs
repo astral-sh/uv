@@ -295,6 +295,15 @@ pub struct DependencyGroupsWithDefaults {
 }
 
 impl DependencyGroupsWithDefaults {
+    /// Do not enable any groups
+    ///
+    /// Many places in the code need to know what dependency-groups are active,
+    /// but various commands or subsystems never enable any dependency-groups,
+    /// in which case they want this.
+    pub fn none() -> Self {
+        DependencyGroups::default().with_defaults(DefaultGroups::default())
+    }
+
     /// Returns `true` if the specification was enabled, and *only* because it was a default
     pub fn contains_because_default(&self, group: &GroupName) -> bool {
         self.cur.contains(group) && !self.prev.contains(group)

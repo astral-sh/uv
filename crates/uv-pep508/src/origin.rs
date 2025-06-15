@@ -12,8 +12,8 @@ pub enum RequirementOrigin {
     File(PathBuf),
     /// The requirement was provided via a local project (e.g., a `pyproject.toml` file).
     Project(PathBuf, PackageName),
-    /// The requirement was provided via a local project (e.g., a `pyproject.toml` file).
-    Group(PathBuf, PackageName, GroupName),
+    /// The requirement was provided via a local project's group (e.g., a `pyproject.toml` file).
+    Group(PathBuf, Option<PackageName>, GroupName),
     /// The requirement was provided via a workspace.
     Workspace,
 }

@@ -13,17 +13,15 @@ use std::fs::FileType;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-
 use thiserror::Error;
 use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
 use uv_normalize::PackageName;
-use uv_pypi_types::IdentifierParseError;
+use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
-use crate::settings::ModuleName;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -33,8 +31,8 @@ pub enum Error {
     Toml(#[from] toml::de::Error),
     #[error("Invalid pyproject.toml")]
     Validation(#[from] ValidationError),
-    #[error(transparent)]
-    Identifier(#[from] IdentifierParseError),
+    #[error("Invalid module name: {0}")]
+    InvalidModuleName(String, #[source] IdentifierParseError),
     #[error("Unsupported glob expression in: `{field}`")]
     PortableGlob {
         field: String,
@@ -62,27 +60,10 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
-    #[error(
-        "Missing source directory at: `{}`",
-        _0.user_display()
-    )]
-    MissingSrc(PathBuf),
-    #[error(
-        "Expected a Python module directory at: `{}`",
-        _0.user_display()
-    )]
+    #[error("Expected a Python module at: `{}`", _0.user_display())]
     MissingInitPy(PathBuf),
-    #[error(
-        "Missing module directory for `{}` in `{}`. Found: `{}`",
-        module_name,
-        src_root.user_display(),
-        dir_listing.join("`, `")
-    )]
-    MissingModuleDir {
-        module_name: String,
-        src_root: PathBuf,
-        dir_listing: Vec<String>,
-    },
+    #[error("For namespace packages, `__init__.py[i]` is not allowed in parent directory: `{}`", _0.user_display())]
+    NotANamespace(PathBuf),
     /// Either an absolute path or a parent path through `..`.
     #[error("Module root must be inside the project: `{}`", _0.user_display())]
     InvalidModuleRoot(PathBuf),
@@ -195,12 +176,26 @@ fn check_metadata_directory(
     Ok(())
 }
 
-/// Resolve the source root, module root and the module name.
+/// Returns the source root and the module path with the `__init__.py[i]`  below to it while
+/// checking the project layout and names.
+///
+/// Some target platforms have case-sensitive filesystems, while others have case-insensitive
+/// filesystems. We always lower case the package name, our default for the module, while some
+/// users want uppercase letters in their module names. For example, the package name is `pil_util`,
+/// but the module `PIL_util`. To make the behavior as consistent as possible across platforms as
+/// possible, we require that an upper case name is given explicitly through
+/// `tool.uv.build-backend.module-name`.
+///
+/// By default, the dist-info-normalized package name is the module name. For
+/// dist-info-normalization, the rules are lowercasing, replacing `.` with `_` and
+/// replace `-` with `_`. Since `.` and `-` are not allowed in identifiers, we can use a string
+/// comparison with the module name.
 fn find_roots(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     relative_module_root: &Path,
-    module_name: Option<&ModuleName>,
+    module_name: Option<&str>,
+    namespace: bool,
 ) -> Result<(PathBuf, PathBuf), Error> {
     let relative_module_root = uv_fs::normalize_path(relative_module_root);
     let src_root = source_tree.join(&relative_module_root);
@@ -208,93 +203,114 @@ fn find_roots(
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
     let src_root = source_tree.join(&relative_module_root);
-    let module_root = find_module_root(&src_root, module_name, pyproject_toml.name())?;
-    Ok((src_root, module_root))
+    debug!("Source root: {}", src_root.user_display());
+
+    if namespace {
+        // `namespace = true` disables module structure checks.
+        let module_relative = if let Some(module_name) = module_name {
+            module_name.split('.').collect::<PathBuf>()
+        } else {
+            PathBuf::from(pyproject_toml.name().as_dist_info_name().to_string())
+        };
+        debug!("Namespace module path: {}", module_relative.user_display());
+        return Ok((src_root, module_relative));
+    }
+
+    let module_relative = if let Some(module_name) = module_name {
+        module_path_from_module_name(&src_root, module_name)?
+    } else {
+        find_module_path_from_package_name(&src_root, pyproject_toml.name())?
+    };
+    debug!("Module path: {}", module_relative.user_display());
+    Ok((src_root, module_relative))
 }
 
-/// Match the module name to its module directory with potentially different casing.
+/// Infer stubs packages from package name alone.
 ///
-/// Some target platforms have case-sensitive filesystems, while others have case-insensitive
-/// filesystems and we always lower case the package name, our default for the module, while some
-/// users want uppercase letters in their module names. For example, the package name is `pil_util`,
-/// but the module `PIL_util`.
-///
-/// By default, the dist-info-normalized package name is the module name. For
-/// dist-info-normalization, the rules are lowercasing, replacing `.` with `_` and
-/// replace `-` with `_`. Since `.` and `-` are not allowed in identifiers, we can use a string
-/// comparison with the module name.
-///
-/// To make the behavior as consistent as possible across platforms as possible, we require that an
-/// upper case name is given explicitly through `tool.uv.module-name`.
-///
-/// Returns the module root path, the directory below which the `__init__.py` lives.
-fn find_module_root(
+/// There are potential false positives if someone had a regular package with `-stubs`.
+/// The `Identifier` checks in `module_path_from_module_name` are here covered by the `PackageName`
+/// validation.
+fn find_module_path_from_package_name(
     src_root: &Path,
-    module_name: Option<&ModuleName>,
     package_name: &PackageName,
 ) -> Result<PathBuf, Error> {
-    let (module_name, stubs) = if let Some(module_name) = module_name {
-        // This name can be uppercase.
-        match module_name {
-            ModuleName::Identifier(module_name) => (module_name.to_string(), false),
-            ModuleName::Stubs(module_name) => (module_name.to_string(), true),
+    if let Some(stem) = package_name.to_string().strip_suffix("-stubs") {
+        debug!("Building stubs package instead of a regular package");
+        let module_name = PackageName::from_str(stem)
+            .expect("non-empty package name prefix must be valid package name")
+            .as_dist_info_name()
+            .to_string();
+        let module_relative = PathBuf::from(format!("{module_name}-stubs"));
+        let init_pyi = src_root.join(&module_relative).join("__init__.pyi");
+        if !init_pyi.is_file() {
+            return Err(Error::MissingInitPy(init_pyi));
         }
+        Ok(module_relative)
     } else {
-        // Infer stubs packages from package name alone. There are potential false positives if
-        // someone had a regular package with `-stubs`.
-        if let Some(stem) = package_name.to_string().strip_suffix("-stubs") {
-            debug!("Building stubs package instead of a regular package");
-            let module_name = PackageName::from_str(stem)
-                .expect("non-empty package name prefix must be valid package name")
-                .as_dist_info_name()
-                .to_string();
-            (format!("{module_name}-stubs"), true)
-        } else {
-            // This name is always lowercase.
-            (package_name.as_dist_info_name().to_string(), false)
+        // This name is always lowercase.
+        let module_relative = PathBuf::from(package_name.as_dist_info_name().to_string());
+        let init_py = src_root.join(&module_relative).join("__init__.py");
+        if !init_py.is_file() {
+            return Err(Error::MissingInitPy(init_py));
         }
+        Ok(module_relative)
+    }
+}
+
+/// Determine the relative module path from an explicit module name.
+fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<PathBuf, Error> {
+    // This name can be uppercase.
+    let module_relative = module_name.split('.').collect::<PathBuf>();
+
+    // Check if we have a regular module or a namespace.
+    let (root_name, namespace_segments) =
+        if let Some((root_name, namespace_segments)) = module_name.split_once('.') {
+            (
+                root_name,
+                namespace_segments.split('.').collect::<Vec<&str>>(),
+            )
+        } else {
+            (module_name, Vec::new())
+        };
+
+    // Check if we have an implementation or a stubs package.
+    // For stubs for a namespace, the `-stubs` prefix must be on the root.
+    let stubs = if let Some(stem) = root_name.strip_suffix("-stubs") {
+        // Check that the stubs belong to a valid module.
+        Identifier::from_str(stem)
+            .map_err(|err| Error::InvalidModuleName(module_name.to_string(), err))?;
+        true
+    } else {
+        Identifier::from_str(root_name)
+            .map_err(|err| Error::InvalidModuleName(module_name.to_string(), err))?;
+        false
     };
 
-    let dir = match fs_err::read_dir(src_root) {
-        Ok(dir_iterator) => dir_iterator.collect::<Result<Vec<_>, _>>()?,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            return Err(Error::MissingSrc(src_root.to_path_buf()));
-        }
-        Err(err) => return Err(Error::Io(err)),
-    };
-    let module_root = dir.iter().find_map(|entry| {
-        // TODO(konsti): Do we ever need to check if `dir/{module_name}/__init__.py` exists because
-        // the wrong casing may be recorded on disk?
-        if entry
-            .file_name()
-            .to_str()
-            .is_some_and(|file_name| file_name == module_name)
+    // For a namespace, check that all names below the root is valid.
+    for segment in namespace_segments {
+        Identifier::from_str(segment)
+            .map_err(|err| Error::InvalidModuleName(module_name.to_string(), err))?;
+    }
+
+    // Check that an `__init__.py[i]` exists for the module.
+    let init_py =
+        src_root
+            .join(&module_relative)
+            .join(if stubs { "__init__.pyi" } else { "__init__.py" });
+    if !init_py.is_file() {
+        return Err(Error::MissingInitPy(init_py));
+    }
+
+    // For a namespace, check that the directories above the lowest are namespace directories.
+    for namespace_dir in module_relative.ancestors().skip(1) {
+        if src_root.join(namespace_dir).join("__init__.py").exists()
+            || src_root.join(namespace_dir).join("__init__.pyi").exists()
         {
-            Some(entry.path())
-        } else {
-            None
+            return Err(Error::NotANamespace(src_root.join(namespace_dir)));
         }
-    });
-    let init_py = if stubs { "__init__.pyi" } else { "__init__.py" };
-    let module_root = if let Some(module_root) = module_root {
-        if module_root.join(init_py).is_file() {
-            module_root.clone()
-        } else {
-            return Err(Error::MissingInitPy(module_root.join(init_py)));
-        }
-    } else {
-        return Err(Error::MissingModuleDir {
-            module_name,
-            src_root: src_root.to_path_buf(),
-            dir_listing: dir
-                .into_iter()
-                .filter_map(|entry| Some(entry.file_name().to_str()?.to_string()))
-                .collect(),
-        });
-    };
+    }
 
-    debug!("Module name: `{}`", module_name);
-    Ok(module_root)
+    Ok(module_relative)
 }
 
 #[cfg(test)]
@@ -845,7 +861,7 @@ mod tests {
             .replace('\\', "/");
         assert_snapshot!(
             err_message,
-            @"Missing module directory for `camel_case` in `[TEMP_PATH]/src`. Found: `camelCase`"
+            @"Expected a Python module at: `[TEMP_PATH]/src/camel_case/__init__.py`"
         );
     }
 
@@ -872,14 +888,10 @@ mod tests {
         let err_message = format_err(&build_err);
         assert_snapshot!(
             err_message,
-            @r#"
-        Invalid pyproject.toml
-          Caused by: TOML parse error at line 10, column 15
-           |
-        10 | module-name = "django@home-stubs"
-           |               ^^^^^^^^^^^^^^^^^^^
-        Invalid character `@` at position 7 for identifier `django@home`, expected an underscore or an alphanumeric character
-        "#
+            @r"
+        Invalid module name: django@home-stubs
+          Caused by: Invalid character `@` at position 7 for identifier `django@home`, expected an underscore or an alphanumeric character
+        "
         );
     }
 
@@ -914,7 +926,7 @@ mod tests {
             .replace('\\', "/");
         assert_snapshot!(
             err_message,
-            @"Expected a Python module directory at: `[TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi`"
+            @"Expected a Python module at: `[TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi`"
         );
 
         // Create the correct file
@@ -955,5 +967,238 @@ mod tests {
 
         let build2 = build(src.path(), dist.path()).unwrap();
         assert_eq!(build1.wheel_contents, build2.wheel_contents);
+    }
+
+    /// A simple namespace package with a single root `__init__.py`.
+    #[test]
+    fn simple_namespace_package() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "simple-namespace-part"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "simple_namespace.part"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("simple_namespace").join("part"))
+            .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"Expected a Python module at: `[TEMP_PATH]/src/simple_namespace/part/__init__.py`"
+        );
+
+        // Create the correct file
+        File::create(
+            src.path()
+                .join("src")
+                .join("simple_namespace")
+                .join("part")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        // For a namespace package, there must not be an `__init__.py` here.
+        let bogus_init_py = src
+            .path()
+            .join("src")
+            .join("simple_namespace")
+            .join("__init__.py");
+        File::create(&bogus_init_py).unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: `[TEMP_PATH]/src/simple_namespace`"
+        );
+        fs_err::remove_file(bogus_init_py).unwrap();
+
+        let build1 = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
+        simple_namespace_part-1.0.0/
+        simple_namespace_part-1.0.0/PKG-INFO
+        simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/src
+        simple_namespace_part-1.0.0/src/simple_namespace
+        simple_namespace_part-1.0.0/src/simple_namespace/part
+        simple_namespace_part-1.0.0/src/simple_namespace/part/__init__.py
+        ");
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        simple_namespace/
+        simple_namespace/part/
+        simple_namespace/part/__init__.py
+        simple_namespace_part-1.0.0.dist-info/
+        simple_namespace_part-1.0.0.dist-info/METADATA
+        simple_namespace_part-1.0.0.dist-info/RECORD
+        simple_namespace_part-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that `namespace = true` works too.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "simple-namespace-part"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "simple_namespace.part"
+            namespace = true
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let build2 = build(src.path(), dist.path()).unwrap();
+        assert_eq!(build1, build2);
+    }
+
+    /// A complex namespace package with a multiple root `__init__.py`.
+    #[test]
+    fn complex_namespace_package() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "complex-namespace"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            namespace = true
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_a"),
+        )
+        .unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_a")
+                .join("__init__.py"),
+        )
+        .unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_b"),
+        )
+        .unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_b")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build1 = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        complex_namespace-1.0.0.dist-info/
+        complex_namespace-1.0.0.dist-info/METADATA
+        complex_namespace-1.0.0.dist-info/RECORD
+        complex_namespace-1.0.0.dist-info/WHEEL
+        complex_namespace/
+        complex_namespace/part_a/
+        complex_namespace/part_a/__init__.py
+        complex_namespace/part_b/
+        complex_namespace/part_b/__init__.py
+        ");
+
+        // Check that setting the name manually works equally.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "complex-namespace"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "complex_namespace"
+            namespace = true
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let build2 = build(src.path(), dist.path()).unwrap();
+        assert_eq!(build1, build2);
+    }
+
+    /// Stubs for a namespace package.
+    #[test]
+    fn stubs_namespace() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "cloud.db.schema-stubs"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "cloud-stubs.db.schema"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("cloud-stubs")
+                .join("db")
+                .join("schema"),
+        )
+        .unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("cloud-stubs")
+                .join("db")
+                .join("schema")
+                .join("__init__.pyi"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        cloud-stubs/
+        cloud-stubs/db/
+        cloud-stubs/db/schema/
+        cloud-stubs/db/schema/__init__.pyi
+        cloud_db_schema_stubs-1.0.0.dist-info/
+        cloud_db_schema_stubs-1.0.0.dist-info/METADATA
+        cloud_db_schema_stubs-1.0.0.dist-info/RECORD
+        cloud_db_schema_stubs-1.0.0.dist-info/WHEEL
+        ");
     }
 }

@@ -653,6 +653,8 @@ impl TestContext {
             format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/"),
             "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/".to_string(),
         ));
+        // For wiremock tests
+        filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
 
         Self {
             root: ChildPath::new(root.path()),

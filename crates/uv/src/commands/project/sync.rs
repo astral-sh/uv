@@ -57,7 +57,7 @@ pub(crate) async fn sync(
     all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -116,23 +116,24 @@ pub(crate) async fn sync(
         SyncTarget::Project(project)
     };
 
-    // Determine the default groups to include.
+    // Determine the groups and extras to include.
     let default_groups = match &target {
         SyncTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         SyncTarget::Script(..) => DefaultGroups::default(),
     };
-
-    // Determine the default extras to include.
     let default_extras = match &target {
         SyncTarget::Project(_project) => DefaultExtras::default(),
         SyncTarget::Script(..) => DefaultExtras::default(),
     };
+    let groups = groups.with_defaults(default_groups);
+    let extras = extras.with_defaults(default_extras);
 
     // Discover or create the virtual environment.
     let environment = match &target {
         SyncTarget::Project(project) => SyncEnvironment::Project(
             ProjectEnvironment::get_or_init(
                 project.workspace(),
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &network_settings,
@@ -437,8 +438,8 @@ pub(crate) async fn sync(
     match do_sync(
         sync_target,
         &environment,
-        &extras.with_defaults(default_extras),
-        &dev.with_defaults(default_groups),
+        &extras,
+        &groups,
         editable,
         install_options,
         modifications,
@@ -573,7 +574,7 @@ pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
-    dev: &DependencyGroupsWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -624,11 +625,11 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(target.lock(), extras, dev)?;
+    detect_conflicts(target.lock(), extras, groups)?;
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(extras)?;
-    target.validate_groups(dev)?;
+    target.validate_groups(groups)?;
 
     // Determine the markers to use for resolution.
     let marker_env = venv.interpreter().resolver_marker_environment();
@@ -665,7 +666,7 @@ pub(super) async fn do_sync(
         &marker_env,
         tags,
         extras,
-        dev,
+        groups,
         build_options,
         &install_options,
     )?;

@@ -2671,7 +2671,7 @@ Supports CPython and PyPy. CPython distributions are downloaded from the Astral 
 
 Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`.
 
-A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments. There is experimental support for adding Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
+A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments. There is experimental support for adding Python executables to a directory on the path — use the `--preview` flag to enable this behavior and `uv python dir --bin` to retrieve the target directory.
 
 Multiple Python versions may be requested.
 
@@ -2922,7 +2922,7 @@ By default, Python installations are stored in the uv data directory at `$XDG_DA
 
 The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
 
-To view the directory where uv installs Python executables instead, use the `--bin` flag. Note that Python executables are only installed when preview mode is enabled.
+To view the directory where uv installs Python executables instead, use the `--bin` flag. The Python executable directory may be overridden with `$UV_PYTHON_BIN_DIR`. Note that Python executables are only installed when preview mode is enabled.
 
 <h3 class="cli-reference">Usage</h3>
 

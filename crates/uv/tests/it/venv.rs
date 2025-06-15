@@ -475,17 +475,195 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     context.venv.assert(predicates::path::is_dir());
 
     // We warn if we receive an incompatible version
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn create_venv_respects_group_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.9", "3.10", "3.11", "3.12"]);
+
+    // Without a Python requirement, we use the first on the PATH
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // With `requires-python = ">=3.10"` on the default group, we pick 3.10
+    // However non-default groups should not be consulted!
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.10"}
+        other = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // When the top-level requires-python and default group requires-python
+    // both apply, their intersection is used. However non-default groups
+    // should not be consulted! (here the top-level wins)
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.10"}
+        other = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // When the top-level requires-python and default group requires-python
+    // both apply, their intersection is used. However non-default groups
+    // should not be consulted! (here the group wins)
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.11"}
+        other = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // We warn if we receive an incompatible version
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `tool.uv.dependency-groups.dev.requires-python`).
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // We error if there's no compatible version
+    // non-default groups are not consulted here!
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = "<3.12"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.12"}
+        other = {requires-python = ">=3.11"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Found conflicting Python requirements:
+      │ - foo: <3.12
+      │ - foo:dev: >=3.12
+    "
     );
 
     Ok(())

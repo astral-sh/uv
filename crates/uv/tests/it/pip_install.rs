@@ -564,11 +564,6 @@ fn install_requirements_txt() -> Result<()> {
 #[tokio::test]
 async fn install_remote_requirements_txt() -> Result<()> {
     let context = TestContext::new("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
 
     let username = "user";
     let password = "password";
@@ -579,17 +574,17 @@ async fn install_remote_requirements_txt() -> Result<()> {
     let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server_url))?;
 
     // Should fail without credentials
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_url.as_str())
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Error while accessing remote requirements file: `http://[LOCALHOST]
-    "###
+    error: Error while accessing remote requirements file: `http://[LOCALHOST]/requirements.txt`
+    "
     );
 
     let _ = requirements_url.set_username(username);
@@ -9632,6 +9627,43 @@ fn dependency_group() -> Result<()> {
      + iniconfig==2.0.0
      + sortedcontainers==2.4.0
      + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_dependency_group() -> Result<()> {
+    // testing basic `uv pip install --group` functionality
+    // when the pyproject.toml is virtual
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            bar = ["iniconfig"]
+            dev = ["sniffio"]
+            "#,
+        )?;
+        Ok(context)
+    }
+
+    // 'bar' using path sugar
+    let context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     Ok(())

@@ -31,4 +31,42 @@ build on aarch64 Windows, but does not consider either platform to be supported 
 minimum supported Windows versions are Windows 10 and Windows Server 2016, following
 [Rust's own Tier 1 support](https://blog.rust-lang.org/2024/02/26/Windows-7.html).
 
-uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, 3.12, and 3.13.
+## macOS versions
+
+uv supports macOS 13+ (Ventura).
+
+uv is known to work on macOS 12, but requires installation of a `realpath` executable.
+
+## Python support
+
+uv supports and is tested against the following Python versions:
+
+- 3.8
+- 3.9
+- 3.10
+- 3.11
+- 3.12
+- 3.13
+- 3.14
+
+uv has Tier 1 support for the following Python implementations:
+
+- CPython
+
+As with platforms, Tier 1 support can be thought of "guaranteed to work". uv supports managed
+installations of these implementations, and the builds are maintained by Astral.
+
+uv has Tier 2 support for:
+
+- PyPy
+- GraalPy
+
+uv is "expected to work" with these implementations. uv also supports managed installations of these
+Python implementations, but the builds are not maintained by Astral.
+
+uv has Tier 3 support for:
+
+- Pyston
+- Pyodide
+
+uv "should work" with these implementations, but stability may vary.

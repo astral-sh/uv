@@ -19,7 +19,7 @@ existing project, add it to the `[build-system]` section in your `pyproject.toml
 
 ```toml
 [build-system]
-requires = ["uv_build>=0.7.12,<0.8.0"]
+requires = ["uv_build>=0.7.13,<0.8.0"]
 build-backend = "uv_build"
 ```
 
@@ -54,7 +54,24 @@ module-name = "PIL"
 module-root = ""
 ```
 
-The build backend supports building stubs packages with a `-stubs` package or module name.
+For a namespace packages, the path can be dotted. The example below expects to find a
+`src/cloud/db/schema/__init__.py`:
+
+```toml
+[tool.uv.build-backend]
+module-name = "cloud.db.schema"
+```
+
+Complex namespaces with more than one root module can be built by setting the `namespace` option,
+which allows more than one root `__init__.py`:
+
+```toml
+[tool.uv.build-backend]
+namespace = true
+```
+
+The build backend supports building stubs packages with a `-stubs` suffix on the package or module
+name, including for namespace packages.
 
 ## Include and exclude configuration
 
