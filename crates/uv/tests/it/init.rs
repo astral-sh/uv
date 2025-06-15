@@ -4006,3 +4006,49 @@ fn git_states() {
     ");
     assert!(!context.temp_dir.child("broken-git/.git").is_dir());
 }
+
+#[test]
+fn init_cursor_rules() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Test with --cursor-rules flag
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--cursor-rules").env("CURSOR_TRACE_ID", "test"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    // Verify the Cursor rules file was created
+    let cursor_rules_path = context.temp_dir.join("foo/.cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc");
+    assert!(cursor_rules_path.exists(), "Cursor rules file should be created");
+    
+    let cursor_rules_content = fs_err::read_to_string(&cursor_rules_path)?;
+    assert!(cursor_rules_content.contains("Use uv instead of pip, poetry, conda"));
+    assert!(cursor_rules_content.contains("uv add <package>"));
+
+    Ok(())
+}
+
+#[test]
+fn init_no_cursor_rules() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Test with --no-cursor-rules flag
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-cursor-rules").env("CURSOR_TRACE_ID", "test"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    // Verify the Cursor rules file was NOT created
+    let cursor_rules_path = context.temp_dir.join("foo/.cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc");
+    assert!(!cursor_rules_path.exists(), "Cursor rules file should not be created with --no-cursor-rules");
+
+    Ok(())
+}
