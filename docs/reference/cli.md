@@ -321,7 +321,10 @@ uv init [OPTIONS] [PATH]
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="uv-init--config-file"><a href="#uv-init--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
-<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-init--description"><a href="#uv-init--description"><code>--description</code></a> <i>description</i></dt><dd><p>Set the project description</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-init--cursor-rules"><a href="#uv-init--cursor-rules"><code>--cursor-rules</code></a></dt><dd><p>Create Cursor rules file to guide AI assistants to prefer uv over other Python tools.</p>
+<p>When enabled, uv will automatically create a <code>.cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc</code> file if Cursor is detected on the system. This guides AI assistants to use uv and understand its syntax</p>
+<p>By default, uv will create the rules file automatically when Cursor is detected. Use <code>--no-cursor-rules</code> to disable this behavior.</p>
+<p>May also be set with the <code>UV_CURSOR_RULES</code> environment variable.</p></dd><dt id="uv-init--description"><a href="#uv-init--description"><code>--description</code></a> <i>description</i></dt><dd><p>Set the project description</p>
 </dd><dt id="uv-init--directory"><a href="#uv-init--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
@@ -338,7 +341,9 @@ uv init [OPTIONS] [PATH]
 <p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-init--no-cache"><a href="#uv-init--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-init--no-config"><a href="#uv-init--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-init--no-description"><a href="#uv-init--no-description"><code>--no-description</code></a></dt><dd><p>Disable the description for the project</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-init--no-cursor-rules"><a href="#uv-init--no-cursor-rules"><code>--no-cursor-rules</code></a></dt><dd><p>Disable automatic creation of Cursor rules file.</p>
+<p>Prevents uv from creating a <code>.cursor/rules/</code> file even if Cursor is detected.</p>
+</dd><dt id="uv-init--no-description"><a href="#uv-init--no-description"><code>--no-description</code></a></dt><dd><p>Disable the description for the project</p>
 </dd><dt id="uv-init--no-managed-python"><a href="#uv-init--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 <p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-init--no-package"><a href="#uv-init--no-package"><code>--no-package</code></a></dt><dd><p>Do not set up the project to be built as a Python package.</p>

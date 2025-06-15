@@ -1650,6 +1650,7 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.no_workspace,
+                args.cursor_rules,
                 &globals.network_settings,
                 globals.python_preference,
                 globals.python_downloads,

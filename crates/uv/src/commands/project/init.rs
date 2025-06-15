@@ -55,6 +55,7 @@ pub(crate) async fn init(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
+    cursor_rules: bool,
     network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -145,6 +146,7 @@ pub(crate) async fn init(
                 python,
                 install_mirrors,
                 no_workspace,
+                cursor_rules,
                 network_settings,
                 python_preference,
                 python_downloads,
@@ -288,6 +290,7 @@ async fn init_project(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
+    cursor_rules: bool,
     network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -664,6 +667,81 @@ async fn init_project(
         }
     }
 
+    // Create Cursor rules file if enabled and Cursor is detected
+    if cursor_rules && is_cursor_installed() {
+        if let Err(err) = create_cursor_rules_file(path) {
+            // Log the error but don't fail the initialization
+            tracing::debug!("Failed to create Cursor rules file: {}", err);
+        } else {
+            tracing::debug!(
+                "Created Cursor rules file at .cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Detect if Cursor is installed on the system.
+fn is_cursor_installed() -> bool {
+    if std::env::var("UV_CURSOR_RULES_DISABLED").is_ok() {
+        return false;
+    }
+
+    if let Ok(env) = std::env::var("CURSOR_TRACE_ID") {
+        if !env.is_empty() {
+            return true;
+        }
+    }
+
+    match std::env::consts::OS {
+        "macos" => std::path::Path::new("/Applications/Cursor.app").exists(),
+        "windows" => {
+            std::env::var("LOCALAPPDATA")
+                .map(|appdata| {
+                    std::path::Path::new(&appdata)
+                        .join("Programs/Cursor/Cursor.exe")
+                        .exists()
+                })
+                .unwrap_or(false)
+                || std::env::var("PROGRAMFILES")
+                    .map(|pf| std::path::Path::new(&pf).join("Cursor/Cursor.exe").exists())
+                    .unwrap_or(false)
+        }
+        "linux" => {
+            std::env::var("HOME")
+                .map(|home| {
+                    std::path::Path::new(&home)
+                        .join(".local/bin/cursor")
+                        .exists()
+                })
+                .unwrap_or(false)
+                || std::path::Path::new("/snap/cursor/current/cursor").exists()
+                || std::path::Path::new("/usr/local/bin/cursor").exists()
+                || std::path::Path::new("/usr/bin/cursor").exists()
+                || std::process::Command::new("flatpak")
+                    .args(["list"])
+                    .output()
+                    .map(|output| {
+                        String::from_utf8_lossy(&output.stdout).contains("com.cursor.Cursor")
+                    })
+                    .unwrap_or(false)
+        }
+        _ => false,
+    }
+}
+
+/// Create the Cursor rules file.
+fn create_cursor_rules_file(project_path: &std::path::Path) -> Result<()> {
+    let cursor_dir = project_path.join(".cursor").join("rules");
+    std::fs::create_dir_all(&cursor_dir)?;
+
+    let rules_file = cursor_dir.join("use-uv-instead-of-pip-poetry-conda.mdc");
+
+    // Embed the template file at compile time
+    const CURSOR_RULES_TEMPLATE: &str = include_str!("cursor_rules_template.mdc");
+
+    fs_err::write(rules_file, CURSOR_RULES_TEMPLATE)?;
     Ok(())
 }
 

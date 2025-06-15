@@ -2880,6 +2880,22 @@ pub struct InitArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// Create Cursor rules file to guide AI assistants to prefer uv over other Python tools.
+    ///
+    /// When enabled, uv will automatically create a `.cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc`
+    /// file if Cursor is detected on the system. This guides AI assistants to use uv and understand its syntax
+    ///
+    /// By default, uv will create the rules file automatically when Cursor is detected. Use
+    /// `--no-cursor-rules` to disable this behavior.
+    #[arg(long, overrides_with = "no_cursor_rules", env = "UV_CURSOR_RULES", value_parser = clap::builder::BoolishValueParser::new())]
+    pub cursor_rules: bool,
+
+    /// Disable automatic creation of Cursor rules file.
+    ///
+    /// Prevents uv from creating a `.cursor/rules/` file even if Cursor is detected.
+    #[arg(long, overrides_with = "cursor_rules")]
+    pub no_cursor_rules: bool,
 }
 
 #[derive(Args)]
