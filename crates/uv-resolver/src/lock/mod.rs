@@ -1231,7 +1231,7 @@ impl Lock {
         build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
-        indexes: Option<&IndexLocations>,
+        indexes: Option<Cow<'_, IndexLocations>>,
         tags: &Tags,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
@@ -1397,7 +1397,7 @@ impl Lock {
         }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
-        let remotes = indexes.map(|locations| {
+        let remotes = indexes.as_ref().map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1410,7 +1410,7 @@ impl Lock {
                 .collect::<BTreeSet<_>>()
         });
 
-        let locals = indexes.map(|locations| {
+        let locals = indexes.as_ref().map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
