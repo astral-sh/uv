@@ -831,7 +831,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("x86_64"),
+                    value: arcstr::literal!("AMD64"),
                 }));
                 marker.or(tag_marker);
             }
