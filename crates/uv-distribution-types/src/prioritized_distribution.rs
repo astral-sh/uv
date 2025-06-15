@@ -925,7 +925,7 @@ mod tests {
         );
         assert_markers(
             "numpy-2.2.1-cp313-cp313t-win_amd64.whl",
-            "sys_platform == 'win32' and platform_machine == 'x86_64'",
+            "sys_platform == 'win32' and platform_machine == 'AMD64'",
         );
         assert_markers(
             "numpy-2.2.1-cp313-cp313t-win_arm64.whl",
