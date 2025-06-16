@@ -1,10 +1,15 @@
-# Build and publish a Docker image using Depot.
+# Build and publish Docker images.
 #
-# Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
-# artifacts job within `cargo-dist`.
+# Uses Depot for multi-platform builds. Includes both a `uv` base image, which
+# is just the binary in a scratch image, and a set of extra, common images with
+# the uv binary installed.
 #
-# TODO(charlie): Ideally, the publish step would happen as a publish job within `cargo-dist`, but
-# sharing the built image as an artifact between jobs is challenging.
+# Assumed to run as a subworkflow of .github/workflows/release.yml;
+# specifically, as a local artifacts job within `cargo-dist`.
+#
+# TODO(charlie): Ideally, the publish step would happen as a publish job within
+# `cargo-dist`, but sharing the built image as an artifact between jobs is
+# challenging.
 name: "Build Docker image"
 
 on:
