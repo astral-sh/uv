@@ -41,10 +41,7 @@ use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{
-    BaseClient, CachedClient, CachedClientError, Error, ErrorKind, FlatIndexClient,
-    FlatIndexEntries,
-};
+use crate::{BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -607,18 +604,16 @@ impl RegistryClient {
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
-        self.cached_client()
+        let simple = self
+            .cached_client()
             .get_cacheable_with_retry(
                 simple_request,
                 cache_entry,
                 cache_control,
                 parse_simple_response,
             )
-            .await
-            .map_err(|err| match err {
-                CachedClientError::Client { err, .. } => err,
-                CachedClientError::Callback { err, .. } => err,
-            })
+            .await?;
+        Ok(simple)
     }
 
     /// Fetch the [`SimpleMetadata`] from a local file, using a PEP 503-compatible directory
