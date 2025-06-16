@@ -631,7 +631,7 @@ impl ToolUvSources {
 }
 
 /// Ensure that all keys in the TOML table are unique.
-impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
+impl<'de> Deserialize<'de> for ToolUvSources {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -641,7 +641,7 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
         impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
             type Value = ToolUvSources;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str("a map with unique keys")
             }
 
@@ -690,7 +690,7 @@ impl ToolUvDependencyGroups {
 }
 
 /// Ensure that all keys in the TOML table are unique.
-impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
+impl<'de> Deserialize<'de> for ToolUvDependencyGroups {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -700,7 +700,7 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
         impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
             type Value = ToolUvDependencyGroups;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str("a map with unique keys")
             }
 
@@ -780,7 +780,7 @@ pub struct ToolUvWorkspace {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SerdePattern(Pattern);
 
-impl serde::ser::Serialize for SerdePattern {
+impl Serialize for SerdePattern {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::ser::Serializer,
@@ -789,8 +789,8 @@ impl serde::ser::Serialize for SerdePattern {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for SerdePattern {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+impl<'de> Deserialize<'de> for SerdePattern {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct Visitor;
 
         impl serde::de::Visitor<'_> for Visitor {
@@ -879,7 +879,7 @@ enum SourcesWire {
     Many(Vec<Source>),
 }
 
-impl<'de> serde::de::Deserialize<'de> for SourcesWire {
+impl<'de> Deserialize<'de> for SourcesWire {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -889,7 +889,7 @@ impl<'de> serde::de::Deserialize<'de> for SourcesWire {
         impl<'de> serde::de::Visitor<'de> for Visitor {
             type Value = SourcesWire;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str("a single source (as a map) or list of sources")
             }
 
@@ -897,7 +897,7 @@ impl<'de> serde::de::Deserialize<'de> for SourcesWire {
             where
                 A: SeqAccess<'de>,
             {
-                let sources = serde::de::Deserialize::deserialize(
+                let sources = Deserialize::deserialize(
                     serde::de::value::SeqAccessDeserializer::new(seq),
                 )?;
                 Ok(SourcesWire::Many(sources))
@@ -907,7 +907,7 @@ impl<'de> serde::de::Deserialize<'de> for SourcesWire {
             where
                 M: serde::de::MapAccess<'de>,
             {
-                let source = serde::de::Deserialize::deserialize(
+                let source = Deserialize::deserialize(
                     serde::de::value::MapAccessDeserializer::new(&mut map),
                 )?;
                 Ok(SourcesWire::One(source))

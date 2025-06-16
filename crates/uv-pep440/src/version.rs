@@ -149,7 +149,7 @@ impl FromStr for Operator {
 
 impl std::fmt::Display for Operator {
     /// Note the `EqualStar` is also `==`.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let operator = match self {
             Self::Equal => "==",
             // Beware, this doesn't print the star
@@ -178,7 +178,7 @@ pub struct OperatorParseError {
 impl std::error::Error for OperatorParseError {}
 
 impl std::fmt::Display for OperatorParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
             "no such comparison operator {:?}, must be one of ~= == != <= >= < > ===",
@@ -761,7 +761,7 @@ impl Serialize for Version {
 
 /// Shows normalized version
 impl std::fmt::Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.epoch() != 0 {
             write!(f, "{}!", self.epoch())?;
         }
@@ -798,7 +798,7 @@ impl std::fmt::Display for Version {
 }
 
 impl std::fmt::Debug for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "\"{self}\"")
     }
 }
@@ -1497,7 +1497,7 @@ pub enum PrereleaseKind {
 }
 
 impl std::fmt::Display for PrereleaseKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Alpha => write!(f, "a"),
             Self::Beta => write!(f, "b"),
@@ -1507,7 +1507,7 @@ impl std::fmt::Display for PrereleaseKind {
 }
 
 impl std::fmt::Display for Prerelease {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.kind, self.number)
     }
 }
@@ -1572,7 +1572,7 @@ impl LocalVersion {
 /// [`LocalVersionSlice::Max`] maps to `"[max]"` which is otherwise an illegal local
 /// version because `[` and `]` are not allowed.
 impl std::fmt::Display for LocalVersionSlice<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             LocalVersionSlice::Segments(segments) => {
                 for (i, segment) in segments.iter().enumerate() {
@@ -1646,7 +1646,7 @@ pub enum LocalSegment {
 }
 
 impl std::fmt::Display for LocalSegment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::String(string) => write!(f, "{string}"),
             Self::Number(number) => write!(f, "{number}"),
@@ -2306,7 +2306,7 @@ impl ByteSet {
 }
 
 impl std::fmt::Debug for ByteSet {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         let mut set = f.debug_set();
         for byte in 0..=255 {
             if self.contains(byte) {
@@ -2326,7 +2326,7 @@ pub struct VersionParseError {
 impl std::error::Error for VersionParseError {}
 
 impl std::fmt::Display for VersionParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match *self.kind {
             ErrorKind::Wildcard => write!(f, "wildcards are not allowed in a version"),
             ErrorKind::InvalidDigit { got } if got.is_ascii() => {
@@ -2444,7 +2444,7 @@ pub struct VersionPatternParseError {
 impl std::error::Error for VersionPatternParseError {}
 
 impl std::fmt::Display for VersionPatternParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match *self.kind {
             PatternErrorKind::Version(ref err) => err.fmt(f),
             PatternErrorKind::WildcardNotTrailing => {

@@ -1510,8 +1510,8 @@ fn add_source(req: &PackageName, source: &Source, sources: &mut Table) -> Result
     Ok(())
 }
 
-impl fmt::Display for PyProjectTomlMut {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for PyProjectTomlMut {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.doc.fmt(f)
     }
 }

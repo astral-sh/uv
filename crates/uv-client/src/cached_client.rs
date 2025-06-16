@@ -82,7 +82,7 @@ where
     A: rkyv::Archive + for<'a> rkyv::Serialize<crate::rkyvutil::Serializer<'a>> + Send + 'static,
     A::Archived: rkyv::Portable
         + rkyv::Deserialize<A, crate::rkyvutil::Deserializer>
-        + for<'a> rkyv::bytecheck::CheckBytes<crate::rkyvutil::Validator<'a>>,
+        + for<'a> bytecheck::CheckBytes<crate::rkyvutil::Validator<'a>>,
 {
     type Target = Self;
 

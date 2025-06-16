@@ -20,7 +20,7 @@ pub enum DefaultExtras {
 }
 
 /// Serialize a [`DefaultExtras`] struct into a list of marker strings.
-impl serde::Serialize for DefaultExtras {
+impl Serialize for DefaultExtras {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -39,17 +39,17 @@ impl serde::Serialize for DefaultExtras {
 }
 
 /// Deserialize a "all" or list of [`ExtraName`] into a [`DefaultExtras`] enum.
-impl<'de> serde::Deserialize<'de> for DefaultExtras {
+impl<'de> Deserialize<'de> for DefaultExtras {
     fn deserialize<D>(deserializer: D) -> Result<DefaultExtras, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         struct StringOrVecVisitor;
 
         impl<'de> serde::de::Visitor<'de> for StringOrVecVisitor {
             type Value = DefaultExtras;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
                 formatter.write_str(r#"the string "all" or a list of strings"#)
             }
 

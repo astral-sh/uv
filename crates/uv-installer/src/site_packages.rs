@@ -258,10 +258,10 @@ impl SitePackages {
                         }
                         [installed] => {
                             match &dependency.version_or_url {
-                                None | Some(uv_pep508::VersionOrUrl::Url(_)) => {
+                                None | Some(VersionOrUrl::Url(_)) => {
                                     // Nothing to do (accept any installed version).
                                 }
-                                Some(uv_pep508::VersionOrUrl::VersionSpecifier(
+                                Some(VersionOrUrl::VersionSpecifier(
                                     version_specifier,
                                 )) => {
                                     // The installed version doesn't satisfy the requirement.

@@ -1305,7 +1305,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
         .and_then(|component| component.as_os_str().to_str())
         .is_some_and(|component| {
             component.starts_with("python")
-                && std::path::Path::new(component)
+                && Path::new(component)
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
         })
@@ -1340,7 +1340,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     let mut path_encoded = path
         .as_os_str()
         .encode_wide()
-        .chain(std::iter::once(0))
+        .chain(iter::once(0))
         .collect::<Vec<_>>();
 
     // SAFETY: The path is null-terminated.

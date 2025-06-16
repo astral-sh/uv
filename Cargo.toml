@@ -199,6 +199,7 @@ ignored = ["flate2", "xz2"]
 [workspace.lints.rust]
 unsafe_code = "warn"
 unreachable_pub = "warn"
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -2 }

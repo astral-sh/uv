@@ -352,7 +352,7 @@ pub(crate) async fn install(
                 downloaded.push(installation);
             }
             Err(err) => {
-                errors.push((download.key().clone(), anyhow::Error::new(err)));
+                errors.push((download.key().clone(), Error::new(err)));
             }
         }
     }
@@ -690,7 +690,7 @@ fn create_bin_links(
                     .insert(target.clone());
             }
             Err(err) => {
-                errors.push((installation.key().clone(), anyhow::Error::new(err)));
+                errors.push((installation.key().clone(), Error::new(err)));
             }
         }
     }

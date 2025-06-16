@@ -49,7 +49,7 @@ impl<'de> Deserialize<'de> for GroupName {
         impl serde::de::Visitor<'_> for Visitor {
             type Value = GroupName;
 
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
                 f.write_str("a string")
             }
 
@@ -75,8 +75,8 @@ impl Serialize for GroupName {
     }
 }
 
-impl std::fmt::Display for GroupName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for GroupName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }
@@ -176,10 +176,10 @@ pub enum DefaultGroups {
 }
 
 /// Serialize a [`DefaultGroups`] struct into a list of marker strings.
-impl serde::Serialize for DefaultGroups {
+impl Serialize for DefaultGroups {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: Serializer,
     {
         match self {
             DefaultGroups::All => serializer.serialize_str("all"),
@@ -195,17 +195,17 @@ impl serde::Serialize for DefaultGroups {
 }
 
 /// Deserialize a "all" or list of [`GroupName`] into a [`DefaultGroups`] enum.
-impl<'de> serde::Deserialize<'de> for DefaultGroups {
+impl<'de> Deserialize<'de> for DefaultGroups {
     fn deserialize<D>(deserializer: D) -> Result<DefaultGroups, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         struct StringOrVecVisitor;
 
         impl<'de> serde::de::Visitor<'de> for StringOrVecVisitor {
             type Value = DefaultGroups;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str(r#"the string "all" or a list of strings"#)
             }
 

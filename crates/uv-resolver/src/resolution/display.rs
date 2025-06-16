@@ -212,7 +212,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                     let mut dependents = graph
                         .edges_directed(index, Direction::Incoming)
                         .map(|edge| &graph[edge.source()])
-                        .map(uv_distribution_types::Name::name)
+                        .map(Name::name)
                         .collect::<Vec<_>>();
                     dependents.sort_unstable();
                     dependents.dedup();

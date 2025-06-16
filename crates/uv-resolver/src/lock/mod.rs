@@ -880,7 +880,7 @@ impl Lock {
                         self.manifest
                             .members
                             .iter()
-                            .map(std::string::ToString::to_string),
+                            .map(ToString::to_string),
                     )),
                 );
             }
@@ -2985,7 +2985,7 @@ impl PackageId {
 }
 
 impl Display for PackageId {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         if let Some(version) = &self.version {
             write!(f, "{}=={} @ {}", self.name, version, self.source)
         } else {
@@ -3319,7 +3319,7 @@ impl Source {
 }
 
 impl Display for Source {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Source::Registry(RegistrySource::Url(url))
             | Source::Git(url, _)
@@ -3449,7 +3449,7 @@ enum RegistrySource {
 }
 
 impl Display for RegistrySource {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             RegistrySource::Url(url) => write!(f, "{url}"),
             RegistrySource::Path(path) => write!(f, "{}", path.display()),
@@ -3475,7 +3475,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySourceWire {
         impl serde::de::Visitor<'_> for Visitor {
             type Value = RegistrySourceWire;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str("a valid URL or a file path")
             }
 
@@ -4414,7 +4414,7 @@ impl Dependency {
 }
 
 impl Display for Dependency {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match (self.extra.is_empty(), self.package_id.version.as_ref()) {
             (true, Some(version)) => write!(f, "{}=={}", self.package_id.name, version),
             (true, None) => write!(f, "{}", self.package_id.name),
@@ -4494,7 +4494,7 @@ impl FromStr for Hash {
 }
 
 impl Display for Hash {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{}:{}", self.0.algorithm, self.0.digest)
     }
 }
@@ -4752,14 +4752,14 @@ pub struct LockError {
     hint: Option<WheelTagHint>,
 }
 
-impl std::error::Error for LockError {
+impl Error for LockError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         self.kind.source()
     }
 }
 
-impl std::fmt::Display for LockError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for LockError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.kind)?;
         if let Some(hint) = &self.hint {
             write!(f, "\n\n{hint}")?;
@@ -4898,7 +4898,7 @@ impl WheelTagHint {
         filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
     ) -> impl Iterator<Item = LanguageTag> + 'a {
         filenames
-            .flat_map(uv_distribution_filename::WheelFilename::python_tags)
+            .flat_map(WheelFilename::python_tags)
             .copied()
     }
 
@@ -4907,7 +4907,7 @@ impl WheelTagHint {
         filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
     ) -> impl Iterator<Item = AbiTag> + 'a {
         filenames
-            .flat_map(uv_distribution_filename::WheelFilename::abi_tags)
+            .flat_map(WheelFilename::abi_tags)
             .copied()
     }
 
@@ -4932,8 +4932,8 @@ impl WheelTagHint {
     }
 }
 
-impl std::fmt::Display for WheelTagHint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for WheelTagHint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::LanguageTags {
                 package,
@@ -5473,10 +5473,10 @@ enum SourceParseError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct HashParseError(&'static str);
 
-impl std::error::Error for HashParseError {}
+impl Error for HashParseError {}
 
 impl Display for HashParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         Display::fmt(self.0, f)
     }
 }

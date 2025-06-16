@@ -528,7 +528,7 @@ impl<'a> ExecutableProviderHints<'a> {
     }
 }
 
-impl std::fmt::Display for ExecutableProviderHints<'_> {
+impl Display for ExecutableProviderHints<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self {
             executable,
@@ -602,7 +602,7 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
             packages => {
                 let provided_by = packages
                     .iter()
-                    .map(uv_distribution_types::Name::name)
+                    .map(Name::name)
                     .map(|name| format!("- {}", name.cyan()))
                     .join("\n");
                 if self.not_from_expected() {
@@ -654,7 +654,7 @@ impl ToolRequirement {
     }
 }
 
-impl std::fmt::Display for ToolRequirement {
+impl Display for ToolRequirement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ToolRequirement::Python { .. } => write!(f, "python"),

@@ -114,7 +114,7 @@ impl<T: Pep508Url> Display for Pep508Error<T> {
 }
 
 /// We need this to allow anyhow's `.context()` and `AsDynError`.
-impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<T> {}
+impl<E: Error + Debug, T: Pep508Url<Err = E>> Error for Pep508Error<T> {}
 
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
@@ -220,10 +220,10 @@ impl<'de, T: Pep508Url> Deserialize<'de> for Requirement<T> {
     {
         struct RequirementVisitor<T>(std::marker::PhantomData<T>);
 
-        impl<T: Pep508Url> serde::de::Visitor<'_> for RequirementVisitor<T> {
+        impl<T: Pep508Url> de::Visitor<'_> for RequirementVisitor<T> {
             type Value = Requirement<T>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str("a string containing a PEP 508 requirement")
             }
 

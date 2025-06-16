@@ -1258,7 +1258,7 @@ impl RunCommand {
                 let entrypoint = interpreter.scripts().join(name);
 
                 // If the target is an installed, executable script — prefer that
-                if uv_fs::which::is_executable(&entrypoint) {
+                if is_executable(&entrypoint) {
                     let mut process = Command::new(entrypoint);
                     process.args(args);
                     process
@@ -1544,7 +1544,7 @@ impl RunCommand {
         } else {
             Ok(Self::External(
                 target.clone(),
-                args.iter().map(std::clone::Clone::clone).collect(),
+                args.iter().map(Clone::clone).collect(),
             ))
         }
     }

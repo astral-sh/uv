@@ -374,7 +374,7 @@ fn get_string_literal(
     meta: &ParseNestedMeta,
     meta_name: &str,
     attribute_name: &str,
-) -> syn::Result<syn::LitStr> {
+) -> syn::Result<LitStr> {
     let expr: syn::Expr = meta.value()?.parse()?;
 
     let mut value = &expr;

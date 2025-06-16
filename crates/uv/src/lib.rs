@@ -260,7 +260,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             },
             _ => None,
         }
-    } else if let Commands::Python(uv_cli::PythonNamespace {
+    } else if let Commands::Python(PythonNamespace {
         command:
             PythonCommand::Find(uv_cli::PythonFindArgs {
                 script: Some(script),

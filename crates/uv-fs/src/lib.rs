@@ -54,7 +54,7 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
 ///
 /// If the file path is `-`, then contents are read from stdin instead.
 #[cfg(feature = "tokio")]
-pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result<String> {
+pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> io::Result<String> {
     use std::io::Read;
 
     use encoding_rs_io::DecodeReaderBytes;
@@ -62,7 +62,7 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
     let path = path.as_ref();
     let raw = if path == Path::new("-") {
         let mut buf = Vec::with_capacity(1024);
-        std::io::stdin().read_to_end(&mut buf)?;
+        io::stdin().read_to_end(&mut buf)?;
         buf
     } else {
         fs_err::tokio::read(path).await?
@@ -72,7 +72,7 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
         .read_to_string(&mut buf)
         .map_err(|err| {
             let path = path.display();
-            std::io::Error::other(format!("failed to decode file {path}: {err}"))
+            io::Error::other(format!("failed to decode file {path}: {err}"))
         })?;
     Ok(buf)
 }
@@ -85,11 +85,11 @@ pub async fn read_to_string_transcode(path: impl AsRef<Path>) -> std::io::Result
 ///
 /// Note that because junctions are used, the source must be a directory.
 #[cfg(windows)]
-pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
     // If the source is a file, we can't create a junction
     if src.as_ref().is_file() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
             format!(
                 "Cannot create a junction for {}: is not a directory",
                 src.as_ref().display()
@@ -101,10 +101,10 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     match junction::delete(dunce::simplified(dst.as_ref())) {
         Ok(()) => match fs_err::remove_dir_all(dst.as_ref()) {
             Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => return Err(err),
         },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
     }
 
@@ -151,7 +151,7 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
 ///
 /// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
 /// instead; it will use a junction on Windows, which is more performant.
-pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
     #[cfg(windows)]
     {
         fs_err::copy(src.as_ref(), dst.as_ref())?;
@@ -165,14 +165,14 @@ pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std
 }
 
 #[cfg(windows)]
-pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn remove_symlink(path: impl AsRef<Path>) -> io::Result<()> {
     match junction::delete(dunce::simplified(path.as_ref())) {
         Ok(()) => match fs_err::remove_dir_all(path.as_ref()) {
             Ok(()) => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(err) => Err(err),
         },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err),
     }
 }
@@ -191,13 +191,13 @@ pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
 
 /// Return a [`NamedTempFile`] in the specified directory.
 #[cfg(not(unix))]
-pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
+pub fn tempfile_in(path: &Path) -> io::Result<NamedTempFile> {
     tempfile::Builder::new().tempfile_in(path)
 }
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 #[cfg(feature = "tokio")]
-pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
+pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> io::Result<()> {
     let temp_file = tempfile_in(
         path.as_ref()
             .parent()
@@ -208,7 +208,7 @@ pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std
 }
 
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
-pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
+pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> io::Result<()> {
     let temp_file = tempfile_in(
         path.as_ref()
             .parent()
@@ -219,7 +219,7 @@ pub fn write_atomic_sync(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std:
 }
 
 /// Copy `from` to `to` atomically using a temporary file and atomic rename.
-pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
     let temp_file = tempfile_in(to.as_ref().parent().expect("Write path must have a parent"))?;
     fs_err::copy(from.as_ref(), &temp_file)?;
     persist_with_retry_sync(temp_file, to.as_ref())
@@ -243,7 +243,7 @@ fn backoff_file_move() -> backon::ExponentialBackoff {
 pub async fn rename_with_retry(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     #[cfg(windows)]
     {
         use backon::Retryable;
@@ -260,7 +260,7 @@ pub async fn rename_with_retry(
         rename
             .retry(backoff_file_move())
             .sleep(tokio::time::sleep)
-            .when(|e| e.kind() == std::io::ErrorKind::PermissionDenied)
+            .when(|e| e.kind() == io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
                     "Retrying rename from {} to {} due to transient error: {}",
@@ -284,8 +284,8 @@ pub fn with_retry_sync(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
     operation_name: &str,
-    operation: impl Fn() -> Result<(), std::io::Error>,
-) -> Result<(), std::io::Error> {
+    operation: impl Fn() -> Result<(), io::Error>,
+) -> Result<(), io::Error> {
     #[cfg(windows)]
     {
         use backon::BlockingRetryable;
@@ -300,7 +300,7 @@ pub fn with_retry_sync(
         operation
             .retry(backoff_file_move())
             .sleep(std::thread::sleep)
-            .when(|err| err.kind() == std::io::ErrorKind::PermissionDenied)
+            .when(|err| err.kind() == io::ErrorKind::PermissionDenied)
             .notify(|err, _dur| {
                 warn!(
                     "Retrying {} from {} to {} due to transient error: {}",
@@ -312,7 +312,7 @@ pub fn with_retry_sync(
             })
             .call()
             .map_err(|err| {
-                std::io::Error::other(format!(
+                io::Error::other(format!(
                     "Failed {} {} to {}: {}",
                     operation_name,
                     from.display(),
@@ -340,7 +340,7 @@ enum PersistRetryError {
 pub async fn persist_with_retry(
     from: NamedTempFile,
     to: impl AsRef<Path>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     #[cfg(windows)]
     {
         use backon::Retryable;
@@ -414,12 +414,12 @@ pub async fn persist_with_retry(
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+            Err(PersistRetryError::Persist(error_message)) => Err(io::Error::other(format!(
                 "Failed to persist temporary file to {}: {}",
                 to.display(),
                 error_message,
             ))),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+            Err(PersistRetryError::LostState) => Err(io::Error::other(format!(
                 "Failed to retrieve temporary file while trying to persist to {}",
                 to.display()
             ))),
@@ -435,7 +435,7 @@ pub async fn persist_with_retry(
 pub fn persist_with_retry_sync(
     from: NamedTempFile,
     to: impl AsRef<Path>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     #[cfg(windows)]
     {
         use backon::BlockingRetryable;
@@ -482,12 +482,12 @@ pub fn persist_with_retry_sync(
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+            Err(PersistRetryError::Persist(error_message)) => Err(io::Error::other(format!(
                 "Failed to persist temporary file to {}: {}",
                 to.display(),
                 error_message,
             ))),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+            Err(PersistRetryError::LostState) => Err(io::Error::other(format!(
                 "Failed to retrieve temporary file while trying to persist to {}",
                 to.display()
             ))),
@@ -581,7 +581,7 @@ pub struct LockedFile(fs_err::File);
 
 impl LockedFile {
     /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
-    fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, std::io::Error> {
+    fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, io::Error> {
         trace!(
             "Checking lock for `{resource}` at `{}`",
             file.path().user_display()
@@ -593,7 +593,7 @@ impl LockedFile {
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if err.kind() != io::ErrorKind::WouldBlock {
                     debug!("Try lock error: {err:?}");
                 }
                 info!(
@@ -602,7 +602,7 @@ impl LockedFile {
                 );
                 file.file().lock_exclusive().map_err(|err| {
                     // Not an fs_err method, we need to build our own path context
-                    std::io::Error::other(format!(
+                    io::Error::other(format!(
                         "Could not acquire lock for `{resource}` at `{}`: {}",
                         file.path().user_display(),
                         err
@@ -621,7 +621,7 @@ impl LockedFile {
     pub fn acquire_blocking(
         path: impl AsRef<Path>,
         resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, io::Error> {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file_blocking(file, &resource)
@@ -632,7 +632,7 @@ impl LockedFile {
     pub async fn acquire(
         path: impl AsRef<Path>,
         resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, io::Error> {
         let file = Self::create(path)?;
         let resource = resource.to_string();
         tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
@@ -682,7 +682,7 @@ impl LockedFile {
     }
 
     #[cfg(not(unix))]
-    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
+    fn create(path: impl AsRef<Path>) -> io::Result<fs_err::File> {
         fs_err::OpenOptions::new()
             .read(true)
             .write(true)
@@ -693,7 +693,7 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = fs2::FileExt::unlock(self.0.file()) {
+        if let Err(err) = FileExt::unlock(self.0.file()) {
             error!(
                 "Failed to unlock {}; program may be stuck: {}",
                 self.0.path().display(),
@@ -730,7 +730,7 @@ impl<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin> tokio::i
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
+    ) -> std::task::Poll<io::Result<()>> {
         std::pin::Pin::new(&mut self.as_mut().reader)
             .poll_read(cx, buf)
             .map_ok(|()| {
@@ -740,7 +740,7 @@ impl<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin> tokio::i
 }
 
 /// Recursively copy a directory and its contents.
-pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
     fs_err::create_dir_all(&dst)?;
     for entry in fs_err::read_dir(src.as_ref())? {
         let entry = entry?;

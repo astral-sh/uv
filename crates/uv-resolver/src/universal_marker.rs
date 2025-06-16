@@ -359,9 +359,9 @@ impl ConflictMarker {
     /// Create a conflict marker that is true only when the given extra for the
     /// given package is activated.
     pub fn extra(package: &PackageName, extra: &ExtraName) -> ConflictMarker {
-        let operator = uv_pep508::ExtraOperator::Equal;
+        let operator = ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_extra(package, extra));
-        let expr = uv_pep508::MarkerExpression::Extra { operator, name };
+        let expr = MarkerExpression::Extra { operator, name };
         let marker = MarkerTree::expression(expr);
         ConflictMarker { marker }
     }
@@ -369,9 +369,9 @@ impl ConflictMarker {
     /// Create a conflict marker that is true only when the given group for the
     /// given package is activated.
     pub fn group(package: &PackageName, group: &GroupName) -> ConflictMarker {
-        let operator = uv_pep508::ExtraOperator::Equal;
+        let operator = ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_group(package, group));
-        let expr = uv_pep508::MarkerExpression::Extra { operator, name };
+        let expr = MarkerExpression::Extra { operator, name };
         let marker = MarkerTree::expression(expr);
         ConflictMarker { marker }
     }

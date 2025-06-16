@@ -74,7 +74,7 @@ impl<'de> serde::Deserialize<'de> for RequiredVersion {
 }
 
 impl std::fmt::Display for RequiredVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self.0, f)
     }
 }

@@ -384,7 +384,7 @@ impl BuildContext for BuildDispatch<'_> {
         build_output: BuildOutput,
         mut build_stack: BuildStack,
     ) -> Result<SourceBuild, uv_build_frontend::Error> {
-        let dist_name = dist.map(uv_distribution_types::Name::name);
+        let dist_name = dist.map(Name::name);
         let dist_version = dist
             .map(uv_distribution_types::DistributionMetadata::version_or_url)
             .and_then(|version| match version {

@@ -241,7 +241,7 @@ impl TrieState {
 #[derive(Debug)]
 struct RealmUsername(Realm, Username);
 
-impl std::fmt::Display for RealmUsername {
+impl Display for RealmUsername {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Self(realm, username) = self;
         if let Some(username) = username.as_deref() {

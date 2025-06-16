@@ -39,7 +39,7 @@ impl<'a> IntoIterator for &'a DependencyGroups {
 }
 
 /// Ensure that all keys in the TOML table are unique.
-impl<'de> serde::de::Deserialize<'de> for DependencyGroups {
+impl<'de> Deserialize<'de> for DependencyGroups {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,

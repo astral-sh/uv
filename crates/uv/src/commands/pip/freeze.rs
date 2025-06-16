@@ -53,7 +53,7 @@ pub(crate) fn pip_freeze(
 
     site_packages
         .iter()
-        .flat_map(uv_installer::SitePackages::iter)
+        .flat_map(SitePackages::iter)
         .filter(|dist| !(exclude_editable && dist.is_editable()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .map(|dist| match dist {

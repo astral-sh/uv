@@ -23,11 +23,11 @@ use uv_static::EnvVars;
 /// check if the directory exists.
 pub fn user_executable_directory(override_variable: Option<&'static str>) -> Option<PathBuf> {
     override_variable
-        .and_then(std::env::var_os)
+        .and_then(env::var_os)
         .and_then(parse_path)
-        .or_else(|| std::env::var_os(EnvVars::XDG_BIN_HOME).and_then(parse_path))
+        .or_else(|| env::var_os(EnvVars::XDG_BIN_HOME).and_then(parse_path))
         .or_else(|| {
-            std::env::var_os(EnvVars::XDG_DATA_HOME)
+            env::var_os(EnvVars::XDG_DATA_HOME)
                 .and_then(parse_path)
                 .map(|path| path.join("../bin"))
         })

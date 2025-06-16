@@ -916,7 +916,7 @@ impl RegistryClient {
                     read_metadata_range_request,
                 )
                 .await
-                .map_err(crate::Error::from);
+                .map_err(Error::from);
 
             match result {
                 Ok(metadata) => return Ok(metadata),
@@ -969,7 +969,7 @@ impl RegistryClient {
         self.cached_client()
             .get_serde_with_retry(req, &cache_entry, cache_control, read_metadata_stream)
             .await
-            .map_err(crate::Error::from)
+            .map_err(Error::from)
     }
 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].

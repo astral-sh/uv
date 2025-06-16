@@ -140,7 +140,7 @@ impl From<VersionSpecifier> for VersionSpecifiers {
 }
 
 impl std::fmt::Display for VersionSpecifiers {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for (idx, version_specifier) in self.0.iter().enumerate() {
             // Separate version specifiers by comma, but we need one comma less than there are
             // specifiers
@@ -222,7 +222,7 @@ struct VersionSpecifiersParseErrorInner {
 }
 
 impl std::fmt::Display for VersionSpecifiersParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use unicode_width::UnicodeWidthStr;
 
         let VersionSpecifiersParseErrorInner {
@@ -655,7 +655,7 @@ impl FromStr for VersionSpecifier {
 }
 
 impl std::fmt::Display for VersionSpecifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.operator == Operator::EqualStar || self.operator == Operator::NotEqualStar {
             return write!(f, "{}{}.*", self.operator, self.version);
         }
@@ -674,7 +674,7 @@ pub struct VersionSpecifierBuildError {
 impl std::error::Error for VersionSpecifierBuildError {}
 
 impl std::fmt::Display for VersionSpecifierBuildError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match *self.kind {
             BuildErrorKind::OperatorLocalCombo {
                 operator: ref op,
@@ -711,7 +711,7 @@ struct VersionOperatorBuildError {
 impl std::error::Error for VersionOperatorBuildError {}
 
 impl std::fmt::Display for VersionOperatorBuildError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "Unexpected end of version specifier, expected operator")?;
         if let Some(version_pattern) = &self.version_pattern {
             let version_specifier =
@@ -765,7 +765,7 @@ pub struct VersionSpecifierParseError {
 impl std::error::Error for VersionSpecifierParseError {}
 
 impl std::fmt::Display for VersionSpecifierParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         // Note that even though we have nested error types here, since we
         // don't expose them through std::error::Error::source, we emit them
         // as part of the error message here. This makes the error a bit

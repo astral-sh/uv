@@ -21,7 +21,7 @@ use crate::{Lock, PackageMap};
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
     /// The constructed dependency graph.
-    graph: petgraph::graph::Graph<Node<'env>, Edge<'env>, petgraph::Directed>,
+    graph: Graph<Node<'env>, Edge<'env>, petgraph::Directed>,
     /// The packages considered as roots of the dependency tree.
     roots: Vec<NodeIndex>,
     /// The latest known version of each package.

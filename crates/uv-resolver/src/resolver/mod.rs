@@ -2998,7 +2998,7 @@ impl ForkState {
         let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
-                let pubgrub::Kind::FromDependencyOf(
+                let Kind::FromDependencyOf(
                     self_package,
                     ref self_range,
                     dependency_package,

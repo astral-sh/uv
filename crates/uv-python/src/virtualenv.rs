@@ -228,7 +228,7 @@ impl PyVenvConfiguration {
                 "version" | "version_info" => {
                     version = Some(
                         PythonVersion::from_str(value.trim())
-                            .map_err(|e| io::Error::new(std::io::ErrorKind::InvalidData, e))?,
+                            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
                     );
                 }
                 _ => {}

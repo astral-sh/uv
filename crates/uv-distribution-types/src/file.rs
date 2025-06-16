@@ -193,7 +193,7 @@ impl From<&DisplaySafeUrl> for UrlString {
 
 impl Display for UrlString {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
+        Display::fmt(&self.0, f)
     }
 }
 

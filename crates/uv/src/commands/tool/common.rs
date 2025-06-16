@@ -201,7 +201,7 @@ pub(crate) fn install_executables(
             let target_path = executable_directory.join(
                 source_path
                     .file_name()
-                    .map(std::borrow::ToOwned::to_owned)
+                    .map(ToOwned::to_owned)
                     .unwrap_or_else(|| OsString::from(name.clone())),
             );
             (name, source_path, target_path)
