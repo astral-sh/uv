@@ -84,6 +84,7 @@ pub struct TestContext {
     pub temp_dir: ChildPath,
     pub cache_dir: ChildPath,
     pub python_dir: ChildPath,
+    pub managed_python_dir: ChildPath,
     pub home_dir: ChildPath,
     pub user_config_dir: ChildPath,
     pub bin_dir: ChildPath,
@@ -383,20 +384,11 @@ impl TestContext {
         self
     }
 
-    /// Add extra directories and configuration for managed Python installations.
+    /// Enable download of Python downloads.
     #[must_use]
-    pub fn with_managed_python_dirs(mut self) -> Self {
-        let managed = self.temp_dir.join("managed");
-
-        self.extra_env.push((
-            EnvVars::UV_PYTHON_BIN_DIR.into(),
-            self.bin_dir.as_os_str().to_owned(),
-        ));
-        self.extra_env
-            .push((EnvVars::UV_PYTHON_INSTALL_DIR.into(), managed.into()));
+    pub fn with_python_downloads_enabled(mut self) -> Self {
         self.extra_env
             .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "automatic".into()));
-
         self
     }
 
@@ -452,6 +444,10 @@ impl TestContext {
 
         let python_dir = ChildPath::new(root.path()).child("python");
         fs_err::create_dir_all(&python_dir).expect("Failed to create test Python directory");
+
+        let managed_python_dir = ChildPath::new(root.path()).child("managed");
+        fs_err::create_dir_all(&managed_python_dir)
+            .expect("Failed to create managed Python directory");
 
         let bin_dir = ChildPath::new(root.path()).child("bin");
         fs_err::create_dir_all(&bin_dir).expect("Failed to create test bin directory");
@@ -585,6 +581,12 @@ impl TestContext {
                 .into_iter()
                 .map(|pattern| (pattern, "[PYTHON_DIR]/".to_string())),
         );
+        filters.extend(
+            Self::path_patterns(&managed_python_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[MANAGED_PYTHON_DIR]/".to_string())),
+        );
+
         let mut uv_user_config_dir = PathBuf::from(user_config_dir.path());
         uv_user_config_dir.push("uv");
         filters.extend(
@@ -658,6 +660,7 @@ impl TestContext {
             temp_dir,
             cache_dir,
             python_dir,
+            managed_python_dir,
             home_dir,
             user_config_dir,
             bin_dir,
@@ -736,8 +739,12 @@ impl TestContext {
             .env(EnvVars::HOME, self.home_dir.as_os_str())
             .env(EnvVars::APPDATA, self.home_dir.as_os_str())
             .env(EnvVars::USERPROFILE, self.home_dir.as_os_str())
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-            // Installations are not allowed by default; see `Self::with_managed_python_dirs`
+            .env(
+                EnvVars::UV_PYTHON_INSTALL_DIR,
+                self.managed_python_dir.as_os_str(),
+            )
+            .env(EnvVars::UV_PYTHON_BIN_DIR, self.bin_dir.as_os_str())
+            // Installations are not allowed by default; see `Self::with_python_downloads_enabled`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)

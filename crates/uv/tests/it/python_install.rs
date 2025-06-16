@@ -16,7 +16,7 @@ fn python_install() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install(), @r"
@@ -98,7 +98,7 @@ fn python_reinstall() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install a couple versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("3.13"), @r"
@@ -152,7 +152,7 @@ fn python_reinstall_patch() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install a couple patch versions
     uv_snapshot!(context.filters(), context.python_install().arg("3.12.6").arg("3.12.7"), @r"
@@ -186,7 +186,7 @@ fn python_install_automatic() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_python_sources()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // With downloads disabled, the automatic install should fail
     uv_snapshot!(context.filters(), context.run()
@@ -295,7 +295,7 @@ fn regression_cpython() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_python_sources()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     let init = context.temp_dir.child("mre.py");
     init.write_str(indoc! { r#"
@@ -327,7 +327,7 @@ fn python_install_preview() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @r"
@@ -481,7 +481,7 @@ fn python_install_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.8-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -489,7 +489,7 @@ fn python_install_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/python"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.8-[PLATFORM]/python"
             );
         });
     }
@@ -500,7 +500,7 @@ fn python_install_preview_upgrade() {
     let context = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     let bin_python = context
         .bin_dir
@@ -533,7 +533,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.5-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -541,7 +541,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.5-[PLATFORM]/python"
             );
         });
     }
@@ -562,7 +562,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.5-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -570,7 +570,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.5-[PLATFORM]/python"
             );
         });
     }
@@ -591,7 +591,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.4-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.4-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -599,7 +599,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.4-[PLATFORM]/python"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.4-[PLATFORM]/python"
             );
         });
     }
@@ -620,7 +620,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.6-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -628,7 +628,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]/python"
+                read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.12.6-[PLATFORM]/python"
             );
         });
     }
@@ -639,7 +639,7 @@ fn python_install_freethreaded() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install the latest version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13t"), @r"
@@ -713,7 +713,7 @@ fn python_install_invalid_request() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Request something that is not a Python version
     uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r###"
@@ -751,7 +751,7 @@ fn python_install_default() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     let bin_python_minor_13 = context
         .bin_dir
@@ -893,7 +893,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python_major), @"[MANAGED_PYTHON_DIR]/cpython-3.12.11-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -901,7 +901,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python_minor_12), @"[MANAGED_PYTHON_DIR]/cpython-3.12.11-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -909,7 +909,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python_default), @"[MANAGED_PYTHON_DIR]/cpython-3.12.11-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -917,7 +917,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+                read_link_path(&bin_python_major), @"[MANAGED_PYTHON_DIR]/cpython-3.12.11-[PLATFORM]/python"
             );
         });
 
@@ -925,7 +925,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+                read_link_path(&bin_python_minor_12), @"[MANAGED_PYTHON_DIR]/cpython-3.12.11-[PLATFORM]/python"
             );
         });
 
@@ -933,7 +933,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+                read_link_path(&bin_python_default), @"[MANAGED_PYTHON_DIR]/cpython-3.12.11-[PLATFORM]/python"
             );
         });
     }
@@ -961,7 +961,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+                read_link_path(&bin_python_major), @"[MANAGED_PYTHON_DIR]/cpython-3.13.5-[PLATFORM]/bin/python3.13"
             );
         });
 
@@ -969,7 +969,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+                read_link_path(&bin_python_minor_13), @"[MANAGED_PYTHON_DIR]/cpython-3.13.5-[PLATFORM]/bin/python3.13"
             );
         });
 
@@ -977,7 +977,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
+                read_link_path(&bin_python_minor_12), @"[MANAGED_PYTHON_DIR]/cpython-3.12.11-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -985,7 +985,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+                read_link_path(&bin_python_default), @"[MANAGED_PYTHON_DIR]/cpython-3.13.5-[PLATFORM]/bin/python3.13"
             );
         });
     } else {
@@ -993,7 +993,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
+                read_link_path(&bin_python_major), @"[MANAGED_PYTHON_DIR]/cpython-3.13.5-[PLATFORM]/python"
             );
         });
 
@@ -1001,7 +1001,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
+                read_link_path(&bin_python_minor_13), @"[MANAGED_PYTHON_DIR]/cpython-3.13.5-[PLATFORM]/python"
             );
         });
 
@@ -1009,7 +1009,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+                read_link_path(&bin_python_minor_12), @"[MANAGED_PYTHON_DIR]/cpython-3.12.11-[PLATFORM]/python"
             );
         });
 
@@ -1017,7 +1017,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
+                read_link_path(&bin_python_default), @"[MANAGED_PYTHON_DIR]/cpython-3.13.5-[PLATFORM]/python"
             );
         });
     }
@@ -1043,7 +1043,7 @@ fn read_link_path(path: &Path) -> String {
 
 #[test]
 fn python_install_unknown() {
-    let context: TestContext = TestContext::new_with_versions(&[]).with_managed_python_dirs();
+    let context: TestContext = TestContext::new_with_versions(&[]).with_python_downloads_enabled();
 
     // An unknown request
     uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r###"
@@ -1077,7 +1077,7 @@ fn python_install_preview_broken_link() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     let bin_python = context.bin_dir.child("python3.13");
 
@@ -1101,7 +1101,7 @@ fn python_install_preview_broken_link() {
         filters => context.filters(),
     }, {
         insta::assert_snapshot!(
-            read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+            read_link_path(&bin_python), @"[MANAGED_PYTHON_DIR]/cpython-3.13.5-[PLATFORM]/bin/python3.13"
         );
     });
 }
@@ -1111,7 +1111,7 @@ fn python_install_default_from_env() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install the version specified by the `UV_PYTHON` environment variable by default
     uv_snapshot!(context.filters(), context.python_install().env(EnvVars::UV_PYTHON, "3.12"), @r"
@@ -1201,7 +1201,7 @@ fn python_install_patch_dylib() {
 
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install the latest version
     context
@@ -1228,15 +1228,14 @@ fn python_install_patch_dylib() {
     let mut cmd = std::process::Command::new("otool");
     cmd.arg("-D").arg(dylib.as_ref());
 
-    uv_snapshot!(context.filters(), cmd, @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), cmd, @r"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib:
-    [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
 
     ----- stderr -----
-    "###);
+    error: /Library/Developer/CommandLineTools/usr/bin/otool-classic: can't open file: [MANAGED_PYTHON_DIR]/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib (No such file or directory)
+    ");
 }
 
 #[test]
@@ -1244,7 +1243,7 @@ fn python_install_314() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs()
+        .with_python_downloads_enabled()
         .with_filtered_python_names()
         .with_filtered_python_install_bin();
 
@@ -1277,7 +1276,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
+    [MANAGED_PYTHON_DIR]/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1287,7 +1286,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
+    [MANAGED_PYTHON_DIR]/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1296,7 +1295,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
+    [MANAGED_PYTHON_DIR]/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1316,7 +1315,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/[INSTALL-BIN]/python
+    [MANAGED_PYTHON_DIR]/cpython-3.13.5-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1335,7 +1334,7 @@ fn python_install_cached() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     let python_cache = context.temp_dir.child("python-cache");
 
@@ -1422,7 +1421,7 @@ fn python_install_cached() {
 fn python_install_emulated_macos() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Before installation, `uv python list` should not show the x86_64 download
     uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
@@ -1450,7 +1449,7 @@ fn python_install_emulated_macos() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.5-macos-x86_64-none/bin/python3.13
+    [MANAGED_PYTHON_DIR]/cpython-3.13.5-macos-x86_64-none/bin/python3.13
 
     ----- stderr -----
     ");
@@ -1461,7 +1460,7 @@ fn python_install_emulated_macos() {
     exit_code: 0
     ----- stdout -----
     cpython-3.13.5-macos-aarch64-none    <download available>
-    cpython-3.13.5-macos-x86_64-none     managed/cpython-3.13.5-macos-x86_64-none/bin/python3.13
+    cpython-3.13.5-macos-x86_64-none     [MANAGED_PYTHON_DIR]/cpython-3.13.5-macos-x86_64-none/bin/python3.13
 
     ----- stderr -----
     ");
@@ -1481,7 +1480,7 @@ fn python_install_emulated_macos() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.5-macos-aarch64-none/bin/python3.13
+    [MANAGED_PYTHON_DIR]/cpython-3.13.5-macos-aarch64-none/bin/python3.13
 
     ----- stderr -----
     ");
