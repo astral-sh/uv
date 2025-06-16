@@ -142,7 +142,7 @@ ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
-reqwest = { version = "=0.12.20", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
+reqwest = { version = "0.12.20", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
 reqwest-middleware = { version = "0.4.0", features = ["multipart"] }
 reqwest-retry = { version = "0.7.0" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
