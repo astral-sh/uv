@@ -4022,9 +4022,14 @@ fn init_cursor_rules() -> Result<()> {
     "###);
 
     // Verify the Cursor rules file was created
-    let cursor_rules_path = context.temp_dir.join("foo/.cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc");
-    assert!(cursor_rules_path.exists(), "Cursor rules file should be created");
-    
+    let cursor_rules_path = context
+        .temp_dir
+        .join("foo/.cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc");
+    assert!(
+        cursor_rules_path.exists(),
+        "Cursor rules file should be created"
+    );
+
     let cursor_rules_content = fs_err::read_to_string(&cursor_rules_path)?;
     assert!(cursor_rules_content.contains("Use uv instead of pip, poetry, conda"));
     assert!(cursor_rules_content.contains("uv add <package>"));
@@ -4047,8 +4052,13 @@ fn init_no_cursor_rules() -> Result<()> {
     "###);
 
     // Verify the Cursor rules file was NOT created
-    let cursor_rules_path = context.temp_dir.join("foo/.cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc");
-    assert!(!cursor_rules_path.exists(), "Cursor rules file should not be created with --no-cursor-rules");
+    let cursor_rules_path = context
+        .temp_dir
+        .join("foo/.cursor/rules/use-uv-instead-of-pip-poetry-conda.mdc");
+    assert!(
+        !cursor_rules_path.exists(),
+        "Cursor rules file should not be created with --no-cursor-rules"
+    );
 
     Ok(())
 }
