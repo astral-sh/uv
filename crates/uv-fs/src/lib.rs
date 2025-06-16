@@ -432,10 +432,7 @@ pub async fn persist_with_retry(
 }
 
 /// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
-pub fn persist_with_retry_sync(
-    from: NamedTempFile,
-    to: impl AsRef<Path>,
-) -> Result<(), io::Error> {
+pub fn persist_with_retry_sync(from: NamedTempFile, to: impl AsRef<Path>) -> Result<(), io::Error> {
     #[cfg(windows)]
     {
         use backon::BlockingRetryable;

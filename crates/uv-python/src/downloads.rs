@@ -568,8 +568,7 @@ impl FromStr for PythonDownloadRequest {
 }
 
 const BUILTIN_PYTHON_DOWNLOADS_JSON: &str = include_str!("download-metadata-minified.json");
-static PYTHON_DOWNLOADS: OnceCell<Cow<'static, [ManagedPythonDownload]>> =
-    OnceCell::new();
+static PYTHON_DOWNLOADS: OnceCell<Cow<'static, [ManagedPythonDownload]>> = OnceCell::new();
 
 #[derive(Debug, Deserialize, Clone)]
 struct JsonPythonDownload {

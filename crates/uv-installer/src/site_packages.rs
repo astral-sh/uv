@@ -261,9 +261,7 @@ impl SitePackages {
                                 None | Some(VersionOrUrl::Url(_)) => {
                                     // Nothing to do (accept any installed version).
                                 }
-                                Some(VersionOrUrl::VersionSpecifier(
-                                    version_specifier,
-                                )) => {
+                                Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
                                     // The installed version doesn't satisfy the requirement.
                                     if !version_specifier.contains(installed.version()) {
                                         diagnostics.push(

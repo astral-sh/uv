@@ -897,9 +897,8 @@ impl<'de> Deserialize<'de> for SourcesWire {
             where
                 A: SeqAccess<'de>,
             {
-                let sources = Deserialize::deserialize(
-                    serde::de::value::SeqAccessDeserializer::new(seq),
-                )?;
+                let sources =
+                    Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
                 Ok(SourcesWire::Many(sources))
             }
 
