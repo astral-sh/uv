@@ -729,7 +729,7 @@ async def find() -> None:
     }
     if token:
         headers["Authorization"] = "Bearer " + token
-    client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=15)
+    client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=60)
 
     finders = [
         CPythonFinder(client),

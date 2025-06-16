@@ -7,7 +7,7 @@ use std::{env, fmt, io};
 
 use fs_err::tokio::File;
 use futures::TryStreamExt;
-use glob::{glob, GlobError, PatternError};
+use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
@@ -21,15 +21,15 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
-use tracing::{debug, enabled, trace, warn, Level};
+use tracing::{Level, debug, enabled, trace, warn};
 use trusted_publishing::TrustedPublishingToken;
 use url::Url;
 
 use uv_auth::Credentials;
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy,
-    DEFAULT_RETRIES,
+    BaseClient, DEFAULT_RETRIES, MetadataFormat, OwnedArchive, RegistryClientBuilder,
+    UvRetryableStrategy,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -38,6 +38,7 @@ use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -59,7 +60,7 @@ pub enum PublishError {
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(PathBuf, Url, #[source] PublishSendError),
+    PublishSend(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -108,15 +109,21 @@ pub enum PublishSendError {
     StatusNoBody(StatusCode, #[source] reqwest::Error),
     #[error("Upload failed with status code {0}. Server says: {1}")]
     Status(StatusCode, String),
-    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?")]
+    #[error(
+        "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
+    )]
     MethodNotAllowedNoBody,
-    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}")]
+    #[error(
+        "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}"
+    )]
     MethodNotAllowed(String),
     /// The registry returned a "403 Forbidden".
     #[error("Permission denied (status code {0}): {1}")]
     PermissionDenied(StatusCode, String),
     /// See inline comment.
-    #[error("The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`")]
+    #[error(
+        "The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`"
+    )]
     RedirectError(Url),
 }
 
@@ -237,6 +244,7 @@ impl PublishSendError {
 /// <https://github.com/astral-sh/uv/issues/8030> caused by
 /// <https://github.com/pypa/setuptools/issues/3777> in combination with
 /// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
+#[allow(clippy::result_large_err)]
 pub fn files_for_publishing(
     paths: Vec<String>,
 ) -> Result<Vec<(PathBuf, String, DistFilename)>, PublishError> {
@@ -301,7 +309,7 @@ pub async fn check_trusted_publishing(
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
     trusted_publishing: TrustedPublishing,
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
 ) -> Result<TrustedPublishResult, PublishError> {
     match trusted_publishing {
@@ -319,7 +327,9 @@ pub async fn check_trusted_publishing(
             }
             // We could check for credentials from the keyring or netrc the auth middleware first, but
             // given that we are in GitHub Actions we check for trusted publishing first.
-            debug!("Running on GitHub Actions without explicit credentials, checking for trusted publishing");
+            debug!(
+                "Running on GitHub Actions without explicit credentials, checking for trusted publishing"
+            );
             match trusted_publishing::get_token(registry, client.for_host(registry)).await {
                 Ok(token) => Ok(TrustedPublishResult::Configured(token)),
                 Err(err) => {
@@ -370,7 +380,7 @@ pub async fn upload(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
     credentials: &Credentials,
     check_url_client: Option<&CheckUrlClient<'_>>,
@@ -577,7 +587,7 @@ async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareErro
     let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
         .entries()?
         .map_err(PublishPrepareError::from)
-        .try_filter_map(|mut entry| async move {
+        .try_filter_map(async |mut entry| {
             let path = entry
                 .path()
                 .map_err(PublishPrepareError::from)?
@@ -742,7 +752,7 @@ async fn build_request(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
     credentials: &Credentials,
     form_metadata: &[(&'static str, String)],
@@ -781,7 +791,7 @@ async fn build_request(
 
     let mut request = client
         .for_host(&url)
-        .post(url)
+        .post(Url::from(url))
         .multipart(form)
         // Ask PyPI for a structured error messages instead of HTML-markup error messages.
         // For other registries, we ask them to return plain text over HTML. See
@@ -875,15 +885,15 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
 
 #[cfg(test)]
 mod tests {
-    use crate::{build_request, form_metadata, Reporter};
+    use crate::{Reporter, build_request, form_metadata};
     use insta::{assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
     use std::path::PathBuf;
     use std::sync::Arc;
-    use url::Url;
     use uv_auth::Credentials;
     use uv_client::BaseClientBuilder;
     use uv_distribution_filename::DistFilename;
+    use uv_redacted::DisplaySafeUrl;
 
     struct DummyReporter;
 
@@ -963,7 +973,7 @@ mod tests {
             &file,
             raw_filename,
             &filename,
-            &Url::parse("https://example.org/upload").unwrap(),
+            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
@@ -1010,8 +1020,7 @@ mod tests {
     /// Snapshot the data we send for an upload request for a wheel.
     #[tokio::test]
     async fn upload_request_wheel() {
-        let raw_filename =
-            "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
         let file = PathBuf::from("../../scripts/links/").join(raw_filename);
         let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
@@ -1113,7 +1122,7 @@ mod tests {
             &file,
             raw_filename,
             &filename,
-            &Url::parse("https://example.org/upload").unwrap(),
+            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,

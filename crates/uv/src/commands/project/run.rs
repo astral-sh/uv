@@ -5,7 +5,7 @@ use std::fmt::Write;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -30,6 +30,7 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
+use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{Installable, Lock, Preference};
 use uv_scripts::Pep723Item;
@@ -48,14 +49,14 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
+    EnvironmentSpecification, PreferenceSource, ProjectEnvironment, ProjectError,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_specification, update_environment,
-    validate_project_requires_python, EnvironmentSpecification, PreferenceSource,
-    ProjectEnvironment, ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState,
-    WorkspacePython,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -77,7 +78,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     modifications: Modifications,
     python: Option<String>,
@@ -273,7 +274,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("script")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -290,7 +291,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 target,
                 &environment,
                 &extras.with_defaults(DefaultExtras::default()),
-                &dev.with_defaults(DefaultGroups::default()),
+                &groups.with_defaults(DefaultGroups::default()),
                 editable,
                 install_options,
                 modifications,
@@ -318,7 +319,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("script")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -414,7 +415,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         )
                         .with_context("script")
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -467,7 +468,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        for flag in dev.history().as_flags_pretty() {
+        for flag in groups.history().as_flags_pretty() {
             warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
         }
         if all_packages {
@@ -542,7 +543,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in extras.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            for flag in dev.history().as_flags_pretty() {
+            for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if locked {
@@ -559,7 +560,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in extras.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            for flag in dev.history().as_flags_pretty() {
+            for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if locked {
@@ -570,7 +571,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
         }
 
-        let interpreter = if let Some(project) = project {
+        if let Some(project) = project {
             if let Some(project_name) = project.project_name() {
                 debug!(
                     "Discovered project `{project_name}` at: {}",
@@ -582,6 +583,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     project.workspace().install_path().display()
                 );
             }
+            // Determine the groups and extras to include.
+            let default_groups = default_dependency_groups(project.pyproject_toml())?;
+            let default_extras = DefaultExtras::default();
+            let groups = groups.with_defaults(default_groups);
+            let extras = extras.with_defaults(default_extras);
 
             let venv = if isolated {
                 debug!("Creating isolated virtual environment");
@@ -601,6 +607,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 } = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
+                    &groups,
                     project_dir,
                     no_config,
                 )
@@ -625,6 +632,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     validate_project_requires_python(
                         &interpreter,
                         Some(project.workspace()),
+                        &groups,
                         requires_python,
                         &source,
                     )?;
@@ -646,6 +654,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // project.
                 ProjectEnvironment::get_or_init(
                     project.workspace(),
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
                     &network_settings,
@@ -676,14 +685,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
-                // Validate that any referenced dependency groups are defined in the workspace.
-
-                // Determine the default groups to include.
-                let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-                // Determine the default extras to include.
-                let default_extras = DefaultExtras::default();
-
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
@@ -717,7 +718,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                             network_settings.native_tls,
                         )
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -768,18 +769,15 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 };
 
                 let install_options = InstallOptions::default();
-                let dev = dev.with_defaults(default_groups);
-                let extras = extras.with_defaults(default_extras);
-
                 // Validate that the set of requested extras and development groups are defined in the lockfile.
                 target.validate_extras(&extras)?;
-                target.validate_groups(&dev)?;
+                target.validate_groups(&groups)?;
 
                 match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
-                    &dev,
+                    &groups,
                     editable,
                     install_options,
                     modifications,
@@ -806,7 +804,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                             network_settings.native_tls,
                         )
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -876,9 +874,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             } else {
                 interpreter
             }
-        };
-
-        interpreter
+        }
     };
 
     debug!(
@@ -968,7 +964,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("`--with`")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -992,6 +988,16 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             "import site; site.addsitedir(\"{}\")",
             site_packages.escape_for_python()
         ))?;
+
+        // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
+        // file. This helps out static-analysis tools such as ty (see docs on
+        // `CachedEnvironment::set_parent_environment`).
+        //
+        // Note that we do this even if the parent environment is not a virtual environment.
+        // For ephemeral environments created by `uv run --with`, the parent environment's
+        // `site-packages` directory is added to `sys.path` even if the parent environment is not
+        // a virtual environment and even if `--system-site-packages` was not explicitly selected.
+        ephemeral_env.set_parent_environment(base_interpreter.sys_prefix())?;
 
         // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
         // environment.
@@ -1200,7 +1206,7 @@ pub(crate) enum RunCommand {
     /// Execute a `pythonw` script provided via `stdin`.
     PythonGuiStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
-    PythonRemote(Url, tempfile::NamedTempFile, Vec<OsString>),
+    PythonRemote(DisplaySafeUrl, tempfile::NamedTempFile, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -1466,7 +1472,7 @@ impl RunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let url = Url::parse(&target.to_string_lossy())?;
+                let url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
 
                 let file_stem = url
                     .path_segments()
@@ -1483,7 +1489,11 @@ impl RunCommand {
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone())
                     .build();
-                let response = client.for_host(&url).get(url.clone()).send().await?;
+                let response = client
+                    .for_host(&url)
+                    .get(Url::from(url.clone()))
+                    .send()
+                    .await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();
@@ -1562,7 +1572,7 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
         Err(VarError::NotPresent) => return Ok(0),
         Err(e) => {
             return Err(e)
-                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH));
         }
     };
 

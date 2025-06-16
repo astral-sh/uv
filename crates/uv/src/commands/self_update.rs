@@ -10,6 +10,7 @@ use uv_fs::Simplified;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Attempt to update the uv binary.
 pub(crate) async fn self_update(
@@ -17,7 +18,23 @@ pub(crate) async fn self_update(
     token: Option<String>,
     dry_run: bool,
     printer: Printer,
+    network_settings: NetworkSettings,
 ) -> Result<ExitStatus> {
+    if network_settings.connectivity.is_offline() {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format_args!(
+                concat!(
+                    "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)"
+                ),
+                "error".red().bold(),
+                ":".bold()
+            )
+        )?;
+        return Ok(ExitStatus::Failure);
+    }
+
     let mut updater = AxoUpdater::new_for("uv");
     updater.disable_installer_output();
 
@@ -45,6 +62,14 @@ pub(crate) async fn self_update(
         )?;
         return Ok(ExitStatus::Error);
     };
+
+    // If we know what our version is, ignore whatever the receipt thinks it is!
+    // This makes us behave better if someone manually installs a random version of uv
+    // in a way that doesn't update the receipt.
+    if let Ok(version) = env!("CARGO_PKG_VERSION").parse() {
+        // This is best-effort, it's fine if it fails (also it can't actually fail)
+        let _ = updater.set_current_version(version);
+    }
 
     // Ensure the receipt is for the current binary. If it's not, then the user likely has multiple
     // uv binaries installed, and the current binary was _not_ installed via the standalone

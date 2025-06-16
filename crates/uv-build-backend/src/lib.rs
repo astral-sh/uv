@@ -4,7 +4,7 @@ mod settings;
 mod source_dist;
 mod wheel;
 
-pub use metadata::{check_direct_build, PyProjectToml};
+pub use metadata::{PyProjectToml, check_direct_build};
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
@@ -13,13 +13,12 @@ use std::fs::FileType;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-
-use itertools::Itertools;
 use thiserror::Error;
 use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
+use uv_normalize::PackageName;
 use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
@@ -32,8 +31,8 @@ pub enum Error {
     Toml(#[from] toml::de::Error),
     #[error("Invalid pyproject.toml")]
     Validation(#[from] ValidationError),
-    #[error(transparent)]
-    Identifier(#[from] IdentifierParseError),
+    #[error("Invalid module name: {0}")]
+    InvalidModuleName(String, #[source] IdentifierParseError),
     #[error("Unsupported glob expression in: `{field}`")]
     PortableGlob {
         field: String,
@@ -61,32 +60,13 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
-    #[error(
-        "Missing source directory at: `{}`",
-        _0.user_display()
-    )]
-    MissingSrc(PathBuf),
-    #[error(
-        "Expected a Python module directory at: `{}`",
-        _0.user_display()
-    )]
-    MissingModule(PathBuf),
-    #[error(
-        "Expected an `__init__.py` at: `{}`",
-        _0.user_display()
-    )]
+    #[error("Expected a Python module at: `{}`", _0.user_display())]
     MissingInitPy(PathBuf),
-    #[error(
-        "Expected an `__init__.py` at `{}`, found multiple:\n* `{}`",
-        module_name,
-        paths.iter().map(Simplified::user_display).join("`\n* `")
-    )]
-    MultipleModules {
-        module_name: Identifier,
-        paths: Vec<PathBuf>,
-    },
-    #[error("Absolute module root is not allowed: `{}`", _0.display())]
-    AbsoluteModuleRoot(PathBuf),
+    #[error("For namespace packages, `__init__.py[i]` is not allowed in parent directory: `{}`", _0.user_display())]
+    NotANamespace(PathBuf),
+    /// Either an absolute path or a parent path through `..`.
+    #[error("Module root must be inside the project: `{}`", _0.user_display())]
+    InvalidModuleRoot(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]
@@ -196,78 +176,141 @@ fn check_metadata_directory(
     Ok(())
 }
 
-/// Resolve the source root and module root paths.
+/// Returns the source root and the module path with the `__init__.py[i]`  below to it while
+/// checking the project layout and names.
+///
+/// Some target platforms have case-sensitive filesystems, while others have case-insensitive
+/// filesystems. We always lower case the package name, our default for the module, while some
+/// users want uppercase letters in their module names. For example, the package name is `pil_util`,
+/// but the module `PIL_util`. To make the behavior as consistent as possible across platforms as
+/// possible, we require that an upper case name is given explicitly through
+/// `tool.uv.build-backend.module-name`.
+///
+/// By default, the dist-info-normalized package name is the module name. For
+/// dist-info-normalization, the rules are lowercasing, replacing `.` with `_` and
+/// replace `-` with `_`. Since `.` and `-` are not allowed in identifiers, we can use a string
+/// comparison with the module name.
 fn find_roots(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     relative_module_root: &Path,
-    module_name: Option<&Identifier>,
+    module_name: Option<&str>,
+    namespace: bool,
 ) -> Result<(PathBuf, PathBuf), Error> {
-    if relative_module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(
-            relative_module_root.to_path_buf(),
-        ));
+    let relative_module_root = uv_fs::normalize_path(relative_module_root);
+    let src_root = source_tree.join(&relative_module_root);
+    if !src_root.starts_with(source_tree) {
+        return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
-    let src_root = source_tree.join(relative_module_root);
+    let src_root = source_tree.join(&relative_module_root);
+    debug!("Source root: {}", src_root.user_display());
 
-    let module_name = if let Some(module_name) = module_name {
-        module_name.clone()
+    if namespace {
+        // `namespace = true` disables module structure checks.
+        let module_relative = if let Some(module_name) = module_name {
+            module_name.split('.').collect::<PathBuf>()
+        } else {
+            PathBuf::from(pyproject_toml.name().as_dist_info_name().to_string())
+        };
+        debug!("Namespace module path: {}", module_relative.user_display());
+        return Ok((src_root, module_relative));
+    }
+
+    let module_relative = if let Some(module_name) = module_name {
+        module_path_from_module_name(&src_root, module_name)?
     } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
+        find_module_path_from_package_name(&src_root, pyproject_toml.name())?
     };
-    debug!("Module name: `{:?}`", module_name);
-
-    let module_root = find_module_root(&src_root, module_name)?;
-    Ok((src_root, module_root))
+    debug!("Module path: {}", module_relative.user_display());
+    Ok((src_root, module_relative))
 }
 
-/// Match the module name to its module directory with potentially different casing.
+/// Infer stubs packages from package name alone.
 ///
-/// For example, a package may have the dist-info-normalized package name `pil_util`, but the
-/// importable module is named `PIL_util`.
-///
-/// We get the module either as dist-info-normalized package name, or explicitly from the user.
-/// For dist-info-normalizing a package name, the rules are lowercasing, replacing `.` with `_` and
-/// replace `-` with `_`. Since `.` and `-` are not allowed in module names, we can check whether a
-/// directory name matches our expected module name by lowercasing it.
-fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf, Error> {
-    let normalized = module_name.to_string();
-    let dir_iterator = match fs_err::read_dir(src_root) {
-        Ok(dir_iterator) => dir_iterator,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            return Err(Error::MissingSrc(src_root.to_path_buf()))
+/// There are potential false positives if someone had a regular package with `-stubs`.
+/// The `Identifier` checks in `module_path_from_module_name` are here covered by the `PackageName`
+/// validation.
+fn find_module_path_from_package_name(
+    src_root: &Path,
+    package_name: &PackageName,
+) -> Result<PathBuf, Error> {
+    if let Some(stem) = package_name.to_string().strip_suffix("-stubs") {
+        debug!("Building stubs package instead of a regular package");
+        let module_name = PackageName::from_str(stem)
+            .expect("non-empty package name prefix must be valid package name")
+            .as_dist_info_name()
+            .to_string();
+        let module_relative = PathBuf::from(format!("{module_name}-stubs"));
+        let init_pyi = src_root.join(&module_relative).join("__init__.pyi");
+        if !init_pyi.is_file() {
+            return Err(Error::MissingInitPy(init_pyi));
         }
-        Err(err) => return Err(Error::Io(err)),
+        Ok(module_relative)
+    } else {
+        // This name is always lowercase.
+        let module_relative = PathBuf::from(package_name.as_dist_info_name().to_string());
+        let init_py = src_root.join(&module_relative).join("__init__.py");
+        if !init_py.is_file() {
+            return Err(Error::MissingInitPy(init_py));
+        }
+        Ok(module_relative)
+    }
+}
+
+/// Determine the relative module path from an explicit module name.
+fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<PathBuf, Error> {
+    // This name can be uppercase.
+    let module_relative = module_name.split('.').collect::<PathBuf>();
+
+    // Check if we have a regular module or a namespace.
+    let (root_name, namespace_segments) =
+        if let Some((root_name, namespace_segments)) = module_name.split_once('.') {
+            (
+                root_name,
+                namespace_segments.split('.').collect::<Vec<&str>>(),
+            )
+        } else {
+            (module_name, Vec::new())
+        };
+
+    // Check if we have an implementation or a stubs package.
+    // For stubs for a namespace, the `-stubs` prefix must be on the root.
+    let stubs = if let Some(stem) = root_name.strip_suffix("-stubs") {
+        // Check that the stubs belong to a valid module.
+        Identifier::from_str(stem)
+            .map_err(|err| Error::InvalidModuleName(module_name.to_string(), err))?;
+        true
+    } else {
+        Identifier::from_str(root_name)
+            .map_err(|err| Error::InvalidModuleName(module_name.to_string(), err))?;
+        false
     };
-    let modules = dir_iterator
-        .filter_ok(|entry| {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|file_name| file_name.to_lowercase() == normalized)
-        })
-        .map_ok(|entry| entry.path())
-        .collect::<Result<Vec<_>, _>>()?;
-    match modules.as_slice() {
-        [] => {
-            // Show the normalized path in the error message, as representative example.
-            Err(Error::MissingModule(src_root.join(module_name.as_ref())))
-        }
-        [module_root] => {
-            if module_root.join("__init__.py").is_file() {
-                Ok(module_root.clone())
-            } else {
-                Err(Error::MissingInitPy(module_root.join("__init__.py")))
-            }
-        }
-        multiple => {
-            let mut paths = multiple.to_vec();
-            paths.sort();
-            Err(Error::MultipleModules { module_name, paths })
+
+    // For a namespace, check that all names below the root is valid.
+    for segment in namespace_segments {
+        Identifier::from_str(segment)
+            .map_err(|err| Error::InvalidModuleName(module_name.to_string(), err))?;
+    }
+
+    // Check that an `__init__.py[i]` exists for the module.
+    let init_py =
+        src_root
+            .join(&module_relative)
+            .join(if stubs { "__init__.pyi" } else { "__init__.py" });
+    if !init_py.is_file() {
+        return Err(Error::MissingInitPy(init_py));
+    }
+
+    // For a namespace, check that the directories above the lowest are namespace directories.
+    for namespace_dir in module_relative.ancestors().skip(1) {
+        if src_root.join(namespace_dir).join("__init__.py").exists()
+            || src_root.join(namespace_dir).join("__init__.pyi").exists()
+        {
+            return Err(Error::NotANamespace(src_root.join(namespace_dir)));
         }
     }
+
+    Ok(module_relative)
 }
 
 #[cfg(test)]
@@ -280,8 +323,132 @@ mod tests {
     use itertools::Itertools;
     use sha2::Digest;
     use std::io::{BufReader, Read};
+    use std::iter;
     use tempfile::TempDir;
+    use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_fs::{copy_dir_all, relative_to};
+
+    fn format_err(err: &Error) -> String {
+        let context = iter::successors(std::error::Error::source(&err), |&err| err.source())
+            .map(|err| format!("  Caused by: {err}"))
+            .join("\n");
+        err.to_string() + "\n" + &context
+    }
+
+    /// File listings, generated archives and archive contents for both a build with
+    /// source tree -> wheel
+    /// and a build with
+    /// source tree -> source dist -> wheel.
+    #[derive(Debug, PartialEq, Eq)]
+    struct BuildResults {
+        source_dist_list_files: FileList,
+        source_dist_filename: SourceDistFilename,
+        source_dist_contents: Vec<String>,
+        wheel_list_files: FileList,
+        wheel_filename: WheelFilename,
+        wheel_contents: Vec<String>,
+    }
+
+    /// Run both a direct wheel build and an indirect wheel build through a source distribution,
+    /// while checking that directly built wheel and indirectly built wheel are the same.
+    fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
+        // Build a direct wheel, capture all its properties to compare it with the indirect wheel
+        // latest and remove it since it has the same filename as the indirect wheel.
+        let (_name, direct_wheel_list_files) = list_wheel(source_root, "1.0.0+test")?;
+        let direct_wheel_filename = build_wheel(source_root, dist, None, "1.0.0+test")?;
+        let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
+        let direct_wheel_contents = wheel_contents(&direct_wheel_path);
+        let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
+        fs_err::remove_file(&direct_wheel_path)?;
+
+        // Build a source distribution.
+        let (_name, source_dist_list_files) = list_source_dist(source_root, "1.0.0+test")?;
+        // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
+        // normalize the path.
+        let (_name, wheel_list_files) = list_wheel(source_root, "1.0.0+test")?;
+        let source_dist_filename = build_source_dist(source_root, dist, "1.0.0+test")?;
+        let source_dist_path = dist.join(source_dist_filename.to_string());
+        let source_dist_contents = sdist_contents(&source_dist_path);
+
+        // Unpack the source distribution and build a wheel from it.
+        let sdist_tree = TempDir::new()?;
+        let sdist_reader = BufReader::new(File::open(&source_dist_path)?);
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+        source_dist.unpack(sdist_tree.path())?;
+        let sdist_top_level_directory = sdist_tree.path().join(format!(
+            "{}-{}",
+            source_dist_filename.name.as_dist_info_name(),
+            source_dist_filename.version
+        ));
+        let wheel_filename = build_wheel(&sdist_top_level_directory, dist, None, "1.0.0+test")?;
+        let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
+
+        // Check that direct and indirect wheels are identical.
+        assert_eq!(direct_wheel_filename, wheel_filename);
+        assert_eq!(direct_wheel_contents, wheel_contents);
+        assert_eq!(direct_wheel_list_files, wheel_list_files);
+        assert_eq!(
+            direct_wheel_hash,
+            sha2::Sha256::digest(fs_err::read(dist.join(wheel_filename.to_string()))?)
+        );
+
+        Ok(BuildResults {
+            source_dist_list_files,
+            source_dist_filename,
+            source_dist_contents,
+            wheel_list_files,
+            wheel_filename,
+            wheel_contents,
+        })
+    }
+
+    fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
+        let sdist_reader = BufReader::new(File::open(source_dist_path).unwrap());
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+        let mut source_dist_contents: Vec<_> = source_dist
+            .entries()
+            .unwrap()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .replace('\\', "/")
+            })
+            .collect();
+        source_dist_contents.sort();
+        source_dist_contents
+    }
+
+    fn wheel_contents(direct_output_dir: &Path) -> Vec<String> {
+        let wheel = zip::ZipArchive::new(File::open(direct_output_dir).unwrap()).unwrap();
+        let mut wheel_contents: Vec<_> = wheel
+            .file_names()
+            .map(|path| path.replace('\\', "/"))
+            .collect();
+        wheel_contents.sort_unstable();
+        wheel_contents
+    }
+
+    fn format_file_list(file_list: FileList, src: &Path) -> String {
+        file_list
+            .into_iter()
+            .map(|(path, source)| {
+                let path = path.replace('\\', "/");
+                if let Some(source) = source {
+                    let source = relative_to(source, src)
+                        .unwrap()
+                        .portable_display()
+                        .to_string();
+                    format!("{path} ({source})")
+                } else {
+                    format!("{path} (generated)")
+                }
+            })
+            .join("\n")
+    }
 
     /// Tests that builds are stable and include the right files and.
     ///
@@ -335,91 +502,39 @@ mod tests {
         File::create(module_root.join("__pycache__").join("compiled.pyc")).unwrap();
         File::create(module_root.join("arithmetic").join("circle.pyc")).unwrap();
 
-        // Build a wheel from the source tree
-        let direct_output_dir = TempDir::new().unwrap();
-        let (_name, wheel_list_files) = list_wheel(src.path(), "1.0.0+test").unwrap();
-        build_wheel(src.path(), direct_output_dir.path(), None, "1.0.0+test").unwrap();
+        // Perform both the direct and the indirect build.
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path()).unwrap();
 
-        let wheel = zip::ZipArchive::new(
-            File::open(
-                direct_output_dir
-                    .path()
-                    .join("built_by_uv-0.1.0-py3-none-any.whl"),
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let mut direct_wheel_contents: Vec<_> = wheel.file_names().collect();
-        direct_wheel_contents.sort_unstable();
-
-        // List file and build a source dist from the source tree
-        let source_dist_dir = TempDir::new().unwrap();
-        let (_name, source_dist_list_files) = list_source_dist(src.path(), "1.0.0+test").unwrap();
-        build_source_dist(src.path(), source_dist_dir.path(), "1.0.0+test").unwrap();
-        let source_dist_path = source_dist_dir.path().join("built_by_uv-0.1.0.tar.gz");
+        let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
+        assert_eq!(
+            build.source_dist_filename.to_string(),
+            "built_by_uv-0.1.0.tar.gz"
+        );
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
             @"dab46bcc4d66960a11cfdc19604512a8e1a3241a67536f7e962166760e9c575c"
         );
-
-        // Build a wheel from the source dist
-        let sdist_tree = TempDir::new().unwrap();
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        let mut source_dist_contents: Vec<_> = source_dist
-            .entries()
-            .unwrap()
-            .map(|entry| entry.unwrap().path().unwrap().to_str().unwrap().to_string())
-            .collect();
-        source_dist_contents.sort();
-        // Reset the reader and unpack
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        source_dist.unpack(sdist_tree.path()).unwrap();
-        drop(source_dist_dir);
-
-        let indirect_output_dir = TempDir::new().unwrap();
-        build_wheel(
-            &sdist_tree.path().join("built_by_uv-0.1.0"),
-            indirect_output_dir.path(),
-            None,
-            "1.0.0+test",
-        )
-        .unwrap();
-        let wheel = zip::ZipArchive::new(
-            File::open(
-                indirect_output_dir
-                    .path()
-                    .join("built_by_uv-0.1.0-py3-none-any.whl"),
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let mut indirect_wheel_contents: Vec<_> = wheel.file_names().collect();
-        indirect_wheel_contents.sort_unstable();
-        assert_eq!(indirect_wheel_contents, direct_wheel_contents);
-
-        let format_file_list = |file_list: FileList| {
-            file_list
-                .into_iter()
-                .map(|(path, source)| {
-                    let path = path.replace('\\', "/");
-                    if let Some(source) = source {
-                        let source = relative_to(source, src.path())
-                            .unwrap()
-                            .portable_display()
-                            .to_string();
-                        format!("{path} ({source})")
-                    } else {
-                        format!("{path} (generated)")
-                    }
-                })
-                .join("\n")
-        };
-
-        // Check the contained files and directories
-        assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
+        // Check both the files we report and the actual files
+        assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @r"
+        built_by_uv-0.1.0/PKG-INFO (generated)
+        built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
+        built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
+        built_by_uv-0.1.0/README.md (README.md)
+        built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
+        built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
+        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
+        built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
+        built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+        built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
+        built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
+        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+        ");
+        assert_snapshot!(build.source_dist_contents.iter().join("\n"), @r"
         built_by_uv-0.1.0/
         built_by_uv-0.1.0/LICENSE-APACHE
         built_by_uv-0.1.0/LICENSE-MIT
@@ -443,26 +558,19 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/cli.py
         built_by_uv-0.1.0/third-party-licenses
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
-        "###);
-        assert_snapshot!(format_file_list(source_dist_list_files), @r"
-        built_by_uv-0.1.0/PKG-INFO (generated)
-        built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
-        built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-        built_by_uv-0.1.0/README.md (README.md)
-        built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
-        built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
-        built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
-        built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
-        built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
-        built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
-        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
         ");
 
-        assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
+        let wheel_path = dist.path().join(build.wheel_filename.to_string());
+        assert_eq!(
+            build.wheel_filename.to_string(),
+            "built_by_uv-0.1.0-py3-none-any.whl"
+        );
+        // Check that the wheel is reproducible across platforms.
+        assert_snapshot!(
+            format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
+            @"ac3f68ac448023bca26de689d80401bff57f764396ae802bf4666234740ffbe3"
+        );
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
         built_by_uv-0.1.0.data/data/
         built_by_uv-0.1.0.data/data/data.csv
         built_by_uv-0.1.0.data/headers/
@@ -486,9 +594,8 @@ mod tests {
         built_by_uv/arithmetic/circle.py
         built_by_uv/arithmetic/pi.txt
         built_by_uv/cli.py
-        "###);
-
-        assert_snapshot!(format_file_list(wheel_list_files), @r"
+        ");
+        assert_snapshot!(format_file_list(build.wheel_list_files, src.path()), @r"
         built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
         built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
@@ -504,19 +611,6 @@ mod tests {
         built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
         built_by_uv-0.1.0.dist-info/METADATA (generated)
         ");
-
-        // Check that the wheel is the same for both build paths and reproducible across platforms.
-        let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
-        let index_wheel_contents =
-            fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap();
-        assert_eq!(
-            fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
-            index_wheel_contents
-        );
-        assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(&index_wheel_contents)),
-            @"ac3f68ac448023bca26de689d80401bff57f764396ae802bf4666234740ffbe3"
-        );
     }
 
     /// Test that `license = { file = "LICENSE" }` is supported.
@@ -650,5 +744,461 @@ mod tests {
         Name: two-step-build
         Version: 1.0.0
         "###);
+    }
+
+    /// Check that non-normalized paths for `module-root` work with the glob inclusions.
+    #[test]
+    fn test_glob_path_normalization() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "two-step-build"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-root = "./"
+            "#
+            },
+        )
+        .unwrap();
+
+        fs_err::create_dir_all(src.path().join("two_step_build")).unwrap();
+        File::create(src.path().join("two_step_build").join("__init__.py")).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build1 = build(src.path(), dist.path()).unwrap();
+
+        assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
+        two_step_build-1.0.0/
+        two_step_build-1.0.0/PKG-INFO
+        two_step_build-1.0.0/pyproject.toml
+        two_step_build-1.0.0/two_step_build
+        two_step_build-1.0.0/two_step_build/__init__.py
+        ");
+
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        two_step_build-1.0.0.dist-info/
+        two_step_build-1.0.0.dist-info/METADATA
+        two_step_build-1.0.0.dist-info/RECORD
+        two_step_build-1.0.0.dist-info/WHEEL
+        two_step_build/
+        two_step_build/__init__.py
+        ");
+
+        // A path with a parent reference.
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "two-step-build"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-root = "two_step_build/.././"
+            "#
+            },
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build2 = build(src.path(), dist.path()).unwrap();
+        assert_eq!(build1, build2);
+    }
+
+    /// Check that upper case letters in module names work.
+    #[test]
+    fn test_camel_case() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "camelcase"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "camelCase"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        fs_err::create_dir_all(src.path().join("src").join("camelCase")).unwrap();
+        File::create(src.path().join("src").join("camelCase").join("__init__.py")).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build1 = build(src.path(), dist.path()).unwrap();
+
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        camelCase/
+        camelCase/__init__.py
+        camelcase-1.0.0.dist-info/
+        camelcase-1.0.0.dist-info/METADATA
+        camelcase-1.0.0.dist-info/RECORD
+        camelcase-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that an explicit wrong casing fails to build.
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            pyproject_toml.replace("camelCase", "camel_case"),
+        )
+        .unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"Expected a Python module at: `[TEMP_PATH]/src/camel_case/__init__.py`"
+        );
+    }
+
+    #[test]
+    fn invalid_stubs_name() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "camelcase"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "django@home-stubs"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err);
+        assert_snapshot!(
+            err_message,
+            @r"
+        Invalid module name: django@home-stubs
+          Caused by: Invalid character `@` at position 7 for identifier `django@home`, expected an underscore or an alphanumeric character
+        "
+        );
+    }
+
+    /// Stubs packages use a special name and `__init__.pyi`.
+    #[test]
+    fn stubs_package() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "stuffed-bird-stubs"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("stuffed_bird-stubs")).unwrap();
+        // That's the wrong file, we're expecting a `__init__.pyi`.
+        let regular_init_py = src
+            .path()
+            .join("src")
+            .join("stuffed_bird-stubs")
+            .join("__init__.py");
+        File::create(&regular_init_py).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"Expected a Python module at: `[TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi`"
+        );
+
+        // Create the correct file
+        fs_err::remove_file(regular_init_py).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("stuffed_bird-stubs")
+                .join("__init__.pyi"),
+        )
+        .unwrap();
+
+        let build1 = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        stuffed_bird-stubs/
+        stuffed_bird-stubs/__init__.pyi
+        stuffed_bird_stubs-1.0.0.dist-info/
+        stuffed_bird_stubs-1.0.0.dist-info/METADATA
+        stuffed_bird_stubs-1.0.0.dist-info/RECORD
+        stuffed_bird_stubs-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that setting the name manually works equally.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "stuffed-bird-stubs"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "stuffed_bird-stubs"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let build2 = build(src.path(), dist.path()).unwrap();
+        assert_eq!(build1.wheel_contents, build2.wheel_contents);
+    }
+
+    /// A simple namespace package with a single root `__init__.py`.
+    #[test]
+    fn simple_namespace_package() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "simple-namespace-part"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "simple_namespace.part"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("simple_namespace").join("part"))
+            .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"Expected a Python module at: `[TEMP_PATH]/src/simple_namespace/part/__init__.py`"
+        );
+
+        // Create the correct file
+        File::create(
+            src.path()
+                .join("src")
+                .join("simple_namespace")
+                .join("part")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        // For a namespace package, there must not be an `__init__.py` here.
+        let bogus_init_py = src
+            .path()
+            .join("src")
+            .join("simple_namespace")
+            .join("__init__.py");
+        File::create(&bogus_init_py).unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: `[TEMP_PATH]/src/simple_namespace`"
+        );
+        fs_err::remove_file(bogus_init_py).unwrap();
+
+        let build1 = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
+        simple_namespace_part-1.0.0/
+        simple_namespace_part-1.0.0/PKG-INFO
+        simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/src
+        simple_namespace_part-1.0.0/src/simple_namespace
+        simple_namespace_part-1.0.0/src/simple_namespace/part
+        simple_namespace_part-1.0.0/src/simple_namespace/part/__init__.py
+        ");
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        simple_namespace/
+        simple_namespace/part/
+        simple_namespace/part/__init__.py
+        simple_namespace_part-1.0.0.dist-info/
+        simple_namespace_part-1.0.0.dist-info/METADATA
+        simple_namespace_part-1.0.0.dist-info/RECORD
+        simple_namespace_part-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that `namespace = true` works too.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "simple-namespace-part"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "simple_namespace.part"
+            namespace = true
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let build2 = build(src.path(), dist.path()).unwrap();
+        assert_eq!(build1, build2);
+    }
+
+    /// A complex namespace package with a multiple root `__init__.py`.
+    #[test]
+    fn complex_namespace_package() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "complex-namespace"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            namespace = true
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_a"),
+        )
+        .unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_a")
+                .join("__init__.py"),
+        )
+        .unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_b"),
+        )
+        .unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_b")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build1 = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        complex_namespace-1.0.0.dist-info/
+        complex_namespace-1.0.0.dist-info/METADATA
+        complex_namespace-1.0.0.dist-info/RECORD
+        complex_namespace-1.0.0.dist-info/WHEEL
+        complex_namespace/
+        complex_namespace/part_a/
+        complex_namespace/part_a/__init__.py
+        complex_namespace/part_b/
+        complex_namespace/part_b/__init__.py
+        ");
+
+        // Check that setting the name manually works equally.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "complex-namespace"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "complex_namespace"
+            namespace = true
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let build2 = build(src.path(), dist.path()).unwrap();
+        assert_eq!(build1, build2);
+    }
+
+    /// Stubs for a namespace package.
+    #[test]
+    fn stubs_namespace() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "cloud.db.schema-stubs"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "cloud-stubs.db.schema"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("cloud-stubs")
+                .join("db")
+                .join("schema"),
+        )
+        .unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("cloud-stubs")
+                .join("db")
+                .join("schema")
+                .join("__init__.pyi"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        cloud-stubs/
+        cloud-stubs/db/
+        cloud-stubs/db/schema/
+        cloud-stubs/db/schema/__init__.pyi
+        cloud_db_schema_stubs-1.0.0.dist-info/
+        cloud_db_schema_stubs-1.0.0.dist-info/METADATA
+        cloud_db_schema_stubs-1.0.0.dist-info/RECORD
+        cloud_db_schema_stubs-1.0.0.dist-info/WHEEL
+        ");
     }
 }

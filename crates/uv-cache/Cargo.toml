@@ -24,6 +24,7 @@ uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
@@ -35,5 +36,4 @@ same-file = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
 walkdir = { workspace = true }

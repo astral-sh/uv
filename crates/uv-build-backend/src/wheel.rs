@@ -4,7 +4,6 @@ use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::{io, mem};
 use tracing::{debug, trace};
 use walkdir::WalkDir;
@@ -14,12 +13,11 @@ use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
-use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
-    find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
 };
 
 /// Build a wheel from the source tree and place it in the output directory.
@@ -125,15 +123,24 @@ fn write_wheel(
     let exclude_matcher = build_exclude_matcher(excludes)?;
 
     debug!("Adding content files to wheel");
-    let (src_root, module_root) = find_roots(
+    let (src_root, module_relative) = find_roots(
         source_tree,
         pyproject_toml,
         &settings.module_root,
-        settings.module_name.as_ref(),
+        settings.module_name.as_deref(),
+        settings.namespace,
     )?;
 
+    // For convenience, have directories for the whole tree in the wheel
+    for ancestor in module_relative.ancestors().skip(1) {
+        if ancestor == Path::new("") {
+            continue;
+        }
+        wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
+    }
+
     let mut files_visited = 0;
-    for entry in WalkDir::new(module_root)
+    for entry in WalkDir::new(src_root.join(module_relative))
         .sort_by_file_name()
         .into_iter()
         .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
@@ -268,22 +275,14 @@ pub fn build_editable(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding pth file to {}", wheel_path.user_display());
-    if settings.module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
-    }
-    let src_root = source_tree.join(settings.module_root);
-
-    let module_name = if let Some(module_name) = settings.module_name {
-        module_name
-    } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
-    };
-    debug!("Module name: `{:?}`", module_name);
-
     // Check that a module root exists in the directory we're linking from the `.pth` file
-    crate::find_module_root(&src_root, module_name)?;
+    let (src_root, _module_relative) = find_roots(
+        source_tree,
+        &pyproject_toml,
+        &settings.module_root,
+        settings.module_name.as_deref(),
+        settings.namespace,
+    )?;
 
     wheel_writer.write_bytes(
         &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),

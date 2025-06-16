@@ -11,7 +11,7 @@ use predicates::prelude::predicate;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn tool_install() {
@@ -126,9 +126,11 @@ fn tool_install() {
     "###);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
-    assert!(bin_dir
-        .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
-        .exists());
+    assert!(
+        bin_dir
+            .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
 
     #[cfg(not(windows))]
     insta::with_settings!({
@@ -211,9 +213,11 @@ fn tool_install_with_global_python() -> Result<()> {
     "###);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
-    assert!(bin_dir
-        .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
-        .exists());
+    assert!(
+        bin_dir
+            .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
 
     uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: true
@@ -322,7 +326,7 @@ fn tool_install_with_editable() -> Result<()> {
 
 #[test]
 fn tool_install_with_compatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8")
+    let context = TestContext::new("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -340,7 +344,7 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
         .arg("build_constraints.txt")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -359,7 +363,7 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
      + tomli==2.0.1
      + typing-extensions==4.11.0
     Installed 2 executables: black, blackd
-    "###);
+    ");
 
     tool_dir
         .child("black")
@@ -392,7 +396,7 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
 
 #[test]
 fn tool_install_with_incompatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8")
+    let context = TestContext::new("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -410,7 +414,7 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
         .arg("build_constraints.txt")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -421,7 +425,7 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     tool_dir
         .child("black")

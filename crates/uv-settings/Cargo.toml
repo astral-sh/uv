@@ -28,10 +28,12 @@ uv-options-metadata = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars", "clap"] }
+uv-redacted = { workspace = true }
 uv-resolver = { workspace = true, features = ["schemars", "clap"] }
 uv-static = { workspace = true }
 uv-torch = { workspace = true, features = ["schemars", "clap"] }
 uv-warnings = { workspace = true }
+uv-workspace = { workspace = true, features = ["schemars", "clap"] }
 
 clap = { workspace = true }
 fs-err = { workspace = true }

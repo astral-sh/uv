@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
@@ -21,9 +21,9 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Origin, Requirement, UnresolvedRequirementSpecification, Verbatim,
+    Origin, Requirement, RequiresPython, UnresolvedRequirementSpecification, Verbatim,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::{GroupName, PackageName};
@@ -32,14 +32,14 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,
 };
-use uv_requirements::upgrade::{read_pylock_toml_requirements, LockedRequirements};
+use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
-    is_pylock_toml, upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
+    RequirementsSource, RequirementsSpecification, is_pylock_toml, upgrade::read_requirements_txt,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, RequiresPython,
-    ResolutionMode, ResolverEnvironment,
+    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
+    ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
@@ -48,7 +48,7 @@ use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::{diagnostics, ExitStatus, OutputWriter};
+use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -517,6 +517,7 @@ pub(crate) async fn pip_compile(
         tags.as_deref(),
         resolver_env.clone(),
         python_requirement,
+        interpreter.markers(),
         Conflicts::empty(),
         &client,
         &flat_index,
@@ -533,7 +534,7 @@ pub(crate) async fn pip_compile(
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
 
@@ -655,7 +656,9 @@ pub(crate) async fn pip_compile(
         }
         ExportFormat::PylockToml => {
             if include_marker_expression {
-                warn_user!("The `--emit-marker-expression` option is not supported for `pylock.toml` output");
+                warn_user!(
+                    "The `--emit-marker-expression` option is not supported for `pylock.toml` output"
+                );
             }
             if include_index_url {
                 warn_user!(
@@ -673,7 +676,9 @@ pub(crate) async fn pip_compile(
                 );
             }
             if include_index_annotation {
-                warn_user!("The `--emit-index-annotation` option is not supported for `pylock.toml` output");
+                warn_user!(
+                    "The `--emit-index-annotation` option is not supported for `pylock.toml` output"
+                );
             }
 
             // Determine the directory relative to which the output file should be written.

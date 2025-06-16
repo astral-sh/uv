@@ -18,8 +18,9 @@ use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, warn, Instrument};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
+use uv_redacted::DisplaySafeUrl;
 use zip::ZipArchive;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
@@ -39,7 +40,7 @@ use uv_fs::{rename_with_retry, write_atomic};
 use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
-use uv_pep440::{release_specifiers_to_ranges, Version};
+use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
@@ -386,7 +387,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data Url,
+        url: &'data DisplaySafeUrl,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
@@ -582,7 +583,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = subdirectory {
             if !source_dist_entry.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    url.clone(),
+                    DisplaySafeUrl::from(url.clone()),
                     subdirectory.to_path_buf(),
                 ));
             }
@@ -715,7 +716,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
         };
-        let req = Self::request(url.clone(), client.unmanaged)?;
+        let req = Self::request(DisplaySafeUrl::from(url.clone()), client.unmanaged)?;
         let revision = client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -727,8 +728,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             })
             .await
             .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => err,
+                CachedClientError::Client { err, .. } => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, force a refresh.
@@ -736,18 +737,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(revision)
         } else {
             client
-                .managed(|client| async move {
+                .managed(async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
-                            Self::request(url.clone(), client)?,
+                            Self::request(DisplaySafeUrl::from(url.clone()), client)?,
                             &cache_entry,
                             download,
                         )
                         .await
                         .map_err(|err| match err {
-                            CachedClientError::Callback(err) => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Callback { err, .. } => err,
+                            CachedClientError::Client { err, .. } => Error::Client(err),
                         })
                 })
                 .await
@@ -1620,7 +1621,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             // Nothing to do.
                         }
                         Err(err) => {
-                            debug!("Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})");
+                            debug!(
+                                "Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})"
+                            );
                         }
                     }
                 }
@@ -1923,7 +1926,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         debug!("Attempting to fetch `pyproject.toml` from: {url}");
 
         let content = client
-            .managed(|client| async {
+            .managed(async |client| {
                 let response = client
                     .uncached_client(git.repository())
                     .get(&url)
@@ -2071,18 +2074,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .instrument(info_span!("download", source_dist = %source))
         };
         client
-            .managed(|client| async move {
+            .managed(async |client| {
                 client
                     .cached_client()
                     .skip_cache_with_retry(
-                        Self::request(url.clone(), client)?,
+                        Self::request(DisplaySafeUrl::from(url.clone()), client)?,
                         &cache_entry,
                         download,
                     )
                     .await
                     .map_err(|err| match err {
-                        CachedClientError::Callback(err) => err,
-                        CachedClientError::Client(err) => Error::Client(err),
+                        CachedClientError::Callback { err, .. } => err,
+                        CachedClientError::Client { err, .. } => Error::Client(err),
                     })
             })
             .await
@@ -2105,7 +2108,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         .map_err(Error::CacheWrite)?;
         let reader = response
             .bytes_stream()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+            .map_err(std::io::Error::other)
             .into_async_read();
 
         // Create a hasher for each hash algorithm.
@@ -2133,12 +2136,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Extract the top-level directory.
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
-            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
+            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.keep(),
             Err(err) => {
                 return Err(Error::Extract(
                     temp_dir.path().to_string_lossy().into_owned(),
                     err,
-                ))
+                ));
             }
         };
 
@@ -2206,7 +2209,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Err(Error::Extract(
                     temp_dir.path().to_string_lossy().into_owned(),
                     err,
-                ))
+                ));
             }
         };
 
@@ -2400,10 +2403,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(url: Url, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(
+        url: DisplaySafeUrl,
+        client: &RegistryClient,
+    ) -> Result<reqwest::Request, reqwest::Error> {
         client
             .uncached_client(&url)
-            .get(url)
+            .get(Url::from(url))
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading

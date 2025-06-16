@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use toml_edit::{value, Array, Item, Table, Value};
+use toml_edit::{Array, Item, Table, Value, value};
 
 use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};

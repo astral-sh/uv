@@ -1,6 +1,6 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -8,7 +8,6 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::debug;
-use uv_tool::InstalledTools;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
@@ -17,9 +16,9 @@ use uv_configuration::{
     ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
+    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification, Requirement,
     ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_distribution_types::{
@@ -29,6 +28,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
+use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -40,12 +40,13 @@ use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
     Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
 };
-use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
+use uv_tool::InstalledTools;
+use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, ChangeEventKind, DryRunEvent};
+use crate::commands::{ChangeEventKind, DryRunEvent, compile_bytecode};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -119,6 +120,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     tags: Option<&Tags>,
     resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    current_environment: &MarkerEnvironment,
     conflicts: Conflicts,
     client: &RegistryClient,
     flat_index: &FlatIndex,
@@ -164,7 +166,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
                 extras,
-                groups,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -208,6 +209,47 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     .into_iter()
                     .flat_map(|resolution| resolution.requirements),
             );
+        }
+
+        for (pyproject_path, groups) in groups {
+            let metadata = SourcedDependencyGroups::from_virtual_project(
+                pyproject_path,
+                None,
+                build_dispatch.locations(),
+                build_dispatch.sources(),
+                build_dispatch.workspace_cache(),
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to read dependency groups from: {}\n{}",
+                    pyproject_path.display(),
+                    e
+                )
+            })?;
+
+            // Complain if dependency groups are named that don't appear.
+            for name in groups.explicit_names() {
+                if !metadata.dependency_groups.contains_key(name) {
+                    return Err(anyhow!(
+                        "The dependency group '{name}' was not found in the project: {}",
+                        pyproject_path.user_display()
+                    ))?;
+                }
+            }
+            // Apply dependency-groups
+            for (group_name, group) in &metadata.dependency_groups {
+                if groups.contains(group_name) {
+                    requirements.extend(group.iter().cloned().map(|group| Requirement {
+                        origin: Some(RequirementOrigin::Group(
+                            pyproject_path.clone(),
+                            metadata.name.clone(),
+                            group_name.clone(),
+                        )),
+                        ..group
+                    }));
+                }
+            }
         }
 
         requirements
@@ -303,6 +345,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             options,
             &python_requirement,
             resolver_env,
+            current_environment,
             conflicts,
             tags,
             flat_index,
@@ -561,6 +604,7 @@ pub(crate) async fn install(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -618,6 +662,7 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -660,6 +705,7 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
+#[allow(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -793,6 +839,7 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -810,6 +857,7 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,

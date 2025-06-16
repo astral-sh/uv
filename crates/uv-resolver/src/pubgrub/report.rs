@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexUrl,
+    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -27,9 +27,7 @@ use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
     MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
-use crate::{
-    Flexibility, InMemoryIndex, Options, RequiresPython, ResolverEnvironment, VersionsResponse,
-};
+use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -1408,7 +1406,8 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                     package_requires_python.cyan(),
                 )
@@ -1426,7 +1425,8 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1442,7 +1442,8 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1515,7 +1516,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     name.cyan(),
-                    found_index.redacted().cyan(),
+                    found_index.without_credentials().cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
@@ -1527,7 +1528,7 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    index.redacted().cyan(),
+                    index.without_credentials().cyan(),
                     "401 Unauthorized".red(),
                 )
             }
@@ -1537,7 +1538,7 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    index.redacted().cyan(),
+                    index.without_credentials().cyan(),
                     "403 Forbidden".red(),
                 )
             }

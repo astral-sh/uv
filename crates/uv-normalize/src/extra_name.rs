@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_small_str::SmallString;
 
-use crate::{validate_and_normalize_ref, InvalidNameError};
+use crate::{InvalidNameError, validate_and_normalize_ref};
 
 /// Either the literal "all" or a list of extras
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

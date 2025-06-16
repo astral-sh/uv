@@ -50,7 +50,7 @@ the workspace context.
 
 Every workspace needs a root, which is _also_ a workspace member. In the above example, `albatross`
 is the workspace root, and the workspace members include all projects under the `packages`
-directory, with the exception of `seeds`.
+directory, except `seeds`.
 
 By default, `uv run` and `uv sync` operates on the workspace root. For example, in the above
 example, `uv run` and `uv run --package albatross` would be equivalent, while

@@ -4,16 +4,16 @@ use std::sync::Arc;
 
 use indexmap::IndexSet;
 use petgraph::{
-    graph::{Graph, NodeIndex},
     Directed, Direction,
+    graph::{Graph, NodeIndex},
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, Requirement, ResolutionDiagnostic,
-    ResolvedDist, VersionId, VersionOrUrlRef,
+    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, Requirement, RequiresPython,
+    ResolutionDiagnostic, ResolvedDist, VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -30,8 +30,7 @@ use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
-    VersionsResponse,
+    InMemoryIndex, MetadataResponse, Options, PythonRequirement, ResolveError, VersionsResponse,
 };
 
 /// The output of a successful resolution.
@@ -60,6 +59,7 @@ pub struct ResolverOutput {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum ResolutionGraphNode {
     Root,
     Dist(AnnotatedDist),
@@ -778,7 +778,7 @@ impl ResolverOutput {
         for node in self.graph.node_weights() {
             let annotated_dist = match node {
                 ResolutionGraphNode::Root => continue,
-                ResolutionGraphNode::Dist(ref annotated_dist) => annotated_dist,
+                ResolutionGraphNode::Dist(annotated_dist) => annotated_dist,
             };
             name_to_markers
                 .entry(&annotated_dist.name)
@@ -787,18 +787,18 @@ impl ResolverOutput {
         }
         let mut dupes = vec![];
         for (name, marker_trees) in name_to_markers {
-            for (i, (version1, &marker1)) in marker_trees.iter().enumerate() {
-                for (version2, &marker2) in &marker_trees[i + 1..] {
+            for (i, (version1, marker1)) in marker_trees.iter().enumerate() {
+                for (version2, marker2) in &marker_trees[i + 1..] {
                     if version1 == version2 {
                         continue;
                     }
-                    if !marker1.is_disjoint(marker2) {
+                    if !marker1.is_disjoint(**marker2) {
                         dupes.push(ConflictingDistributionError {
                             name: name.clone(),
                             version1: (*version1).clone(),
                             version2: (*version2).clone(),
-                            marker1,
-                            marker2,
+                            marker1: **marker1,
+                            marker2: **marker2,
                         });
                     }
                 }

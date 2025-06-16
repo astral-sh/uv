@@ -1,22 +1,20 @@
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
-    find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
 };
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
 use std::io::{BufReader, Cursor};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
-use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -59,6 +57,7 @@ pub fn list_source_dist(
 
 /// Build includes and excludes for source tree walking for source dists.
 fn source_dist_matcher(
+    source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     settings: BuildBackendSettings,
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
@@ -68,23 +67,23 @@ fn source_dist_matcher(
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
 
-    let module_name = if let Some(module_name) = settings.module_name {
-        module_name
-    } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
-    };
-    debug!("Module name: `{:?}`", module_name);
-
+    // Check that the source tree contains a module.
+    let (src_root, module_relative) = find_roots(
+        source_tree,
+        pyproject_toml,
+        &settings.module_root,
+        settings.module_name.as_deref(),
+        settings.namespace,
+    )?;
     // The wheel must not include any files included by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
-    let import_path = &settings
-        .module_root
-        .join(module_name.as_ref())
-        .portable_display()
-        .to_string();
-    includes.push(format!("{}/**", globset::escape(import_path)));
+    let import_path = uv_fs::normalize_path(
+        &uv_fs::relative_to(src_root.join(module_relative), source_tree)
+            .expect("module root is inside source tree"),
+    )
+    .portable_display()
+    .to_string();
+    includes.push(format!("{}/**", globset::escape(&import_path)));
     for include in includes {
         let glob = PortableGlobParser::Uv
             .parse(&include)
@@ -92,7 +91,7 @@ fn source_dist_matcher(
                 field: "tool.uv.build-backend.source-include".to_string(),
                 source: err,
             })?;
-        include_globs.push(glob.clone());
+        include_globs.push(glob);
     }
 
     // Include the Readme
@@ -101,11 +100,11 @@ fn source_dist_matcher(
         .as_ref()
         .and_then(|readme| readme.path())
     {
+        let readme = uv_fs::normalize_path(readme);
         trace!("Including readme at: `{}`", readme.user_display());
-        include_globs.push(
-            Glob::new(&globset::escape(&readme.portable_display().to_string()))
-                .expect("escaped globset is parseable"),
-        );
+        let readme = readme.portable_display().to_string();
+        let glob = Glob::new(&globset::escape(&readme)).expect("escaped globset is parseable");
+        include_globs.push(glob);
     }
 
     // Include the license files
@@ -122,16 +121,29 @@ fn source_dist_matcher(
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
+        let directory = uv_fs::normalize_path(Path::new(directory));
+        trace!(
+            "Including data ({}) at: `{}`",
+            name,
+            directory.user_display()
+        );
+        let directory = directory.portable_display().to_string();
         let glob = PortableGlobParser::Uv
-            .parse(&format!("{}/**", globset::escape(directory)))
+            .parse(&format!("{}/**", globset::escape(&directory)))
             .map_err(|err| Error::PortableGlob {
                 field: format!("tool.uv.build-backend.data.{name}"),
                 source: err,
             })?;
-        trace!("Including data ({name}) at: `{directory}`");
         include_globs.push(glob);
     }
 
+    debug!(
+        "Source distribution includes: `{:?}`",
+        include_globs
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+    );
     let include_matcher =
         GlobDirFilter::from_globs(&include_globs).map_err(|err| Error::GlobSetTooLarge {
             field: "tool.uv.build-backend.source-include".to_string(),
@@ -187,15 +199,7 @@ fn write_source_dist(
     let metadata = pyproject_toml.to_metadata(source_tree)?;
     let metadata_email = metadata.core_metadata_format();
 
-    debug!("Adding content files to wheel");
-    // Check that the source tree contains a module.
-    find_roots(
-        source_tree,
-        &pyproject_toml,
-        &settings.module_root,
-        settings.module_name.as_ref(),
-    )?;
-
+    debug!("Adding content files to source distribution");
     writer.write_bytes(
         &Path::new(&top_level)
             .join("PKG-INFO")
@@ -204,7 +208,8 @@ fn write_source_dist(
         metadata_email.as_bytes(),
     )?;
 
-    let (include_matcher, exclude_matcher) = source_dist_matcher(&pyproject_toml, settings)?;
+    let (include_matcher, exclude_matcher) =
+        source_dist_matcher(source_tree, &pyproject_toml, settings)?;
 
     let mut files_visited = 0;
     for entry in WalkDir::new(source_tree)

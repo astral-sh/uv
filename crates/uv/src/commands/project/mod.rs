@@ -18,12 +18,13 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredRequirement};
 use uv_distribution_types::{
-    Index, Requirement, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Index, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
-use uv_fs::{LockedFile, Simplified, CWD};
+use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
@@ -32,11 +33,11 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
+use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, RequiresPython,
-    ResolverEnvironment, ResolverOutput,
+    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -45,7 +46,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
-use uv_workspace::{Workspace, WorkspaceCache};
+use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -67,10 +68,13 @@ pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
 pub(crate) mod tree;
+pub(crate) mod version;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
-    #[error("The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.")]
+    #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
+    )]
     LockMismatch(Box<Lock>),
 
     #[error(
@@ -78,69 +82,70 @@ pub(crate) enum ProjectError {
     )]
     MissingLockfile,
 
-    #[error("The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
+    #[error(
+        "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+    )]
     UnsupportedLockVersion(u32, u32),
 
-    #[error("Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
+    #[error(
+        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+    )]
     UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
 
     #[error("Failed to serialize `uv.lock`")]
     LockSerialization(#[from] toml_edit::ser::Error),
 
-    #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
+    #[error(
+        "The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`"
+    )]
     LockedPythonIncompatibility(Version, RequiresPython),
 
-    #[error("The current Python platform is not compatible with the lockfile's supported environments: {0}")]
+    #[error(
+        "The current Python platform is not compatible with the lockfile's supported environments: {0}"
+    )]
     LockedPlatformIncompatibility(String),
 
     #[error(transparent)]
     Conflict(#[from] ConflictError),
 
-    #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
-    RequestedPythonProjectIncompatibility(Version, RequiresPython),
+    #[error(
+        "The requested interpreter resolved to Python {_0}, which is incompatible with the project's Python requirement: `{_1}`{}",
+        format_optional_requires_python_sources(_2, *_3)
+    )]
+    RequestedPythonProjectIncompatibility(Version, RequiresPython, RequiresPythonSources, bool),
 
-    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the project's Python requirement: `{2}`. Use `uv python pin` to update the `.python-version` file to a compatible version.")]
-    DotPythonVersionProjectIncompatibility(String, Version, RequiresPython),
-
-    #[error("The resolved Python interpreter (Python {0}) is incompatible with the project's Python requirement: `{1}`")]
-    RequiresPythonProjectIncompatibility(Version, RequiresPython),
-
-    #[error("The requested interpreter resolved to Python {0}, which is incompatible with the script's Python requirement: `{1}`")]
-    RequestedPythonScriptIncompatibility(Version, RequiresPython),
-
-    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the script's Python requirement: `{2}`")]
-    DotPythonVersionScriptIncompatibility(String, Version, RequiresPython),
-
-    #[error("The resolved Python interpreter (Python {0}) is incompatible with the script's Python requirement: `{1}`")]
-    RequiresPythonScriptIncompatibility(Version, RequiresPython),
-
-    #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`. However, a workspace member (`{member}`) supports Python {3}. To install the workspace member on its own, navigate to `{path}`, then run `{venv}` followed by `{install}`.", member = _2.cyan(), venv = format!("uv venv --python {_0}").green(), install = "uv pip install -e .".green(), path = _4.user_display().cyan() )]
-    RequestedMemberIncompatibility(
-        Version,
-        RequiresPython,
-        PackageName,
-        VersionSpecifiers,
-        PathBuf,
-    ),
-
-    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the project's Python requirement: `{2}`. However, a workspace member (`{member}`) supports Python {4}. To install the workspace member on its own, navigate to `{path}`, then run `{venv}` followed by `{install}`.", member = _3.cyan(), venv = format!("uv venv --python {_1}").green(), install = "uv pip install -e .".green(), path = _5.user_display().cyan() )]
-    DotPythonVersionMemberIncompatibility(
+    #[error(
+        "The Python request from `{_0}` resolved to Python {_1}, which is incompatible with the project's Python requirement: `{_2}`{}\nUse `uv python pin` to update the `.python-version` file to a compatible version",
+        format_optional_requires_python_sources(_3, *_4)
+    )]
+    DotPythonVersionProjectIncompatibility(
         String,
         Version,
         RequiresPython,
-        PackageName,
-        VersionSpecifiers,
-        PathBuf,
+        RequiresPythonSources,
+        bool,
     ),
 
-    #[error("The resolved Python interpreter (Python {0}) is incompatible with the project's Python requirement: `{1}`. However, a workspace member (`{member}`) supports Python {3}. To install the workspace member on its own, navigate to `{path}`, then run `{venv}` followed by `{install}`.", member = _2.cyan(), venv = format!("uv venv --python {_0}").green(), install = "uv pip install -e .".green(), path = _4.user_display().cyan() )]
-    RequiresPythonMemberIncompatibility(
-        Version,
-        RequiresPython,
-        PackageName,
-        VersionSpecifiers,
-        PathBuf,
-    ),
+    #[error(
+        "The resolved Python interpreter (Python {_0}) is incompatible with the project's Python requirement: `{_1}`{}",
+        format_optional_requires_python_sources(_2, *_3)
+    )]
+    RequiresPythonProjectIncompatibility(Version, RequiresPython, RequiresPythonSources, bool),
+
+    #[error(
+        "The requested interpreter resolved to Python {0}, which is incompatible with the script's Python requirement: `{1}`"
+    )]
+    RequestedPythonScriptIncompatibility(Version, RequiresPython),
+
+    #[error(
+        "The Python request from `{0}` resolved to Python {1}, which is incompatible with the script's Python requirement: `{2}`"
+    )]
+    DotPythonVersionScriptIncompatibility(String, Version, RequiresPython),
+
+    #[error(
+        "The resolved Python interpreter (Python {0}) is incompatible with the script's Python requirement: `{1}`"
+    )]
+    RequiresPythonScriptIncompatibility(Version, RequiresPython),
 
     #[error("Group `{0}` is not defined in the project's `dependency-groups` table")]
     MissingGroupProject(GroupName),
@@ -151,7 +156,9 @@ pub(crate) enum ProjectError {
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
 
-    #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table")]
+    #[error(
+        "Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table"
+    )]
     MissingDefaultGroup(GroupName),
 
     #[error("Extra `{0}` is not defined in the project's `optional-dependencies` table")]
@@ -169,8 +176,11 @@ pub(crate) enum ProjectError {
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
     DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
 
-    #[error("The workspace contains conflicting Python requirements:\n{}", _0.iter().map(|(name, specifiers)| format!("- `{name}`: `{specifiers}`")).join("\n"))]
-    DisjointRequiresPython(BTreeMap<PackageName, VersionSpecifiers>),
+    #[error(
+        "Found conflicting Python requirements:\n{}",
+        format_requires_python_sources(_0)
+    )]
+    DisjointRequiresPython(BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>),
 
     #[error("Environment marker is empty")]
     EmptyEnvironment,
@@ -261,7 +271,7 @@ pub(crate) struct ConflictError {
     /// The items from the set that were enabled, and thus create the conflict.
     pub(crate) conflicts: Vec<ConflictPackage>,
     /// Enabled dependency groups with defaults applied.
-    pub(crate) dev: DependencyGroupsWithDefaults,
+    pub(crate) groups: DependencyGroupsWithDefaults,
 }
 
 impl std::fmt::Display for ConflictError {
@@ -271,8 +281,8 @@ impl std::fmt::Display for ConflictError {
             .set
             .iter()
             .map(|item| match item.conflict() {
-                ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
-                ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
+                ConflictPackage::Extra(extra) => format!("`{}[{}]`", item.package(), extra),
+                ConflictPackage::Group(group) => format!("`{}:{}`", item.package(), group),
             })
             .join(", ");
 
@@ -289,7 +299,7 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Extra(ref extra) => format!("`{extra}`"),
+                            ConflictPackage::Extra(extra) => format!("`{extra}`"),
                             ConflictPackage::Group(..) => unreachable!(),
                         })
                         .collect()
@@ -312,10 +322,10 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Group(ref group)
-                                if self.dev.contains_because_default(group) =>
+                            ConflictPackage::Group(group)
+                                if self.groups.contains_because_default(group) =>
                                 format!("`{group}` (enabled by default)"),
-                            ConflictPackage::Group(ref group) => format!("`{group}`"),
+                            ConflictPackage::Group(group) => format!("`{group}`"),
                             ConflictPackage::Extra(..) => unreachable!(),
                         })
                         .collect()
@@ -331,13 +341,13 @@ impl std::fmt::Display for ConflictError {
                         .enumerate()
                         .map(|(i, conflict)| {
                             let conflict = match conflict {
-                                ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(ref group)
-                                    if self.dev.contains_because_default(group) =>
+                                ConflictPackage::Extra(extra) => format!("extra `{extra}`"),
+                                ConflictPackage::Group(group)
+                                    if self.groups.contains_because_default(group) =>
                                 {
                                     format!("group `{group}` (enabled by default)")
                                 }
-                                ConflictPackage::Group(ref group) => format!("group `{group}`"),
+                                ConflictPackage::Group(group) => format!("group `{group}`"),
                             };
                             if i == 0 {
                                 capitalize(&conflict)
@@ -404,23 +414,16 @@ impl PlatformState {
 #[allow(clippy::result_large_err)]
 pub(crate) fn find_requires_python(
     workspace: &Workspace,
+    groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<RequiresPython>, ProjectError> {
+    let requires_python = workspace.requires_python(groups)?;
     // If there are no `Requires-Python` specifiers in the workspace, return `None`.
-    if workspace.requires_python().next().is_none() {
+    if requires_python.is_empty() {
         return Ok(None);
     }
-    match RequiresPython::intersection(
-        workspace
-            .requires_python()
-            .map(|(.., specifiers)| specifiers),
-    ) {
+    match RequiresPython::intersection(requires_python.iter().map(|(.., specifiers)| specifiers)) {
         Some(requires_python) => Ok(Some(requires_python)),
-        None => Err(ProjectError::DisjointRequiresPython(
-            workspace
-                .requires_python()
-                .map(|(name, specifiers)| (name.clone(), specifiers.clone()))
-                .collect(),
-        )),
+        None => Err(ProjectError::DisjointRequiresPython(requires_python)),
     }
 }
 
@@ -432,6 +435,7 @@ pub(crate) fn find_requires_python(
 pub(crate) fn validate_project_requires_python(
     interpreter: &Interpreter,
     workspace: Option<&Workspace>,
+    groups: &DependencyGroupsWithDefaults,
     requires_python: &RequiresPython,
     source: &PythonRequestSource,
 ) -> Result<(), ProjectError> {
@@ -439,57 +443,24 @@ pub(crate) fn validate_project_requires_python(
         return Ok(());
     }
 
-    // If the Python version is compatible with one of the workspace _members_, raise
-    // a dedicated error. For example, if the workspace root requires Python >=3.12, but
-    // a library in the workspace is compatible with Python >=3.8, the user may attempt
-    // to sync on Python 3.8. This will fail, but we should provide a more helpful error
-    // message.
-    for (name, member) in workspace.into_iter().flat_map(Workspace::packages) {
-        let Some(project) = member.pyproject_toml().project.as_ref() else {
-            continue;
-        };
-        let Some(specifiers) = project.requires_python.as_ref() else {
-            continue;
-        };
-        if specifiers.contains(interpreter.python_version()) {
-            return match source {
-                PythonRequestSource::UserRequest => {
-                    Err(ProjectError::RequestedMemberIncompatibility(
-                        interpreter.python_version().clone(),
-                        requires_python.clone(),
-                        name.clone(),
-                        specifiers.clone(),
-                        member.root().clone(),
-                    ))
-                }
-                PythonRequestSource::DotPythonVersion(file) => {
-                    Err(ProjectError::DotPythonVersionMemberIncompatibility(
-                        file.path().user_display().to_string(),
-                        interpreter.python_version().clone(),
-                        requires_python.clone(),
-                        name.clone(),
-                        specifiers.clone(),
-                        member.root().clone(),
-                    ))
-                }
-                PythonRequestSource::RequiresPython => {
-                    Err(ProjectError::RequiresPythonMemberIncompatibility(
-                        interpreter.python_version().clone(),
-                        requires_python.clone(),
-                        name.clone(),
-                        specifiers.clone(),
-                        member.root().clone(),
-                    ))
-                }
-            };
-        }
-    }
+    // Find all the individual requires_python constraints that conflict
+    let conflicting_requires = workspace
+        .and_then(|workspace| workspace.requires_python(groups).ok())
+        .into_iter()
+        .flatten()
+        .filter(|(.., requires)| !requires.contains(interpreter.python_version()))
+        .collect::<RequiresPythonSources>();
+    let workspace_non_trivial = workspace
+        .map(|workspace| workspace.packages().len() > 1)
+        .unwrap_or(false);
 
     match source {
         PythonRequestSource::UserRequest => {
             Err(ProjectError::RequestedPythonProjectIncompatibility(
                 interpreter.python_version().clone(),
                 requires_python.clone(),
+                conflicting_requires,
+                workspace_non_trivial,
             ))
         }
         PythonRequestSource::DotPythonVersion(file) => {
@@ -497,12 +468,16 @@ pub(crate) fn validate_project_requires_python(
                 file.path().user_display().to_string(),
                 interpreter.python_version().clone(),
                 requires_python.clone(),
+                conflicting_requires,
+                workspace_non_trivial,
             ))
         }
         PythonRequestSource::RequiresPython => {
             Err(ProjectError::RequiresPythonProjectIncompatibility(
                 interpreter.python_version().clone(),
                 requires_python.clone(),
+                conflicting_requires,
+                workspace_non_trivial,
             ))
         }
     }
@@ -713,7 +688,13 @@ impl ScriptInterpreter {
 
         if let Err(err) = match requires_python {
             Some((requires_python, RequiresPythonSource::Project)) => {
-                validate_project_requires_python(&interpreter, workspace, &requires_python, &source)
+                validate_project_requires_python(
+                    &interpreter,
+                    workspace,
+                    &DependencyGroupsWithDefaults::none(),
+                    &requires_python,
+                    &source,
+                )
             }
             Some((requires_python, RequiresPythonSource::Script)) => {
                 validate_script_requires_python(&interpreter, &requires_python, &source)
@@ -785,7 +766,9 @@ pub(crate) enum EnvironmentIncompatibilityError {
     #[error("The {0} environment's Python version does not meet the Python requirement: `{1}`")]
     RequiresPython(EnvironmentKind, RequiresPython),
 
-    #[error("The interpreter in the {0} environment has different version ({1}) than it was created with ({2})")]
+    #[error(
+        "The interpreter in the {0} environment has different version ({1}) than it was created with ({2})"
+    )]
     PyenvVersionConflict(EnvironmentKind, Version, Version),
 }
 
@@ -847,6 +830,7 @@ impl ProjectInterpreter {
     pub(crate) async fn discover(
         workspace: &Workspace,
         project_dir: &Path,
+        groups: &DependencyGroupsWithDefaults,
         python_request: Option<PythonRequest>,
         network_settings: &NetworkSettings,
         python_preference: PythonPreference,
@@ -863,8 +847,14 @@ impl ProjectInterpreter {
             source,
             python_request,
             requires_python,
-        } = WorkspacePython::from_request(python_request, Some(workspace), project_dir, no_config)
-            .await?;
+        } = WorkspacePython::from_request(
+            python_request,
+            Some(workspace),
+            groups,
+            project_dir,
+            no_config,
+        )
+        .await?;
 
         // Read from the virtual environment first.
         let root = workspace.venv(active);
@@ -899,7 +889,7 @@ impl ProjectInterpreter {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
                             root,
                             inner.kind.to_string(),
-                        ))
+                        ));
                     }
                     InvalidEnvironmentKind::MissingExecutable(_) => {
                         if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
@@ -975,6 +965,7 @@ impl ProjectInterpreter {
             validate_project_requires_python(
                 &interpreter,
                 Some(workspace),
+                groups,
                 requires_python,
                 &source,
             )?;
@@ -1054,10 +1045,14 @@ impl WorkspacePython {
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         workspace: Option<&Workspace>,
+        groups: &DependencyGroupsWithDefaults,
         project_dir: &Path,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        let requires_python = workspace.map(find_requires_python).transpose()?.flatten();
+        let requires_python = workspace
+            .map(|workspace| find_requires_python(workspace, groups))
+            .transpose()?
+            .flatten();
 
         let workspace_root = workspace.map(Workspace::install_path);
 
@@ -1138,6 +1133,8 @@ impl ScriptPython {
         } = WorkspacePython::from_request(
             python_request,
             workspace,
+            // Scripts have no groups to hang requires-python settings off of
+            &DependencyGroupsWithDefaults::none(),
             script.path().and_then(Path::parent).unwrap_or(&**CWD),
             no_config,
         )
@@ -1204,6 +1201,7 @@ impl ProjectEnvironment {
     /// Initialize a virtual environment for the current project.
     pub(crate) async fn get_or_init(
         workspace: &Workspace,
+        groups: &DependencyGroupsWithDefaults,
         python: Option<PythonRequest>,
         install_mirrors: &PythonInstallMirrors,
         network_settings: &NetworkSettings,
@@ -1222,6 +1220,7 @@ impl ProjectEnvironment {
         match ProjectInterpreter::discover(
             workspace,
             workspace.install_path().as_ref(),
+            groups,
             python,
             network_settings,
             python_preference,
@@ -1264,7 +1263,9 @@ impl ProjectEnvironment {
                     (_, Err(err)) | (Err(err), _) => {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
                             root,
-                            format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
+                            format!(
+                                "it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"
+                            ),
                         ));
                     }
                 };
@@ -1895,6 +1896,7 @@ pub(crate) async fn resolve_environment(
         Some(tags),
         ResolverEnvironment::specific(marker_env),
         python_requirement,
+        interpreter.markers(),
         Conflicts::empty(),
         &client,
         &flat_index,
@@ -2267,6 +2269,7 @@ pub(crate) async fn update_environment(
         Some(tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
+        venv.interpreter().markers(),
         Conflicts::empty(),
         &client,
         &flat_index,
@@ -2403,7 +2406,7 @@ pub(crate) fn default_dependency_groups(
 pub(crate) fn detect_conflicts(
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: &DependencyGroupsWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
 ) -> Result<(), ProjectError> {
     // Note that we need to collect all extras and groups that match in
     // a particular set, since extras can be declared as conflicting with
@@ -2422,7 +2425,7 @@ pub(crate) fn detect_conflicts(
             }
             if item
                 .group()
-                .map(|group| dev.contains(group))
+                .map(|group| groups.contains(group))
                 .unwrap_or(false)
             {
                 conflicts.push(item.conflict().clone());
@@ -2432,7 +2435,7 @@ pub(crate) fn detect_conflicts(
             return Err(ProjectError::Conflict(ConflictError {
                 set: set.clone(),
                 conflicts,
-                dev: dev.clone(),
+                groups: groups.clone(),
             }));
         }
     }
@@ -2561,7 +2564,9 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
     if settings.index_locations.no_index() {
         // Nothing to do, we're ignoring the URLs anyway.
     } else if *no_index {
-        warn_user_once!("Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file.");
+        warn_user_once!(
+            "Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file."
+        );
     } else {
         if let Some(index_url) = index_url {
             if settings.index_locations.default_index().map(Index::url) != Some(index_url) {
@@ -2578,7 +2583,6 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
             {
                 warn_user_once!(
                     "Ignoring `--extra-index-url` from requirements file: `{extra_index_url}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`"
-
                 );
             }
         }
@@ -2596,11 +2600,15 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
     }
 
     if !no_binary.is_none() && settings.build_options.no_binary() != no_binary {
-        warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-binary` command-line argument, or set `no-binary` in a `uv.toml` or `pyproject.toml` file.");
+        warn_user_once!(
+            "Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-binary` command-line argument, or set `no-binary` in a `uv.toml` or `pyproject.toml` file."
+        );
     }
 
     if !no_build.is_none() && settings.build_options.no_build() != no_build {
-        warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file.");
+        warn_user_once!(
+            "Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file."
+        );
     }
 }
 
@@ -2639,6 +2647,50 @@ fn cache_name(name: &str) -> Option<Cow<'_, str>> {
     } else {
         Some(Cow::Owned(normalized))
     }
+}
+
+fn format_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
+    conflicts
+        .iter()
+        .map(|((package, group), specifiers)| {
+            if let Some(group) = group {
+                format!("- {package}:{group}: {specifiers}")
+            } else {
+                format!("- {package}: {specifiers}")
+            }
+        })
+        .join("\n")
+}
+
+fn format_optional_requires_python_sources(
+    conflicts: &RequiresPythonSources,
+    workspace_non_trivial: bool,
+) -> String {
+    // If there's lots of conflicts, print a list
+    if conflicts.len() > 1 {
+        return format!(
+            ".\nThe following `requires-python` declarations do not permit this version:\n{}",
+            format_requires_python_sources(conflicts)
+        );
+    }
+    // If there's one conflict, give a clean message
+    if conflicts.len() == 1 {
+        let ((package, group), _) = conflicts.iter().next().unwrap();
+        if let Some(group) = group {
+            if workspace_non_trivial {
+                return format!(
+                    " (from workspace member `{package}`'s `tool.uv.dependency-groups.{group}.requires-python`)."
+                );
+            }
+            return format!(" (from `tool.uv.dependency-groups.{group}.requires-python`).");
+        }
+        if workspace_non_trivial {
+            return format!(" (from workspace member `{package}`'s `project.requires-python`).");
+        }
+        return " (from `project.requires-python`)".to_owned();
+    }
+    // Otherwise don't elaborate
+    String::new()
 }
 
 #[cfg(test)]

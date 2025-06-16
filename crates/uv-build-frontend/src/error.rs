@@ -64,7 +64,9 @@ pub enum Error {
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
-    #[error("`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty.")]
+    #[error(
+        "`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty."
+    )]
     InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
     #[error("Failed to resolve requirements from {0}")]
     RequirementsResolve(&'static str, #[source] AnyErrorBuild),

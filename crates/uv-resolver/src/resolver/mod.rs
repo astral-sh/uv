@@ -18,7 +18,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info, instrument, trace, warn, Level};
+use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::DistributionDatabase;
@@ -30,8 +30,10 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
@@ -60,7 +62,7 @@ use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
 use crate::resolver::environment::{
-    fork_version_by_marker, fork_version_by_python_requirement, ForkingPossibility,
+    ForkingPossibility, fork_version_by_marker, fork_version_by_python_requirement,
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub use crate::resolver::index::InMemoryIndex;
@@ -74,7 +76,10 @@ use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
-use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap};
+use crate::{
+    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap,
+    marker,
+};
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
 
@@ -115,6 +120,8 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
     env: ResolverEnvironment,
+    // The environment of the current Python interpreter.
+    current_environment: MarkerEnvironment,
     tags: Option<Tags>,
     python_requirement: PythonRequirement,
     conflicts: Conflicts,
@@ -158,6 +165,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         env: ResolverEnvironment,
+        current_environment: &MarkerEnvironment,
         conflicts: Conflicts,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
@@ -184,6 +192,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             options,
             hasher,
             env,
+            current_environment,
             tags.cloned(),
             python_requirement,
             conflicts,
@@ -206,6 +215,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         hasher: &HashStrategy,
         env: ResolverEnvironment,
+        current_environment: &MarkerEnvironment,
         tags: Option<Tags>,
         python_requirement: &PythonRequirement,
         conflicts: Conflicts,
@@ -234,6 +244,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             hasher: hasher.clone(),
             locations: locations.clone(),
             env,
+            current_environment: current_environment.clone(),
             tags,
             python_requirement: python_requirement.clone(),
             conflicts,
@@ -354,6 +365,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_urls,
                                     state.fork_indexes,
                                     state.env,
+                                    self.current_environment.clone(),
+                                    self.options.exclude_newer,
                                     &visited,
                                 ));
                             }
@@ -519,7 +532,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .term_intersection_for_package(next_id)
                                 .expect("a package was chosen but we don't have a term");
 
-                            if let PubGrubPackageInner::Package { ref name, .. } = &**next_package {
+                            if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                                 // Check if the decision was due to the package being unavailable
                                 if let Some(entry) = self.unavailable_packages.get(name) {
                                     state.pubgrub.add_incompatibility(
@@ -1857,7 +1870,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             url: None,
                         })
                         .collect(),
-                ))
+                ));
             }
 
             // Add a dependency on both the extra and base package, with and without the marker.
@@ -1885,7 +1898,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 })
                         })
                         .collect(),
-                ))
+                ));
             }
 
             // Add a dependency on the dependency group, with and without the marker.
@@ -1905,7 +1918,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             url: None,
                         })
                         .collect(),
-                ))
+                ));
             }
         };
         Ok(Dependencies::Available(dependencies))
@@ -2422,7 +2435,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if !self.selector.use_highest_version(&package_name, &env) {
                         if let Some((lower, _)) = range.iter().next() {
                             if lower == &Bound::Unbounded {
-                                debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
+                                debug!(
+                                    "Skipping prefetch for unbounded minimum-version range: {package_name} ({range})"
+                                );
                                 return Ok(None);
                             }
                         }
@@ -2502,6 +2517,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
+        current_environment: MarkerEnvironment,
+        exclude_newer: Option<ExcludeNewer>,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2554,10 +2571,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let VersionsResponse::Found(ref version_maps) = *response {
                     // Track the available versions, across all indexes.
                     for version_map in version_maps {
-                        available_versions
+                        let package_versions = available_versions
                             .entry(name.clone())
-                            .or_insert_with(BTreeSet::new)
-                            .extend(version_map.versions().cloned());
+                            .or_insert_with(BTreeSet::new);
+
+                        for (version, dists) in version_map.iter(&Ranges::full()) {
+                            // Don't show versions removed by excluded-newer in hints.
+                            if let Some(exclude_newer) = exclude_newer {
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    continue;
+                                };
+                                if prioritized_dist.files().all(|file| {
+                                    file.upload_time_utc_ms.is_none_or(|upload_time| {
+                                        upload_time >= exclude_newer.timestamp_millis()
+                                    })
+                                }) {
+                                    continue;
+                                }
+                            }
+
+                            package_versions.insert(version.clone());
+                        }
                     }
 
                     // Track the indexes in which the package is available.
@@ -2573,7 +2607,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        ResolveError::NoSolution(NoSolutionError::new(
+        ResolveError::NoSolution(Box::new(NoSolutionError::new(
             err,
             self.index.clone(),
             available_versions,
@@ -2587,10 +2621,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             fork_urls,
             fork_indexes,
             env,
+            current_environment,
             self.tags.clone(),
             self.workspace_members.clone(),
             self.options.clone(),
-        ))
+        )))
     }
 
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
@@ -3607,15 +3642,12 @@ impl Forks {
                 // {foo, bar}, one that excludes {foo, baz} and one
                 // that excludes {bar, baz}.
                 for (i, _) in set.iter().enumerate() {
-                    let fork_allows_group =
-                        fork.clone()
-                            .filter(set.iter().cloned().enumerate().map(|(j, group)| {
-                                if i == j {
-                                    Ok(group)
-                                } else {
-                                    Err(group)
-                                }
-                            }));
+                    let fork_allows_group = fork.clone().filter(
+                        set.iter()
+                            .cloned()
+                            .enumerate()
+                            .map(|(j, group)| if i == j { Ok(group) } else { Err(group) }),
+                    );
                     if let Some(fork_allows_group) = fork_allows_group {
                         new.push(fork_allows_group);
                     }

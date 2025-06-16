@@ -12,8 +12,8 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::{
-    find_python_installations, DiscoveryError, EnvironmentPreference, PythonDownloads,
-    PythonInstallation, PythonNotFound, PythonPreference, PythonRequest, PythonSource,
+    DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
+    PythonPreference, PythonRequest, PythonSource, find_python_installations,
 };
 
 use crate::commands::ExitStatus;
@@ -167,16 +167,20 @@ pub(crate) async fn list(
             }
         }
 
-        // Only show the latest patch version for each download unless all were requested
+        // Only show the latest patch version for each download unless all were requested.
+        //
+        // We toggle off platforms/arches based unless all_platforms/all_arches because
+        // we want to only show the "best" option for each version by default, even
+        // if e.g. the x86_32 build would also work on x86_64.
         if !matches!(kind, Kind::System) {
             if let [major, minor, ..] = *key.version().release() {
                 if !seen_minor.insert((
-                    *key.os(),
+                    all_platforms.then_some(*key.os()),
                     major,
                     minor,
                     key.variant(),
                     key.implementation(),
-                    *key.arch(),
+                    all_arches.then_some(*key.arch()),
                     *key.libc(),
                 )) {
                     if matches!(kind, Kind::Download) && !all_versions {
@@ -186,13 +190,13 @@ pub(crate) async fn list(
             }
             if let [major, minor, patch] = *key.version().release() {
                 if !seen_patch.insert((
-                    *key.os(),
+                    all_platforms.then_some(*key.os()),
                     major,
                     minor,
                     patch,
                     key.variant(),
                     key.implementation(),
-                    *key.arch(),
+                    all_arches.then_some(*key.arch()),
                     key.libc(),
                 )) {
                     if matches!(kind, Kind::Download) {

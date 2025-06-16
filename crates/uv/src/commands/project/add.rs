@@ -1,12 +1,12 @@
-use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -17,22 +17,24 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DevMode, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, PreviewMode, SourceStrategy,
+    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
+    PreviewMode, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    redact_credentials, Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement,
+    Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, VersionId,
 };
-use uv_fs::Simplified;
+use uv_fs::{LockedFile, Simplified};
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{DefaultExtras, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -40,7 +42,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
-use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
+use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{
@@ -51,11 +53,11 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, init_script_python_requirement, PlatformState, ProjectEnvironment,
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    UniversalState, default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
+use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -73,11 +75,12 @@ pub(crate) async fn add(
     editable: Option<bool>,
     dependency_type: DependencyType,
     raw: bool,
+    bounds: Option<AddBoundsKind>,
     indexes: Vec<Index>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
-    extras: Vec<ExtraName>,
+    extras_of_dependency: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -93,6 +96,10 @@ pub(crate) async fn add(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    if bounds.is_some() && preview.is_disabled() {
+        warn_user_once!("The bounds option is in preview and may change in any future release.");
+    }
+
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -115,6 +122,34 @@ pub(crate) async fn add(
     }
 
     let reporter = PythonDownloadReporter::single(printer);
+
+    // Determine what defaults/extras we're explicitly enabling
+    let (extras, groups) = match &dependency_type {
+        DependencyType::Production => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Exclude);
+            (extras, groups)
+        }
+        DependencyType::Dev => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Include);
+            (extras, groups)
+        }
+        DependencyType::Optional(extra_name) => {
+            let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Exclude);
+            (extras, groups)
+        }
+        DependencyType::Group(group_name) => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_group(group_name.clone());
+            (extras, groups)
+        }
+    };
+    // Default extras currently always disabled
+    let defaulted_extras = extras.with_defaults(DefaultExtras::default());
+    // Default groups we need the actual project for, interpreter discovery will use this!
+    let defaulted_groups;
 
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -166,6 +201,9 @@ pub(crate) async fn add(
             }
         };
 
+        // Scripts don't actually have groups
+        defaulted_groups = groups.with_defaults(DefaultGroups::default());
+
         // Discover the interpreter.
         let interpreter = ScriptInterpreter::discover(
             Pep723ItemRef::Script(&script),
@@ -212,21 +250,32 @@ pub(crate) async fn add(
         if project.is_non_project() {
             match dependency_type {
                 DependencyType::Production => {
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead", "uv add --dev".green())
+                    bail!(
+                        "Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead",
+                        "uv add --dev".green()
+                    )
                 }
                 DependencyType::Optional(_) => {
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
+                    bail!(
+                        "Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead",
+                        "uv add --dev".green()
+                    )
                 }
                 DependencyType::Group(_) => {}
                 DependencyType::Dev => (),
             }
         }
 
+        // Enable the default groups of the project
+        defaulted_groups =
+            groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
+
         if frozen || no_sync {
             // Discover the interpreter.
             let interpreter = ProjectInterpreter::discover(
                 project.workspace(),
                 project_dir,
+                &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -246,6 +295,7 @@ pub(crate) async fn add(
             // Discover or create the virtual environment.
             let environment = ProjectEnvironment::get_or_init(
                 project.workspace(),
+                &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &network_settings,
@@ -264,6 +314,8 @@ pub(crate) async fn add(
             AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
         }
     };
+
+    let _lock = target.acquire_lock().await?;
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
@@ -454,10 +506,23 @@ pub(crate) async fn add(
         rev.as_deref(),
         tag.as_deref(),
         branch.as_deref(),
-        &extras,
+        &extras_of_dependency,
         index,
         &mut toml,
     )?;
+
+    // Validate any indexes that were provided on the command-line to ensure
+    // they point to existing directories when using path URLs.
+    for index in &indexes {
+        if let IndexUrl::Path(url) = &index.url {
+            let path = url
+                .to_file_path()
+                .map_err(|()| anyhow::anyhow!("Invalid file path in index URL: {url}"))?;
+            if !path.is_dir() {
+                bail!("Directory not found for index: {url}");
+            }
+        }
+    }
 
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
@@ -524,8 +589,10 @@ pub(crate) async fn add(
         lock_state,
         sync_state,
         locked,
-        &dependency_type,
+        &defaulted_extras,
+        &defaulted_groups,
         raw,
+        bounds,
         constraints,
         &settings,
         &network_settings,
@@ -578,7 +645,7 @@ fn edits(
             AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw => {
                 (uv_pep508::Requirement::from(requirement), None)
             }
-            AddTarget::Script(ref script, _) => {
+            AddTarget::Script(script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");
 
@@ -595,7 +662,7 @@ fn edits(
                     existing_sources,
                 )?
             }
-            AddTarget::Project(ref project, _) => {
+            AddTarget::Project(project, _) => {
                 let existing_sources = project
                     .pyproject_toml()
                     .tool
@@ -621,7 +688,7 @@ fn edits(
             }
         };
 
-        // Redact any credentials. By default, we avoid writing sensitive credentials to files that
+        // Remove any credentials. By default, we avoid writing sensitive credentials to files that
         // will be checked into version control (e.g., `pyproject.toml` and `uv.lock`). Instead,
         // we store the credentials in a global store, and reuse them during resolution. The
         // expectation is that subsequent resolutions steps will succeed by reading from (e.g.) the
@@ -643,7 +710,7 @@ fn edits(
                     GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
 
                     // Redact the credentials.
-                    redact_credentials(&mut git);
+                    git.remove_credentials();
                 }
                 Some(Source::Git {
                     git,
@@ -699,13 +766,15 @@ fn edits(
 
         // Update the `pyproject.toml`.
         let edit = match &dependency_type {
-            DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
-            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
-            DependencyType::Optional(ref extra) => {
-                toml.add_optional_dependency(extra, &requirement, source.as_ref())?
+            DependencyType::Production => {
+                toml.add_dependency(&requirement, source.as_ref(), raw)?
             }
-            DependencyType::Group(ref group) => {
-                toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
+            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref(), raw)?,
+            DependencyType::Optional(extra) => {
+                toml.add_optional_dependency(extra, &requirement, source.as_ref(), raw)?
+            }
+            DependencyType::Group(group) => {
+                toml.add_dependency_group_requirement(group, &requirement, source.as_ref(), raw)?
             }
         };
 
@@ -748,8 +817,10 @@ async fn lock_and_sync(
     lock_state: UniversalState,
     sync_state: PlatformState,
     locked: bool,
-    dependency_type: &DependencyType,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
     raw: bool,
+    bound_kind: Option<AddBoundsKind>,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
@@ -825,6 +896,15 @@ async fn lock_and_sync(
                 None => true,
             };
             if !is_empty {
+                if let Some(bound_kind) = bound_kind {
+                    writeln!(
+                        printer.stderr(),
+                        "{} Using explicit requirement `{}` over bounds preference `{}`",
+                        "note:".bold(),
+                        edit.requirement,
+                        bound_kind
+                    )?;
+                }
                 continue;
             }
 
@@ -837,7 +917,12 @@ async fn lock_and_sync(
             // For example, convert `1.2.3+local` to `1.2.3`.
             let minimum = (*minimum).clone().without_local();
 
-            toml.set_dependency_minimum_version(&edit.dependency_type, *index, minimum)?;
+            toml.set_dependency_bound(
+                &edit.dependency_type,
+                *index,
+                minimum,
+                bound_kind.unwrap_or_default(),
+            )?;
 
             modified = true;
         }
@@ -857,6 +942,7 @@ async fn lock_and_sync(
             // Invalidate the project metadata.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = Url::from_file_path(project.project_root())
+                    .map(DisplaySafeUrl::from)
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
                 let existing = lock_state.index().distributions().remove(&version_id);
@@ -896,36 +982,6 @@ async fn lock_and_sync(
         return Ok(());
     };
 
-    // Sync the environment.
-    let (extras, dev) = match dependency_type {
-        DependencyType::Production => {
-            let extras = ExtrasSpecification::from_extra(vec![]);
-            let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
-            (extras, dev)
-        }
-        DependencyType::Dev => {
-            let extras = ExtrasSpecification::from_extra(vec![]);
-            let dev = DependencyGroups::from_dev_mode(DevMode::Include);
-            (extras, dev)
-        }
-        DependencyType::Optional(ref extra_name) => {
-            let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
-            let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
-            (extras, dev)
-        }
-        DependencyType::Group(ref group_name) => {
-            let extras = ExtrasSpecification::from_extra(vec![]);
-            let dev = DependencyGroups::from_group(group_name.clone());
-            (extras, dev)
-        }
-    };
-
-    // Determine the default groups to include.
-    let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-    // Determine the default extras to include.
-    let default_extras = DefaultExtras::default();
-
     // Identify the installation target.
     let target = match &project {
         VirtualProject::Project(project) => InstallTarget::Project {
@@ -942,8 +998,8 @@ async fn lock_and_sync(
     project::sync::do_sync(
         target,
         venv,
-        &extras.with_defaults(default_extras),
-        &dev.with_defaults(default_groups),
+        extras,
+        groups,
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
@@ -1121,6 +1177,15 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 }
 
 impl AddTarget {
+    /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
+    /// modifications.
+    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, io::Error> {
+        match self {
+            Self::Script(_, interpreter) => interpreter.lock().await,
+            Self::Project(_, python_target) => python_target.interpreter().lock().await,
+        }
+    }
+
     /// Returns the [`Interpreter`] for the target.
     pub(super) fn interpreter(&self) -> &Interpreter {
         match self {

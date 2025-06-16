@@ -1,18 +1,20 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
+use uv_distribution_types::RequiresPython;
 
 use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    PreviewMode, ProjectBuildBackend, VersionControlError, VersionControlSystem,
+    DependencyGroupsWithDefaults, PreviewMode, ProjectBuildBackend, VersionControlError,
+    VersionControlSystem,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -21,16 +23,16 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
     VersionRequest,
 };
-use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
+use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
 
+use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -501,7 +503,7 @@ async fn init_project(
         (requires_python, python_request)
     } else if let Some(requires_python) = workspace
         .as_ref()
-        .map(find_requires_python)
+        .map(|workspace| find_requires_python(workspace, &DependencyGroupsWithDefaults::none()))
         .transpose()?
         .flatten()
     {
@@ -1235,6 +1237,7 @@ fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
     let Ok(output) = Command::new(git)
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
+        .env(EnvVars::LC_ALL, "C")
         .current_dir(path)
         .output()
     else {

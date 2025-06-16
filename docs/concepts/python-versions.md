@@ -64,8 +64,8 @@ A global `.python-version` file can be created in the user configuration directo
 
 Discovery of `.python-version` files can be disabled with `--no-config`.
 
-uv will not search for `.python-version` files beyond project or workspace boundaries (with the
-exception of the user configuration directory).
+uv will not search for `.python-version` files beyond project or workspace boundaries (except the
+user configuration directory).
 
 ## Installing a Python version
 
@@ -106,13 +106,13 @@ To install a specific implementation:
 $ uv python install pypy
 ```
 
-All of the [Python version request](#requesting-a-version) formats are supported except those that
-are used for requesting local interpreters such as a file path.
+All the [Python version request](#requesting-a-version) formats are supported except those that are
+used for requesting local interpreters such as a file path.
 
 By default `uv python install` will verify that a managed Python version is installed or install the
 latest version. If a `.python-version` file is present, uv will install the Python version listed in
 the file. A project that requires multiple Python versions may define a `.python-versions` file. If
-present, uv will install all of the Python versions listed in the file.
+present, uv will install all the Python versions listed in the file.
 
 !!! important
 
@@ -284,7 +284,7 @@ during `uv python install`.
 !!! tip
 
     The `python-downloads` setting can be set in a
-    [persistent configuration file](../configuration/files.md) to change the default behavior, or
+    [persistent configuration file](./configuration-files.md) to change the default behavior, or
     the `--no-python-downloads` flag can be passed to any uv command.
 
 ## Requiring or disabling managed Python versions
@@ -341,7 +341,7 @@ The implementations may be requested with either the long or short name:
 - PyPy: `pypy`, `pp`
 - GraalPy: `graalpy`, `gp`
 
-Implementation name requests are not case sensitive.
+Implementation name requests are not case-sensitive.
 
 See the [Python version request](#requesting-a-version) documentation for more details on the
 supported formats.

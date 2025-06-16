@@ -26,7 +26,11 @@ impl std::fmt::Display for SourceAnnotation {
                     write!(f, "{project_name} ({})", path.portable_display())
                 }
                 RequirementOrigin::Group(path, project_name, group) => {
-                    write!(f, "{project_name} ({}:{group})", path.portable_display())
+                    if let Some(project_name) = project_name {
+                        write!(f, "{project_name} ({}:{group})", path.portable_display())
+                    } else {
+                        write!(f, "({}:{group})", path.portable_display())
+                    }
                 }
                 RequirementOrigin::Workspace => {
                     write!(f, "(workspace)")
@@ -45,11 +49,15 @@ impl std::fmt::Display for SourceAnnotation {
                 }
                 RequirementOrigin::Group(path, project_name, group) => {
                     // Group is not used for override
-                    write!(
-                        f,
-                        "--override {project_name} ({}:{group})",
-                        path.portable_display()
-                    )
+                    if let Some(project_name) = project_name {
+                        write!(
+                            f,
+                            "--override {project_name} ({}:{group})",
+                            path.portable_display()
+                        )
+                    } else {
+                        write!(f, "--override ({}:{group})", path.portable_display())
+                    }
                 }
                 RequirementOrigin::Workspace => {
                     write!(f, "--override (workspace)")

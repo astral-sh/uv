@@ -10,7 +10,7 @@ use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info_span, instrument, warn, Instrument};
+use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -27,6 +27,7 @@ use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
+use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
@@ -97,7 +98,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 ),
             )
         } else {
-            io::Error::new(io::ErrorKind::Other, err)
+            io::Error::other(err)
         }
     }
 
@@ -417,15 +418,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        // If the metadata was provided by the user directly, prefer it.
-        if let Some(metadata) = self
-            .build_context
-            .dependency_metadata()
-            .get(dist.name(), Some(dist.version()))
-        {
-            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
-        }
-
         // If hash generation is enabled, and the distribution isn't hosted on a registry, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
         // is hosted on an index, the hashes will be included in the simple metadata response.
@@ -442,12 +434,30 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if hashes.is_generate(dist) {
             let wheel = self.get_wheel(dist, hashes).await?;
-            let metadata = wheel.metadata()?;
+            // If the metadata was provided by the user directly, prefer it.
+            let metadata = if let Some(metadata) = self
+                .build_context
+                .dependency_metadata()
+                .get(dist.name(), Some(dist.version()))
+            {
+                metadata.clone()
+            } else {
+                wheel.metadata()?
+            };
             let hashes = wheel.hashes;
             return Ok(ArchiveMetadata {
                 metadata: Metadata::from_metadata23(metadata),
                 hashes,
             });
+        }
+
+        // If the metadata was provided by the user directly, prefer it.
+        if let Some(metadata) = self
+            .build_context
+            .dependency_metadata()
+            .get(dist.name(), Some(dist.version()))
+        {
+            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
 
         let result = self
@@ -465,7 +475,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 Ok(ArchiveMetadata::from_metadata23(metadata))
             }
             Err(err) if err.is_http_streaming_unsupported() => {
-                warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
+                warn!(
+                    "Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})"
+                );
 
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.
@@ -527,7 +539,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
     async fn stream_wheel(
         &self,
-        url: Url,
+        url: DisplaySafeUrl,
         filename: &WheelFilename,
         size: Option<u64>,
         wheel_entry: &CacheEntry,
@@ -590,7 +602,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let id = self
                     .build_context
                     .cache()
-                    .persist(temp_dir.into_path(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -632,8 +644,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             })
             .await
             .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => err,
+                CachedClientError::Client { err, .. } => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -645,14 +657,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             archive
         } else {
             self.client
-                .managed(|client| async {
+                .managed(async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
-                            CachedClientError::Callback(err) => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Callback { err, .. } => err,
+                            CachedClientError::Client { err, .. } => Error::Client(err),
                         })
                 })
                 .await?
@@ -664,7 +676,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Download a wheel from a URL, then unzip it into the cache.
     async fn download_wheel(
         &self,
-        url: Url,
+        url: DisplaySafeUrl,
         filename: &WheelFilename,
         size: Option<u64>,
         wheel_entry: &CacheEntry,
@@ -761,7 +773,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let id = self
                     .build_context
                     .cache()
-                    .persist(temp_dir.into_path(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -799,8 +811,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             })
             .await
             .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => err,
+                CachedClientError::Client { err, .. } => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -812,14 +824,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             archive
         } else {
             self.client
-                .managed(|client| async {
+                .managed(async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
-                            CachedClientError::Callback(err) => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Callback { err, .. } => err,
+                            CachedClientError::Client { err, .. } => Error::Client(err),
                         })
                 })
                 .await?
@@ -922,7 +934,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let id = self
                 .build_context
                 .cache()
-                .persist(temp_dir.into_path(), wheel_entry.path())
+                .persist(temp_dir.keep(), wheel_entry.path())
                 .await
                 .map_err(Error::CacheWrite)?;
 
@@ -970,7 +982,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let id = self
             .build_context
             .cache()
-            .persist(temp_dir.into_path(), target)
+            .persist(temp_dir.keep(), target)
             .await
             .map_err(Error::CacheWrite)?;
 
@@ -978,11 +990,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(&self, url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(url)
+            .get(Url::from(url))
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading

@@ -13,7 +13,7 @@ use reqwest::{Proxy, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_auth::Indexes;
@@ -31,7 +31,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
-use uv_redacted::redacted_url;
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
@@ -41,10 +41,7 @@ use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{
-    BaseClient, CachedClient, CachedClientError, Error, ErrorKind, FlatIndexClient,
-    FlatIndexEntries,
-};
+use crate::{BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -251,12 +248,12 @@ impl RegistryClient {
     }
 
     /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self, url: &Url) -> &ClientWithMiddleware {
+    pub fn uncached_client(&self, url: &DisplaySafeUrl) -> &ClientWithMiddleware {
         self.client.uncached().for_host(url)
     }
 
     /// Returns `true` if SSL verification is disabled for the given URL.
-    pub fn disable_ssl(&self, url: &Url) -> bool {
+    pub fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
         self.client.uncached().disable_ssl(url)
     }
 
@@ -352,7 +349,9 @@ impl RegistryClient {
                                 // The search failed because of an HTTP status code that we don't ignore for
                                 // this index. We end our search here.
                                 SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
-                                    debug!("Indexes search failed because of status code failure: {status_code}");
+                                    debug!(
+                                        "Indexes search failed because of status code failure: {status_code}"
+                                    );
                                     break;
                                 }
                             }
@@ -371,7 +370,7 @@ impl RegistryClient {
             // Otherwise, fetch concurrently.
             IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
                 results = futures::stream::iter(indexes)
-                    .map(|index| async move {
+                    .map(async |index| {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
@@ -400,12 +399,10 @@ impl RegistryClient {
                         }
                     })
                     .buffered(8)
-                    .filter_map(|result: Result<_, Error>| async move {
-                        match result {
-                            Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
-                            Ok((_, None)) => None,
-                            Err(err) => Some(Err(err)),
-                        }
+                    .filter_map(async |result: Result<_, Error>| match result {
+                        Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
+                        Ok((_, None)) => None,
+                        Err(err) => Some(Err(err)),
                     })
                     .try_collect::<Vec<_>>()
                     .await?;
@@ -485,10 +482,7 @@ impl RegistryClient {
             // ref https://github.com/servo/rust-url/issues/333
             .push("");
 
-        trace!(
-            "Fetching metadata for {package_name} from {}",
-            redacted_url(&url)
-        );
+        trace!("Fetching metadata for {package_name} from {url}");
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
@@ -554,14 +548,14 @@ impl RegistryClient {
     async fn fetch_remote_index(
         &self,
         package_name: &PackageName,
-        url: &Url,
+        url: &DisplaySafeUrl,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let simple_request = self
             .uncached_client(url)
-            .get(url.clone())
-            .header("Accept-Encoding", "gzip")
+            .get(Url::from(url.clone()))
+            .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::accepts())
             .build()
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
@@ -569,7 +563,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = response.url().clone();
+                let url = DisplaySafeUrl::from(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -610,18 +604,16 @@ impl RegistryClient {
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
-        self.cached_client()
+        let simple = self
+            .cached_client()
             .get_cacheable_with_retry(
                 simple_request,
                 cache_entry,
                 cache_control,
                 parse_simple_response,
             )
-            .await
-            .map_err(|err| match err {
-                CachedClientError::Client(err) => err,
-                CachedClientError::Callback(err) => err,
-            })
+            .await?;
+        Ok(simple)
     }
 
     /// Fetch the [`SimpleMetadata`] from a local file, using a PEP 503-compatible directory
@@ -629,7 +621,7 @@ impl RegistryClient {
     async fn fetch_local_index(
         &self,
         package_name: &PackageName,
-        url: &Url,
+        url: &DisplaySafeUrl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let path = url
             .to_file_path()
@@ -669,7 +661,7 @@ impl RegistryClient {
                     /// A local file path.
                     Path(PathBuf),
                     /// A remote URL.
-                    Url(Url),
+                    Url(DisplaySafeUrl),
                 }
 
                 let wheel = wheels.best_wheel();
@@ -770,14 +762,15 @@ impl RegistryClient {
         &self,
         index: &IndexUrl,
         file: &File,
-        url: &Url,
+        url: &DisplaySafeUrl,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file.dist_info_metadata {
             let mut url = url.clone();
-            url.set_path(&format!("{}.metadata", url.path()));
+            let path = format!("{}.metadata", url.path());
+            url.set_path(&path);
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
@@ -800,7 +793,7 @@ impl RegistryClient {
                 lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
             };
 
-            let response_callback = |response: Response| async {
+            let response_callback = async |response: Response| {
                 let bytes = response
                     .bytes()
                     .await
@@ -818,7 +811,7 @@ impl RegistryClient {
             };
             let req = self
                 .uncached_client(&url)
-                .get(url.clone())
+                .get(Url::from(url.clone()))
                 .build()
                 .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
             Ok(self
@@ -844,7 +837,7 @@ impl RegistryClient {
     async fn wheel_metadata_no_pep658<'data>(
         &self,
         filename: &'data WheelFilename,
-        url: &'data Url,
+        url: &'data DisplaySafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: WheelCache<'data>,
         capabilities: &'data IndexCapabilities,
@@ -874,7 +867,7 @@ impl RegistryClient {
         if index.is_none_or(|index| capabilities.supports_range_requests(index)) {
             let req = self
                 .uncached_client(url)
-                .head(url.clone())
+                .head(Url::from(url.clone()))
                 .header(
                     "accept-encoding",
                     http::HeaderValue::from_static("identity"),
@@ -895,22 +888,20 @@ impl RegistryClient {
                     let mut reader = AsyncHttpRangeReader::from_head_response(
                         self.uncached_client(url).clone(),
                         response,
-                        url.clone(),
+                        Url::from(url.clone()),
                         headers.clone(),
                     )
                     .await
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
-                    let metadata =
-                        ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
-                            Error::from(ErrorKind::MetadataParseError(
-                                filename.clone(),
-                                url.to_string(),
-                                Box::new(err),
-                            ))
-                        })?;
-                    Ok::<ResolutionMetadata, CachedClientError<Error>>(metadata)
+                    ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
+                        Error::from(ErrorKind::MetadataParseError(
+                            filename.clone(),
+                            url.to_string(),
+                            Box::new(err),
+                        ))
+                    })
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -949,7 +940,7 @@ impl RegistryClient {
         // Create a request to stream the file.
         let req = self
             .uncached_client(url)
-            .get(url.clone())
+            .get(Url::from(url.clone()))
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
@@ -987,11 +978,12 @@ impl RegistryClient {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout().as_secs()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
+                    self.timeout().as_secs()
                 ),
             )
         } else {
-            std::io::Error::new(std::io::ErrorKind::Other, err)
+            std::io::Error::other(err)
         }
     }
 }
@@ -1140,7 +1132,11 @@ impl SimpleMetadata {
     }
 
     /// Read the [`SimpleMetadata`] from an HTML index.
-    fn from_html(text: &str, package_name: &PackageName, url: &Url) -> Result<Self, Error> {
+    fn from_html(
+        text: &str,
+        package_name: &PackageName,
+        url: &DisplaySafeUrl,
+    ) -> Result<Self, Error> {
         let SimpleHtml { base, files } =
             SimpleHtml::parse(text, url).map_err(|err| Error::from_html_err(err, url.clone()))?;
 
@@ -1219,12 +1215,11 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
-    use url::Url;
-
     use uv_normalize::PackageName;
     use uv_pypi_types::{JoinRelativeError, SimpleJson};
+    use uv_redacted::DisplaySafeUrl;
 
-    use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};
+    use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
     #[test]
     fn ignore_failing_files() {
@@ -1262,7 +1257,7 @@ mod tests {
     }
     "#;
         let data: SimpleJson = serde_json::from_str(response).unwrap();
-        let base = Url::parse("https://pypi.org/simple/pyflyby/").unwrap();
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pyflyby/").unwrap();
         let simple_metadata = SimpleMetadata::from_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
@@ -1299,7 +1294,7 @@ mod tests {
     "#;
 
         // Note the lack of a trailing `/` here is important for coverage of url-join behavior
-        let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
+        let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
 
@@ -1308,7 +1303,10 @@ mod tests {
             .iter()
             .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
             .collect::<Result<Vec<_>, JoinRelativeError>>()?;
-        let urls = urls.iter().map(Url::as_str).collect::<Vec<_>>();
+        let urls = urls
+            .iter()
+            .map(DisplaySafeUrl::to_string)
+            .collect::<Vec<_>>();
         insta::assert_debug_snapshot!(urls, @r#"
         [
             "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz",

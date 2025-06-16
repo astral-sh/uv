@@ -1,20 +1,20 @@
 use std::sync::{Arc, LazyLock};
 
-use http::{Extensions, StatusCode};
-use url::Url;
-
-use crate::{
-    cache::FetchUrl,
-    credentials::{Credentials, Username},
-    index::{AuthPolicy, Indexes},
-    realm::Realm,
-    CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
-};
 use anyhow::{anyhow, format_err};
+use http::{Extensions, StatusCode};
 use netrc::Netrc;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
 use tracing::{debug, trace, warn};
+
+use crate::{
+    CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
+    cache::FetchUrl,
+    credentials::{Credentials, Username},
+    index::{AuthPolicy, Indexes},
+    realm::Realm,
+};
+use uv_redacted::DisplaySafeUrl;
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
@@ -274,18 +274,22 @@ impl Middleware for AuthMiddleware {
             trace!("Checking for credentials for {url}");
             (request, None)
         };
+        let retry_request_url = DisplaySafeUrl::ref_cast(retry_request.url());
 
         let username = credentials
             .as_ref()
             .map(|credentials| credentials.to_username())
             .unwrap_or(Username::none());
         let credentials = if let Some(index_url) = maybe_index_url {
-            self.cache().get_url(index_url, &username)
+            self.cache().get_url(index_url, &username).or_else(|| {
+                self.cache()
+                    .get_realm(Realm::from(&**retry_request_url), username)
+            })
         } else {
             // Since there is no known index for this URL, check if there are credentials in
             // the realm-level cache.
             self.cache()
-                .get_realm(Realm::from(retry_request.url()), username)
+                .get_realm(Realm::from(&**retry_request_url), username)
         }
         .or(credentials);
 
@@ -304,7 +308,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = self
             .fetch_credentials(
                 credentials.as_deref(),
-                retry_request.url(),
+                retry_request_url,
                 maybe_index_url,
                 auth_policy,
             )
@@ -359,7 +363,7 @@ impl AuthMiddleware {
             // Nothing to insert into the cache if we don't have credentials
             return next.run(request, extensions).await;
         };
-        let url = request.url().clone();
+        let url = DisplaySafeUrl::from(request.url().clone());
         if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
             return Err(Error::Middleware(format_err!("Missing password for {url}")));
         }
@@ -384,8 +388,8 @@ impl AuthMiddleware {
         mut request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
-        url: &str,
-        index_url: Option<&Url>,
+        url: &DisplaySafeUrl,
+        index_url: Option<&DisplaySafeUrl>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
@@ -427,16 +431,27 @@ impl AuthMiddleware {
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
-            .fetch_credentials(Some(&credentials), request.url(), index_url, auth_policy)
+            .fetch_credentials(
+                Some(&credentials),
+                DisplaySafeUrl::ref_cast(request.url()),
+                index_url,
+                auth_policy,
+            )
             .await
         {
             request = credentials.authenticate(request);
             Some(credentials)
         } else if index_url.is_some() {
             // If this is a known index, we fall back to checking for the realm.
-            self.cache()
+            if let Some(credentials) = self
+                .cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
-                .or(Some(credentials))
+            {
+                request = credentials.authenticate(request);
+                Some(credentials)
+            } else {
+                Some(credentials)
+            }
         } else {
             // If we don't find a password, we'll still attempt the request with the existing credentials
             Some(credentials)
@@ -453,8 +468,8 @@ impl AuthMiddleware {
     async fn fetch_credentials(
         &self,
         credentials: Option<&Credentials>,
-        url: &Url,
-        maybe_index_url: Option<&Url>,
+        url: &DisplaySafeUrl,
+        maybe_index_url: Option<&DisplaySafeUrl>,
         auth_policy: AuthPolicy,
     ) -> Option<Arc<Credentials>> {
         let username = Username::from(
@@ -466,7 +481,7 @@ impl AuthMiddleware {
         let key = if let Some(index_url) = maybe_index_url {
             (FetchUrl::Index(index_url.clone()), username)
         } else {
-            (FetchUrl::Realm(Realm::from(url)), username)
+            (FetchUrl::Realm(Realm::from(&**url)), username)
         };
         if !self.cache().fetches.register(key.clone()) {
             let credentials = self
@@ -514,7 +529,7 @@ impl AuthMiddleware {
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     if let Some(index_url) = maybe_index_url {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
-                        keyring.fetch(index_url, Some(username)).await
+                        keyring.fetch(DisplaySafeUrl::ref_cast(index_url), Some(username)).await
                     } else {
                         debug!("Checking keyring for credentials for full URL {}@{}", username, url);
                         keyring.fetch(url, Some(username)).await
@@ -524,7 +539,7 @@ impl AuthMiddleware {
                         debug!(
                             "Checking keyring for credentials for index URL {index_url} without username due to `authenticate = always`"
                         );
-                        keyring.fetch(index_url, None).await
+                        keyring.fetch(DisplaySafeUrl::ref_cast(index_url), None).await
                     } else {
                         None
                     }
@@ -549,24 +564,17 @@ impl AuthMiddleware {
     }
 }
 
-fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> String {
-    if !tracing::enabled!(tracing::Level::DEBUG) {
-        return request.url().to_string();
-    }
-
-    let mut url = request.url().clone();
+fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> DisplaySafeUrl {
+    let mut url = DisplaySafeUrl::from(request.url().clone());
     if let Some(creds) = credentials {
-        if creds.password().is_some() {
-            if let Some(username) = creds.username() {
-                let _ = url.set_username(username);
-            }
-            let _ = url.set_password(Some("****"));
-        // A username on its own might be a secret token.
-        } else if creds.username().is_some() {
-            let _ = url.set_username("****");
+        if let Some(username) = creds.username() {
+            let _ = url.set_username(username);
+        }
+        if let Some(password) = creds.password() {
+            let _ = url.set_password(Some(password));
         }
     }
-    url.to_string()
+    url
 }
 
 #[cfg(test)]
@@ -582,8 +590,8 @@ mod tests {
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::credentials::Password;
     use crate::Index;
+    use crate::credentials::Password;
 
     use super::*;
 
@@ -1088,7 +1096,10 @@ mod tests {
         let mut url = base_url.clone();
         url.set_username("other_user").unwrap();
         assert!(
-            matches!(client.get(url).send().await, Err(reqwest_middleware::Error::Middleware(_))),
+            matches!(
+                client.get(url).send().await,
+                Err(reqwest_middleware::Error::Middleware(_))
+            ),
             "If the username does not match, a password should not be fetched, and the middleware should fail eagerly since `authenticate = always` is not satisfied"
         );
 
@@ -1605,8 +1616,8 @@ mod tests {
     /// credentials for _every_ request URL at the cost of inconsistent behavior when
     /// credentials are not scoped to a realm.
     #[test(tokio::test)]
-    async fn test_credentials_from_keyring_mixed_authentication_in_realm_same_username(
-    ) -> Result<(), Error> {
+    async fn test_credentials_from_keyring_mixed_authentication_in_realm_same_username()
+    -> Result<(), Error> {
         let username = "user";
         let password_1 = "password1";
         let password_2 = "password2";
@@ -1705,8 +1716,8 @@ mod tests {
     /// where multiple URLs with the same username and realm share the same realm-level
     /// credentials cache entry.
     #[test(tokio::test)]
-    async fn test_credentials_from_keyring_mixed_authentication_different_indexes_same_realm(
-    ) -> Result<(), Error> {
+    async fn test_credentials_from_keyring_mixed_authentication_different_indexes_same_realm()
+    -> Result<(), Error> {
         let username = "user";
         let password_1 = "password1";
         let password_2 = "password2";
@@ -1737,13 +1748,13 @@ mod tests {
         let base_url_2 = base_url.join("prefix_2")?;
         let indexes = Indexes::from_indexes(vec![
             Index {
-                url: base_url_1.clone(),
-                root_url: base_url_1.clone(),
+                url: DisplaySafeUrl::from(base_url_1.clone()),
+                root_url: DisplaySafeUrl::from(base_url_1.clone()),
                 auth_policy: AuthPolicy::Auto,
             },
             Index {
-                url: base_url_2.clone(),
-                root_url: base_url_2.clone(),
+                url: DisplaySafeUrl::from(base_url_2.clone()),
+                root_url: DisplaySafeUrl::from(base_url_2.clone()),
                 auth_policy: AuthPolicy::Auto,
             },
         ]);
@@ -1817,8 +1828,8 @@ mod tests {
     /// Demonstrates that when an index' credentials are cached for its realm, we
     /// find those credentials if they're not present in the keyring.
     #[test(tokio::test)]
-    async fn test_credentials_from_keyring_shared_authentication_different_indexes_same_realm(
-    ) -> Result<(), Error> {
+    async fn test_credentials_from_keyring_shared_authentication_different_indexes_same_realm()
+    -> Result<(), Error> {
         let username = "user";
         let password = "password";
 
@@ -1845,8 +1856,8 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let index_url = base_url.join("prefix_1")?;
         let indexes = Indexes::from_indexes(vec![Index {
-            url: index_url.clone(),
-            root_url: index_url.clone(),
+            url: DisplaySafeUrl::from(index_url.clone()),
+            root_url: DisplaySafeUrl::from(index_url.clone()),
             auth_policy: AuthPolicy::Auto,
         }]);
 
@@ -1900,7 +1911,7 @@ mod tests {
     }
 
     fn indexes_for(url: &Url, policy: AuthPolicy) -> Indexes {
-        let mut url = url.clone();
+        let mut url = DisplaySafeUrl::from(url.clone());
         url.set_password(None).ok();
         url.set_username("").ok();
         Indexes::from_indexes(vec![Index {
@@ -2092,16 +2103,14 @@ mod tests {
     }
 
     #[test]
-    #[tracing_test::traced_test(level = "debug")]
     fn test_tracing_url() {
         // No credentials
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, None),
-            "https://pypi-proxy.fly.dev/basic-auth/simple"
+            DisplaySafeUrl::parse("https://pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
 
-        // Mask username if there is a username but no password
         let creds = Credentials::Basic {
             username: Username::new(Some(String::from("user"))),
             password: None,
@@ -2109,10 +2118,9 @@ mod tests {
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, Some(&creds)),
-            "https://****@pypi-proxy.fly.dev/basic-auth/simple"
+            DisplaySafeUrl::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
 
-        // Log username but mask password if a password is present
         let creds = Credentials::Basic {
             username: Username::new(Some(String::from("user"))),
             password: Some(Password::new(String::from("password"))),
@@ -2120,7 +2128,8 @@ mod tests {
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, Some(&creds)),
-            "https://user:****@pypi-proxy.fly.dev/basic-auth/simple"
+            DisplaySafeUrl::parse("https://user:password@pypi-proxy.fly.dev/basic-auth/simple")
+                .unwrap()
         );
     }
 

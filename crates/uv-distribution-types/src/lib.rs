@@ -50,6 +50,7 @@ use uv_pep508::{Pep508Url, VerbatimUrl};
 use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
+use uv_redacted::DisplaySafeUrl;
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -72,6 +73,7 @@ pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
 pub use crate::requested::*;
 pub use crate::requirement::*;
+pub use crate::requires_python::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
@@ -99,6 +101,7 @@ mod pip_index;
 mod prioritized_distribution;
 mod requested;
 mod requirement;
+mod requires_python;
 mod resolution;
 mod resolved;
 mod specified_requirement;
@@ -147,12 +150,12 @@ pub enum InstalledVersion<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location, along with the version
     /// specifier to which it resolved.
-    Url(&'a Url, &'a Version),
+    Url(&'a DisplaySafeUrl, &'a Version),
 }
 
 impl InstalledVersion<'_> {
     /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&Url> {
+    pub fn url(&self) -> Option<&DisplaySafeUrl> {
         match self {
             InstalledVersion::Version(_) => None,
             InstalledVersion::Url(url, _) => Some(url),
@@ -258,7 +261,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Box<Url>,
+    pub location: Box<DisplaySafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -299,7 +302,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Box<Url>,
+    pub location: Box<DisplaySafeUrl>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<Box<Path>>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -353,7 +356,7 @@ impl Dist {
     pub fn from_http_url(
         name: PackageName,
         url: VerbatimUrl,
-        location: Url,
+        location: DisplaySafeUrl,
         subdirectory: Option<Box<Path>>,
         ext: DistExtension,
     ) -> Result<Dist, Error> {
@@ -1168,7 +1171,7 @@ impl RemoteSource for Dist {
     }
 }
 
-impl Identifier for Url {
+impl Identifier for DisplaySafeUrl {
     fn distribution_id(&self) -> DistributionId {
         DistributionId::Url(uv_cache_key::CanonicalUrl::new(self))
     }
@@ -1461,7 +1464,7 @@ impl Identifier for BuildableSource<'_> {
 #[cfg(test)]
 mod test {
     use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
-    use url::Url;
+    use uv_redacted::DisplaySafeUrl;
 
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
@@ -1485,7 +1488,7 @@ mod test {
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
         ] {
-            let url = Url::parse(url).unwrap();
+            let url = DisplaySafeUrl::parse(url).unwrap();
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");

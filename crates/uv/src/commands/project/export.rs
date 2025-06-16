@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
@@ -24,10 +24,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    detect_conflicts,
 };
-use crate::commands::{diagnostics, ExitStatus, OutputWriter};
+use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 
@@ -61,7 +61,7 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     locked: bool,
     frozen: bool,
@@ -122,7 +122,7 @@ pub(crate) async fn export(
         ExportTarget::Script(_) => DefaultExtras::default(),
     };
 
-    let dev = dev.with_defaults(default_groups);
+    let groups = groups.with_defaults(default_groups);
     let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
@@ -148,6 +148,7 @@ pub(crate) async fn export(
             ExportTarget::Project(project) => ProjectInterpreter::discover(
                 project.workspace(),
                 project_dir,
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -200,13 +201,13 @@ pub(crate) async fn export(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
 
     // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&lock, &extras, &dev)?;
+    detect_conflicts(&lock, &extras, &groups)?;
 
     // Identify the installation target.
     let target = match &target {
@@ -259,7 +260,7 @@ pub(crate) async fn export(
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
-    target.validate_groups(&dev)?;
+    target.validate_groups(&groups)?;
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
@@ -306,7 +307,7 @@ pub(crate) async fn export(
                 &target,
                 &prune,
                 &extras,
-                &dev,
+                &groups,
                 include_annotations,
                 editable,
                 hashes,
@@ -328,8 +329,9 @@ pub(crate) async fn export(
                 &target,
                 &prune,
                 &extras,
-                &dev,
+                &groups,
                 include_annotations,
+                editable,
                 &install_options,
             )?;
 

@@ -12,23 +12,24 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, ExtrasSpecification, PreviewMode, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    PreviewMode, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Requirement, UnresolvedRequirementSpecification,
+    Requirement, RequiresPython, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
+use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
+    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
 use uv_scripts::{Pep723ItemRef, Pep723Script};
@@ -40,16 +41,17 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceMember}
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, ProjectError, ProjectInterpreter, ScriptInterpreter,
-    UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, pip, ExitStatus, ScriptPath};
+use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum LockResult {
     /// The lock was unchanged.
     Unchanged(Lock),
@@ -141,6 +143,8 @@ pub(crate) async fn lock(
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
                 workspace,
                 project_dir,
+                // Don't enable any groups' requires-python for interpreter discovery
+                &DependencyGroupsWithDefaults::none(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -436,8 +440,8 @@ async fn do_lock(
     let build_constraints = target.lower(build_constraints, index_locations, *sources)?;
     let dependency_groups = dependency_groups
         .into_iter()
-        .map(|(name, requirements)| {
-            let requirements = target.lower(requirements, index_locations, *sources)?;
+        .map(|(name, group)| {
+            let requirements = target.lower(group.requirements, index_locations, *sources)?;
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
@@ -531,9 +535,13 @@ async fn do_lock(
         if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-            warn_user_once!("The workspace `requires-python` value (`{requires_python}`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+            warn_user_once!(
+                "The workspace `requires-python` value (`{requires_python}`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `{default}`)."
+            );
         } else if requires_python.is_exact_without_patch() {
-            warn_user_once!("The workspace `requires-python` value (`{requires_python}`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `{requires_python}.0`). Did you mean `{requires_python}.*`?");
+            warn_user_once!(
+                "The workspace `requires-python` value (`{requires_python}`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `{requires_python}.0`). Did you mean `{requires_python}.*`?"
+            );
         }
         requires_python
     } else {
@@ -817,6 +825,7 @@ async fn do_lock(
                 None,
                 resolver_env,
                 python_requirement,
+                interpreter.markers(),
                 conflicts.clone(),
                 &client,
                 &flat_index,
@@ -1016,8 +1025,12 @@ impl ValidatedLock {
         if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
             warn_user!(
                 "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
-                fork_markers_union.try_to_string().unwrap_or("true".to_string()),
-                environments_union.try_to_string().unwrap_or("true".to_string()),
+                fork_markers_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+                environments_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
             );
             return Ok(Self::Versions(lock));
         }
@@ -1183,7 +1196,8 @@ impl ValidatedLock {
             }
             SatisfiesResult::MissingLocalIndex(name, version, index) => {
                 debug!(
-                    "Ignoring existing lockfile due to missing local index: `{name}` `{version}` from `{}`", index.display()
+                    "Ignoring existing lockfile due to missing local index: `{name}` `{version}` from `{}`",
+                    index.display()
                 );
                 Ok(Self::Preferable(lock))
             }

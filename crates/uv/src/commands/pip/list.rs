@@ -17,19 +17,21 @@ use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name};
+use uv_distribution_types::{
+    Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
+};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment};
-use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
+use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -118,7 +120,7 @@ pub(crate) async fn pip_list(
 
         // Fetch the latest version for each package.
         let mut fetches = futures::stream::iter(&results)
-            .map(|dist| async {
+            .map(async |dist| {
                 let latest = client
                     .find_latest(dist.name(), None, &download_concurrency)
                     .await?;

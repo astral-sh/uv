@@ -8,6 +8,7 @@ use url::Url;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
+use uv_redacted::DisplaySafeUrl;
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -27,7 +28,7 @@ impl SimpleHtml {
         // Parse the first `<base>` tag, if any, to determine the base URL to which all
         // relative URLs should be resolved. The HTML spec requires that the `<base>` tag
         // appear before other tags with attribute values of URLs.
-        let base = BaseUrl::from(
+        let base = BaseUrl::from(DisplaySafeUrl::from(
             dom.nodes()
                 .iter()
                 .filter_map(|node| node.as_tag())
@@ -37,7 +38,7 @@ impl SimpleHtml {
                 .transpose()?
                 .flatten()
                 .unwrap_or_else(|| url.clone()),
-        );
+        ));
 
         // Parse each `<a>` tag, to extract the filename, hash, and URL.
         let mut files: Vec<File> = dom
@@ -278,7 +279,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -335,7 +336,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -395,7 +396,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -452,7 +453,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -509,7 +510,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -566,7 +567,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -621,7 +622,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -673,10 +674,10 @@ mod tests {
     ";
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -694,7 +695,7 @@ mod tests {
             ),
             files: [],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -711,10 +712,10 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -732,7 +733,7 @@ mod tests {
             ),
             files: [],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -752,7 +753,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -807,7 +808,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -863,7 +864,7 @@ mod tests {
         Ok(
             SimpleHtml {
                 base: BaseUrl(
-                    Url {
+                    DisplaySafeUrl {
                         scheme: "https",
                         cannot_be_a_base: false,
                         username: "",
@@ -920,7 +921,7 @@ mod tests {
         Ok(
             SimpleHtml {
                 base: BaseUrl(
-                    Url {
+                    DisplaySafeUrl {
                         scheme: "https",
                         cannot_be_a_base: false,
                         username: "",
@@ -994,7 +995,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -1076,7 +1077,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -1179,7 +1180,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",
@@ -1252,7 +1253,7 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                Url {
+                DisplaySafeUrl {
                     scheme: "https",
                     cannot_be_a_base: false,
                     username: "",

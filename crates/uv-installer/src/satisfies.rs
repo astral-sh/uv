@@ -25,8 +25,7 @@ impl RequirementSatisfaction {
     pub(crate) fn check(distribution: &InstalledDist, source: &RequirementSource) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
-            distribution,
-            source
+            distribution, source
         );
         // Filter out already-installed packages.
         match source {
@@ -194,8 +193,7 @@ impl RequirementSatisfaction {
                 {
                     trace!(
                         "Path mismatch: {:?} vs. {:?}",
-                        requested_path,
-                        installed_path,
+                        requested_path, installed_path,
                     );
                     return Self::Mismatch;
                 }
@@ -264,8 +262,7 @@ impl RequirementSatisfaction {
                 {
                     trace!(
                         "Path mismatch: {:?} vs. {:?}",
-                        requested_path,
-                        installed_path,
+                        requested_path, installed_path,
                     );
                     return Self::Mismatch;
                 }

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::fmt::Write;
 use std::path::Path;
+use uv_configuration::DependencyGroupsWithDefaults;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
@@ -13,8 +14,8 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::{
-    project::{validate_project_requires_python, ScriptInterpreter, WorkspacePython},
     ExitStatus,
+    project::{ScriptInterpreter, WorkspacePython, validate_project_requires_python},
 };
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
@@ -56,6 +57,8 @@ pub(crate) async fn find(
         }
     };
 
+    // Don't enable the requires-python settings on groups
+    let groups = DependencyGroupsWithDefaults::none();
     let WorkspacePython {
         source,
         python_request,
@@ -63,6 +66,7 @@ pub(crate) async fn find(
     } = WorkspacePython::from_request(
         request.map(|request| PythonRequest::parse(&request)),
         project.as_ref().map(VirtualProject::workspace),
+        &groups,
         project_dir,
         no_config,
     )
@@ -80,6 +84,7 @@ pub(crate) async fn find(
         match validate_project_requires_python(
             python.interpreter(),
             project.as_ref().map(VirtualProject::workspace),
+            &groups,
             &requires_python,
             &source,
         ) {

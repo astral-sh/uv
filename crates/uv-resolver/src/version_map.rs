@@ -1,5 +1,5 @@
-use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::Bound;
+use std::collections::btree_map::{BTreeMap, Entry};
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
 
@@ -11,7 +11,8 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -21,7 +22,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{yanks::AllowedYanks, ExcludeNewer, RequiresPython};
+use crate::{ExcludeNewer, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -309,6 +310,7 @@ impl<'a> VersionMapDistHandle<'a> {
 
 /// The kind of internal version map we have.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum VersionMapInner {
     /// All distributions are fully materialized in memory.
     ///

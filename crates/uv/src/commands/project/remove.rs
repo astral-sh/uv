@@ -13,7 +13,7 @@ use uv_configuration::{
     PreviewMode,
 };
 use uv_fs::Simplified;
-use uv_normalize::{DefaultExtras, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -30,10 +30,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups,
 };
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -202,6 +202,14 @@ pub(crate) async fn remove(
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content)?;
 
+    // Determine enabled groups and extras
+    let default_groups = match &target {
+        RemoveTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+        RemoveTarget::Script(_) => DefaultGroups::default(),
+    };
+    let groups = DependencyGroups::default().with_defaults(default_groups);
+    let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
+
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
     let target = match target {
         RemoveTarget::Project(project) => {
@@ -210,6 +218,7 @@ pub(crate) async fn remove(
                 let interpreter = ProjectInterpreter::discover(
                     project.workspace(),
                     project_dir,
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &network_settings,
                     python_preference,
@@ -229,6 +238,7 @@ pub(crate) async fn remove(
                 // Discover or create the virtual environment.
                 let environment = ProjectEnvironment::get_or_init(
                     project.workspace(),
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
                     &network_settings,
@@ -268,6 +278,8 @@ pub(crate) async fn remove(
         }
     };
 
+    let _lock = target.acquire_lock().await?;
+
     // Determine the lock mode.
     let mode = if locked {
         LockMode::Locked(target.interpreter())
@@ -297,7 +309,7 @@ pub(crate) async fn remove(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -311,17 +323,6 @@ pub(crate) async fn remove(
         // If we're not syncing, exit early.
         return Ok(ExitStatus::Success);
     };
-
-    // Perform a full sync, because we don't know what exactly is affected by the removal.
-    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::from_all_extras();
-    let install_options = InstallOptions::default();
-
-    // Determine the default groups to include.
-    let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-    // Determine the default extras to include.
-    let default_extras = DefaultExtras::default();
 
     // Identify the installation target.
     let target = match &project {
@@ -341,10 +342,10 @@ pub(crate) async fn remove(
     match project::sync::do_sync(
         target,
         venv,
-        &extras.with_defaults(default_extras),
-        &DependencyGroups::default().with_defaults(default_groups),
+        &extras,
+        &groups,
         EditableMode::Editable,
-        install_options,
+        InstallOptions::default(),
         Modifications::Exact,
         (&settings).into(),
         &network_settings,
@@ -363,7 +364,7 @@ pub(crate) async fn remove(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }

@@ -12,7 +12,7 @@ use std::{env, io};
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
-use base64::{prelude::BASE64_STANDARD as base64, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use etcetera::BaseStrategy;
 use futures::StreamExt;
 use indoc::formatdoc;
@@ -32,7 +32,8 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.46";
+pub const PACKSE_VERSION: &str = "0.3.47";
+pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -239,6 +240,30 @@ impl TestContext {
                 r"[\\/]python".to_string(),
                 "/[INSTALL-BIN]/python".to_string(),
             ));
+        }
+        self
+    }
+
+    /// Filtering for various keys in a `pyvenv.cfg` file that will vary
+    /// depending on the specific machine used:
+    /// - `home = foo/bar/baz/python3.X.X/bin`
+    /// - `uv = X.Y.Z`
+    /// - `extends-environment = <path/to/parent/venv>`
+    #[must_use]
+    pub fn with_pyvenv_cfg_filters(mut self) -> Self {
+        let added_filters = [
+            (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
+            (
+                r"uv = \d+\.\d+\.\d+".to_string(),
+                "uv = [UV_VERSION]".to_string(),
+            ),
+            (
+                r"extends-environment = .+".to_string(),
+                "extends-environment = [PARENT_VENV]".to_string(),
+            ),
+        ];
+        for filter in added_filters {
+            self.filters.insert(0, filter);
         }
         self
     }
@@ -625,6 +650,8 @@ impl TestContext {
             format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/"),
             "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/".to_string(),
         ));
+        // For wiremock tests
+        filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
 
         Self {
             root: ChildPath::new(root.path()),
@@ -878,6 +905,13 @@ impl TestContext {
         command
     }
 
+    pub fn self_update(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("self").arg("update");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv publish` command with options shared across scenarios.
     pub fn publish(&self) -> Command {
         let mut command = self.new_command();
@@ -892,8 +926,7 @@ impl TestContext {
             .arg("python")
             .arg("find")
             .env(EnvVars::UV_PREVIEW, "1")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-            .current_dir(&self.temp_dir);
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -904,8 +937,7 @@ impl TestContext {
         command
             .arg("python")
             .arg("list")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-            .current_dir(&self.temp_dir);
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -914,10 +946,7 @@ impl TestContext {
     pub fn python_install(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
-        command
-            .arg("python")
-            .arg("install")
-            .current_dir(&self.temp_dir);
+        command.arg("python").arg("install");
         command
     }
 
@@ -925,10 +954,7 @@ impl TestContext {
     pub fn python_uninstall(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
-        command
-            .arg("python")
-            .arg("uninstall")
-            .current_dir(&self.temp_dir);
+        command.arg("python").arg("uninstall");
         command
     }
 
@@ -1602,10 +1628,12 @@ pub const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
     "SHIzUG1tRVZRSHMzQTl2a3NiVnB4Tmk0eTR3R2JVYklLck1qY05naHhMSFVMTDZGVElIMXNYeFhYN2gK",
 ];
 
+pub const READ_ONLY_GITHUB_SSH_DEPLOY_KEY: &str = "LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0KYjNCbGJuTnphQzFyWlhrdGRqRUFBQUFBQkc1dmJtVUFBQUFFYm05dVpRQUFBQUFBQUFBQkFBQUFNd0FBQUF0emMyZ3RaVwpReU5UVXhPUUFBQUNBeTF1SnNZK1JXcWp1NkdIY3Z6a3AwS21yWDEwdmo3RUZqTkpNTkRqSGZPZ0FBQUpqWUpwVnAyQ2FWCmFRQUFBQXR6YzJndFpXUXlOVFV4T1FBQUFDQXkxdUpzWStSV3FqdTZHSGN2emtwMEttclgxMHZqN0VGak5KTU5EakhmT2cKQUFBRUMwbzBnd1BxbGl6TFBJOEFXWDVaS2dVZHJyQ2ptMDhIQm9FenB4VDg3MXBqTFc0bXhqNUZhcU83b1lkeS9PU25RcQphdGZYUytQc1FXTTBrdzBPTWQ4NkFBQUFFR3R2Ym5OMGFVQmhjM1J5WVd3dWMyZ0JBZ01FQlE9PQotLS0tLUVORCBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0K";
+
 /// Decode a split, base64 encoded authentication token.
 /// We split and encode the token to bypass revoke by GitHub's secret scanning
 pub fn decode_token(content: &[&str]) -> String {
-    let token = content
+    content
         .iter()
         .map(|part| base64.decode(part).unwrap())
         .map(|decoded| {
@@ -1614,8 +1642,7 @@ pub fn decode_token(content: &[&str]) -> String {
                 .trim_end()
                 .to_string()
         })
-        .join("_");
-    token
+        .join("_")
 }
 
 /// Simulates `reqwest::blocking::get` but returns bytes directly, and disables
@@ -1631,9 +1658,13 @@ pub async fn download_to_disk(url: &str, path: &Path) {
     let client = uv_client::BaseClientBuilder::new()
         .allow_insecure_host(trusted_hosts)
         .build();
-    let url: reqwest::Url = url.parse().unwrap();
+    let url = url.parse().unwrap();
     let client = client.for_host(&url);
-    let response = client.request(http::Method::GET, url).send().await.unwrap();
+    let response = client
+        .request(http::Method::GET, reqwest::Url::from(url))
+        .send()
+        .await
+        .unwrap();
 
     let mut file = tokio::fs::File::create(path).await.unwrap();
     let mut stream = response.bytes_stream();

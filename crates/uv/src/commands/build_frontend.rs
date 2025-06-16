@@ -16,14 +16,17 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
+    PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
-use uv_fs::{relative_to, Simplified};
+use uv_distribution_types::{
+    DependencyMetadata, Index, IndexLocations, RequiresPython, SourceDist,
+};
+use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -33,15 +36,15 @@ use uv_python::{
     VersionRequest,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
-use crate::commands::pip::operations;
-use crate::commands::project::{find_requires_python, ProjectError};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
+use crate::commands::pip::operations;
+use crate::commands::project::{ProjectError, find_requires_python};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 
@@ -272,7 +275,13 @@ async fn build_impl(
         if !package.pyproject_toml().is_package() {
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "build-system".green(), "setuptools".cyan(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "build-system".green(),
+                "setuptools".cyan(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
@@ -311,7 +320,13 @@ async fn build_impl(
             let member = workspace.packages().values().next().unwrap();
             let name = &member.project().name;
             let pyproject_toml = member.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "setuptools".cyan(), "build-system".green(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "setuptools".cyan(),
+                "build-system".green(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         packages
@@ -459,7 +474,8 @@ async fn build_package(
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
-            interpreter_request = find_requires_python(workspace)?
+            let groups = DependencyGroupsWithDefaults::none();
+            interpreter_request = find_requires_python(workspace, &groups)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {

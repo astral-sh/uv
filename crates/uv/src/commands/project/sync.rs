@@ -39,10 +39,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, script_specification, update_environment,
     PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
+    default_dependency_groups, detect_conflicts, script_specification, update_environment,
 };
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings};
 
@@ -57,7 +57,7 @@ pub(crate) async fn sync(
     all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -108,29 +108,32 @@ pub(crate) async fn sync(
         if project.workspace().pyproject_toml().has_scripts()
             && !project.workspace().pyproject_toml().is_package()
         {
-            warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
+            warn_user!(
+                "Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`"
+            );
         }
 
         SyncTarget::Project(project)
     };
 
-    // Determine the default groups to include.
+    // Determine the groups and extras to include.
     let default_groups = match &target {
         SyncTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         SyncTarget::Script(..) => DefaultGroups::default(),
     };
-
-    // Determine the default extras to include.
     let default_extras = match &target {
         SyncTarget::Project(_project) => DefaultExtras::default(),
         SyncTarget::Script(..) => DefaultExtras::default(),
     };
+    let groups = groups.with_defaults(default_groups);
+    let extras = extras.with_defaults(default_extras);
 
     // Discover or create the virtual environment.
     let environment = match &target {
         SyncTarget::Project(project) => SyncEnvironment::Project(
             ProjectEnvironment::get_or_init(
                 project.workspace(),
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &network_settings,
@@ -163,6 +166,8 @@ pub(crate) async fn sync(
             .await?,
         ),
     };
+
+    let _lock = environment.lock().await?;
 
     // Notify the user of any environment changes.
     match &environment {
@@ -330,7 +335,7 @@ pub(crate) async fn sync(
                         network_settings.native_tls,
                     )
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -413,7 +418,7 @@ pub(crate) async fn sync(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
             // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
@@ -433,8 +438,8 @@ pub(crate) async fn sync(
     match do_sync(
         sync_target,
         &environment,
-        &extras.with_defaults(default_extras),
-        &dev.with_defaults(default_groups),
+        &extras,
+        &groups,
         editable,
         install_options,
         modifications,
@@ -455,7 +460,7 @@ pub(crate) async fn sync(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
@@ -468,6 +473,7 @@ pub(crate) async fn sync(
 
 /// The outcome of a `lock` operation within a `sync` operation.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
     Success(Lock),
@@ -568,7 +574,7 @@ pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
-    dev: &DependencyGroupsWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -619,11 +625,11 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(target.lock(), extras, dev)?;
+    detect_conflicts(target.lock(), extras, groups)?;
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(extras)?;
-    target.validate_groups(dev)?;
+    target.validate_groups(groups)?;
 
     // Determine the markers to use for resolution.
     let marker_env = venv.interpreter().resolver_marker_environment();
@@ -660,7 +666,7 @@ pub(super) async fn do_sync(
         &marker_env,
         tags,
         extras,
-        dev,
+        groups,
         build_options,
         &install_options,
     )?;
