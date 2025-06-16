@@ -1344,8 +1344,13 @@ Upgrade the project's dependency constraints
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv upgrade [OPTIONS]
+uv upgrade [OPTIONS] [REQUIREMENTS]...
 ```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-upgrade--requirements"><a href="#uv-upgrade--requirements"<code>REQUIREMENTS</code></a></dt><dd><p>Upgrade only the given requirements (i.e. <code>uv&lt;0.5</code>) instead of pyproject.toml files</p>
+</dd></dl>
 
 <h3 class="cli-reference">Options</h3>
 
