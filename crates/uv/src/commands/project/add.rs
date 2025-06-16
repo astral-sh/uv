@@ -438,6 +438,7 @@ pub(crate) async fn add(
                 &settings.resolver.config_setting,
                 &settings.resolver.config_settings_package,
                 build_isolation,
+                &settings.resolver.extra_build_dependencies,
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
                 &build_hasher,

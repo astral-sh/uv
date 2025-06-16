@@ -1527,6 +1527,106 @@ fn sync_build_isolation_extra() -> Result<()> {
     Ok(())
 }
 
+/// Use dedicated extra groups to install dependencies for `--no-build-isolation-package`.
+#[test]
+fn sync_build_isolation_fail() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["fasttext==0.9.2"]
+
+        [build-system]
+        requires = ["setuptools >= 40.9.0"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(&filters, context.sync(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `fasttext==0.9.2`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          [CACHE_DIR]/builds-v0/[TMP]/python: No module named pip
+          Traceback (most recent call last):
+            File "<string>", line 38, in __init__
+          ModuleNotFoundError: No module named 'pybind11'
+
+          During handling of the above exception, another exception occurred:
+
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 72, in <module>
+            File "<string>", line 41, in __init__
+          RuntimeError: pybind11 install failed.
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `fasttext` (v0.9.2) was included because `myproject` (v0.1.0) depends on `fasttext==0.9.2`
+    "#);
+
+    // Adding extra-build-dependencies should solve the issue
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["fasttext==0.9.2"]
+
+        [build-system]
+        requires = ["setuptools >= 40.9.0"]
+        build-backend = "setuptools.build_meta"
+        
+        [tool.uv.extra-build-dependencies]
+        fasttext = ["setuptools", "wheel", "pybind11"]
+        "#,
+    )?;
+
+    uv_snapshot!(&filters, context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + fasttext==0.9.2
+     + myproject==0.1.0 (from file://[TEMP_DIR]/)
+     + numpy==1.26.4
+     + pybind11==2.11.1
+     + setuptools==69.2.0
+    ");
+
+    // assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
 /// Avoid using incompatible versions for build dependencies that are also part of the resolved
 /// environment. This is a very subtle issue, but: when locking, we don't enforce platform
 /// compatibility. So, if we reuse the resolver state to install, and the install itself has to

@@ -39,6 +39,7 @@ use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
@@ -79,6 +80,7 @@ pub(crate) async fn pip_install(
     config_settings_package: &PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
+    extra_build_dependencies: &ExtraBuildDependencies,
     build_options: BuildOptions,
     modifications: Modifications,
     python_version: Option<PythonVersion>,
@@ -426,6 +428,7 @@ pub(crate) async fn pip_install(
         config_settings,
         config_settings_package,
         build_isolation,
+        extra_build_dependencies,
         link_mode,
         &build_options,
         &build_hasher,
