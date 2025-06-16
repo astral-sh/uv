@@ -4038,7 +4038,7 @@ fn init_cursor_rules() -> Result<()> {
 }
 
 #[test]
-fn init_no_cursor_rules() -> Result<()> {
+fn init_no_cursor_rules() {
     let context = TestContext::new("3.12");
 
     // Test with --no-cursor-rules flag
@@ -4059,6 +4059,4 @@ fn init_no_cursor_rules() -> Result<()> {
         !cursor_rules_path.exists(),
         "Cursor rules file should not be created with --no-cursor-rules"
     );
-
-    Ok(())
 }

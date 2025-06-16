@@ -734,14 +734,11 @@ fn is_cursor_installed() -> bool {
 /// Create the Cursor rules file.
 fn create_cursor_rules_file(project_path: &std::path::Path) -> Result<()> {
     let cursor_dir = project_path.join(".cursor").join("rules");
-    std::fs::create_dir_all(&cursor_dir)?;
+    fs_err::create_dir_all(&cursor_dir)?;
 
     let rules_file = cursor_dir.join("use-uv-instead-of-pip-poetry-conda.mdc");
 
-    // Embed the template file at compile time
-    const CURSOR_RULES_TEMPLATE: &str = include_str!("cursor_rules_template.mdc");
-
-    fs_err::write(rules_file, CURSOR_RULES_TEMPLATE)?;
+    fs_err::write(rules_file, include_str!("cursor_rules_template.mdc"))?;
     Ok(())
 }
 
