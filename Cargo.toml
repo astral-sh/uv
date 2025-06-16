@@ -143,8 +143,8 @@ reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
 reqwest = { version = "=0.12.15", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
-reqwest-middleware = { version = "0.4.0", features = ["multipart"] }
-reqwest-retry = { version = "0.7.0" }
+reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8", features = ["multipart"] }
+reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.2" }
@@ -371,6 +371,10 @@ riscv64gc-unknown-linux-gnu = "2.31"
 "actions/upload-artifact" = "6027e3dd177782cd8ab9af838c04fd81a07f1d47" # v4.6.2
 "actions/download-artifact" = "d3f86a106a0bac45b974a628896c90dbdf5c8093" # v4.3.0
 "actions/attest-build-provenance" = "c074443f1aee8d4aeeae555aebba3282517141b2" #v2.2.3
+
+[patch.crates-io]
+reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
+reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
 
 [workspace.metadata.dist.binaries]
 "*" = ["uv", "uvx"]
