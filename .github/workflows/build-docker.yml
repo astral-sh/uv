@@ -4,13 +4,16 @@
 # is just the binary in a scratch image, and a set of extra, common images with
 # the uv binary installed.
 #
-# Assumed to run as a subworkflow of .github/workflows/release.yml;
-# specifically, as a local artifacts job within `cargo-dist`.
+# Images are built on all runs.
+#
+# On release, assumed to run as a subworkflow of .github/workflows/release.yml;
+# specifically, as a local artifacts job within `cargo-dist`. In this case,
+# images are published based on the `plan`.
 #
 # TODO(charlie): Ideally, the publish step would happen as a publish job within
 # `cargo-dist`, but sharing the built image as an artifact between jobs is
 # challenging.
-name: "Build Docker image"
+name: "Docker images"
 
 on:
   workflow_call:
@@ -39,7 +42,7 @@ env:
 jobs:
   docker-publish-base:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    name: Build Docker image (ghcr.io/astral-sh/uv)
+    name: uv
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -114,7 +117,7 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
 
   docker-publish-extra:
-    name: Publish additional Docker image based on ${{ matrix.image-mapping }}
+    name: ${{ matrix.image-mapping }}
     runs-on: ubuntu-latest
     environment:
       name: release
@@ -241,7 +244,7 @@ jobs:
 
   # Re-tag the base image, to ensure it's shown as the newest on the registry UI
   docker-retag-base:
-    name: Re-tag base image
+    name: retag uv
     runs-on: ubuntu-latest
     environment:
       name: release
