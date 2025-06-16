@@ -716,6 +716,10 @@ pub struct UpgradeProjectArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// Upgrade only the given requirements (i.e. `uv<0.5`) instead of pyproject.toml files.
+    #[arg(required = false, value_parser = parse_requirement)]
+    pub requirements: Vec<Maybe<Requirement>>,
 }
 
 // Note that the ordering of the variants is significant, as when given a list of operations
@@ -1363,6 +1367,18 @@ fn parse_dependency_type(input: &str) -> Result<Maybe<DependencyType>, String> {
         Ok(Maybe::None)
     } else {
         match DependencyType::from_str(input) {
+            Ok(table) => Ok(Maybe::Some(table)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string like `uv<0.5` into an [`Requirement`], mapping the empty string to `None`.
+fn parse_requirement(input: &str) -> Result<Maybe<Requirement>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match Requirement::from_str(input) {
             Ok(table) => Ok(Maybe::Some(table)),
             Err(err) => Err(err.to_string()),
         }

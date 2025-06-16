@@ -56,13 +56,19 @@ pub(crate) async fn upgrade_project_dependencies(
         allow if !allow.is_empty() => allow,
         _ => vec![1, 2, 3, 4],
     };
-    let tomls = match args
-        .recursive
-        .then(|| search_pyproject_tomls(Path::new(".")))
-    {
-        None => vec![".".to_string()],
-        Some(Ok(tomls)) => tomls,
-        Some(Err(err)) => return Err(err),
+
+    let only_packages = !args.requirements.is_empty();
+    let tomls = if only_packages {
+        vec![String::new()]
+    } else {
+        match args
+            .recursive
+            .then(|| search_pyproject_tomls(Path::new(".")))
+        {
+            None => vec![String::new()], // recursive=false or no pyproject.toml files found
+            Some(Ok(tomls)) => tomls,
+            Some(Err(err)) => return Err(err), // error searching pyproject.toml files
+        }
     };
 
     let printer = Printer::Default;
@@ -93,11 +99,32 @@ pub(crate) async fn upgrade_project_dependencies(
         .and_then(|v| RequiresPython::from_str(&v).ok());
     let mut all_versioned = FxHashMap::default();
     let mut toml_contents = BTreeMap::default();
+    let packages: Vec<_> = args
+        .requirements
+        .iter()
+        .filter_map(|r| {
+            let requirement = r.clone().into_option().expect("no req");
+            requirement.version_or_url.as_ref()?; // Skip unversioned requirements
+            Some(format!("\"{requirement}\""))
+        })
+        .collect();
     for toml_dir in &tomls {
-        let pyproject_toml = Path::new(toml_dir).join("pyproject.toml");
-        let toml = match read_pyproject_toml(&pyproject_toml).await {
-            Ok(value) => value,
-            Err(value) => return value,
+        let toml = if only_packages {
+            if packages.is_empty() {
+                warn_user!("No versioned dependencies found in packages");
+                return Ok(ExitStatus::Error);
+            }
+            let content = format!("[project]\ndependencies = [\n{}\n]", packages.join(",\n"));
+            match PyProjectTomlMut::from_toml(&content, DependencyTarget::PyProjectToml) {
+                Ok(p) => p,
+                Err(err) => {
+                    warn_user!("Couldn't parse packages: {}", err.to_string());
+                    return Ok(ExitStatus::Error);
+                }
+            }
+        } else {
+            let pyproject_toml = Path::new(toml_dir).join("pyproject.toml");
+            read_pyproject_toml(&pyproject_toml).await?
         };
         let versioned = toml.find_versioned_dependencies();
         if versioned.is_empty() {
@@ -132,7 +159,7 @@ pub(crate) async fn upgrade_project_dependencies(
 
     for (toml_dir, toml) in &mut toml_contents {
         let pyproject_toml = Path::new(*toml_dir).join("pyproject.toml");
-        let relative = if *toml_dir == "." {
+        let relative = if toml_dir.is_empty() || *toml_dir == "." {
             String::new()
         } else {
             format!("{}/", &toml_dir[2..])
@@ -160,7 +187,8 @@ pub(crate) async fn upgrade_project_dependencies(
                 if !skipped.is_empty() {
                     writeln!(
                         printer.stderr(),
-                        "{info} Skipped {skipped} ({count_skipped} upgrades) of {found} dependencies in {subpath}"
+                        "{info} Skipped {skipped} ({count_skipped} upgrades) of {} in {subpath}",
+                        plural(found, "dependency"),
                     )?;
                 }
                 continue; // Skip intermediate messages if nothing was changed
@@ -173,8 +201,12 @@ pub(crate) async fn upgrade_project_dependencies(
             } else {
                 writeln!(
                     printer.stderr(),
-                    "{info} No upgrades found for {found} dependencies in {subpath}, check manually if not committed yet{}",
-                    skipped.format(" (skipped ", &format!(" of {count_skipped} upgrades)"))
+                    "{info} No upgrades found for {} in {subpath}, check manually if not committed yet{}",
+                    plural(found, "dependency"),
+                    skipped.format(
+                        " (skipped ",
+                        &format!(" of {})", plural(count_skipped, "upgrade"))
+                    )
                 )?;
             }
             continue;
@@ -219,30 +251,41 @@ pub(crate) async fn upgrade_project_dependencies(
                 );
             });
         table.printstd();
-        if !args.dry_run {
+        if only_packages {
+            writeln!(
+                printer.stderr(),
+                "{info} Upgraded {bumped} of {} 🚀{}",
+                plural(found, "package"),
+                skipped.format(
+                    " (skipped ",
+                    &format!(" of {})", plural(count_skipped, "upgrade"))
+                )
+            )?;
+        } else if !args.dry_run {
             if let Err(err) = fs_err::tokio::write(pyproject_toml, toml.to_string()).await {
                 return Err(err.into());
             }
             writeln!(
                 printer.stderr(),
                 "{info} Upgraded {bumped}/{found} in {subpath} 🚀 Check manually, update {uv_sync} and run tests{}",
-                skipped.format(" (skipped ", &format!(" of {count_skipped} upgrades)"))
+                skipped.format(
+                    " (skipped ",
+                    &format!(" of {})", plural(count_skipped, "upgrade"))
+                )
             )?;
         } else if !skipped.is_empty() {
             writeln!(
                 printer.stderr(),
-                "{info} Skipped {skipped} ({count_skipped} upgrades), upgraded {bumped} of {found} dependencies in {subpath}"
+                "{info} Skipped {skipped} ({}), upgraded {bumped} of {} in {subpath}",
+                plural(count_skipped, "upgrade"),
+                plural(found, "dependency"),
             )?;
         }
         if !item_written {
             item_written = true;
         }
     }
-    let files = format!(
-        "{} file{}",
-        tomls.len(),
-        if tomls.len() == 1 { "" } else { "s" }
-    );
+    let files = plural(tomls.len(), "file");
     if args.recursive && files_bumped != 1 {
         if tomls.is_empty() {
             warn_user!("No pyproject.toml files found recursively");
@@ -256,31 +299,48 @@ pub(crate) async fn upgrade_project_dependencies(
             } else if !all_skipped.is_empty() {
                 writeln!(
                     printer.stderr(),
-                    "{info} Skipped {all_skipped} ({all_count_skipped} upgrades), {all_found} dependencies in {files} not upgraded for --allow={}",
+                    "{info} Skipped {all_skipped} ({}), {} in {files} not upgraded for --allow={}",
+                    plural(all_count_skipped, "upgrade"),
+                    plural(all_found, "dependency"),
                     format_allow(&allow)
                 )?;
             } else {
                 writeln!(
                     printer.stderr(),
-                    "{info} No upgrades in {all_found} dependencies and {files} found, check manually if not committed yet"
+                    "{info} No upgrades in {} and {files} found, check manually if not committed yet",
+                    plural(all_found, "dependency"),
                 )?;
             }
         } else if !all_skipped.is_empty() {
             writeln!(
                 printer.stderr(),
-                "{info} Total: Skipped {all_skipped} ({all_count_skipped} upgrades), upgraded {all_bumped} of {all_found} dependencies for --allow={}",
+                "{info} Total: Skipped {all_skipped} ({}), upgraded {all_bumped} of {} for --allow={}",
+                plural(all_count_skipped, "upgrade"),
+                plural(all_found, "dependency"),
                 format_allow(&allow)
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "{info} Upgraded {all_bumped}/{all_found} dependencies in {files} 🚀 Check manually, update {uv_sync} and run tests{}",
-                all_skipped.format(" (skipped ", &format!(" of {all_count_skipped} upgrades)"))
+                "{info} Total: Upgraded {all_bumped}/{} in {files} 🚀 Check manually, update {uv_sync} and run tests{}",
+                plural(all_found, "dependency"),
+                all_skipped.format(
+                    " (skipped ",
+                    &format!(" of {})", plural(all_count_skipped, "upgrade"))
+                )
             )?;
         }
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn plural(count: usize, word: &str) -> String {
+    if count != 1 && word.ends_with('y') {
+        format!("{count} {}ies", &word[..word.len() - 1])
+    } else {
+        format!("{count} {word}{}", if count == 1 { "" } else { "s" })
+    }
 }
 
 fn get_requires_python(toml: &PyProjectTomlMut) -> Option<RequiresPython> {
@@ -308,24 +368,29 @@ fn format_allow(allow: &[usize]) -> String {
         .join(",")
 }
 
-async fn read_pyproject_toml(
-    pyproject_toml: &Path,
-) -> Result<PyProjectTomlMut, Result<ExitStatus>> {
+async fn read_pyproject_toml(pyproject_toml: &Path) -> Result<PyProjectTomlMut, anyhow::Error> {
     let content = match fs_err::tokio::read_to_string(pyproject_toml.to_path_buf()).await {
         Ok(content) => content,
         Err(err) => {
             if err.kind() == ErrorKind::NotFound {
-                warn_user!("No pyproject.toml found in current directory");
-                return Err(Ok(ExitStatus::Error));
+                warn_user!(
+                    "Could not find {}",
+                    pyproject_toml.to_str().expect("path not UTF-8")
+                );
+            } else {
+                warn_user!(
+                    "Could not read {}",
+                    pyproject_toml.to_str().expect("path not UTF-8")
+                );
             }
-            return Err(Err(err.into()));
+            return Err(anyhow::Error::from(err));
         }
     };
     let toml = match PyProjectTomlMut::from_toml(&content, DependencyTarget::PyProjectToml) {
         Ok(toml) => toml,
         Err(err) => {
-            warn_user!("Couldn't read pyproject.toml: {}", err);
-            return Err(Ok(ExitStatus::Error));
+            warn_user!("Could not parse pyproject.toml: {}", err);
+            return Err(anyhow::Error::from(err));
         }
     };
     Ok(toml)
