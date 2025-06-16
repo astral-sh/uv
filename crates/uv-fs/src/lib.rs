@@ -119,11 +119,11 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Resu
 ///
 /// On Unix, this method creates a temporary file, then moves it into place.
 #[cfg(unix)]
-pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
     // Attempt to create the symlink directly.
     match fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
             // Create a symlink, using a temporary file to ensure atomicity.
             let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
             let temp_file = temp_dir.path().join("link");
@@ -139,7 +139,7 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 }
 
 #[cfg(unix)]
-pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn remove_symlink(path: impl AsRef<Path>) -> io::Result<()> {
     fs_err::remove_file(path.as_ref())
 }
 
@@ -183,7 +183,7 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> io::Result<()> {
 /// ([`NamedTempfile`] defaults to `0o600`.)
 #[cfg(unix)]
 pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
-    use std::os::unix::fs::PermissionsExt;
+    use os::unix::fs::PermissionsExt;
     tempfile::Builder::new()
         .permissions(std::fs::Permissions::from_mode(0o666))
         .tempfile_in(path)
@@ -636,7 +636,7 @@ impl LockedFile {
     }
 
     #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, io::Error> {
         use std::os::unix::fs::PermissionsExt;
 
         // If path already exists, return it.
@@ -666,7 +666,7 @@ impl LockedFile {
         match file.persist_noclobber(path.as_ref()) {
             Ok(file) => Ok(fs_err::File::from_parts(file, path.as_ref())),
             Err(err) => {
-                if err.error.kind() == std::io::ErrorKind::AlreadyExists {
+                if err.error.kind() == io::ErrorKind::AlreadyExists {
                     fs_err::OpenOptions::new()
                         .read(true)
                         .write(true)

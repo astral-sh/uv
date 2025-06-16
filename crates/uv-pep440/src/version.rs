@@ -3986,7 +3986,7 @@ mod tests {
     struct VersionBloatedDebug<'a>(&'a Version);
 
     impl std::fmt::Debug for VersionBloatedDebug<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Version")
                 .field("epoch", &self.0.epoch())
                 .field("release", &&*self.0.release())
