@@ -765,7 +765,7 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "windows-sys 0.59.0",
 ]
 
@@ -1891,7 +1891,7 @@ dependencies = [
  "console",
  "number_prefix",
  "portable-atomic",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "web-time",
 ]
 
@@ -4010,7 +4010,7 @@ checksum = "c13547615a44dc9c452a8a534638acdf07120d4b6847c8178705da06306a3057"
 dependencies = [
  "smawk",
  "unicode-linebreak",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
 ]
 
 [[package]]
@@ -4516,9 +4516,9 @@ checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-width"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
+checksum = "4a1a07cc7db3810833284e8d372ccdc6da29741639ecc70c9ec107df0fa6154c"
 
 [[package]]
 name = "unsafe-libyaml"
@@ -4667,7 +4667,7 @@ dependencies = [
  "tracing-durations-export",
  "tracing-subscriber",
  "tracing-tree",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "url",
  "uv-auth",
  "uv-build-backend",
@@ -5466,7 +5466,7 @@ dependencies = [
  "rkyv",
  "serde",
  "tracing",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "unscanny",
  "version-ranges",
 ]
@@ -5489,7 +5489,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "tracing-test",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "url",
  "uv-fs",
  "uv-normalize",
