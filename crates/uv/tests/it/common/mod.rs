@@ -739,7 +739,7 @@ impl TestContext {
             "Activate with: source $1/[BIN]/activate".to_string(),
         ));
         filters.push((
-            r"Activate with: source (.*)/bin/activate(?:\.\w+)?".to_string(),
+            r"Activate with: source (.*)/bin/activate".to_string(),
             "Activate with: source $1/[BIN]/activate".to_string(),
         ));
 
@@ -910,11 +910,6 @@ impl TestContext {
 
         if activate_venv {
             command.env(EnvVars::VIRTUAL_ENV, self.venv.as_os_str());
-        }
-
-        if cfg!(unix) {
-            // Avoid locale issues in tests
-            command.env(EnvVars::LC_ALL, "C");
         }
     }
 
@@ -1255,6 +1250,9 @@ impl TestContext {
         command
     }
 
+    /// The path to the Python interpreter in the venv.
+    ///
+    /// Don't use this for `Command::new`, use `Self::python_command` instead.
     pub fn interpreter(&self) -> PathBuf {
         let venv = &self.venv;
         if cfg!(unix) {
@@ -1528,8 +1526,90 @@ impl TestContext {
 
     /// Creates a new `Command` that is intended to be suitable for use in
     /// all tests, but with the given binary.
+    ///
+    /// The command contains only essential env vars to avoid the tests getting
+    /// influenced by host `UV_*`, XDG, or other environment variables.
     fn new_command_with(bin: &Path) -> Command {
-        Command::new(bin)
+        let mut command = Command::new(bin);
+        command.env_clear();
+
+        if cfg!(unix) {
+            // For Unix, we pretend the tests run in a bash for the activate hint, for Windows, shell
+            // detection assumes PowerShell if `PROMPT` is not set.
+            command.env("SHELL", "/bin/bash");
+
+            // Avoid locale issues in tests
+            command.env(EnvVars::LC_ALL, "C");
+
+            // STOPSHIP(konsti): This is for pyodide on my machine
+            for env_var in ["VOLTA_HOME"] {
+                if let Some(value) = env::var_os(env_var) {
+                    command.env(env_var, value);
+                }
+            }
+        }
+
+        // Standard Windows environment variables
+        //
+        // Sources:
+        // - https://ss64.com/nt/syntax-variables.html
+        // - https://learn.microsoft.com/en-us/windows/win32/procthread/environment-variables
+        // - https://en.wikipedia.org/wiki/Environment_variable
+        // - https://www.elevenforum.com/t/complete-list-of-environment-variables-in-windows-11.11212/
+        let env_vars = &[
+            "ALLUSERSPROFILE",           // C:\ProgramData
+            "APPDATA",                   // C:\Users\{username}\AppData\Roaming
+            "CD",                        // Current directory (dynamic, cmd.exe only)
+            "CMDCMDLINE",                // Command line that started cmd.exe (dynamic)
+            "CMDEXTVERSION",             // Command extensions version (dynamic)
+            "COMPUTERNAME",              // Computer name
+            "COMSPEC",                   // C:\Windows\system32\cmd.exe
+            "CommonProgramFiles",        // C:\Program Files\Common Files
+            "CommonProgramFiles(x86)",   // C:\Program Files (x86)\Common Files (64-bit only)
+            "CommonProgramW6432",        // C:\Program Files\Common Files (64-bit only)
+            "DATE",                      // Current date (dynamic, cmd.exe only)
+            "DIRCMD",                    // Directory listing format
+            "DriverData",                // C:\Windows\System32\Drivers\DriverData
+            "ERRORLEVEL",                // Exit code of last command (dynamic)
+            "HOMEDRIVE",                 // C:
+            "HOMEPATH",                  // \Users\{username}
+            "LOCALAPPDATA",              // C:\Users\{username}\AppData\Local
+            "LOGONSERVER",               // \\{servername} (volatile)
+            "NUMBER_OF_PROCESSORS",      // Number of processors
+            "OS",                        // Windows_NT
+            "PATH",                      // Executable search paths
+            "PATHEXT",                   // Executable file extensions
+            "PROCESSOR_ARCHITECTURE",    // AMD64, x86, etc.
+            "PROCESSOR_IDENTIFIER",      // Processor description
+            "PROCESSOR_LEVEL",           // Processor level
+            "PROCESSOR_REVISION",        // Processor revision
+            "PROMPT",                    // Command prompt format
+            "PSModulePath",              // PowerShell module paths
+            "PUBLIC",                    // C:\Users\Public
+            "ProgramData",               // C:\ProgramData
+            "ProgramFiles",              // C:\Program Files
+            "ProgramFiles(x86)",         // C:\Program Files (x86) (64-bit only)
+            "ProgramW6432",              // C:\Program Files (64-bit only)
+            "RANDOM",                    // Random 0-32767 (dynamic, cmd.exe only)
+            "SystemDrive",               // C:
+            "SystemRoot",                // C:\Windows
+            "SYSTEMROOT",                // C:\Windows
+            "TEMP",                      // C:\Users\{username}\AppData\Local\Temp
+            "TIME",                      // Current time (dynamic, cmd.exe only)
+            "TMP",                       // Same as TEMP
+            "USERDOMAIN",                // User domain (volatile)
+            "USERDOMAIN_ROAMINGPROFILE", // User domain for roaming profile (volatile)
+            "USERNAME",                  // Current username
+            "USERPROFILE",               // C:\Users\{username}
+            "windir",                    // C:\Windows (same as SystemRoot)
+        ];
+        for env_var in env_vars {
+            if let Some(system_root) = env::var_os(env_var) {
+                command.env(env_var, system_root);
+            }
+        }
+
+        command
     }
 }
 
@@ -1593,6 +1673,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
 /// Create a virtual environment at the given path.
 pub fn create_venv_from_executable<P: AsRef<Path>>(path: P, cache_dir: &ChildPath, python: &Path) {
     assert_cmd::Command::new(get_bin())
+        .env_clear()
         .arg("venv")
         .arg(path.as_ref().as_os_str())
         .arg("--clear")
