@@ -1416,6 +1416,9 @@ impl TestContext {
         command
     }
 
+    /// The path to the Python interpreter in the venv.
+    ///
+    /// Don't use this for `Command::new`, use `Self::python_command` instead.
     pub fn interpreter(&self) -> PathBuf {
         let venv = &self.venv;
         if cfg!(unix) {
@@ -1698,8 +1701,17 @@ impl TestContext {
 
     /// Creates a new `Command` that is intended to be suitable for use in
     /// all tests, but with the given binary.
+    ///
+    /// Clears all environment variables defined in [`EnvVars`] to avoid
+    /// reading test host settings.
     fn new_command_with(bin: &Path) -> Command {
-        Command::new(bin)
+        let mut command = Command::new(bin);
+
+        for env_var in EnvVars::all_names() {
+            command.env_remove(env_var);
+        }
+
+        command
     }
 }
 
@@ -1762,7 +1774,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
 
 /// Create a virtual environment at the given path.
 pub fn create_venv_from_executable<P: AsRef<Path>>(path: P, cache_dir: &ChildPath, python: &Path) {
-    assert_cmd::Command::new(get_bin())
+    TestContext::new_command_with(&get_bin())
         .arg("venv")
         .arg(path.as_ref().as_os_str())
         .arg("--clear")
