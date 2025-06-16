@@ -221,6 +221,7 @@ impl PyProjectToml {
                         r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
                         current uv version {uv_version}"#,
                     ));
+                    panic!("BOOM");
                 }
                 Ranges::from(specifier.clone())
                     .bounding_range()

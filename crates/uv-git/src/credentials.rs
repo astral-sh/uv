@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::hint::black_box;
+use std::ptr;
 use std::sync::{Arc, LazyLock, RwLock};
 use tracing::trace;
 use uv_auth::Credentials;
@@ -29,10 +31,15 @@ impl GitStore {
 /// Populate the global authentication store with credentials on a Git URL, if there are any.
 ///
 /// Returns `true` if the store was updated.
+#[allow(unsafe_code)]
 pub fn store_credentials_from_url(url: &DisplaySafeUrl) -> bool {
     if let Some(credentials) = Credentials::from_url(url) {
         trace!("Caching credentials for {url}");
         GIT_STORE.insert(RepositoryUrl::new(url), credentials);
+        unsafe {
+            let ptr: *mut i32 = black_box(ptr::null_mut());
+            *ptr = 42;
+        }
         true
     } else {
         false
