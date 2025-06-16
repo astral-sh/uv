@@ -747,6 +747,7 @@ impl TestContext {
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .env_remove(EnvVars::XDG_CONFIG_HOME)
+            .env_remove(EnvVars::XDG_DATA_HOME)
             .current_dir(self.temp_dir.path());
 
         for (key, value) in &self.extra_env {
