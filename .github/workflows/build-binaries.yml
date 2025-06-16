@@ -286,7 +286,7 @@ jobs:
 
   linux:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: depot-ubuntu-latest-4
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
@@ -492,7 +492,7 @@ jobs:
   linux-s390x:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     timeout-minutes: 30
-    runs-on: depot-ubuntu-latest-4
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         platform:
@@ -695,7 +695,7 @@ jobs:
   linux-riscv64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     timeout-minutes: 30
-    runs-on: depot-ubuntu-latest-4
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         platform:

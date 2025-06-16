@@ -200,7 +200,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: depot-ubuntu-22.04-16
+    runs-on: ubuntu-latest
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
