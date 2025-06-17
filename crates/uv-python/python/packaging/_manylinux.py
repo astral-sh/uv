@@ -255,5 +255,6 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
                 if _is_compatible(arch, glibc_version):
                     yield "manylinux_{}_{}_{}".format(*glibc_version, arch)
                     # Handle the legacy manylinux1, manylinux2010, manylinux2014 tags.
-                    if legacy_tag := _LEGACY_MANYLINUX_MAP.get(glibc_version):
+                    legacy_tag = _LEGACY_MANYLINUX_MAP.get(glibc_version)
+                    if legacy_tag:
                         yield f"{legacy_tag}_{arch}"
