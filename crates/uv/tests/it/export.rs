@@ -1143,6 +1143,78 @@ fn requirements_txt_non_project() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn virtual_empty() -> Result<()> {
+    // testing how `uv export` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_dependency_group() -> Result<()> {
+    // testing basic `uv export --group` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    // default groups
+    uv_snapshot!(context.filters(), context.export(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    ");
+
+    // explicit --group
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--group").arg("bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    ");
+
+    // explicit --only-group
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--only-group").arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    ");
+
+    Ok(())
+}
+
 #[cfg(feature = "git")]
 #[test]
 fn requirements_txt_https_git_credentials() -> Result<()> {
