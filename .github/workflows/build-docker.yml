@@ -40,9 +40,35 @@ env:
   UV_BASE_IMG: ghcr.io/${{ github.repository_owner }}/uv
 
 jobs:
+  docker-plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      push: ${{ steps.plan.outputs.push }}
+      tag: ${{ steps.plan.outputs.tag }}
+      action: ${{ steps.plan.outputs.action }}
+    steps:
+      - name: Set push variable
+        env:
+          DRY_RUN: ${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
+          TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag }}
+        id: plan
+        run: |
+          if [ "${{ env.DRY_RUN }}" == "false" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ env.TAG }}" >> "$GITHUB_OUTPUT"
+            echo "action=build and publish" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+            echo "tag=dry-run" >> "$GITHUB_OUTPUT"
+            echo "action=build" >> "$GITHUB_OUTPUT"
+          fi
+
   docker-publish-base:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    name: uv
+    name: ${{ needs.docker-plan.outputs.action }} uv
+    needs:
+      - docker-plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -75,12 +101,12 @@ jobs:
       - uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5
 
       - name: Check tag consistency
-        if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+        if: ${{ needs.docker-plan.outputs.push == 'true' }}
         run: |
           version=$(grep "version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
-          if [ "${{ fromJson(inputs.plan).announcement_tag }}" != "${version}" ]; then
+          if [ "${{ needs.docker-plan.outputs.tag }}" != "${version}" ]; then
             echo "The input tag does not match the version from pyproject.toml:" >&2
-            echo "${{ fromJson(inputs.plan).announcement_tag }}" >&2
+            echo "${{ needs.docker-plan.outputs.tag }}" >&2
             echo "${version}" >&2
             exit 1
           else
@@ -94,9 +120,9 @@ jobs:
           images: ${{ env.UV_BASE_IMG }}
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
           tags: |
-            type=raw,value=dry-run,enable=${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
-            type=pep440,pattern={{ version }},value=${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag || 'dry-run' }},enable=${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
-            type=pep440,pattern={{ major }}.{{ minor }},value=${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag || 'dry-run' }},enable=${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+            type=raw,value=dry-run,enable=${{ needs.docker-plan.outputs.push == 'false' }}
+            type=pep440,pattern={{ version }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push }}
+            type=pep440,pattern={{ major }}.{{ minor }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push }}
 
       - name: Build and push by digest
         id: build
@@ -105,25 +131,26 @@ jobs:
           project: 7hd4vdzmw5 # astral-sh/uv
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+          push: ${{ needs.docker-plan.outputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Generate artifact attestation for base image
-        if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+        if: ${{ needs.docker-plan.outputs.push == 'true' }}
         uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
         with:
           subject-name: ${{ env.UV_BASE_IMG }}
           subject-digest: ${{ steps.build.outputs.digest }}
 
   docker-publish-extra:
-    name: ${{ matrix.image-mapping }}
+    name: ${{ needs.docker-plan.outputs.action }} ${{ matrix.image-mapping }}
     runs-on: ubuntu-latest
     environment:
       name: release
     needs:
+      - docker-plan
       - docker-publish-base
-    if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    if: ${{ needs.docker-plan.outputs.push == 'true' }}
     permissions:
       packages: write
       attestations: write # needed to push image attestations to the Github attestation store
@@ -196,8 +223,8 @@ jobs:
           # Loop through all base tags and append its docker metadata pattern to the list
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
           IFS=','; for TAG in ${BASE_TAGS}; do
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${{ fromJson(inputs.plan).announcement_tag }}\n"
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${{ fromJson(inputs.plan).announcement_tag }}\n"
+            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${{ needs.docker-plan.outputs.tag }}\n"
+            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${{ needs.docker-plan.outputs.tag }}\n"
             TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
           done
 
@@ -249,8 +276,10 @@ jobs:
     environment:
       name: release
     needs:
+      - docker-plan
       - docker-publish-base
       - docker-publish-extra
+    if: ${{ needs.docker-plan.outputs.push == 'true' }}
     steps:
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
