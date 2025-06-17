@@ -1972,7 +1972,7 @@ fn virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: Missing `project.name` field in: pyproject.toml
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -1996,7 +1996,7 @@ fn virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: Missing `project.name` field in: pyproject.toml
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2032,13 +2032,12 @@ fn add_virtual_dependency_group() -> Result<()> {
 
     // Get the version (doesn't make sense)
     uv_snapshot!(context.filters(), context.version(), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    warning: Failed to read project metadata (No `project` table found in: `[TEMP_DIR]/pyproject.toml`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+    error: Missing `project.name` field in: pyproject.toml
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2064,7 +2063,7 @@ fn add_virtual_dependency_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: Missing `project.name` field in: pyproject.toml
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
