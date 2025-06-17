@@ -85,21 +85,21 @@ In such cases, the first step is to add the relevant PyTorch index to your `pypr
     explicit = true
     ```
 
-=== "CUDA 12.1"
+=== "CUDA 12.6"
 
     ```toml
     [[tool.uv.index]]
-    name = "pytorch-cu121"
-    url = "https://download.pytorch.org/whl/cu121"
+    name = "pytorch-cu126"
+    url = "https://download.pytorch.org/whl/cu126"
     explicit = true
     ```
 
-=== "CUDA 12.4"
+=== "CUDA 12.8"
 
     ```toml
     [[tool.uv.index]]
-    name = "pytorch-cu124"
-    url = "https://download.pytorch.org/whl/cu124"
+    name = "pytorch-cu128"
+    url = "https://download.pytorch.org/whl/cu128"
     explicit = true
     ```
 
@@ -108,7 +108,7 @@ In such cases, the first step is to add the relevant PyTorch index to your `pypr
     ```toml
     [[tool.uv.index]]
     name = "pytorch-rocm"
-    url = "https://download.pytorch.org/whl/rocm6.2"
+    url = "https://download.pytorch.org/whl/rocm6.3"
     explicit = true
     ```
 
@@ -154,7 +154,7 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ]
     ```
 
-=== "CUDA 12.1"
+=== "CUDA 12.6"
 
     PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
     the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
@@ -162,14 +162,14 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+      { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     torchvision = [
-      { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+      { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
-=== "CUDA 12.4"
+=== "CUDA 12.8"
 
     PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
     the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
@@ -177,10 +177,10 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+      { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     torchvision = [
-      { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+      { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
