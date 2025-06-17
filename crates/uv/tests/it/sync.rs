@@ -8140,7 +8140,7 @@ fn sync_dry_run() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8148,14 +8148,15 @@ fn sync_dry_run() -> Result<()> {
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Would replace existing virtual environment at: .venv
+    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.12'` vs `python_full_version == '3.9.*'`
     Resolved 2 packages in [TIME]
     Would update lockfile at: uv.lock
     Would install 1 package
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Perform a full sync.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8164,10 +8165,11 @@ fn sync_dry_run() -> Result<()> {
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
+    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.12'` vs `python_full_version == '3.9.*'`
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     let output = context.sync().arg("--dry-run").arg("-vv").output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -8658,6 +8660,7 @@ fn sync_locked_script() -> Result<()> {
 
     ----- stderr -----
     Recreating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
@@ -8669,6 +8672,7 @@ fn sync_locked_script() -> Result<()> {
 
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 6 packages in [TIME]
