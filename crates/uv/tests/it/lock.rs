@@ -27559,7 +27559,7 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
 }
 
 /// Test that lockfile validation includes explicit indexes from path dependencies.
-/// `<https://github.com/astral-sh/uv/issues/11419>`
+/// <https://github.com/astral-sh/uv/issues/11419>
 #[test]
 fn lock_path_dependency_explicit_index() -> Result<()> {
     let context = TestContext::new("3.12");

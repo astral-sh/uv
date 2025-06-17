@@ -1445,6 +1445,8 @@ impl Lock {
             queue.push_back(root);
         }
 
+        // Unlike path dependencies, Git dependencies are immutable. Their sources cannot change
+        // without the hashes changing, so we know their indexes are still present.
         while let Some(package) = queue.pop_front() {
             // If the lockfile references an index that was not provided, we can't validate it.
             if let Source::Registry(index) = &package.id.source {
