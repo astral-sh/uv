@@ -82,7 +82,7 @@ pub(crate) async fn sync(
     } else {
         // Identify the project.
         let project = if frozen {
-            VirtualProject::discover(
+            VirtualProject::discover_defaulted(
                 project_dir,
                 &DiscoveryOptions {
                     members: MemberDiscovery::None,
@@ -99,8 +99,12 @@ pub(crate) async fn sync(
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?
+            VirtualProject::discover_defaulted(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await?
         };
 
         // TODO(lucab): improve warning content
