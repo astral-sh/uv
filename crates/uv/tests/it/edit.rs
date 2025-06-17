@@ -4461,7 +4461,7 @@ fn add_virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `uv add --dev` instead
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4481,12 +4481,16 @@ fn add_virtual_empty() -> Result<()> {
     uv_snapshot!(context.filters(), context.add()
         .arg("sortedcontainers")
         .arg("--group").arg("dev"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.4.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4498,6 +4502,11 @@ fn add_virtual_empty() -> Result<()> {
             pyproject_toml, @r#"
         [tool.mycooltool]
         wow = "someconfig"
+
+        [dependency-groups]
+        dev = [
+            "sortedcontainers>=2.4.0",
+        ]
         "#
         );
     });
@@ -4523,12 +4532,17 @@ fn add_virtual_dependency_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.add()
         .arg("sortedcontainers")
         .arg("--group").arg("dev"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4541,7 +4555,10 @@ fn add_virtual_dependency_group() -> Result<()> {
         [dependency-groups]
         foo = ["sortedcontainers"]
         bar = ["iniconfig"]
-        dev = ["sniffio"]
+        dev = [
+            "sniffio",
+            "sortedcontainers>=2.4.0",
+        ]
         "#
         );
     });
@@ -4550,12 +4567,14 @@ fn add_virtual_dependency_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.add()
         .arg("sortedcontainers")
         .arg("--group").arg("baz"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    Audited 2 packages in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4568,7 +4587,13 @@ fn add_virtual_dependency_group() -> Result<()> {
         [dependency-groups]
         foo = ["sortedcontainers"]
         bar = ["iniconfig"]
-        dev = ["sniffio"]
+        dev = [
+            "sniffio",
+            "sortedcontainers>=2.4.0",
+        ]
+        baz = [
+            "sortedcontainers>=2.4.0",
+        ]
         "#
         );
     });

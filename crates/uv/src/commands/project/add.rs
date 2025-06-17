@@ -237,7 +237,7 @@ pub(crate) async fn add(
                 .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(
+            VirtualProject::discover_defaulted(
                 project_dir,
                 &DiscoveryOptions::default(),
                 &WorkspaceCache::default(),
