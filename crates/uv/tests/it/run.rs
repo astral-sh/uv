@@ -3083,14 +3083,17 @@ fn run_project_toml_error() -> Result<()> {
     init.touch()?;
 
     // `run` should fail
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
-    success: false
-    exit_code: 2
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [VENV]/[BIN]/python
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
-    "###);
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved in [TIME]
+    Audited in [TIME]
+    ");
 
     // `run --no-project` should not
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"

@@ -1435,7 +1435,7 @@ impl VirtualProject {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
-        Self::discover_impl(path, options, cache, false).await
+        Self::discover_impl(path, options, cache, true).await
     }
 
     /// Equivalent to [`VirtualProject::discover`] but consider it acceptable for
