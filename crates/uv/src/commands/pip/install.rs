@@ -344,20 +344,18 @@ pub(crate) async fn pip_install(
     }
 
     // Determine the PyTorch backend.
-    let torch_backend = torch_backend.map(|mode| {
-        if preview.is_disabled() {
-            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
-        }
-
-        TorchStrategy::from_mode(
-            mode,
-            python_platform
-                .map(TargetTriple::platform)
-                .as_ref()
-                .unwrap_or(interpreter.platform())
-                .os(),
-        )
-    }).transpose()?;
+    let torch_backend = torch_backend
+        .map(|mode| {
+            TorchStrategy::from_mode(
+                mode,
+                python_platform
+                    .map(TargetTriple::platform)
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
