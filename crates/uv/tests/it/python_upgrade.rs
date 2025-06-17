@@ -662,7 +662,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     );
 }
 
-// Tests that `uv python upgrade 3.12 --force` will install over non-managed
+// Tests that `uv python upgrade 3.12` will warn if trying to install over non-managed
 // interpreter.
 #[test]
 fn python_upgrade_force_install() -> Result<()> {
@@ -676,21 +676,20 @@ fn python_upgrade_force_install() -> Result<()> {
         .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX))
         .touch()?;
 
-    // Try to upgrade with a non-managed interpreter installed.
+    // Try to upgrade with a non-managed interpreter installed in `bin`.
     uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: Executable already exists at `[BIN]/python3.12` but is not managed by uv; use `uv python install 3.12 --force` to replace it
     Installed Python 3.12.11 in [TIME]
      + cpython-3.12.11-[PLATFORM]
-    error: Failed to install cpython-3.12.11-[PLATFORM]
-      Caused by: Executable already exists at `[BIN]/python3.12` but is not managed by uv; use `--force` to replace it
     ");
 
-    // Force the upgrade.
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--force").arg("--preview").arg("3.12"), @r"
+    // Force the `bin` install.
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--force").arg("--preview").arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

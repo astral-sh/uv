@@ -1016,6 +1016,7 @@ impl PythonUpgradeSettings {
         let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
         let python_downloads_json_url =
             args.python_downloads_json_url.or(python_downloads_json_url);
+        let force = false;
         let default = false;
 
         let PythonUpgradeArgs {
@@ -1023,7 +1024,6 @@ impl PythonUpgradeSettings {
             targets,
             mirror: _,
             pypy_mirror: _,
-            force,
             python_downloads_json_url: _,
         } = args;
 

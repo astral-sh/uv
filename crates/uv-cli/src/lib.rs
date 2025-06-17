@@ -5000,12 +5000,6 @@ pub struct PythonUpgradeArgs {
     #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
     pub pypy_mirror: Option<String>,
 
-    /// Replace existing Python executables during upgrade.
-    ///
-    /// By default, uv will refuse to replace executables that it does not manage.
-    #[arg(long, short)]
-    pub force: bool,
-
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
