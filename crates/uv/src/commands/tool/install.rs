@@ -33,7 +33,9 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
     sync_environment, update_environment,
 };
-use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
+use crate::commands::tool::common::{
+    finalize_tool_install, refine_interpreter, remove_entrypoints,
+};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
@@ -592,13 +594,13 @@ pub(crate) async fn install(
         }
     };
 
-    install_executables(
+    finalize_tool_install(
         &environment,
         &from.name,
         &installed_tools,
         options,
         force || invalid_tool_receipt,
-        python,
+        python_request,
         requirements,
         constraints,
         overrides,

@@ -67,6 +67,26 @@ pub enum PythonRequest {
     Key(PythonDownloadRequest),
 }
 
+impl<'a> serde::Deserialize<'a> for PythonRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(PythonRequest::parse(&s))
+    }
+}
+
+impl serde::Serialize for PythonRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = self.to_canonical_string();
+        serializer.serialize_str(&s)
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]

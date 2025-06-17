@@ -158,14 +158,18 @@ pub(crate) async fn refine_interpreter(
     Ok(Some(interpreter))
 }
 
-/// Installs tool executables for a given package and handles any conflicts.
-pub(crate) fn install_executables(
+/// Finalizes a tool installation, after creation of an environment.
+///
+/// Installs tool executables for a given package, handling any conflicts.
+///
+/// Adds a receipt for the tool.
+pub(crate) fn finalize_tool_install(
     environment: &PythonEnvironment,
     name: &PackageName,
     installed_tools: &InstalledTools,
     options: ToolOptions,
     force: bool,
-    python: Option<String>,
+    python: Option<PythonRequest>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
