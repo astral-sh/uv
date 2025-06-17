@@ -504,7 +504,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
-            match VirtualProject::discover(
+            match VirtualProject::discover_defaulted(
                 project_dir,
                 &DiscoveryOptions::default(),
                 &workspace_cache,
