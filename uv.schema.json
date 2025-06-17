@@ -2589,6 +2589,118 @@
           "enum": [
             "cu80"
           ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 6.3.",
+          "type": "string",
+          "enum": [
+            "rocm6.3"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 6.2.4.",
+          "type": "string",
+          "enum": [
+            "rocm6.2.4"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 6.2.",
+          "type": "string",
+          "enum": [
+            "rocm6.2"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 6.1.",
+          "type": "string",
+          "enum": [
+            "rocm6.1"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 6.0.",
+          "type": "string",
+          "enum": [
+            "rocm6.0"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 5.7.",
+          "type": "string",
+          "enum": [
+            "rocm5.7"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 5.6.",
+          "type": "string",
+          "enum": [
+            "rocm5.6"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 5.5.",
+          "type": "string",
+          "enum": [
+            "rocm5.5"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 5.4.2.",
+          "type": "string",
+          "enum": [
+            "rocm5.4.2"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 5.4.",
+          "type": "string",
+          "enum": [
+            "rocm5.4"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 5.3.",
+          "type": "string",
+          "enum": [
+            "rocm5.3"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 5.2.",
+          "type": "string",
+          "enum": [
+            "rocm5.2"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 5.1.1.",
+          "type": "string",
+          "enum": [
+            "rocm5.1.1"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 4.2.",
+          "type": "string",
+          "enum": [
+            "rocm4.2"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 4.1.",
+          "type": "string",
+          "enum": [
+            "rocm4.1"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for ROCm 4.0.1.",
+          "type": "string",
+          "enum": [
+            "rocm4.0.1"
+          ]
         }
       ]
     },
