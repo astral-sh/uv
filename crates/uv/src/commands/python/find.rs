@@ -43,8 +43,12 @@ pub(crate) async fn find(
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-            .await
+        match VirtualProject::discover_defaulted(
+            project_dir,
+            &DiscoveryOptions::default(),
+            &workspace_cache,
+        )
+        .await
         {
             Ok(project) => Some(project),
             Err(WorkspaceError::MissingProject(_)) => None,
