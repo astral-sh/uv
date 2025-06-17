@@ -4623,7 +4623,7 @@ fn remove_virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: The dependency `sortedcontainers` could not be found in `project.dependencies`
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4648,7 +4648,7 @@ fn remove_virtual_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: The dependency `sortedcontainers` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4685,12 +4685,16 @@ fn remove_virtual_dependency_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.remove()
         .arg("sortedcontainers")
         .arg("--group").arg("foo"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4701,7 +4705,7 @@ fn remove_virtual_dependency_group() -> Result<()> {
         assert_snapshot!(
             pyproject_toml, @r#"
         [dependency-groups]
-        foo = ["sortedcontainers"]
+        foo = []
         bar = ["iniconfig"]
         dev = ["sniffio"]
         "#
@@ -4717,7 +4721,7 @@ fn remove_virtual_dependency_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: The dependency `sortedcontainers` could not be found in `dependency-groups.baz`
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4728,7 +4732,7 @@ fn remove_virtual_dependency_group() -> Result<()> {
         assert_snapshot!(
             pyproject_toml, @r#"
         [dependency-groups]
-        foo = ["sortedcontainers"]
+        foo = []
         bar = ["iniconfig"]
         dev = ["sniffio"]
         "#
