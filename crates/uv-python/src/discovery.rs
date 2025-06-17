@@ -342,11 +342,9 @@ fn python_executables_from_installed<'a>(
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
                     .map(move |installation| {
-                        (
-                            PythonSource::Managed,
-                            // If it's not a patch version request, then attempt to read the stable
-                            // minor version link.
-                            version
+                        // If it's not a patch version request, then attempt to read the stable
+                        // minor version link.
+                        let executable = version
                                 .patch()
                                 .is_none()
                                 .then(|| {
@@ -362,9 +360,10 @@ fn python_executables_from_installed<'a>(
                                     )
                                 })
                                 .flatten()
-                                .unwrap_or_else(|| installation.executable(false)),
-                        )
-                    }))
+                                .unwrap_or_else(|| installation.executable(false));
+                        (PythonSource::Managed, executable)
+                    })
+                )
             })
     })
     .flatten_ok();
