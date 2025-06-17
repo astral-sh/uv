@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -222,13 +223,13 @@ async fn do_uninstall(
     // Read all existing managed installations and find the highest installed patch
     // for each installed minor version. Ensure the minor version link directory
     // is still valid.
-    let uninstalled_minor_versions =
-        &uninstalled
-            .iter()
-            .fold(FxHashSet::default(), |mut minor_versions, key| {
-                minor_versions.insert(PythonInstallationMinorVersionKey::ref_cast(key));
-                minor_versions
-            });
+    let uninstalled_minor_versions = &uninstalled.iter().fold(
+        IndexSet::<&PythonInstallationMinorVersionKey>::default(),
+        |mut minor_versions, key| {
+            minor_versions.insert(PythonInstallationMinorVersionKey::ref_cast(key));
+            minor_versions
+        },
+    );
     let remaining_installations: Vec<_> = installations.find_all()?.collect();
     let remaining_minor_versions =
         PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(

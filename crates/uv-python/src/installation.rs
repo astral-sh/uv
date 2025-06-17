@@ -2,8 +2,8 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+use indexmap::IndexMap;
 use ref_cast::RefCast;
-use rustc_hash::FxHashMap;
 use tracing::{debug, info};
 
 use uv_cache::Cache;
@@ -535,11 +535,11 @@ impl PythonInstallationMinorVersionKey {
     #[inline]
     pub fn highest_installations_by_minor_version_key<'a, I>(
         installations: I,
-    ) -> FxHashMap<Self, ManagedPythonInstallation>
+    ) -> IndexMap<Self, ManagedPythonInstallation>
     where
         I: IntoIterator<Item = &'a ManagedPythonInstallation>,
     {
-        let mut minor_versions = FxHashMap::default();
+        let mut minor_versions = IndexMap::default();
         for installation in installations {
             minor_versions
                 .entry(installation.minor_version_key().clone())

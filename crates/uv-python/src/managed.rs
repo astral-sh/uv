@@ -658,7 +658,7 @@ impl ManagedPythonInstallation {
 /// linking to the home directory of a Python installation.
 #[derive(Clone, Debug)]
 pub struct PythonMinorVersionLink {
-    /// The symlink directory (or junction on Windows)
+    /// The symlink directory (or junction on Windows).
     pub symlink_directory: PathBuf,
     /// The full path to the executable including the symlink directory
     /// (or junction on Windows).
