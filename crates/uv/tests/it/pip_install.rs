@@ -19,7 +19,7 @@ use wiremock::{
 use crate::common::{self, decode_token};
 use crate::common::{
     DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
-    uv_snapshot, venv_bin_path, venv_to_interpreter,
+    uv_snapshot, venv_bin_path,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -9083,8 +9083,7 @@ fn build_tag() {
     );
 
     // Ensure that we choose the highest build tag (5).
-    uv_snapshot!(Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    uv_snapshot!(context.python_command()
         .arg("-c")
         .arg("import build_tag; build_tag.main()")
         .current_dir(&context.temp_dir), @r###"

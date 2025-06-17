@@ -1,6 +1,4 @@
 use std::env::consts::EXE_SUFFIX;
-use std::path::Path;
-use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
@@ -11,23 +9,9 @@ use indoc::indoc;
 use predicates::Predicate;
 use url::Url;
 
-use crate::common::{
-    TestContext, download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter,
-};
+use crate::common::{TestContext, download_to_disk, site_packages_path, uv_snapshot};
 use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
-
-fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
-    Command::new(venv_to_interpreter(venv))
-        // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
-        // https://github.com/python/cpython/issues/75953
-        .arg("-B")
-        .arg("-c")
-        .arg(command)
-        .current_dir(temp_dir)
-        .assert()
-        .success();
-}
 
 #[test]
 fn missing_requirements_txt() {
@@ -463,7 +447,13 @@ fn link() -> Result<()> {
     "###
     );
 
-    check_command(&context2.venv, "import iniconfig", &context2.temp_dir);
+    context2
+        .python_command()
+        .arg("-c")
+        .arg("import iniconfig")
+        .current_dir(&context2.temp_dir)
+        .assert()
+        .success();
 
     Ok(())
 }
@@ -5221,8 +5211,8 @@ fn target_built_distribution() -> Result<()> {
     context.assert_command("import iniconfig").failure();
 
     // Ensure that we can import the package by augmenting the `PYTHONPATH`.
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    context
+        .python_command()
         .arg("-c")
         .arg("import iniconfig")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
@@ -5326,8 +5316,8 @@ fn target_source_distribution() -> Result<()> {
     context.assert_command("import iniconfig").failure();
 
     // Ensure that we can import the package by augmenting the `PYTHONPATH`.
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    context
+        .python_command()
         .arg("-c")
         .arg("import iniconfig")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
@@ -5397,8 +5387,8 @@ fn target_no_build_isolation() -> Result<()> {
     context.assert_command("import wheel").failure();
 
     // Ensure that we can import the package by augmenting the `PYTHONPATH`.
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    context
+        .python_command()
         .arg("-c")
         .arg("import wheel")
         .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
@@ -5474,8 +5464,8 @@ fn prefix() -> Result<()> {
     context.assert_command("import iniconfig").failure();
 
     // Ensure that we can import the package by augmenting the `PYTHONPATH`.
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    context
+        .python_command()
         .arg("-c")
         .arg("import iniconfig")
         .env(
