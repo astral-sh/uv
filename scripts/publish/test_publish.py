@@ -223,7 +223,7 @@ def get_filenames(url: str, client: httpx.Client) -> list[str]:
     response = client.get(url)
     data = response.text
     # Works for the indexes in the list
-    href_text = r"<a(?: +[\w-]+=(?:'[^']+'|\"[^\"]+\"))* *>([^<>]+)</a>"
+    href_text = r"<a(?:\s*[\w-]+=(?:'[^']+'|\"[^\"]+\"))* *>([^<>]+)</a>"
     return [m.group(1) for m in re.finditer(href_text, data)]
 
 
