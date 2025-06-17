@@ -345,7 +345,6 @@ struct VersionMapEager {
 /// avoiding another conversion step into a fully filled out `VersionMap` can
 /// provide substantial savings in some cases.
 #[derive(Debug)]
-#[allow(clippy::struct_excessive_bools)]
 struct VersionMapLazy {
     /// A map from version to possibly-initialized distribution.
     map: BTreeMap<Version, LazyPrioritizedDist>,
