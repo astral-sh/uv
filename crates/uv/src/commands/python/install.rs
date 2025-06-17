@@ -7,6 +7,7 @@ use std::str::FromStr;
 use anyhow::{Error, Result};
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -180,7 +181,7 @@ pub(crate) async fn install(
     let requests: Vec<_> = if targets.is_empty() {
         if upgrade {
             is_unspecified_upgrade = true;
-            let mut minor_version_requests = FxHashSet::default();
+            let mut minor_version_requests = IndexSet::<InstallRequest>::default();
             for installation in &existing_installations {
                 let request = VersionRequest::major_minor_request_from_key(installation.key());
                 if let Ok(request) = InstallRequest::new(
@@ -243,7 +244,7 @@ pub(crate) async fn install(
                 None
             }
         })
-        .collect::<FxHashSet<_>>();
+        .collect::<IndexSet<_>>();
 
     if upgrade
         && requests
