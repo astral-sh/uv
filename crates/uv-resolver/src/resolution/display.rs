@@ -14,7 +14,6 @@ use crate::{ResolverEnvironment, ResolverOutput};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolverOutput,

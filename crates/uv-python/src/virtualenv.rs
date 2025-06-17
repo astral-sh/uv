@@ -32,7 +32,6 @@ pub struct VirtualEnvironment {
 
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PyVenvConfiguration {
     /// Was the virtual environment created with the `virtualenv` package?
     pub(crate) virtualenv: bool,
