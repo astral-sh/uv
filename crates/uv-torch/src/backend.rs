@@ -109,67 +109,67 @@ pub enum TorchMode {
     Cu80,
     /// Use the PyTorch index for ROCm 6.3.
     #[serde(rename = "rocm6.3")]
-    #[clap(name = "rocm6.3")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.3"))]
     Rocm63,
     /// Use the PyTorch index for ROCm 6.2.4.
     #[serde(rename = "rocm6.2.4")]
-    #[clap(name = "rocm6.2.4")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.2.4"))]
     Rocm624,
     /// Use the PyTorch index for ROCm 6.2.
     #[serde(rename = "rocm6.2")]
-    #[clap(name = "rocm6.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.2"))]
     Rocm62,
     /// Use the PyTorch index for ROCm 6.1.
     #[serde(rename = "rocm6.1")]
-    #[clap(name = "rocm6.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.1"))]
     Rocm61,
     /// Use the PyTorch index for ROCm 6.0.
     #[serde(rename = "rocm6.0")]
-    #[clap(name = "rocm6.0")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.0"))]
     Rocm60,
     /// Use the PyTorch index for ROCm 5.7.
     #[serde(rename = "rocm5.7")]
-    #[clap(name = "rocm5.7")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.7"))]
     Rocm57,
     /// Use the PyTorch index for ROCm 5.6.
     #[serde(rename = "rocm5.6")]
-    #[clap(name = "rocm5.6")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.6"))]
     Rocm56,
     /// Use the PyTorch index for ROCm 5.5.
     #[serde(rename = "rocm5.5")]
-    #[clap(name = "rocm5.5")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.5"))]
     Rocm55,
     /// Use the PyTorch index for ROCm 5.4.2.
     #[serde(rename = "rocm5.4.2")]
-    #[clap(name = "rocm5.4.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.4.2"))]
     Rocm542,
     /// Use the PyTorch index for ROCm 5.4.
     #[serde(rename = "rocm5.4")]
-    #[clap(name = "rocm5.4")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.4"))]
     Rocm54,
     /// Use the PyTorch index for ROCm 5.3.
     #[serde(rename = "rocm5.3")]
-    #[clap(name = "rocm5.3")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.3"))]
     Rocm53,
     /// Use the PyTorch index for ROCm 5.2.
     #[serde(rename = "rocm5.2")]
-    #[clap(name = "rocm5.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.2"))]
     Rocm52,
     /// Use the PyTorch index for ROCm 5.1.1.
     #[serde(rename = "rocm5.1.1")]
-    #[clap(name = "rocm5.1.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.1.1"))]
     Rocm511,
     /// Use the PyTorch index for ROCm 4.2.
     #[serde(rename = "rocm4.2")]
-    #[clap(name = "rocm4.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm4.2"))]
     Rocm42,
     /// Use the PyTorch index for ROCm 4.1.
     #[serde(rename = "rocm4.1")]
-    #[clap(name = "rocm4.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm4.1"))]
     Rocm41,
     /// Use the PyTorch index for ROCm 4.0.1.
     #[serde(rename = "rocm4.0.1")]
-    #[clap(name = "rocm4.0.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm4.0.1"))]
     Rocm401,
 }
 
