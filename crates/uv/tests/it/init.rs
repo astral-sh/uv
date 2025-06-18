@@ -938,7 +938,7 @@ fn init_script_shebang() -> Result<()> {
 
     let contents = "#! /usr/bin/env python3\nprint(\"Hello, world!\")";
     fs_err::write(&script_path, contents)?;
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -964,7 +964,7 @@ fn init_script_shebang() -> Result<()> {
     // If the shebang already contains `uv`, the result is the same, but we suppress the warning.
     let contents = "#!/usr/bin/env -S uv run --script\nprint(\"Hello, world!\")";
     fs_err::write(&script_path, contents)?;
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

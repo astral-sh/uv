@@ -22,7 +22,6 @@ uv-workspace = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 indoc = { workspace = true }
 memchr = { workspace = true }
-owo-colors = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

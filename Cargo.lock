@@ -5742,7 +5742,6 @@ dependencies = [
  "fs-err 3.1.1",
  "indoc",
  "memchr",
- "owo-colors",
  "regex",
  "serde",
  "thiserror 2.0.12",
