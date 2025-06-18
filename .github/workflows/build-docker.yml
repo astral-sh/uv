@@ -37,7 +37,8 @@ on:
       - .github/workflows/build-docker.yml
 
 env:
-  UV_BASE_IMG: ghcr.io/${{ github.repository_owner }}/uv
+  UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/uv
+  UV_DOCKERHUB_IMAGE: docker.io/astral/uv
 
 jobs:
   docker-plan:
@@ -84,13 +85,12 @@ jobs:
         with:
           submodules: recursive
 
-      # Login to DockerHub first, to avoid rate-limiting
+      # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        # PRs from forks don't have access to secrets, disable this step in that case.
         if: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         with:
-          username: astralshbot
-          password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
+          username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
+          password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
@@ -117,7 +117,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
-          images: ${{ env.UV_BASE_IMG }}
+          images: |
+            ${{ env.UV_GHCR_IMAGE }}
+            ${{ env.UV_DOCKERHUB_IMAGE }}
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
           tags: |
             type=raw,value=dry-run,enable=${{ needs.docker-plan.outputs.push == 'false' }}
@@ -186,12 +188,12 @@ jobs:
           - python:3.9-slim-bookworm,python3.9-bookworm-slim
           - python:3.8-slim-bookworm,python3.8-bookworm-slim
     steps:
-      # Login to DockerHub first, to avoid rate-limiting
+      # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         if: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         with:
-          username: astralshbot
-          password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
+          username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
+          password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
@@ -212,7 +214,7 @@ jobs:
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
-          COPY --from=${{ env.UV_BASE_IMG }}:latest /uv /uvx /usr/local/bin/
+          COPY --from=${{ env.UV_GHCR_IMAGE }}:latest /uv /uvx /usr/local/bin/
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
           EOF
@@ -245,7 +247,9 @@ jobs:
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
-          images: ${{ env.UV_BASE_IMG }}
+          images: |
+            ${{ env.UV_GHCR_IMAGE }}
+            ${{ env.UV_DOCKERHUB_IMAGE }}
           flavor: |
             latest=false
           tags: |
@@ -266,7 +270,7 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-name: ${{ env.UV_BASE_IMG }}
+          subject-name: ${{ env.UV_GHCR_IMAGE }}
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
 
   # Re-tag the base image, to ensure it's shown as the newest on the registry UI
@@ -289,12 +293,16 @@ jobs:
 
       - name: Push tags
         env:
-          IMAGE: ${{ env.UV_BASE_IMG }}
+          IMAGE: ${{ env.UV_GHCR_IMAGE }}
           DIGEST: ${{ needs.docker-publish-base.outputs.image-digest }}
           TAGS: ${{ needs.docker-publish-base.outputs.image-tags }}
         run: |
           docker pull "${IMAGE}@${DIGEST}"
           for tag in $TAGS; do
+            # Skip re-tag for DockerHub
+            if [[ "$tag" == "${{ env.UV_DOCKERHUB_IMAGE }}"* ]]; then
+              continue
+            fi
             docker tag "${IMAGE}@${DIGEST}" "${tag}"
             docker push "${tag}"
           done
