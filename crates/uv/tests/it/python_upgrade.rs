@@ -1,4 +1,6 @@
 use crate::common::{TestContext, uv_snapshot};
+use anyhow::Result;
+use assert_fs::fixture::FileTouch;
 use assert_fs::prelude::PathChild;
 
 use uv_static::EnvVars;
@@ -658,4 +660,44 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     ----- stderr -----
     "
     );
+}
+
+// Tests that `uv python upgrade 3.12` will warn if trying to install over non-managed
+// interpreter.
+#[test]
+fn python_upgrade_force_install() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.13"])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    context
+        .bin_dir
+        .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX))
+        .touch()?;
+
+    // Try to upgrade with a non-managed interpreter installed in `bin`.
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Executable already exists at `[BIN]/python3.12` but is not managed by uv; use `uv python install 3.12 --force` to replace it
+    Installed Python 3.12.11 in [TIME]
+     + cpython-3.12.11-[PLATFORM]
+    ");
+
+    // Force the `bin` install.
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--force").arg("--preview").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.11 in [TIME]
+     + cpython-3.12.11-[PLATFORM] (python3.12)
+    ");
+
+    Ok(())
 }

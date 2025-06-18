@@ -455,6 +455,7 @@ pub(crate) async fn install(
             force,
             default,
             upgradeable,
+            upgrade,
             is_default_install,
             first_request,
             &existing_installations,
@@ -617,6 +618,7 @@ fn create_bin_links(
     force: bool,
     default: bool,
     upgradeable: bool,
+    upgrade: bool,
     is_default_install: bool,
     first_request: &InstallRequest,
     existing_installations: &[ManagedPythonInstallation],
@@ -699,13 +701,23 @@ fn create_bin_links(
                         // There's an existing executable we don't manage, require `--force`
                         if valid_link {
                             if !force {
-                                errors.push((
-                                    installation.key().clone(),
-                                    anyhow::anyhow!(
-                                        "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                        to.simplified_display()
-                                    ),
-                                ));
+                                if upgrade {
+                                    warn_user!(
+                                        "Executable already exists at `{}` but is not managed by uv; use `uv python install {}.{}{} --force` to replace it",
+                                        to.simplified_display(),
+                                        installation.key().major(),
+                                        installation.key().minor(),
+                                        installation.key().variant().suffix()
+                                    );
+                                } else {
+                                    errors.push((
+                                        installation.key().clone(),
+                                        anyhow::anyhow!(
+                                            "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                                            to.simplified_display()
+                                        ),
+                                    ));
+                                }
                                 continue;
                             }
                             debug!(
