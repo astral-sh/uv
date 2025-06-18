@@ -12018,6 +12018,61 @@ async fn add_redirect_cross_origin() -> Result<()> {
     Ok(())
 }
 
+/// If uv receives a 302 redirect to a cross-origin server with credentials
+/// in the location, use those credentials for the redirect request.
+#[tokio::test]
+async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    let redirect_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(|req: &wiremock::Request| {
+            // Responds with credentials in the location
+            let redirect_url = redirect_url_to_base(
+                req,
+                "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple/",
+            );
+            ResponseTemplate::new(302).insert_header("Location", &redirect_url)
+        })
+        .mount(&redirect_server)
+        .await;
+
+    let redirect_url = Url::parse(&redirect_server.uri())?;
+
+    uv_snapshot!(filters, context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
 /// uv currently fails to look up keyring credentials on a cross-origin redirect.
 #[tokio::test]
 async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
@@ -12145,14 +12200,18 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
 }
 
 fn redirect_url_to_pypi_proxy(req: &wiremock::Request) -> String {
+    redirect_url_to_base(req, "https://pypi-proxy.fly.dev/basic-auth/simple/")
+}
+
+fn redirect_url_to_base(req: &wiremock::Request, base: &str) -> String {
     let last_path_segment = req
         .url
         .path_segments()
         .expect("path has segments")
-        .filter(|segment| !segment.is_empty()) // Filter out empty segments
+        .filter(|segment| !segment.is_empty())
         .next_back()
         .expect("path has a package segment");
-    format!("https://pypi-proxy.fly.dev/basic-auth/simple/{last_path_segment}/")
+    format!("{base}{last_path_segment}/")
 }
 
 /// Test the error message when adding a package with multiple existing references in
