@@ -242,13 +242,15 @@ impl Pep723Script {
             let (mut shebang, contents) = extract_shebang(&existing_contents)?;
             if !shebang.is_empty() {
                 shebang.push_str("\n\n");
+                // If the shebang doesn't contain `uv`, it's probably something like
+                // `#! /usr/bin/env python`, which isn't going to respect the inline metadata.
+                // Issue a warning for users who might not know that.
+                // TODO: There are a lot of mistakes we could consider detecting here, like
+                // `uv run` without `--script` when the file doesn't end in `.py`.
                 if !regex::Regex::new(r"\buv\b").unwrap().is_match(&shebang) {
                     warn_user!(
-                        "If you execute {} directly, it might ignore its inline metadata.",
+                        "If you execute {} directly, it might ignore its inline metadata.\nConsider replacing its shebang with: {}",
                         file.to_string_lossy().cyan(),
-                    );
-                    warn_user!(
-                        "Consider replacing its shebang with: {}",
                         "#!/usr/bin/env -S uv run --script".cyan(),
                     );
                 }
