@@ -488,7 +488,13 @@ pub(crate) async fn install(
         );
 
     for installation in minor_versions.values() {
-        installation.ensure_minor_version_link(preview)?;
+        if upgrade {
+            // During an upgrade, update existing symlinks but avoid
+            // creating new ones.
+            installation.update_minor_version_link(preview)?;
+        } else {
+            installation.ensure_minor_version_link(preview)?;
+        }
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {

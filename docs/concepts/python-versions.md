@@ -180,8 +180,8 @@ To upgrade all installed Python minor versions to their latest supported patch r
 $ uv python upgrade --preview
 ```
 
-All virtual environments created by uv on a minor version that was installed or upgraded with the
-`--preview` flag will transparently upgrade when that minor version is upgraded. This means:
+All virtual environments created by uv on a minor version that was installed with the `--preview`
+flag will transparently upgrade when that minor version is upgraded. This means:
 
 - When you upgrade a Python minor version (e.g., from 3.12.1 to 3.12.2), all virtual environments
   pointing to that minor version will automatically use the new patch version. No manual recreation
@@ -192,7 +192,7 @@ All virtual environments created by uv on a minor version that was installed or 
 Technically, this works by having virtual environments point to a uv-managed minor version symlink
 directory (or junction on Windows) that points to the latest supported patch version.
 
-These upgradeable symlink directories will also be created by installing Python with the `--preview`
+These upgradeable symlink directories will be created by installing Python with the `--preview`
 flag. For example:
 
 ```console
