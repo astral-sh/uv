@@ -366,6 +366,14 @@ impl PythonInstallationKey {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
 
+    pub fn major(&self) -> u8 {
+        self.major
+    }
+
+    pub fn minor(&self) -> u8 {
+        self.minor
+    }
+
     pub fn arch(&self) -> &Arch {
         &self.arch
     }
