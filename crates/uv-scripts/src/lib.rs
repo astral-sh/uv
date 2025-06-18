@@ -241,7 +241,7 @@ impl Pep723Script {
         let script = if let Some(existing_contents) = existing_contents {
             let (mut shebang, contents) = extract_shebang(&existing_contents)?;
             if !shebang.is_empty() {
-                shebang.push_str("\n\n");
+                shebang.push_str("\n#\n");
                 // If the shebang doesn't contain `uv`, it's probably something like
                 // `#! /usr/bin/env python`, which isn't going to respect the inline metadata.
                 // Issue a warning for users who might not know that.
@@ -257,8 +257,7 @@ impl Pep723Script {
             }
             indoc::formatdoc! {r"
             {shebang}{metadata}
-            {contents}
-            "}
+            {contents}" }
         } else {
             indoc::formatdoc! {r#"
             {metadata}

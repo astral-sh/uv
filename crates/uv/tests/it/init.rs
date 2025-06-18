@@ -951,7 +951,7 @@ fn init_script_shebang() -> Result<()> {
     let resulting_script = fs_err::read_to_string(&script_path)?;
     assert_snapshot!(resulting_script, @r#"
     #! /usr/bin/env python3
-
+    #
     # /// script
     # requires-python = ">=3.12"
     # dependencies = []
@@ -975,7 +975,7 @@ fn init_script_shebang() -> Result<()> {
     let resulting_script = fs_err::read_to_string(&script_path)?;
     assert_snapshot!(resulting_script, @r#"
     #!/usr/bin/env -S uv run --script
-
+    #
     # /// script
     # requires-python = ">=3.12"
     # dependencies = []
