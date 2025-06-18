@@ -73,8 +73,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # for Depot OIDC
-      packages: write # for GHCR
+      id-token: write # for Depot OIDC and GHCR signing
+      packages: write # for GHCR image pushes
+      attestations: write # for GHCR attestations
     environment:
       name: release
     outputs:
@@ -141,7 +142,7 @@ jobs:
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
         with:
-          subject-name: ${{ env.UV_BASE_IMG }}
+          subject-name: ${{ env.UV_GHCR_IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
 
   docker-publish-extra:
@@ -154,9 +155,9 @@ jobs:
       - docker-publish-base
     if: ${{ needs.docker-plan.outputs.push == 'true' }}
     permissions:
-      packages: write
-      attestations: write # needed to push image attestations to the Github attestation store
-      id-token: write # needed for signing the images with GitHub OIDC Token
+      id-token: write # for Depot OIDC and GHCR signing
+      packages: write # for GHCR image pushes
+      attestations: write # for GHCR attestations
     strategy:
       fail-fast: false
       matrix:
