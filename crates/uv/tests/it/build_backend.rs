@@ -50,9 +50,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context
-        .run()
-        .arg("python")
+    uv_snapshot!(context.python_command()
         .arg("-c")
         .arg(BUILT_BY_UV_TEST_SCRIPT), @r###"
     success: true
@@ -136,9 +134,7 @@ fn built_by_uv_direct() -> Result<()> {
 
     drop(wheel_dir);
 
-    uv_snapshot!(context
-        .run()
-        .arg("python")
+    uv_snapshot!(context.python_command()
         .arg("-c")
         .arg(BUILT_BY_UV_TEST_SCRIPT), @r###"
     success: true
