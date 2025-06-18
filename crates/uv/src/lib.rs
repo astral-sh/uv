@@ -1415,14 +1415,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Python(PythonNamespace {
             command: PythonCommand::Upgrade(args),
         }) => {
-            if globals.preview.is_disabled() {
-                writeln!(
-                    printer.stderr(),
-                    "`uv python upgrade` is only available in preview mode; add the `--preview` flag to use `upgrade`"
-                )?;
-                return Ok(ExitStatus::Failure);
-            }
-
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem);
             show_settings!(args);

@@ -161,6 +161,12 @@ pub(crate) async fn install(
         return Ok(ExitStatus::Failure);
     }
 
+    if upgrade && preview.is_disabled() {
+        warn_user!(
+            "`uv python upgrade` is experimental and may change without warning. Pass `--preview` to disable this warning"
+        );
+    }
+
     if default && targets.len() > 1 {
         anyhow::bail!("The `--default` flag cannot be used with multiple targets");
     }
