@@ -3349,6 +3349,22 @@ by <code>--python-version</code>.</p>
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
+<li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
+<li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
+<li><code>rocm6.1</code>:  Use the PyTorch index for ROCm 6.1</li>
+<li><code>rocm6.0</code>:  Use the PyTorch index for ROCm 6.0</li>
+<li><code>rocm5.7</code>:  Use the PyTorch index for ROCm 5.7</li>
+<li><code>rocm5.6</code>:  Use the PyTorch index for ROCm 5.6</li>
+<li><code>rocm5.5</code>:  Use the PyTorch index for ROCm 5.5</li>
+<li><code>rocm5.4.2</code>:  Use the PyTorch index for ROCm 5.4.2</li>
+<li><code>rocm5.4</code>:  Use the PyTorch index for ROCm 5.4</li>
+<li><code>rocm5.3</code>:  Use the PyTorch index for ROCm 5.3</li>
+<li><code>rocm5.2</code>:  Use the PyTorch index for ROCm 5.2</li>
+<li><code>rocm5.1.1</code>:  Use the PyTorch index for ROCm 5.1.1</li>
+<li><code>rocm4.2</code>:  Use the PyTorch index for ROCm 4.2</li>
+<li><code>rocm4.1</code>:  Use the PyTorch index for ROCm 4.1</li>
+<li><code>rocm4.0.1</code>:  Use the PyTorch index for ROCm 4.0.1</li>
 </ul></dd><dt id="uv-pip-compile--universal"><a href="#uv-pip-compile--universal"><code>--universal</code></a></dt><dd><p>Perform a universal resolution, attempting to generate a single <code>requirements.txt</code> output file that is compatible with all operating systems, architectures, and Python implementations.</p>
 <p>In universal mode, the current Python version (or user-provided <code>--python-version</code>) will be treated as a lower bound. For example, <code>--universal --python-version 3.7</code> would produce a universal resolution for Python 3.7 and later.</p>
 <p>Implies <code>--no-strip-markers</code>.</p>
@@ -3590,6 +3606,22 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
+<li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
+<li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
+<li><code>rocm6.1</code>:  Use the PyTorch index for ROCm 6.1</li>
+<li><code>rocm6.0</code>:  Use the PyTorch index for ROCm 6.0</li>
+<li><code>rocm5.7</code>:  Use the PyTorch index for ROCm 5.7</li>
+<li><code>rocm5.6</code>:  Use the PyTorch index for ROCm 5.6</li>
+<li><code>rocm5.5</code>:  Use the PyTorch index for ROCm 5.5</li>
+<li><code>rocm5.4.2</code>:  Use the PyTorch index for ROCm 5.4.2</li>
+<li><code>rocm5.4</code>:  Use the PyTorch index for ROCm 5.4</li>
+<li><code>rocm5.3</code>:  Use the PyTorch index for ROCm 5.3</li>
+<li><code>rocm5.2</code>:  Use the PyTorch index for ROCm 5.2</li>
+<li><code>rocm5.1.1</code>:  Use the PyTorch index for ROCm 5.1.1</li>
+<li><code>rocm4.2</code>:  Use the PyTorch index for ROCm 4.2</li>
+<li><code>rocm4.1</code>:  Use the PyTorch index for ROCm 4.1</li>
+<li><code>rocm4.0.1</code>:  Use the PyTorch index for ROCm 4.0.1</li>
 </ul></dd><dt id="uv-pip-sync--verbose"><a href="#uv-pip-sync--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
@@ -3864,6 +3896,22 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
+<li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
+<li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
+<li><code>rocm6.1</code>:  Use the PyTorch index for ROCm 6.1</li>
+<li><code>rocm6.0</code>:  Use the PyTorch index for ROCm 6.0</li>
+<li><code>rocm5.7</code>:  Use the PyTorch index for ROCm 5.7</li>
+<li><code>rocm5.6</code>:  Use the PyTorch index for ROCm 5.6</li>
+<li><code>rocm5.5</code>:  Use the PyTorch index for ROCm 5.5</li>
+<li><code>rocm5.4.2</code>:  Use the PyTorch index for ROCm 5.4.2</li>
+<li><code>rocm5.4</code>:  Use the PyTorch index for ROCm 5.4</li>
+<li><code>rocm5.3</code>:  Use the PyTorch index for ROCm 5.3</li>
+<li><code>rocm5.2</code>:  Use the PyTorch index for ROCm 5.2</li>
+<li><code>rocm5.1.1</code>:  Use the PyTorch index for ROCm 5.1.1</li>
+<li><code>rocm4.2</code>:  Use the PyTorch index for ROCm 4.2</li>
+<li><code>rocm4.1</code>:  Use the PyTorch index for ROCm 4.1</li>
+<li><code>rocm4.0.1</code>:  Use the PyTorch index for ROCm 4.0.1</li>
 </ul></dd><dt id="uv-pip-install--upgrade"><a href="#uv-pip-install--upgrade"><code>--upgrade</code></a>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 </dd><dt id="uv-pip-install--upgrade-package"><a href="#uv-pip-install--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-pip-install--user"><a href="#uv-pip-install--user"><code>--user</code></a></dt><dt id="uv-pip-install--verbose"><a href="#uv-pip-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
