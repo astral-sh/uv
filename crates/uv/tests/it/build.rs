@@ -7,7 +7,6 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
-use std::process::Command;
 use zip::ZipArchive;
 
 #[test]
@@ -1857,7 +1856,7 @@ fn build_unconfigured_setuptools() -> Result<()> {
      + greet==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    uv_snapshot!(context.filters(), Command::new(context.interpreter()).arg("-c").arg("import greet"), @r###"
+    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import greet"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

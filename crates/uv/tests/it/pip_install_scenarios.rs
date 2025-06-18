@@ -5,52 +5,20 @@
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
-use std::path::Path;
 use std::process::Command;
-
-use assert_cmd::assert::Assert;
-use assert_cmd::prelude::*;
 
 use uv_static::EnvVars;
 
-use crate::common::{
-    TestContext, build_vendor_links_url, get_bin, packse_index_url, uv_snapshot,
-    venv_to_interpreter,
-};
-
-fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
-    Command::new(venv_to_interpreter(venv))
-        .arg("-c")
-        .arg(command)
-        .current_dir(temp_dir)
-        .assert()
-}
-
-fn assert_installed(venv: &Path, package: &'static str, version: &'static str, temp_dir: &Path) {
-    assert_command(
-        venv,
-        format!("import {package} as package; print(package.__version__, end='')").as_str(),
-        temp_dir,
-    )
-    .success()
-    .stdout(version);
-}
-
-fn assert_not_installed(venv: &Path, package: &'static str, temp_dir: &Path) {
-    assert_command(venv, format!("import {package}").as_str(), temp_dir).failure();
-}
+use crate::common::{TestContext, build_vendor_links_url, packse_index_url, uv_snapshot};
 
 /// Create a `pip install` command with options shared across all scenarios.
 fn command(context: &TestContext) -> Command {
-    let mut command = Command::new(get_bin());
+    let mut command = context.pip_install();
     command
-        .arg("pip")
-        .arg("install")
         .arg("--index-url")
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
 }
@@ -88,11 +56,7 @@ fn requires_exact_version_does_not_exist() {
       ╰─▶ Because there is no version of package-a==2.0.0 and you require package-a==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "requires_exact_version_does_not_exist_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("requires_exact_version_does_not_exist_a");
 }
 
 /// The user requires a version of `a` greater than `1.0.0` but only smaller or equal versions exist
@@ -130,11 +94,7 @@ fn requires_greater_version_does_not_exist() {
       ╰─▶ Because only package-a<=1.0.0 is available and you require package-a>1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "requires_greater_version_does_not_exist_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("requires_greater_version_does_not_exist_a");
 }
 
 /// The user requires a version of `a` less than `1.0.0` but only larger versions exist
@@ -174,11 +134,7 @@ fn requires_less_version_does_not_exist() {
       ╰─▶ Because only package-a>=2.0.0 is available and you require package-a<2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "requires_less_version_does_not_exist_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("requires_less_version_does_not_exist_a");
 }
 
 /// The user requires any version of package `a` which does not exist.
@@ -211,11 +167,7 @@ fn requires_package_does_not_exist() {
       ╰─▶ Because package-a was not found in the package registry and you require package-a, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "requires_package_does_not_exist_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("requires_package_does_not_exist_a");
 }
 
 /// The user requires package `a` but `a` requires package `b` which does not exist
@@ -254,11 +206,7 @@ fn transitive_requires_package_does_not_exist() {
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "transitive_requires_package_does_not_exist_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_requires_package_does_not_exist_a");
 }
 
 /// There is a non-contiguous range of compatible versions for the requested package `a`, but another dependency `c` excludes the range. This is the same as `dependency-excludes-range-of-compatible-versions` but some of the versions of `a` are incompatible for another reason e.g. dependency on non-existent package `d`.
@@ -376,21 +324,12 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
     ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
-    assert_not_installed(
-        &context.venv,
-        "dependency_excludes_non_contiguous_range_of_compatible_versions_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "dependency_excludes_non_contiguous_range_of_compatible_versions_b",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "dependency_excludes_non_contiguous_range_of_compatible_versions_c",
-        &context.temp_dir,
-    );
+    context
+        .assert_not_installed("dependency_excludes_non_contiguous_range_of_compatible_versions_a");
+    context
+        .assert_not_installed("dependency_excludes_non_contiguous_range_of_compatible_versions_b");
+    context
+        .assert_not_installed("dependency_excludes_non_contiguous_range_of_compatible_versions_c");
 }
 
 /// There is a range of compatible versions for the requested package `a`, but another dependency `c` excludes that range.
@@ -499,21 +438,9 @@ fn dependency_excludes_range_of_compatible_versions() {
     ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
-    assert_not_installed(
-        &context.venv,
-        "dependency_excludes_range_of_compatible_versions_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "dependency_excludes_range_of_compatible_versions_b",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "dependency_excludes_range_of_compatible_versions_c",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("dependency_excludes_range_of_compatible_versions_a");
+    context.assert_not_installed("dependency_excludes_range_of_compatible_versions_b");
+    context.assert_not_installed("dependency_excludes_range_of_compatible_versions_c");
 }
 
 /// Only one version of the requested package `a` is compatible, but the user has banned that version.
@@ -586,16 +513,8 @@ fn excluded_only_compatible_version() {
     ");
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`. The user has excluded that version of `a` so resolution fails.
-    assert_not_installed(
-        &context.venv,
-        "excluded_only_compatible_version_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "excluded_only_compatible_version_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("excluded_only_compatible_version_a");
+    context.assert_not_installed("excluded_only_compatible_version_b");
 }
 
 /// Only one version of the requested package is available, but the user has banned that version.
@@ -635,7 +554,7 @@ fn excluded_only_version() {
     ");
 
     // Only `a==1.0.0` is available but the user excluded it.
-    assert_not_installed(&context.venv, "excluded_only_version_a", &context.temp_dir);
+    context.assert_not_installed("excluded_only_version_a");
 }
 
 /// Multiple optional dependencies are requested for the package via an 'all' extra.
@@ -701,24 +620,9 @@ fn all_extras_required() {
      + package-c==1.0.0
     ");
 
-    assert_installed(
-        &context.venv,
-        "all_extras_required_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "all_extras_required_b",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "all_extras_required_c",
-        "1.0.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("all_extras_required_a", "1.0.0");
+    context.assert_installed("all_extras_required_b", "1.0.0");
+    context.assert_installed("all_extras_required_c", "1.0.0");
 }
 
 /// Optional dependencies are requested for the package, the extra is only available on an older version.
@@ -771,12 +675,7 @@ fn extra_does_not_exist_backtrack() {
     ");
 
     // The resolver should not backtrack to `a==1.0.0` because missing extras are allowed during resolution. `b` should not be installed.
-    assert_installed(
-        &context.venv,
-        "extra_does_not_exist_backtrack_a",
-        "3.0.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("extra_does_not_exist_backtrack_a", "3.0.0");
 }
 
 /// One of two incompatible optional dependencies are requested for the package.
@@ -829,18 +728,8 @@ fn extra_incompatible_with_extra_not_requested() {
     ");
 
     // Because the user does not request both extras, it is okay that one is incompatible with the other.
-    assert_installed(
-        &context.venv,
-        "extra_incompatible_with_extra_not_requested_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "extra_incompatible_with_extra_not_requested_b",
-        "2.0.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("extra_incompatible_with_extra_not_requested_a", "1.0.0");
+    context.assert_installed("extra_incompatible_with_extra_not_requested_b", "2.0.0");
 }
 
 /// Multiple optional dependencies are requested for the package, but they have conflicting requirements with each other.
@@ -892,11 +781,7 @@ fn extra_incompatible_with_extra() {
     ");
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible versions of `b`, `a` cannot be installed.
-    assert_not_installed(
-        &context.venv,
-        "extra_incompatible_with_extra_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("extra_incompatible_with_extra_a");
 }
 
 /// Optional dependencies are requested for the package, but the extra is not compatible with other requested versions.
@@ -946,16 +831,8 @@ fn extra_incompatible_with_root() {
     ");
 
     // Because the user requested `b==2.0.0` but the requested extra requires `b==1.0.0`, the dependencies cannot be satisfied.
-    assert_not_installed(
-        &context.venv,
-        "extra_incompatible_with_root_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "extra_incompatible_with_root_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("extra_incompatible_with_root_a");
+    context.assert_not_installed("extra_incompatible_with_root_b");
 }
 
 /// Optional dependencies are requested for the package.
@@ -1001,18 +878,8 @@ fn extra_required() {
      + package-b==1.0.0
     ");
 
-    assert_installed(
-        &context.venv,
-        "extra_required_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "extra_required_b",
-        "1.0.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("extra_required_a", "1.0.0");
+    context.assert_installed("extra_required_b", "1.0.0");
 }
 
 /// Optional dependencies are requested for the package, but the extra does not exist.
@@ -1052,7 +919,7 @@ fn missing_extra() {
     ");
 
     // Missing extras are ignored during resolution.
-    assert_installed(&context.venv, "missing_extra_a", "1.0.0", &context.temp_dir);
+    context.assert_installed("missing_extra_a", "1.0.0");
 }
 
 /// Multiple optional dependencies are requested for the package.
@@ -1106,24 +973,9 @@ fn multiple_extras_required() {
      + package-c==1.0.0
     ");
 
-    assert_installed(
-        &context.venv,
-        "multiple_extras_required_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "multiple_extras_required_b",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "multiple_extras_required_c",
-        "1.0.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("multiple_extras_required_a", "1.0.0");
+    context.assert_installed("multiple_extras_required_b", "1.0.0");
+    context.assert_installed("multiple_extras_required_c", "1.0.0");
 }
 
 /// The user requires two incompatible, existing versions of package `a`
@@ -1164,16 +1016,8 @@ fn direct_incompatible_versions() {
       ╰─▶ Because you require package-a==1.0.0 and package-a==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "direct_incompatible_versions_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "direct_incompatible_versions_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("direct_incompatible_versions_a");
+    context.assert_not_installed("direct_incompatible_versions_a");
 }
 
 /// The user requires `a`, which requires two incompatible, existing versions of package `b`
@@ -1214,11 +1058,7 @@ fn transitive_incompatible_versions() {
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "transitive_incompatible_versions_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_incompatible_versions_a");
 }
 
 /// The user requires packages `a` and `b` but `a` requires a different version of `b`
@@ -1265,16 +1105,8 @@ fn transitive_incompatible_with_root_version() {
           And because you require package-a and package-b==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "transitive_incompatible_with_root_version_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "transitive_incompatible_with_root_version_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_incompatible_with_root_version_a");
+    context.assert_not_installed("transitive_incompatible_with_root_version_b");
 }
 
 /// The user requires package `a` and `b`; `a` and `b` require different versions of `c`
@@ -1327,16 +1159,8 @@ fn transitive_incompatible_with_transitive() {
           And because you require package-a and package-b, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "transitive_incompatible_with_transitive_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "transitive_incompatible_with_transitive_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_incompatible_with_transitive_a");
+    context.assert_not_installed("transitive_incompatible_with_transitive_b");
 }
 
 /// A local version should be included in inclusive ordered comparisons.
@@ -1378,12 +1202,7 @@ fn local_greater_than_or_equal() {
     ");
 
     // The version '1.2.3+foo' satisfies the constraint '>=1.2.3'.
-    assert_installed(
-        &context.venv,
-        "local_greater_than_or_equal_a",
-        "1.2.3+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_greater_than_or_equal_a", "1.2.3+foo");
 }
 
 /// A local version should be excluded in exclusive ordered comparisons.
@@ -1419,7 +1238,7 @@ fn local_greater_than() {
       ╰─▶ Because only package-a==1.2.3+foo is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(&context.venv, "local_greater_than_a", &context.temp_dir);
+    context.assert_not_installed("local_greater_than_a");
 }
 
 /// A local version should be included in inclusive ordered comparisons.
@@ -1461,12 +1280,7 @@ fn local_less_than_or_equal() {
     ");
 
     // The version '1.2.3+foo' satisfies the constraint '<=1.2.3'.
-    assert_installed(
-        &context.venv,
-        "local_less_than_or_equal_a",
-        "1.2.3+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_less_than_or_equal_a", "1.2.3+foo");
 }
 
 /// A local version should be excluded in exclusive ordered comparisons.
@@ -1502,7 +1316,7 @@ fn local_less_than() {
       ╰─▶ Because only package-a==1.2.3+foo is available and you require package-a<1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(&context.venv, "local_less_than_a", &context.temp_dir);
+    context.assert_not_installed("local_less_than_a");
 }
 
 /// Tests that we can select an older version with a local segment when newer versions are incompatible.
@@ -1546,12 +1360,7 @@ fn local_not_latest() {
      + package-a==1.2.1+foo
     ");
 
-    assert_installed(
-        &context.venv,
-        "local_not_latest_a",
-        "1.2.1+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_not_latest_a", "1.2.1+foo");
 }
 
 /// If there is a 1.2.3 version with an sdist published and no compatible wheels, then the sdist will be used.
@@ -1593,12 +1402,7 @@ fn local_not_used_with_sdist() {
     ");
 
     // The version '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
-    assert_installed(
-        &context.venv,
-        "local_not_used_with_sdist_a",
-        "1.2.3+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_not_used_with_sdist_a", "1.2.3+foo");
 }
 
 /// A simple version constraint should not exclude published versions with local segments.
@@ -1640,12 +1444,7 @@ fn local_simple() {
     ");
 
     // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
-    assert_installed(
-        &context.venv,
-        "local_simple_a",
-        "1.2.3+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_simple_a", "1.2.3+foo");
 }
 
 /// A dependency depends on a conflicting local version of a direct dependency, but we can backtrack to a compatible version.
@@ -1701,18 +1500,8 @@ fn local_transitive_backtrack() {
     ");
 
     // Backtracking to '1.0.0' gives us compatible local versions of b.
-    assert_installed(
-        &context.venv,
-        "local_transitive_backtrack_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "local_transitive_backtrack_b",
-        "2.0.0+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_transitive_backtrack_a", "1.0.0");
+    context.assert_installed("local_transitive_backtrack_b", "2.0.0+foo");
 }
 
 /// A dependency depends on a conflicting local version of a direct dependency.
@@ -1759,16 +1548,8 @@ fn local_transitive_conflicting() {
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "local_transitive_conflicting_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "local_transitive_conflicting_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("local_transitive_conflicting_a");
+    context.assert_not_installed("local_transitive_conflicting_b");
 }
 
 /// A transitive dependency has both a non-local and local version published, but the non-local version is unusable.
@@ -1819,18 +1600,8 @@ fn local_transitive_confounding() {
     ");
 
     // The version '2.0.0+foo' satisfies the constraint '==2.0.0'.
-    assert_installed(
-        &context.venv,
-        "local_transitive_confounding_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "local_transitive_confounding_b",
-        "2.0.0+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_transitive_confounding_a", "1.0.0");
+    context.assert_installed("local_transitive_confounding_b", "2.0.0+foo");
 }
 
 /// A transitive constraint on a local version should match an inclusive ordered operator.
@@ -1881,18 +1652,8 @@ fn local_transitive_greater_than_or_equal() {
     ");
 
     // The version '2.0.0+foo' satisfies both >=2.0.0 and ==2.0.0+foo.
-    assert_installed(
-        &context.venv,
-        "local_transitive_greater_than_or_equal_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "local_transitive_greater_than_or_equal_b",
-        "2.0.0+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_transitive_greater_than_or_equal_a", "1.0.0");
+    context.assert_installed("local_transitive_greater_than_or_equal_b", "2.0.0+foo");
 }
 
 /// A transitive constraint on a local version should not match an exclusive ordered operator.
@@ -1939,16 +1700,8 @@ fn local_transitive_greater_than() {
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "local_transitive_greater_than_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "local_transitive_greater_than_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("local_transitive_greater_than_a");
+    context.assert_not_installed("local_transitive_greater_than_b");
 }
 
 /// A transitive constraint on a local version should match an inclusive ordered operator.
@@ -1999,18 +1752,8 @@ fn local_transitive_less_than_or_equal() {
     ");
 
     // The version '2.0.0+foo' satisfies both <=2.0.0 and ==2.0.0+foo.
-    assert_installed(
-        &context.venv,
-        "local_transitive_less_than_or_equal_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "local_transitive_less_than_or_equal_b",
-        "2.0.0+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_transitive_less_than_or_equal_a", "1.0.0");
+    context.assert_installed("local_transitive_less_than_or_equal_b", "2.0.0+foo");
 }
 
 /// A transitive constraint on a local version should not match an exclusive ordered operator.
@@ -2057,16 +1800,8 @@ fn local_transitive_less_than() {
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "local_transitive_less_than_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "local_transitive_less_than_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("local_transitive_less_than_a");
+    context.assert_not_installed("local_transitive_less_than_b");
 }
 
 /// A simple version constraint should not exclude published versions with local segments.
@@ -2117,18 +1852,8 @@ fn local_transitive() {
     ");
 
     // The version '2.0.0+foo' satisfies both ==2.0.0 and ==2.0.0+foo.
-    assert_installed(
-        &context.venv,
-        "local_transitive_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "local_transitive_b",
-        "2.0.0+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_transitive_a", "1.0.0");
+    context.assert_installed("local_transitive_b", "2.0.0+foo");
 }
 
 /// Even if there is a 1.2.3 version published, if it is unavailable for some reason (no sdist and no compatible wheels in this case), a 1.2.3 version with a local segment should be usable instead.
@@ -2170,12 +1895,7 @@ fn local_used_without_sdist() {
     ");
 
     // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
-    assert_installed(
-        &context.venv,
-        "local_used_without_sdist_a",
-        "1.2.3+foo",
-        &context.temp_dir,
-    );
+    context.assert_installed("local_used_without_sdist_a", "1.2.3+foo");
 }
 
 /// An equal version constraint should match a post-release version if the post-release version is available.
@@ -2216,12 +1936,7 @@ fn post_equal_available() {
     ");
 
     // The version '1.2.3.post0' satisfies the constraint '==1.2.3.post0'.
-    assert_installed(
-        &context.venv,
-        "post_equal_available_a",
-        "1.2.3.post0",
-        &context.temp_dir,
-    );
+    context.assert_installed("post_equal_available_a", "1.2.3.post0");
 }
 
 /// An equal version constraint should not match a post-release version if the post-release version is not available.
@@ -2259,11 +1974,7 @@ fn post_equal_not_available() {
       ╰─▶ Because there is no version of package-a==1.2.3.post0 and you require package-a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "post_equal_not_available_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("post_equal_not_available_a");
 }
 
 /// A greater-than-or-equal version constraint should match a post-release version if the constraint is itself a post-release version.
@@ -2305,12 +2016,7 @@ fn post_greater_than_or_equal_post() {
     ");
 
     // The version '1.2.3.post1' satisfies the constraint '>=1.2.3.post0'.
-    assert_installed(
-        &context.venv,
-        "post_greater_than_or_equal_post_a",
-        "1.2.3.post1",
-        &context.temp_dir,
-    );
+    context.assert_installed("post_greater_than_or_equal_post_a", "1.2.3.post1");
 }
 
 /// A greater-than-or-equal version constraint should match a post-release version.
@@ -2349,12 +2055,7 @@ fn post_greater_than_or_equal() {
     ");
 
     // The version '1.2.3.post1' satisfies the constraint '>=1.2.3'.
-    assert_installed(
-        &context.venv,
-        "post_greater_than_or_equal_a",
-        "1.2.3.post1",
-        &context.temp_dir,
-    );
+    context.assert_installed("post_greater_than_or_equal_a", "1.2.3.post1");
 }
 
 /// A greater-than version constraint should not match a post-release version if the post-release version is not available.
@@ -2394,11 +2095,7 @@ fn post_greater_than_post_not_available() {
       ╰─▶ Because only package-a<=1.2.3.post1 is available and you require package-a>=1.2.3.post3, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "post_greater_than_post_not_available_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("post_greater_than_post_not_available_a");
 }
 
 /// A greater-than version constraint should match a post-release version if the constraint is itself a post-release version.
@@ -2439,12 +2136,7 @@ fn post_greater_than_post() {
     ");
 
     // The version '1.2.3.post1' satisfies the constraint '>1.2.3.post0'.
-    assert_installed(
-        &context.venv,
-        "post_greater_than_post_a",
-        "1.2.3.post1",
-        &context.temp_dir,
-    );
+    context.assert_installed("post_greater_than_post_a", "1.2.3.post1");
 }
 
 /// A greater-than version constraint should not match a post-release version.
@@ -2480,7 +2172,7 @@ fn post_greater_than() {
       ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(&context.venv, "post_greater_than_a", &context.temp_dir);
+    context.assert_not_installed("post_greater_than_a");
 }
 
 /// A less-than-or-equal version constraint should not match a post-release version.
@@ -2516,11 +2208,7 @@ fn post_less_than_or_equal() {
       ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a<=1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "post_less_than_or_equal_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("post_less_than_or_equal_a");
 }
 
 /// A less-than version constraint should not match a post-release version.
@@ -2556,7 +2244,7 @@ fn post_less_than() {
       ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a<1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(&context.venv, "post_less_than_a", &context.temp_dir);
+    context.assert_not_installed("post_less_than_a");
 }
 
 /// A greater-than version constraint should not match a post-release version with a local version identifier.
@@ -2594,11 +2282,7 @@ fn post_local_greater_than_post() {
       ╰─▶ Because only package-a<=1.2.3.post1+local is available and you require package-a>=1.2.3.post2, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "post_local_greater_than_post_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("post_local_greater_than_post_a");
 }
 
 /// A greater-than version constraint should not match a post-release version with a local version identifier.
@@ -2636,11 +2320,7 @@ fn post_local_greater_than() {
       ╰─▶ Because only package-a<=1.2.3.post1+local is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "post_local_greater_than_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("post_local_greater_than_a");
 }
 
 /// A simple version constraint should not match a post-release version.
@@ -2676,7 +2356,7 @@ fn post_simple() {
       ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(&context.venv, "post_simple_a", &context.temp_dir);
+    context.assert_not_installed("post_simple_a");
 }
 
 /// The user requires `a` which has multiple prereleases available with different labels.
@@ -2721,12 +2401,7 @@ fn package_multiple_prereleases_kinds() {
     ");
 
     // Release candidates should be the highest precedence prerelease kind.
-    assert_installed(
-        &context.venv,
-        "package_multiple_prereleases_kinds_a",
-        "1.0.0rc1",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_multiple_prereleases_kinds_a", "1.0.0rc1");
 }
 
 /// The user requires `a` which has multiple alphas available.
@@ -2771,12 +2446,7 @@ fn package_multiple_prereleases_numbers() {
     ");
 
     // The latest alpha version should be selected.
-    assert_installed(
-        &context.venv,
-        "package_multiple_prereleases_numbers_a",
-        "1.0.0a3",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_multiple_prereleases_numbers_a", "1.0.0a3");
 }
 
 /// The user requires a non-prerelease version of `a` which only has prerelease versions available. There are pre-releases on the boundary of their range.
@@ -2819,12 +2489,7 @@ fn package_only_prereleases_boundary() {
     ");
 
     // Since there are only prerelease versions of `a` available, a prerelease is allowed. Since the user did not explicitly request a pre-release, pre-releases at the boundary should not be selected.
-    assert_installed(
-        &context.venv,
-        "package_only_prereleases_boundary_a",
-        "0.1.0a1",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_only_prereleases_boundary_a", "0.1.0a1");
 }
 
 /// The user requires a version of package `a` which only matches prerelease versions but they did not include a prerelease specifier.
@@ -2865,11 +2530,7 @@ fn package_only_prereleases_in_range() {
     ");
 
     // Since there are stable versions of `a` available, prerelease versions should not be selected without explicit opt-in.
-    assert_not_installed(
-        &context.venv,
-        "package_only_prereleases_in_range_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("package_only_prereleases_in_range_a");
 }
 
 /// The user requires any version of package `a` which only has prerelease versions available.
@@ -2908,12 +2569,7 @@ fn package_only_prereleases() {
     ");
 
     // Since there are only prerelease versions of `a` available, it should be installed even though the user did not include a prerelease specifier.
-    assert_installed(
-        &context.venv,
-        "package_only_prereleases_a",
-        "1.0.0a1",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_only_prereleases_a", "1.0.0a1");
 }
 
 /// The user requires a version of `a` with a prerelease specifier and both prerelease and stable releases are available.
@@ -2961,12 +2617,7 @@ fn package_prerelease_specified_mixed_available() {
     ");
 
     // Since the user provided a prerelease specifier, the latest prerelease version should be selected.
-    assert_installed(
-        &context.venv,
-        "package_prerelease_specified_mixed_available_a",
-        "1.0.0a1",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_prerelease_specified_mixed_available_a", "1.0.0a1");
 }
 
 /// The user requires a version of `a` with a prerelease specifier and only stable releases are available.
@@ -3014,11 +2665,9 @@ fn package_prerelease_specified_only_final_available() {
     ");
 
     // The latest stable version should be selected.
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "package_prerelease_specified_only_final_available_a",
         "0.3.0",
-        &context.temp_dir,
     );
 }
 
@@ -3067,11 +2716,9 @@ fn package_prerelease_specified_only_prerelease_available() {
     ");
 
     // The latest prerelease version should be selected.
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "package_prerelease_specified_only_prerelease_available_a",
         "0.3.0a1",
-        &context.temp_dir,
     );
 }
 
@@ -3116,12 +2763,7 @@ fn package_prereleases_boundary() {
     ");
 
     // Since the user did not use a pre-release specifier, pre-releases at the boundary should not be selected even though pre-releases are allowed.
-    assert_installed(
-        &context.venv,
-        "package_prereleases_boundary_a",
-        "0.1.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_prereleases_boundary_a", "0.1.0");
 }
 
 /// The user requires a non-prerelease version of `a` but has enabled pre-releases. There are pre-releases on the boundary of their range.
@@ -3165,12 +2807,7 @@ fn package_prereleases_global_boundary() {
     ");
 
     // Since the user did not use a pre-release specifier, pre-releases at the boundary should not be selected even though pre-releases are allowed.
-    assert_installed(
-        &context.venv,
-        "package_prereleases_global_boundary_a",
-        "0.1.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_prereleases_global_boundary_a", "0.1.0");
 }
 
 /// The user requires a prerelease version of `a`. There are pre-releases on the boundary of their range.
@@ -3220,12 +2857,7 @@ fn package_prereleases_specifier_boundary() {
     ");
 
     // Since the user used a pre-release specifier, pre-releases at the boundary should be selected.
-    assert_installed(
-        &context.venv,
-        "package_prereleases_specifier_boundary_a",
-        "0.2.0a1",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_prereleases_specifier_boundary_a", "0.2.0a1");
 }
 
 /// The user requires a version of package `a` which only matches prerelease versions. They did not include a prerelease specifier for the package, but they opted into prereleases globally.
@@ -3269,11 +2901,9 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
      + package-a==1.0.0a1
     ");
 
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "requires_package_only_prereleases_in_range_global_opt_in_a",
         "1.0.0a1",
-        &context.temp_dir,
     );
 }
 
@@ -3315,12 +2945,7 @@ fn requires_package_prerelease_and_final_any() {
     ");
 
     // Since the user did not provide a prerelease specifier, the older stable version should be selected.
-    assert_installed(
-        &context.venv,
-        "requires_package_prerelease_and_final_any_a",
-        "0.1.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("requires_package_prerelease_and_final_any_a", "0.1.0");
 }
 
 /// The user requires package `a` which has a dependency on a package which only matches prerelease versions; the user has opted into allowing prereleases in `b` explicitly.
@@ -3374,17 +2999,13 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
     ");
 
     // Since the user included a dependency on `b` with a prerelease specifier, a prerelease version can be selected.
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "transitive_package_only_prereleases_in_range_opt_in_a",
         "0.1.0",
-        &context.temp_dir,
     );
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "transitive_package_only_prereleases_in_range_opt_in_b",
         "1.0.0a1",
-        &context.temp_dir,
     );
 }
 
@@ -3432,11 +3053,7 @@ fn transitive_package_only_prereleases_in_range() {
     ");
 
     // Since there are stable versions of `b` available, the prerelease version should not be selected without explicit opt-in. The available version is excluded by the range requested by the user.
-    assert_not_installed(
-        &context.venv,
-        "transitive_package_only_prereleases_in_range_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_package_only_prereleases_in_range_a");
 }
 
 /// The user requires any version of package `a` which requires `b` which only has prerelease versions available.
@@ -3481,18 +3098,8 @@ fn transitive_package_only_prereleases() {
     ");
 
     // Since there are only prerelease versions of `b` available, it should be selected even though the user did not opt-in to prereleases.
-    assert_installed(
-        &context.venv,
-        "transitive_package_only_prereleases_a",
-        "0.1.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "transitive_package_only_prereleases_b",
-        "1.0.0a1",
-        &context.temp_dir,
-    );
+    context.assert_installed("transitive_package_only_prereleases_a", "0.1.0");
+    context.assert_installed("transitive_package_only_prereleases_b", "1.0.0a1");
 }
 
 /// A transitive dependency has both a prerelease and a stable selector, but can only be satisfied by a prerelease. There are many prerelease versions and some are excluded.
@@ -3605,16 +3212,10 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(
-        &context.venv,
-        "transitive_prerelease_and_stable_dependency_many_versions_holes_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "transitive_prerelease_and_stable_dependency_many_versions_holes_b",
-        &context.temp_dir,
-    );
+    context
+        .assert_not_installed("transitive_prerelease_and_stable_dependency_many_versions_holes_a");
+    context
+        .assert_not_installed("transitive_prerelease_and_stable_dependency_many_versions_holes_b");
 }
 
 /// A transitive dependency has both a prerelease and a stable selector, but can only be satisfied by a prerelease. There are many prerelease versions.
@@ -3716,16 +3317,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(
-        &context.venv,
-        "transitive_prerelease_and_stable_dependency_many_versions_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "transitive_prerelease_and_stable_dependency_many_versions_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_prerelease_and_stable_dependency_many_versions_a");
+    context.assert_not_installed("transitive_prerelease_and_stable_dependency_many_versions_b");
 }
 
 /// A transitive dependency has both a prerelease and a stable selector, but can only be satisfied by a prerelease. The user includes an opt-in to prereleases of the transitive dependency.
@@ -3788,23 +3381,17 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
     ");
 
     // Since the user explicitly opted-in to a prerelease for `c`, it can be installed.
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "transitive_prerelease_and_stable_dependency_opt_in_a",
         "1.0.0",
-        &context.temp_dir,
     );
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "transitive_prerelease_and_stable_dependency_opt_in_b",
         "1.0.0",
-        &context.temp_dir,
     );
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "transitive_prerelease_and_stable_dependency_opt_in_c",
         "2.0.0b1",
-        &context.temp_dir,
     );
 }
 
@@ -3860,16 +3447,8 @@ fn transitive_prerelease_and_stable_dependency() {
     ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    assert_not_installed(
-        &context.venv,
-        "transitive_prerelease_and_stable_dependency_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "transitive_prerelease_and_stable_dependency_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_prerelease_and_stable_dependency_a");
+    context.assert_not_installed("transitive_prerelease_and_stable_dependency_b");
 }
 
 /// The user requires a package where recent versions require a Python version greater than the current version, but an older version is compatible.
@@ -3915,12 +3494,7 @@ fn python_greater_than_current_backtrack() {
      + package-a==1.0.0
     ");
 
-    assert_installed(
-        &context.venv,
-        "python_greater_than_current_backtrack_a",
-        "1.0.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("python_greater_than_current_backtrack_a", "1.0.0");
 }
 
 /// The user requires a package where recent versions require a Python version greater than the current version, but an excluded older version is compatible.
@@ -3975,11 +3549,7 @@ fn python_greater_than_current_excluded() {
           And because you require package-a>=2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "python_greater_than_current_excluded_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("python_greater_than_current_excluded_a");
 }
 
 /// The user requires a package which has many versions which all require a Python version greater than the current version
@@ -4037,11 +3607,7 @@ fn python_greater_than_current_many() {
       ╰─▶ Because there is no version of package-a==1.0.0 and you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "python_greater_than_current_many_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("python_greater_than_current_many_a");
 }
 
 /// The user requires a package which requires a Python version with a patch version greater than the current patch version
@@ -4079,11 +3645,7 @@ fn python_greater_than_current_patch() {
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "python_greater_than_current_patch_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("python_greater_than_current_patch_a");
 }
 
 /// The user requires a package which requires a Python version greater than the current version
@@ -4120,11 +3682,7 @@ fn python_greater_than_current() {
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "python_greater_than_current_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("python_greater_than_current_a");
 }
 
 /// The user requires a package which requires a Python version less than the current version
@@ -4199,11 +3757,7 @@ fn python_version_does_not_exist() {
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "python_version_does_not_exist_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("python_version_does_not_exist_a");
 }
 
 /// Both wheels and source distributions are available, and the user has disabled binaries.
@@ -4323,11 +3877,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
           hint: You require CPython 3.12 (`cp312`), but we only found wheels for `package-a` (v1.0.0) with the following Python ABI tag: `graalpy240_310_native`
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "no_sdist_no_wheels_with_matching_abi_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("no_sdist_no_wheels_with_matching_abi_a");
 }
 
 /// No wheels with matching platform tags are available, nor are any source distributions available
@@ -4367,11 +3917,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
           hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "no_sdist_no_wheels_with_matching_platform_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("no_sdist_no_wheels_with_matching_platform_a");
 }
 
 /// No wheels with matching Python tags are available, nor are any source distributions available
@@ -4411,11 +3957,7 @@ fn no_sdist_no_wheels_with_matching_python() {
           hint: You require CPython 3.12 (`cp312`), but we only found wheels for `package-a` (v1.0.0) with the following Python implementation tag: `graalpy310`
     ");
 
-    assert_not_installed(
-        &context.venv,
-        "no_sdist_no_wheels_with_matching_python_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("no_sdist_no_wheels_with_matching_python_a");
 }
 
 /// No wheels are available, only source distributions but the user has disabled builds.
@@ -4456,7 +3998,7 @@ fn no_wheels_no_build() {
           hint: Wheels are required for `package-a` because building from source is disabled for `package-a` (i.e., with `--no-build-package package-a`)
     ");
 
-    assert_not_installed(&context.venv, "no_wheels_no_build_a", &context.temp_dir);
+    context.assert_not_installed("no_wheels_no_build_a");
 }
 
 /// No wheels with matching platform tags are available, just source distributions.
@@ -4569,7 +4111,7 @@ fn only_wheels_no_binary() {
           hint: A source distribution is required for `package-a` because using pre-built wheels is disabled for `package-a` (i.e., with `--no-binary-package package-a`)
     ");
 
-    assert_not_installed(&context.venv, "only_wheels_no_binary_a", &context.temp_dir);
+    context.assert_not_installed("only_wheels_no_binary_a");
 }
 
 /// No source distributions are available, only wheels.
@@ -4684,11 +4226,7 @@ fn package_only_yanked_in_range() {
     ");
 
     // Since there are other versions of `a` available, yanked versions should not be selected without explicit opt-in.
-    assert_not_installed(
-        &context.venv,
-        "package_only_yanked_in_range_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("package_only_yanked_in_range_a");
 }
 
 /// The user requires any version of package `a` which only has yanked versions available.
@@ -4726,7 +4264,7 @@ fn package_only_yanked() {
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.
-    assert_not_installed(&context.venv, "package_only_yanked_a", &context.temp_dir);
+    context.assert_not_installed("package_only_yanked_a");
 }
 
 /// The user requires any version of `a` and both yanked and unyanked releases are available.
@@ -4772,12 +4310,7 @@ fn package_yanked_specified_mixed_available() {
     ");
 
     // The latest unyanked version should be selected.
-    assert_installed(
-        &context.venv,
-        "package_yanked_specified_mixed_available_a",
-        "0.3.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("package_yanked_specified_mixed_available_a", "0.3.0");
 }
 
 /// The user requires any version of package `a` has a yanked version available and an older unyanked version.
@@ -4818,12 +4351,7 @@ fn requires_package_yanked_and_unyanked_any() {
     ");
 
     // The unyanked version should be selected.
-    assert_installed(
-        &context.venv,
-        "requires_package_yanked_and_unyanked_any_a",
-        "0.1.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("requires_package_yanked_and_unyanked_any_a", "0.1.0");
 }
 
 /// The user requires package `a` which has a dependency on a package which only matches yanked versions; the user has opted into allowing the yanked version of `b` explicitly.
@@ -4877,18 +4405,8 @@ fn transitive_package_only_yanked_in_range_opt_in() {
     "#);
 
     // Since the user included a dependency on `b` with an exact specifier, the yanked version can be selected.
-    assert_installed(
-        &context.venv,
-        "transitive_package_only_yanked_in_range_opt_in_a",
-        "0.1.0",
-        &context.temp_dir,
-    );
-    assert_installed(
-        &context.venv,
-        "transitive_package_only_yanked_in_range_opt_in_b",
-        "1.0.0",
-        &context.temp_dir,
-    );
+    context.assert_installed("transitive_package_only_yanked_in_range_opt_in_a", "0.1.0");
+    context.assert_installed("transitive_package_only_yanked_in_range_opt_in_b", "1.0.0");
 }
 
 /// The user requires package `a` which has a dependency on a package which only matches yanked versions.
@@ -4937,11 +4455,7 @@ fn transitive_package_only_yanked_in_range() {
     ");
 
     // Yanked versions should not be installed, even if they are the only valid version in a range.
-    assert_not_installed(
-        &context.venv,
-        "transitive_package_only_yanked_in_range_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_package_only_yanked_in_range_a");
 }
 
 /// The user requires any version of package `a` which requires `b` which only has yanked versions available.
@@ -4985,11 +4499,7 @@ fn transitive_package_only_yanked() {
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.
-    assert_not_installed(
-        &context.venv,
-        "transitive_package_only_yanked_a",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_package_only_yanked_a");
 }
 
 /// A transitive dependency has both a yanked and an unyanked version, but can only be satisfied by a yanked. The user includes an opt-in to the yanked version of the transitive dependency.
@@ -5052,23 +4562,17 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
     "#);
 
     // Since the user explicitly selected the yanked version of `c`, it can be installed.
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "transitive_yanked_and_unyanked_dependency_opt_in_a",
         "1.0.0",
-        &context.temp_dir,
     );
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "transitive_yanked_and_unyanked_dependency_opt_in_b",
         "1.0.0",
-        &context.temp_dir,
     );
-    assert_installed(
-        &context.venv,
+    context.assert_installed(
         "transitive_yanked_and_unyanked_dependency_opt_in_c",
         "2.0.0",
-        &context.temp_dir,
     );
 }
 
@@ -5122,14 +4626,6 @@ fn transitive_yanked_and_unyanked_dependency() {
     ");
 
     // Since the user did not explicitly select the yanked version, it cannot be used.
-    assert_not_installed(
-        &context.venv,
-        "transitive_yanked_and_unyanked_dependency_a",
-        &context.temp_dir,
-    );
-    assert_not_installed(
-        &context.venv,
-        "transitive_yanked_and_unyanked_dependency_b",
-        &context.temp_dir,
-    );
+    context.assert_not_installed("transitive_yanked_and_unyanked_dependency_a");
+    context.assert_not_installed("transitive_yanked_and_unyanked_dependency_b");
 }

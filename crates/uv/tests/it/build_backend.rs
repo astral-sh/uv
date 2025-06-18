@@ -50,13 +50,9 @@ fn built_by_uv_direct_wheel() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context
-        .run()
-        .arg("python")
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg(BUILT_BY_UV_TEST_SCRIPT)
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg(BUILT_BY_UV_TEST_SCRIPT), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -138,13 +134,9 @@ fn built_by_uv_direct() -> Result<()> {
 
     drop(wheel_dir);
 
-    uv_snapshot!(context
-        .run()
-        .arg("python")
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg(BUILT_BY_UV_TEST_SCRIPT)
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg(BUILT_BY_UV_TEST_SCRIPT), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -169,7 +161,8 @@ fn built_by_uv_editable() -> Result<()> {
 
     // Without the editable, pytest fails.
     context.pip_install().arg("pytest").assert().success();
-    Command::new(context.interpreter())
+    context
+        .python_command()
         .arg("-m")
         .arg("pytest")
         .current_dir(built_by_uv)
@@ -200,7 +193,7 @@ fn built_by_uv_editable() -> Result<()> {
     drop(wheel_dir);
 
     // Now, pytest passes.
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-m")
         .arg("pytest")
         // Avoid showing absolute paths and column dependent layout
@@ -340,11 +333,9 @@ fn rename_module() -> Result<()> {
         .success();
 
     // Importing the module with the `module-name` name succeeds.
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import bar")
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg("import bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -354,11 +345,9 @@ fn rename_module() -> Result<()> {
     "###);
 
     // Importing the package name fails, it was overridden by `module-name`.
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import foo")
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg("import foo"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -419,11 +408,9 @@ fn rename_module_editable_build() -> Result<()> {
         .success();
 
     // Importing the module with the `module-name` name succeeds.
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import bar")
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r###"
+        .arg("import bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -514,11 +501,9 @@ fn build_module_name_normalization() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
-        .arg("import Django_plugin")
-        // Python on windows
-        .env(EnvVars::PYTHONUTF8, "1"), @r"
+        .arg("import Django_plugin"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -728,7 +713,7 @@ fn complex_namespace_packages() -> Result<()> {
     "
     );
 
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
         .arg("from complex_project.part_b import two; print(two())"),
         @r"
@@ -769,7 +754,7 @@ fn complex_namespace_packages() -> Result<()> {
     "
     );
 
-    uv_snapshot!(Command::new(context.interpreter())
+    uv_snapshot!(context.python_command()
         .arg("-c")
         .arg("from complex_project.part_b import two; print(two())"),
         @r"
