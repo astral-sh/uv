@@ -414,6 +414,37 @@ pub struct ToolUv {
     )]
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 
+    /// Excludes to apply when resolving the project's dependencies.
+    ///
+    /// Excludes are used to prevent installation of a specific package, even if other dependencies
+    /// require it.
+    ///
+    /// Including a package as an exclude will _not_ trigger installation of the package on its
+    /// own; instead, the package must be requested elsewhere in the project's first-party or
+    ///  transitive dependencies.
+    ///
+    /// !!! note
+    ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `excluded-dependencies` from
+    ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    ///     workspace members or `uv.toml` files.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
+            # a different version.
+            excluded-dependencies = ["numpy"]
+        "#
+    )]
+    pub excluded_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
     /// Constraints to apply when resolving the project's dependencies.
     ///
     /// Constraints are used to restrict the versions of dependencies that are selected during

@@ -177,6 +177,37 @@ environments = ["sys_platform == 'darwin'"]
 
 ---
 
+### [`excluded-dependencies`](#excluded-dependencies) {: #excluded-dependencies }
+
+Excludes to apply when resolving the project's dependencies.
+
+Excludes are used to prevent installation of a specific package, even if other dependencies
+require it.
+
+Including a package as an exclude will _not_ trigger installation of the package on its
+own; instead, the package must be requested elsewhere in the project's first-party or
+ transitive dependencies.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `excluded-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
+# a different version.
+excluded-dependencies = ["numpy"]
+```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The indexes to use when resolving dependencies.

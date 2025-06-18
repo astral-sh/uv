@@ -192,6 +192,16 @@
         }
       ]
     },
+    "excluded-dependencies": {
+      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "extra-index-url": {
       "description": "Extra URLs of package indexes to use, in addition to `--index-url`.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nAll indexes provided via this flag take priority over the index specified by [`index_url`](#index-url) or [`index`](#index) with `default = true`. When multiple indexes are provided, earlier values take priority.\n\nTo control uv's resolution strategy when multiple indexes are present, see [`index_strategy`](#index-strategy).\n\n(Deprecated: use `index` instead.)",
       "type": [
