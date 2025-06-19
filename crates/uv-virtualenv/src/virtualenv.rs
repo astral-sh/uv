@@ -153,23 +153,22 @@ pub(crate) fn create(
             &interpreter.key(),
             preview,
         ) {
-            let debug_symlink_term = if cfg!(windows) {
-                "junction"
-            } else {
-                "symlink directory"
-            };
-            debug!(
-                "Using {} {} instead of base Python path: {}",
-                debug_symlink_term,
-                &minor_version_link.symlink_directory.display(),
-                &base_python.display()
-            );
             if !minor_version_link.exists() {
-                minor_version_link
-                    .create_directory()
-                    .map_err(Error::Python)?;
+                base_python.clone()
+            } else {
+                let debug_symlink_term = if cfg!(windows) {
+                    "junction"
+                } else {
+                    "symlink directory"
+                };
+                debug!(
+                    "Using {} {} instead of base Python path: {}",
+                    debug_symlink_term,
+                    &minor_version_link.symlink_directory.display(),
+                    &base_python.display()
+                );
+                minor_version_link.symlink_executable.clone()
             }
-            minor_version_link.symlink_executable.clone()
         } else {
             base_python.clone()
         }

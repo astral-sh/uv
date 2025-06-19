@@ -139,8 +139,8 @@ To upgrade all uv-managed Python minor versions to their latest patch versions:
 $ uv python upgrade --preview
 ```
 
-All virtual environments created by uv on a minor version that was installed or upgraded with the
-`--preview` flag will transparently upgrade when that minor version is upgraded.
+All virtual environments created by uv on a minor version that was installed with the `--preview`
+flag will transparently upgrade when that minor version is upgraded.
 
 ## Next steps
 

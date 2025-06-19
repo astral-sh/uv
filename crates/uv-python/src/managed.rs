@@ -530,6 +530,21 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
+    /// If the environment contains a symlink directory (or junction on Windows),
+    /// update it to the latest patch directory for this minor version.
+    ///
+    /// Unlike [`ensure_minor_version_link`], will not create a new symlink directory
+    /// if one doesn't already exist,
+    pub fn update_minor_version_link(&self, preview: PreviewMode) -> Result<(), Error> {
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
+            if !minor_version_link.exists() {
+                return Ok(());
+            }
+            minor_version_link.create_directory()?;
+        }
+        Ok(())
+    }
+
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
