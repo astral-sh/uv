@@ -57,6 +57,8 @@ pub(crate) async fn pin(
         }
     };
 
+    // Search for an existing file, we won't necessarily write to this, we'll construct a target
+    // path if there's a request later on.
     let version_file = PythonVersionFile::discover(
         project_dir,
         &VersionFileDiscoveryOptions::default().with_no_local(global),
