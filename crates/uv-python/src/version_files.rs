@@ -127,8 +127,6 @@ impl PythonVersionFile {
     fn find_global(options: &DiscoveryOptions<'_>) -> Option<PathBuf> {
         let user_config_dir = user_uv_config_dir()?;
         Self::find_in_directory(&user_config_dir, options)
-            .into_iter()
-            .find(|path| path.is_file())
     }
 
     fn find_nearest(path: impl AsRef<Path>, options: &DiscoveryOptions<'_>) -> Option<PathBuf> {
