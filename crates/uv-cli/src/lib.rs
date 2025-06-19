@@ -47,6 +47,20 @@ pub enum PythonListFormat {
 }
 
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
+pub enum SyncFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+impl SyncFormat {
+    pub fn is_json(&self) -> bool {
+        matches!(self, SyncFormat::Json)
+    }
+}
+
+#[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum ListFormat {
     /// Display the list of packages in a human-readable table.
     #[default]
@@ -3162,6 +3176,10 @@ pub struct SyncArgs {
     /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = SyncFormat::default())]
+    pub format: SyncFormat,
 
     /// Include all optional dependencies.
     ///
