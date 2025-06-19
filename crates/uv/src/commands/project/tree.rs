@@ -34,7 +34,7 @@ use crate::settings::{NetworkSettings, ResolverSettings};
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     locked: bool,
     frozen: bool,
     universal: bool,
@@ -71,11 +71,12 @@ pub(crate) async fn tree(
         LockTarget::Workspace(&workspace)
     };
 
-    // Determine the default groups to include.
-    let defaults = match target {
+    // Determine the groups to include.
+    let default_groups = match target {
         LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
         LockTarget::Script(_) => DefaultGroups::default(),
     };
+    let groups = groups.with_defaults(default_groups);
 
     let native_tls = network_settings.native_tls;
 
@@ -102,6 +103,7 @@ pub(crate) async fn tree(
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
                 workspace,
                 project_dir,
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 network_settings,
                 python_preference,
@@ -271,7 +273,7 @@ pub(crate) async fn tree(
         depth.into(),
         &prune,
         &package,
-        &dev.with_defaults(defaults),
+        &groups,
         no_dedupe,
         invert,
     );

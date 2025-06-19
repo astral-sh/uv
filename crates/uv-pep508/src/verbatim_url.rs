@@ -106,10 +106,8 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
-        let mut url = DisplaySafeUrl::from(
-            Url::from_file_path(path.clone())
-                .unwrap_or_else(|()| panic!("path is absolute: {}", path.display())),
-        );
+        let mut url = DisplaySafeUrl::from_file_path(path.clone())
+            .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {

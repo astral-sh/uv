@@ -19,7 +19,7 @@ use wiremock::{
 use crate::common::{self, decode_token};
 use crate::common::{
     DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
-    uv_snapshot, venv_bin_path, venv_to_interpreter,
+    uv_snapshot, venv_bin_path,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -564,11 +564,6 @@ fn install_requirements_txt() -> Result<()> {
 #[tokio::test]
 async fn install_remote_requirements_txt() -> Result<()> {
     let context = TestContext::new("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
 
     let username = "user";
     let password = "password";
@@ -579,17 +574,17 @@ async fn install_remote_requirements_txt() -> Result<()> {
     let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server_url))?;
 
     // Should fail without credentials
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_url.as_str())
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Error while accessing remote requirements file: `http://[LOCALHOST]
-    "###
+    error: Error while accessing remote requirements file: `http://[LOCALHOST]/requirements.txt`
+    "
     );
 
     let _ = requirements_url.set_username(username);
@@ -2111,6 +2106,53 @@ fn install_git_public_https_missing_commit() {
     "###);
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn install_git_public_https_exact_commit() {
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+
+    // `uv pip install` a Git dependency with an exact commit.
+    uv_snapshot!(context.filters(), context.pip_install()
+        // Normally Updating/Updated notifications are suppressed in tests (because their order can
+        // be nondeterministic), but here that's exactly what we want to test for.
+        .env_remove(EnvVars::UV_TEST_NO_CLI_PROGRESS)
+        // Whether fetching happens during resolution or later depends on whether the GitHub fast
+        // path is taken, which isn't reliable. Disable it, so that we get a stable order of events
+        // here.
+        .env(EnvVars::UV_NO_GITHUB_FAST_PATH, "true")
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+       Updating https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+        Updated https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    Resolved 1 package in [TIME]
+       Building uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+          Built uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    ");
+
+    // Run the exact same command again, with that commit now in cache.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_TEST_NO_CLI_PROGRESS)
+        .env(EnvVars::UV_NO_GITHUB_FAST_PATH, "true")
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    ");
+}
+
 /// Install a package from a private GitHub repository using a PAT
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
@@ -2849,7 +2891,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2859,8 +2901,8 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
-    "###
+      ╰─▶ Because only setuptools<=40.4.3 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
+    "
     );
 
     Ok(())
@@ -9041,8 +9083,7 @@ fn build_tag() {
     );
 
     // Ensure that we choose the highest build tag (5).
-    uv_snapshot!(Command::new(venv_to_interpreter(&context.venv))
-        .arg("-B")
+    uv_snapshot!(context.python_command()
         .arg("-c")
         .arg("import build_tag; build_tag.main()")
         .current_dir(&context.temp_dir), @r###"
@@ -9585,6 +9626,43 @@ fn dependency_group() -> Result<()> {
      + iniconfig==2.0.0
      + sortedcontainers==2.4.0
      + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_dependency_group() -> Result<()> {
+    // testing basic `uv pip install --group` functionality
+    // when the pyproject.toml is virtual
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            bar = ["iniconfig"]
+            dev = ["sniffio"]
+            "#,
+        )?;
+        Ok(context)
+    }
+
+    // 'bar' using path sugar
+    let context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     Ok(())

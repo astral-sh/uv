@@ -41,10 +41,7 @@ use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{
-    BaseClient, CachedClient, CachedClientError, Error, ErrorKind, FlatIndexClient,
-    FlatIndexEntries,
-};
+use crate::{BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -558,7 +555,7 @@ impl RegistryClient {
         let simple_request = self
             .uncached_client(url)
             .get(Url::from(url.clone()))
-            .header("Accept-Encoding", "gzip")
+            .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::accepts())
             .build()
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
@@ -607,18 +604,16 @@ impl RegistryClient {
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
-        self.cached_client()
+        let simple = self
+            .cached_client()
             .get_cacheable_with_retry(
                 simple_request,
                 cache_entry,
                 cache_control,
                 parse_simple_response,
             )
-            .await
-            .map_err(|err| match err {
-                CachedClientError::Client(err) => err,
-                CachedClientError::Callback(err) => err,
-            })
+            .await?;
+        Ok(simple)
     }
 
     /// Fetch the [`SimpleMetadata`] from a local file, using a PEP 503-compatible directory
@@ -900,15 +895,13 @@ impl RegistryClient {
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
-                    let metadata =
-                        ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
-                            Error::from(ErrorKind::MetadataParseError(
-                                filename.clone(),
-                                url.to_string(),
-                                Box::new(err),
-                            ))
-                        })?;
-                    Ok::<ResolutionMetadata, CachedClientError<Error>>(metadata)
+                    ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
+                        Error::from(ErrorKind::MetadataParseError(
+                            filename.clone(),
+                            url.to_string(),
+                            Box::new(err),
+                        ))
+                    })
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))

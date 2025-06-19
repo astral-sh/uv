@@ -3,10 +3,10 @@ use tracing::debug;
 
 use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl};
+use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl, RequiresPython};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
-use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
+use uv_resolver::{ExcludeNewer, PrereleaseMode};
 use uv_warnings::warn_user_once;
 
 /// A client to fetch the latest version of a package from an index.

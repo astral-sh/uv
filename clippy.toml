@@ -6,6 +6,7 @@ doc-valid-idents = [
   "GraalPy",
   "ReFS",
   "PyTorch",
+  "ROCm",
   ".." # Include the defaults
 ]
 

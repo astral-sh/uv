@@ -2666,7 +2666,7 @@ Supports CPython and PyPy. CPython distributions are downloaded from the Astral 
 
 Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`.
 
-A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments. There is experimental support for adding Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
+A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments. There is experimental support for adding Python executables to a directory on the path — use the `--preview` flag to enable this behavior and `uv python dir --bin` to retrieve the target directory.
 
 Multiple Python versions may be requested.
 
@@ -2904,6 +2904,7 @@ uv python pin [OPTIONS] [REQUEST]
 </dd><dt id="uv-python-pin--resolved"><a href="#uv-python-pin--resolved"><code>--resolved</code></a></dt><dd><p>Write the resolved Python interpreter path instead of the request.</p>
 <p>Ensures that the exact same interpreter is used.</p>
 <p>This option is usually not safe to use when committing the <code>.python-version</code> file to version control.</p>
+</dd><dt id="uv-python-pin--rm"><a href="#uv-python-pin--rm"><code>--rm</code></a></dt><dd><p>Remove the Python version pin</p>
 </dd><dt id="uv-python-pin--verbose"><a href="#uv-python-pin--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
@@ -2916,7 +2917,7 @@ By default, Python installations are stored in the uv data directory at `$XDG_DA
 
 The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
 
-To view the directory where uv installs Python executables instead, use the `--bin` flag. Note that Python executables are only installed when preview mode is enabled.
+To view the directory where uv installs Python executables instead, use the `--bin` flag. The Python executable directory may be overridden with `$UV_PYTHON_BIN_DIR`. Note that Python executables are only installed when preview mode is enabled.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -3348,6 +3349,22 @@ by <code>--python-version</code>.</p>
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
+<li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
+<li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
+<li><code>rocm6.1</code>:  Use the PyTorch index for ROCm 6.1</li>
+<li><code>rocm6.0</code>:  Use the PyTorch index for ROCm 6.0</li>
+<li><code>rocm5.7</code>:  Use the PyTorch index for ROCm 5.7</li>
+<li><code>rocm5.6</code>:  Use the PyTorch index for ROCm 5.6</li>
+<li><code>rocm5.5</code>:  Use the PyTorch index for ROCm 5.5</li>
+<li><code>rocm5.4.2</code>:  Use the PyTorch index for ROCm 5.4.2</li>
+<li><code>rocm5.4</code>:  Use the PyTorch index for ROCm 5.4</li>
+<li><code>rocm5.3</code>:  Use the PyTorch index for ROCm 5.3</li>
+<li><code>rocm5.2</code>:  Use the PyTorch index for ROCm 5.2</li>
+<li><code>rocm5.1.1</code>:  Use the PyTorch index for ROCm 5.1.1</li>
+<li><code>rocm4.2</code>:  Use the PyTorch index for ROCm 4.2</li>
+<li><code>rocm4.1</code>:  Use the PyTorch index for ROCm 4.1</li>
+<li><code>rocm4.0.1</code>:  Use the PyTorch index for ROCm 4.0.1</li>
 </ul></dd><dt id="uv-pip-compile--universal"><a href="#uv-pip-compile--universal"><code>--universal</code></a></dt><dd><p>Perform a universal resolution, attempting to generate a single <code>requirements.txt</code> output file that is compatible with all operating systems, architectures, and Python implementations.</p>
 <p>In universal mode, the current Python version (or user-provided <code>--python-version</code>) will be treated as a lower bound. For example, <code>--universal --python-version 3.7</code> would produce a universal resolution for Python 3.7 and later.</p>
 <p>Implies <code>--no-strip-markers</code>.</p>
@@ -3549,7 +3566,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 <ul>
-<li>Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
+<li>Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
 </ul>
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-pip-sync--strict"><a href="#uv-pip-sync--strict"><code>--strict</code></a></dt><dd><p>Validate the Python environment after completing the installation, to detect packages with missing dependencies or other issues</p>
 </dd><dt id="uv-pip-sync--system"><a href="#uv-pip-sync--system"><code>--system</code></a></dt><dd><p>Install packages into the system Python environment.</p>
@@ -3589,6 +3606,22 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
+<li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
+<li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
+<li><code>rocm6.1</code>:  Use the PyTorch index for ROCm 6.1</li>
+<li><code>rocm6.0</code>:  Use the PyTorch index for ROCm 6.0</li>
+<li><code>rocm5.7</code>:  Use the PyTorch index for ROCm 5.7</li>
+<li><code>rocm5.6</code>:  Use the PyTorch index for ROCm 5.6</li>
+<li><code>rocm5.5</code>:  Use the PyTorch index for ROCm 5.5</li>
+<li><code>rocm5.4.2</code>:  Use the PyTorch index for ROCm 5.4.2</li>
+<li><code>rocm5.4</code>:  Use the PyTorch index for ROCm 5.4</li>
+<li><code>rocm5.3</code>:  Use the PyTorch index for ROCm 5.3</li>
+<li><code>rocm5.2</code>:  Use the PyTorch index for ROCm 5.2</li>
+<li><code>rocm5.1.1</code>:  Use the PyTorch index for ROCm 5.1.1</li>
+<li><code>rocm4.2</code>:  Use the PyTorch index for ROCm 4.2</li>
+<li><code>rocm4.1</code>:  Use the PyTorch index for ROCm 4.1</li>
+<li><code>rocm4.0.1</code>:  Use the PyTorch index for ROCm 4.0.1</li>
 </ul></dd><dt id="uv-pip-sync--verbose"><a href="#uv-pip-sync--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
@@ -3813,7 +3846,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 <ul>
-<li>Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
+<li>Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
 </ul>
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> or <code>pylock.toml</code> files.</p>
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
@@ -3863,6 +3896,22 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>cu91</code>:  Use the PyTorch index for CUDA 9.1</li>
 <li><code>cu90</code>:  Use the PyTorch index for CUDA 9.0</li>
 <li><code>cu80</code>:  Use the PyTorch index for CUDA 8.0</li>
+<li><code>rocm6.3</code>:  Use the PyTorch index for ROCm 6.3</li>
+<li><code>rocm6.2.4</code>:  Use the PyTorch index for ROCm 6.2.4</li>
+<li><code>rocm6.2</code>:  Use the PyTorch index for ROCm 6.2</li>
+<li><code>rocm6.1</code>:  Use the PyTorch index for ROCm 6.1</li>
+<li><code>rocm6.0</code>:  Use the PyTorch index for ROCm 6.0</li>
+<li><code>rocm5.7</code>:  Use the PyTorch index for ROCm 5.7</li>
+<li><code>rocm5.6</code>:  Use the PyTorch index for ROCm 5.6</li>
+<li><code>rocm5.5</code>:  Use the PyTorch index for ROCm 5.5</li>
+<li><code>rocm5.4.2</code>:  Use the PyTorch index for ROCm 5.4.2</li>
+<li><code>rocm5.4</code>:  Use the PyTorch index for ROCm 5.4</li>
+<li><code>rocm5.3</code>:  Use the PyTorch index for ROCm 5.3</li>
+<li><code>rocm5.2</code>:  Use the PyTorch index for ROCm 5.2</li>
+<li><code>rocm5.1.1</code>:  Use the PyTorch index for ROCm 5.1.1</li>
+<li><code>rocm4.2</code>:  Use the PyTorch index for ROCm 4.2</li>
+<li><code>rocm4.1</code>:  Use the PyTorch index for ROCm 4.1</li>
+<li><code>rocm4.0.1</code>:  Use the PyTorch index for ROCm 4.0.1</li>
 </ul></dd><dt id="uv-pip-install--upgrade"><a href="#uv-pip-install--upgrade"><code>--upgrade</code></a>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 </dd><dt id="uv-pip-install--upgrade-package"><a href="#uv-pip-install--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-pip-install--user"><a href="#uv-pip-install--user"><code>--user</code></a></dt><dt id="uv-pip-install--verbose"><a href="#uv-pip-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -4675,7 +4724,7 @@ the platform.</p>
 <p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 <ul>
-<li>Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
+<li>Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
 </ul>
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-build--resolution"><a href="#uv-build--resolution"><code>--resolution</code></a> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>

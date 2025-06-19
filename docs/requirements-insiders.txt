@@ -4,6 +4,10 @@ babel==2.15.0
     # via
     #   mkdocs-git-revision-date-localized-plugin
     #   mkdocs-material
+beautifulsoup4==4.13.4
+    # via
+    #   markdownify
+    #   mkdocs-llmstxt
 black==23.10.0
     # via -r docs/requirements.in
 certifi==2024.7.4
@@ -43,17 +47,20 @@ markdown-it-py==3.0.0
     #   mdformat
     #   mdformat-gfm
     #   mdit-py-plugins
+markdownify==1.1.0
+    # via mkdocs-llmstxt
 markupsafe==2.1.5
     # via
     #   jinja2
     #   mkdocs
-mdformat==0.7.17
+mdformat==0.7.22
     # via
     #   -r docs/requirements.in
     #   mdformat-admon
     #   mdformat-gfm
     #   mdformat-mkdocs
     #   mdformat-tables
+    #   mkdocs-llmstxt
 mdformat-admon==2.0.2
     # via
     #   -r docs/requirements.in
@@ -81,6 +88,8 @@ mkdocs==1.5.0
     #   mkdocs-material
     #   mkdocs-redirects
 mkdocs-git-revision-date-localized-plugin==1.3.0
+    # via -r docs/requirements.in
+mkdocs-llmstxt==0.2.0
     # via -r docs/requirements.in
 mkdocs-material @ git+ssh://git@github.com/astral-sh/mkdocs-material-insiders.git@38c0b8187325c3bab386b666daf3518ac036f2f4
     # via
@@ -128,9 +137,15 @@ regex==2022.10.31
 requests==2.32.3
     # via mkdocs-material
 six==1.16.0
-    # via python-dateutil
+    # via
+    #   markdownify
+    #   python-dateutil
 smmap==5.0.2
     # via gitdb
+soupsieve==2.7
+    # via beautifulsoup4
+typing-extensions==4.14.0
+    # via beautifulsoup4
 uc-micro-py==1.0.3
     # via linkify-it-py
 urllib3==2.2.2

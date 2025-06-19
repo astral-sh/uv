@@ -35,7 +35,6 @@
 //! OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //! OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //! ```
-//!
 
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -108,6 +107,70 @@ pub enum TorchMode {
     Cu90,
     /// Use the PyTorch index for CUDA 8.0.
     Cu80,
+    /// Use the PyTorch index for ROCm 6.3.
+    #[serde(rename = "rocm6.3")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.3"))]
+    Rocm63,
+    /// Use the PyTorch index for ROCm 6.2.4.
+    #[serde(rename = "rocm6.2.4")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.2.4"))]
+    Rocm624,
+    /// Use the PyTorch index for ROCm 6.2.
+    #[serde(rename = "rocm6.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.2"))]
+    Rocm62,
+    /// Use the PyTorch index for ROCm 6.1.
+    #[serde(rename = "rocm6.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.1"))]
+    Rocm61,
+    /// Use the PyTorch index for ROCm 6.0.
+    #[serde(rename = "rocm6.0")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.0"))]
+    Rocm60,
+    /// Use the PyTorch index for ROCm 5.7.
+    #[serde(rename = "rocm5.7")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.7"))]
+    Rocm57,
+    /// Use the PyTorch index for ROCm 5.6.
+    #[serde(rename = "rocm5.6")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.6"))]
+    Rocm56,
+    /// Use the PyTorch index for ROCm 5.5.
+    #[serde(rename = "rocm5.5")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.5"))]
+    Rocm55,
+    /// Use the PyTorch index for ROCm 5.4.2.
+    #[serde(rename = "rocm5.4.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.4.2"))]
+    Rocm542,
+    /// Use the PyTorch index for ROCm 5.4.
+    #[serde(rename = "rocm5.4")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.4"))]
+    Rocm54,
+    /// Use the PyTorch index for ROCm 5.3.
+    #[serde(rename = "rocm5.3")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.3"))]
+    Rocm53,
+    /// Use the PyTorch index for ROCm 5.2.
+    #[serde(rename = "rocm5.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.2"))]
+    Rocm52,
+    /// Use the PyTorch index for ROCm 5.1.1.
+    #[serde(rename = "rocm5.1.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm5.1.1"))]
+    Rocm511,
+    /// Use the PyTorch index for ROCm 4.2.
+    #[serde(rename = "rocm4.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm4.2"))]
+    Rocm42,
+    /// Use the PyTorch index for ROCm 4.1.
+    #[serde(rename = "rocm4.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm4.1"))]
+    Rocm41,
+    /// Use the PyTorch index for ROCm 4.0.1.
+    #[serde(rename = "rocm4.0.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm4.0.1"))]
+    Rocm401,
 }
 
 /// The strategy to use when determining the appropriate PyTorch index.
@@ -158,6 +221,22 @@ impl TorchStrategy {
             TorchMode::Cu91 => Ok(Self::Backend(TorchBackend::Cu91)),
             TorchMode::Cu90 => Ok(Self::Backend(TorchBackend::Cu90)),
             TorchMode::Cu80 => Ok(Self::Backend(TorchBackend::Cu80)),
+            TorchMode::Rocm63 => Ok(Self::Backend(TorchBackend::Rocm63)),
+            TorchMode::Rocm624 => Ok(Self::Backend(TorchBackend::Rocm624)),
+            TorchMode::Rocm62 => Ok(Self::Backend(TorchBackend::Rocm62)),
+            TorchMode::Rocm61 => Ok(Self::Backend(TorchBackend::Rocm61)),
+            TorchMode::Rocm60 => Ok(Self::Backend(TorchBackend::Rocm60)),
+            TorchMode::Rocm57 => Ok(Self::Backend(TorchBackend::Rocm57)),
+            TorchMode::Rocm56 => Ok(Self::Backend(TorchBackend::Rocm56)),
+            TorchMode::Rocm55 => Ok(Self::Backend(TorchBackend::Rocm55)),
+            TorchMode::Rocm542 => Ok(Self::Backend(TorchBackend::Rocm542)),
+            TorchMode::Rocm54 => Ok(Self::Backend(TorchBackend::Rocm54)),
+            TorchMode::Rocm53 => Ok(Self::Backend(TorchBackend::Rocm53)),
+            TorchMode::Rocm52 => Ok(Self::Backend(TorchBackend::Rocm52)),
+            TorchMode::Rocm511 => Ok(Self::Backend(TorchBackend::Rocm511)),
+            TorchMode::Rocm42 => Ok(Self::Backend(TorchBackend::Rocm42)),
+            TorchMode::Rocm41 => Ok(Self::Backend(TorchBackend::Rocm41)),
+            TorchMode::Rocm401 => Ok(Self::Backend(TorchBackend::Rocm401)),
         }
     }
 
@@ -177,6 +256,8 @@ impl TorchStrategy {
                 | "torchtext"
                 | "torchvision"
                 | "pytorch-triton"
+                | "pytorch-triton-rocm"
+                | "pytorch-triton-xpu"
         )
     }
 
@@ -259,6 +340,22 @@ pub enum TorchBackend {
     Cu91,
     Cu90,
     Cu80,
+    Rocm63,
+    Rocm624,
+    Rocm62,
+    Rocm61,
+    Rocm60,
+    Rocm57,
+    Rocm56,
+    Rocm55,
+    Rocm542,
+    Rocm54,
+    Rocm53,
+    Rocm52,
+    Rocm511,
+    Rocm42,
+    Rocm41,
+    Rocm401,
 }
 
 impl TorchBackend {
@@ -290,6 +387,22 @@ impl TorchBackend {
             Self::Cu91 => &CU91_INDEX_URL,
             Self::Cu90 => &CU90_INDEX_URL,
             Self::Cu80 => &CU80_INDEX_URL,
+            Self::Rocm63 => &ROCM63_INDEX_URL,
+            Self::Rocm624 => &ROCM624_INDEX_URL,
+            Self::Rocm62 => &ROCM62_INDEX_URL,
+            Self::Rocm61 => &ROCM61_INDEX_URL,
+            Self::Rocm60 => &ROCM60_INDEX_URL,
+            Self::Rocm57 => &ROCM57_INDEX_URL,
+            Self::Rocm56 => &ROCM56_INDEX_URL,
+            Self::Rocm55 => &ROCM55_INDEX_URL,
+            Self::Rocm542 => &ROCM542_INDEX_URL,
+            Self::Rocm54 => &ROCM54_INDEX_URL,
+            Self::Rocm53 => &ROCM53_INDEX_URL,
+            Self::Rocm52 => &ROCM52_INDEX_URL,
+            Self::Rocm511 => &ROCM511_INDEX_URL,
+            Self::Rocm42 => &ROCM42_INDEX_URL,
+            Self::Rocm41 => &ROCM41_INDEX_URL,
+            Self::Rocm401 => &ROCM401_INDEX_URL,
         }
     }
 
@@ -336,6 +449,69 @@ impl TorchBackend {
             TorchBackend::Cu91 => Some(Version::new([9, 1])),
             TorchBackend::Cu90 => Some(Version::new([9, 0])),
             TorchBackend::Cu80 => Some(Version::new([8, 0])),
+            TorchBackend::Rocm63 => None,
+            TorchBackend::Rocm624 => None,
+            TorchBackend::Rocm62 => None,
+            TorchBackend::Rocm61 => None,
+            TorchBackend::Rocm60 => None,
+            TorchBackend::Rocm57 => None,
+            TorchBackend::Rocm56 => None,
+            TorchBackend::Rocm55 => None,
+            TorchBackend::Rocm542 => None,
+            TorchBackend::Rocm54 => None,
+            TorchBackend::Rocm53 => None,
+            TorchBackend::Rocm52 => None,
+            TorchBackend::Rocm511 => None,
+            TorchBackend::Rocm42 => None,
+            TorchBackend::Rocm41 => None,
+            TorchBackend::Rocm401 => None,
+        }
+    }
+
+    /// Returns the ROCM [`Version`] for the given [`TorchBackend`].
+    pub fn rocm_version(&self) -> Option<Version> {
+        match self {
+            TorchBackend::Cpu => None,
+            TorchBackend::Cu128 => None,
+            TorchBackend::Cu126 => None,
+            TorchBackend::Cu125 => None,
+            TorchBackend::Cu124 => None,
+            TorchBackend::Cu123 => None,
+            TorchBackend::Cu122 => None,
+            TorchBackend::Cu121 => None,
+            TorchBackend::Cu120 => None,
+            TorchBackend::Cu118 => None,
+            TorchBackend::Cu117 => None,
+            TorchBackend::Cu116 => None,
+            TorchBackend::Cu115 => None,
+            TorchBackend::Cu114 => None,
+            TorchBackend::Cu113 => None,
+            TorchBackend::Cu112 => None,
+            TorchBackend::Cu111 => None,
+            TorchBackend::Cu110 => None,
+            TorchBackend::Cu102 => None,
+            TorchBackend::Cu101 => None,
+            TorchBackend::Cu100 => None,
+            TorchBackend::Cu92 => None,
+            TorchBackend::Cu91 => None,
+            TorchBackend::Cu90 => None,
+            TorchBackend::Cu80 => None,
+            TorchBackend::Rocm63 => Some(Version::new([6, 3])),
+            TorchBackend::Rocm624 => Some(Version::new([6, 2, 4])),
+            TorchBackend::Rocm62 => Some(Version::new([6, 2])),
+            TorchBackend::Rocm61 => Some(Version::new([6, 1])),
+            TorchBackend::Rocm60 => Some(Version::new([6, 0])),
+            TorchBackend::Rocm57 => Some(Version::new([5, 7])),
+            TorchBackend::Rocm56 => Some(Version::new([5, 6])),
+            TorchBackend::Rocm55 => Some(Version::new([5, 5])),
+            TorchBackend::Rocm542 => Some(Version::new([5, 4, 2])),
+            TorchBackend::Rocm54 => Some(Version::new([5, 4])),
+            TorchBackend::Rocm53 => Some(Version::new([5, 3])),
+            TorchBackend::Rocm52 => Some(Version::new([5, 2])),
+            TorchBackend::Rocm511 => Some(Version::new([5, 1, 1])),
+            TorchBackend::Rocm42 => Some(Version::new([4, 2])),
+            TorchBackend::Rocm41 => Some(Version::new([4, 1])),
+            TorchBackend::Rocm401 => Some(Version::new([4, 0, 1])),
         }
     }
 }
@@ -370,6 +546,22 @@ impl FromStr for TorchBackend {
             "cu91" => Ok(TorchBackend::Cu91),
             "cu90" => Ok(TorchBackend::Cu90),
             "cu80" => Ok(TorchBackend::Cu80),
+            "rocm6.3" => Ok(TorchBackend::Rocm63),
+            "rocm6.2.4" => Ok(TorchBackend::Rocm624),
+            "rocm6.2" => Ok(TorchBackend::Rocm62),
+            "rocm6.1" => Ok(TorchBackend::Rocm61),
+            "rocm6.0" => Ok(TorchBackend::Rocm60),
+            "rocm5.7" => Ok(TorchBackend::Rocm57),
+            "rocm5.6" => Ok(TorchBackend::Rocm56),
+            "rocm5.5" => Ok(TorchBackend::Rocm55),
+            "rocm5.4.2" => Ok(TorchBackend::Rocm542),
+            "rocm5.4" => Ok(TorchBackend::Rocm54),
+            "rocm5.3" => Ok(TorchBackend::Rocm53),
+            "rocm5.2" => Ok(TorchBackend::Rocm52),
+            "rocm5.1.1" => Ok(TorchBackend::Rocm511),
+            "rocm4.2" => Ok(TorchBackend::Rocm42),
+            "rocm4.1" => Ok(TorchBackend::Rocm41),
+            "rocm4.0.1" => Ok(TorchBackend::Rocm401),
             _ => Err(format!("Unknown PyTorch backend: {s}")),
         }
     }
@@ -501,3 +693,35 @@ static CU90_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu90").unwrap());
 static CU80_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu80").unwrap());
+static ROCM63_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm6.3").unwrap());
+static ROCM624_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm6.2.4").unwrap());
+static ROCM62_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm6.2").unwrap());
+static ROCM61_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm6.1").unwrap());
+static ROCM60_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm6.0").unwrap());
+static ROCM57_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm5.7").unwrap());
+static ROCM56_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm5.6").unwrap());
+static ROCM55_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm5.5").unwrap());
+static ROCM542_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm5.4.2").unwrap());
+static ROCM54_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm5.4").unwrap());
+static ROCM53_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm5.3").unwrap());
+static ROCM52_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm5.2").unwrap());
+static ROCM511_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm5.1.1").unwrap());
+static ROCM42_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm4.2").unwrap());
+static ROCM41_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm4.1").unwrap());
+static ROCM401_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm4.0.1").unwrap());

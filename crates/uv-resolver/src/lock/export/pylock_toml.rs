@@ -13,7 +13,8 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
+    BuildOptions, DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults,
+    InstallOptions,
 };
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
@@ -22,8 +23,8 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, Edge,
     FileLocation, GitSourceDist, IndexUrl, Name, Node, PathBuiltDist, PathSourceDist,
-    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution,
-    ResolvedDist, SourceDist, ToUrlError, UrlString,
+    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, RequiresPython,
+    Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -39,7 +40,7 @@ use uv_small_str::SmallString;
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array};
 use crate::resolution::ResolutionGraphNode;
-use crate::{Installable, LockError, RequiresPython, ResolverOutput};
+use crate::{Installable, LockError, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
@@ -619,6 +620,7 @@ impl<'lock> PylockToml {
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
+        editable: EditableMode,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
         // Extract the packages from the lock file.
@@ -733,7 +735,10 @@ impl<'lock> PylockToml {
                             .unwrap_or_else(|_| sdist.install_path.to_path_buf())
                             .into_boxed_path(),
                     ),
-                    editable: Some(sdist.editable),
+                    editable: match editable {
+                        EditableMode::NonEditable => None,
+                        EditableMode::Editable => Some(sdist.editable),
+                    },
                     subdirectory: None,
                 }),
                 _ => None,

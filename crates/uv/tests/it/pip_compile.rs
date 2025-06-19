@@ -14103,16 +14103,16 @@ fn compile_enumerate_no_versions() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in"),
-    @r###"
+    @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and rooster-blue<=0.0.8 depends on Python>=3.11,<4.0, we can conclude that rooster-blue<=0.0.8 cannot be used.
+      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and all versions of rooster-blue depend on Python>=3.11,<4.0, we can conclude that all versions of rooster-blue cannot be used.
           And because you require rooster-blue, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     Ok(())
 }
@@ -14552,7 +14552,7 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--universal")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14562,7 +14562,9 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
       ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
           hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
-    "###);
+
+          hint: While the active Python version is 3.8, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    ");
 
     Ok(())
 }
@@ -14871,20 +14873,37 @@ fn invalid_platform() -> Result<()> {
         .pip_compile()
         .arg("--python-platform")
         .arg("linux")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only open3d<=0.18.0 is available and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
-          And because open3d>=0.16.0,<=0.18.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only the following versions of open3d are available:
+              open3d==0.8.0.0
+              open3d==0.9.0.0
+              open3d==0.10.0.0
+              open3d==0.10.0.1
+              open3d==0.11.0
+              open3d==0.11.1
+              open3d==0.11.2
+              open3d==0.12.0
+              open3d==0.13.0
+              open3d==0.14.1
+              open3d==0.15.1
+              open3d==0.15.2
+              open3d==0.16.0
+              open3d==0.16.1
+              open3d==0.17.0
+              open3d==0.18.0
+          and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
+          And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
 
           hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
 
           hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
-    "###);
+    ");
 
     Ok(())
 }
@@ -15819,7 +15838,106 @@ fn invalid_group() -> Result<()> {
 }
 
 #[test]
-fn project_and_group() -> Result<()> {
+fn project_and_group_workspace_inherit() -> Result<()> {
+    // Checking that --project is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+
+            [tool.uv.sources]
+            pytest = { workspace = true }
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("packages");
+        subdir.create_dir_all()?;
+
+        let pytest_dir = subdir.child("pytest");
+        pytest_dir.create_dir_all()?;
+        let pytest_toml = pytest_dir.child("pyproject.toml");
+        pytest_toml.write_str(
+            r#"
+            [project]
+            name = "pytest"
+            version = "4.0.0"
+            requires-python = ">=3.12"
+            "#,
+        )?;
+
+        let sniffio_dir = subdir.child("sniffio");
+        sniffio_dir.create_dir_all()?;
+        let sniffio_toml = sniffio_dir.child("pyproject.toml");
+        sniffio_toml.write_str(
+            r#"
+            [project]
+            name = "sniffio"
+            version = "1.3.1"
+            requires-python = ">=3.12"
+            "#,
+        )?;
+
+        let subproject_dir = subdir.child("mysubproject");
+        subproject_dir.create_dir_all()?;
+        let subproject_toml = subproject_dir.child("pyproject.toml");
+        subproject_toml.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.sources]
+            sniffio = { workspace = true }
+
+            [dependency-groups]
+            foo = ["iniconfig", "anyio", "sniffio", "pytest"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    // Check that the workspace's sources are discovered and consulted
+    let context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("packages/mysubproject/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group packages/mysubproject/pyproject.toml:foo
+    anyio==4.3.0
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    idna==3.6
+        # via anyio
+    iniconfig==2.0.0
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    pytest @ file://[TEMP_DIR]/packages/pytest
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    sniffio @ file://[TEMP_DIR]/packages/sniffio
+        # via
+        #   mysubproject (packages/mysubproject/pyproject.toml:foo)
+        #   anyio
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn project_and_group_workspace() -> Result<()> {
     // Checking that --project is handled properly with --group
     fn new_context() -> Result<TestContext> {
         let context = TestContext::new("3.12");

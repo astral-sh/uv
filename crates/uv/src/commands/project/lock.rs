@@ -12,13 +12,14 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, ExtrasSpecification, PreviewMode, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    PreviewMode, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Requirement, UnresolvedRequirementSpecification,
+    Requirement, RequiresPython, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{GroupName, PackageName};
@@ -28,7 +29,7 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_requirements::ExtrasResolver;
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
+    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
 use uv_scripts::{Pep723ItemRef, Pep723Script};
@@ -142,6 +143,8 @@ pub(crate) async fn lock(
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
                 workspace,
                 project_dir,
+                // Don't enable any groups' requires-python for interpreter discovery
+                &DependencyGroupsWithDefaults::none(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -437,8 +440,8 @@ async fn do_lock(
     let build_constraints = target.lower(build_constraints, index_locations, *sources)?;
     let dependency_groups = dependency_groups
         .into_iter()
-        .map(|(name, requirements)| {
-            let requirements = target.lower(requirements, index_locations, *sources)?;
+        .map(|(name, group)| {
+            let requirements = target.lower(group.requirements, index_locations, *sources)?;
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
@@ -822,6 +825,7 @@ async fn do_lock(
                 None,
                 resolver_env,
                 python_requirement,
+                interpreter.markers(),
                 conflicts.clone(),
                 &client,
                 &flat_index,
@@ -979,11 +983,52 @@ impl ValidatedLock {
                 return Ok(Self::Unusable(lock));
             }
             Upgrade::Packages(_) => {
-                // If the user specified `--upgrade-package`, then at best we can prefer some of
-                // the existing versions.
-                debug!("Ignoring existing lockfile due to `--upgrade-package`");
-                return Ok(Self::Preferable(lock));
+                // This is handled below, after some checks regarding fork
+                // markers. In particular, we'd like to return `Preferable`
+                // here, but we shouldn't if the fork markers cannot be
+                // reused.
             }
+        }
+
+        // NOTE: It's important that this appears before any possible path that
+        // returns `Self::Preferable`. In particular, if our fork markers are
+        // bunk, then we shouldn't return a result that indicates we should try
+        // to re-use the existing fork markers.
+        if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
+            warn_user!(
+                "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
+                fork_markers_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+                environments_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // NOTE: Similarly as above, this should also appear before any
+        // possible code path that can return `Self::Preferable`.
+        if let Err((fork_markers_union, requires_python_marker)) =
+            lock.requires_python_coverage(requires_python)
+        {
+            warn_user!(
+                "Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `{}` vs `{}`",
+                fork_markers_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+                requires_python_marker
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        if let Upgrade::Packages(_) = upgrade {
+            // If the user specified `--upgrade-package`, then at best we can prefer some of
+            // the existing versions.
+            debug!("Ignoring existing lockfile due to `--upgrade-package`");
+            return Ok(Self::Preferable(lock));
         }
 
         // If the Requires-Python bound has changed, we have to perform a clean resolution, since
@@ -1014,19 +1059,6 @@ impl ValidatedLock {
             debug!(
                 "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
-            );
-            return Ok(Self::Versions(lock));
-        }
-
-        if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
-            warn_user!(
-                "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
-                fork_markers_union
-                    .try_to_string()
-                    .unwrap_or("true".to_string()),
-                environments_union
-                    .try_to_string()
-                    .unwrap_or("true".to_string()),
             );
             return Ok(Self::Versions(lock));
         }

@@ -650,6 +650,8 @@ impl TestContext {
             format!("https://raw.githubusercontent.com/astral-sh/packse/{PACKSE_VERSION}/"),
             "https://raw.githubusercontent.com/astral-sh/packse/PACKSE_VERSION/".to_string(),
         ));
+        // For wiremock tests
+        filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
 
         Self {
             root: ChildPath::new(root.path()),
@@ -745,6 +747,7 @@ impl TestContext {
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .env_remove(EnvVars::XDG_CONFIG_HOME)
+            .env_remove(EnvVars::XDG_DATA_HOME)
             .current_dir(self.temp_dir.path());
 
         for (key, value) in &self.extra_env {
@@ -1082,15 +1085,30 @@ impl TestContext {
     }
 
     pub fn interpreter(&self) -> PathBuf {
-        venv_to_interpreter(&self.venv)
+        let venv = &self.venv;
+        if cfg!(unix) {
+            venv.join("bin").join("python")
+        } else if cfg!(windows) {
+            venv.join("Scripts").join("python.exe")
+        } else {
+            unimplemented!("Only Windows and Unix are supported")
+        }
+    }
+
+    pub fn python_command(&self) -> Command {
+        let mut command = self.new_command_with(&self.interpreter());
+        command
+            // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
+            // https://github.com/python/cpython/issues/75953
+            .arg("-B")
+            // Python on windows
+            .env(EnvVars::PYTHONUTF8, "1");
+        command
     }
 
     /// Run the given python code and check whether it succeeds.
     pub fn assert_command(&self, command: &str) -> Assert {
-        self.new_command_with(&venv_to_interpreter(&self.venv))
-            // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
-            // https://github.com/python/cpython/issues/75953
-            .arg("-B")
+        self.python_command()
             .arg("-c")
             .arg(command)
             .current_dir(&self.temp_dir)
@@ -1099,10 +1117,7 @@ impl TestContext {
 
     /// Run the given python file and check whether it succeeds.
     pub fn assert_file(&self, file: impl AsRef<Path>) -> Assert {
-        self.new_command_with(&venv_to_interpreter(&self.venv))
-            // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
-            // https://github.com/python/cpython/issues/75953
-            .arg("-B")
+        self.python_command()
             .arg(file.as_ref())
             .current_dir(&self.temp_dir)
             .assert()
@@ -1115,6 +1130,12 @@ impl TestContext {
         )
         .success()
         .stdout(version);
+    }
+
+    /// Assert a package is not installed.
+    pub fn assert_not_installed(&self, package: &'static str) {
+        self.assert_command(format!("import {package}").as_str())
+            .failure();
     }
 
     /// Generate various escaped regex patterns for the given path.
@@ -1339,16 +1360,6 @@ pub fn venv_bin_path(venv: impl AsRef<Path>) -> PathBuf {
         venv.as_ref().join("bin")
     } else if cfg!(windows) {
         venv.as_ref().join("Scripts")
-    } else {
-        unimplemented!("Only Windows and Unix are supported")
-    }
-}
-
-pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
-    if cfg!(unix) {
-        venv.join("bin").join("python")
-    } else if cfg!(windows) {
-        venv.join("Scripts").join("python.exe")
     } else {
         unimplemented!("Only Windows and Unix are supported")
     }

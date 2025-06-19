@@ -127,6 +127,31 @@ default-groups = ["docs"]
 
 ---
 
+### [`dependency-groups`](#dependency-groups) {: #dependency-groups }
+
+Additional settings for `dependency-groups`.
+
+Currently this can only be used to add `requires-python` constraints
+to dependency groups (typically to inform uv that your dev tooling
+has a higher python requirement than your actual project).
+
+This cannot be used to define dependency groups, use the top-level
+`[dependency-groups]` table for that.
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.dependency-groups]
+my-group = {requires-python = ">=3.12"}
+```
+
+---
+
 ### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
 The project's development dependencies.
@@ -481,6 +506,9 @@ Package names need to be valid Python identifiers, and the directory needs to co
 `__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
 being the module name, and which contain a `__init__.pyi` file.
 
+For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
+`foo-stubs.bar`.
+
 Note that using this option runs the risk of creating two packages with different names but
 the same module names. Installing such packages together leads to unspecified behavior,
 often with corrupted files or directory trees.
@@ -514,6 +542,66 @@ Common values are `src` (src layout, the default) or an empty path (flat layout)
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
 module-root = ""
+```
+
+---
+
+#### [`namespace`](#build-backend_namespace) {: #build-backend_namespace }
+<span id="namespace"></span>
+
+Build a namespace package.
+
+Build a PEP 420 implicit namespace package, allowing more than one root `__init__.py`.
+
+Use this option when the namespace package contains multiple root `__init__.py`, for
+namespace packages with a single root `__init__.py` use a dotted `module-name` instead.
+
+To compare dotted `module-name` and `namespace = true`, the first example below can be
+expressed with `module-name = "cloud.database"`: There is one root `__init__.py` `database`.
+In the second example, we have three roots (`cloud.database`, `cloud.database_pro`,
+`billing.modules.database_pro`), so `namespace = true` is required.
+
+```text
+src
+└── cloud
+    └── database
+        ├── __init__.py
+        ├── query_builder
+        │   └── __init__.py
+        └── sql
+            ├── parser.py
+            └── __init__.py
+```
+
+```text
+src
+├── cloud
+│   ├── database
+│   │   ├── __init__.py
+│   │   ├── query_builder
+│   │   │   └── __init__.py
+│   │   └── sql
+│   │       ├── __init__.py
+│   │       └── parser.py
+│   └── database_pro
+│       ├── __init__.py
+│       └── query_builder.py
+└── billing
+    └── modules
+        └── database_pro
+            ├── __init__.py
+            └── sql.py
+```
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+namespace = true
 ```
 
 ---
@@ -3402,7 +3490,7 @@ must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via d
 Hash-checking mode introduces a number of additional constraints:
 
 - Git dependencies are not supported.
-- Editable installs are not supported.
+- Editable installations are not supported.
 - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
 

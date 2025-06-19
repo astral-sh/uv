@@ -29,7 +29,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{ExitStatus, conjunction, tool::common::install_executables};
+use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -375,7 +375,7 @@ async fn upgrade_tool(
         remove_entrypoints(&existing_tool_receipt);
 
         // If we modified the target tool, reinstall the entrypoints.
-        install_executables(
+        finalize_tool_install(
             &environment,
             name,
             installed_tools,

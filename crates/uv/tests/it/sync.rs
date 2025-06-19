@@ -4,7 +4,7 @@ use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 
-use crate::common::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
+use crate::common::{TestContext, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 use uv_fs::Simplified;
@@ -346,7 +346,296 @@ fn mixed_requires_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
-    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.9. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.9.[X]` followed by `uv pip install -e .`.
+    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from workspace member `albatross`'s `project.requires-python`).
+    ");
+
+    Ok(())
+}
+
+/// Ensure that group requires-python solves an actual problem
+#[test]
+#[cfg(not(windows))]
+fn group_requires_python_useful_defaults() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.9"]);
+
+    // Require 3.8 for our project, but have a dev-dependency on a version of sphinx that needs 3.9
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pharaohs-tomp"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["sphinx>=7.2.6"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // Running `uv sync --no-dev` should ideally succeed, locking for Python 3.8.
+    // ...but once we pick the 3.8 interpreter the lock freaks out because it sees
+    // that the dependency-group containing sphinx will never successfully install,
+    // even though it's not enabled!
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-dev"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Creating virtual environment at: .venv
+      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+          And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    ");
+
+    // Running `uv sync` should always fail, as now sphinx is involved
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+          And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    ");
+
+    // Adding group requires python should fix it
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pharaohs-tomp"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["sphinx>=7.2.6"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.9"}
+        "#,
+    )?;
+
+    // Running `uv sync --no-dev` should succeed, still using the Python 3.8.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 29 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Running `uv sync` should succeed, bumping to Python 3.9 as sphinx is now involved.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 29 packages in [TIME]
+    Prepared 22 packages in [TIME]
+    Installed 27 packages in [TIME]
+     + alabaster==0.7.16
+     + anyio==4.3.0
+     + babel==2.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + docutils==0.20.1
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + imagesize==1.4.1
+     + importlib-metadata==7.1.0
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + packaging==24.0
+     + pygments==2.17.2
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + snowballstemmer==2.2.0
+     + sphinx==7.2.6
+     + sphinxcontrib-applehelp==1.0.8
+     + sphinxcontrib-devhelp==1.0.6
+     + sphinxcontrib-htmlhelp==2.0.5
+     + sphinxcontrib-jsmath==1.0.1
+     + sphinxcontrib-qthelp==1.0.7
+     + sphinxcontrib-serializinghtml==1.1.10
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+     + zipp==3.18.1
+    ");
+
+    Ok(())
+}
+
+/// Ensure that group requires-python solves an actual problem
+#[test]
+#[cfg(not(windows))]
+fn group_requires_python_useful_non_defaults() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.9"]);
+
+    // Require 3.8 for our project, but have a dev-dependency on a version of sphinx that needs 3.9
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pharaohs-tomp"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        mygroup = ["sphinx>=7.2.6"]
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("albatross");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    // Running `uv sync` should ideally succeed, locking for Python 3.8.
+    // ...but once we pick the 3.8 interpreter the lock freaks out because it sees
+    // that the dependency-group containing sphinx will never successfully install,
+    // even though it's not enabled, or even a default!
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Creating virtual environment at: .venv
+      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+          And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    ");
+
+    // Running `uv sync --group mygroup` should definitely fail, as now sphinx is involved
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("mygroup"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+          And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    ");
+
+    // Adding group requires python should fix it
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pharaohs-tomp"
+        version = "0.1.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        mygroup = ["sphinx>=7.2.6"]
+
+        [tool.uv.dependency-groups]
+        mygroup = {requires-python = ">=3.9"}
+        "#,
+    )?;
+
+    // Running `uv sync` should succeed, locking for the previous picked Python 3.8.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 29 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Running `uv sync --group mygroup` should pass, bumping the interpreter to 3.9,
+    // as the group requires-python saves us
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--group").arg("mygroup"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 29 packages in [TIME]
+    Prepared 22 packages in [TIME]
+    Installed 27 packages in [TIME]
+     + alabaster==0.7.16
+     + anyio==4.3.0
+     + babel==2.14.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + docutils==0.20.1
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + imagesize==1.4.1
+     + importlib-metadata==7.1.0
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + packaging==24.0
+     + pygments==2.17.2
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + snowballstemmer==2.2.0
+     + sphinx==7.2.6
+     + sphinxcontrib-applehelp==1.0.8
+     + sphinxcontrib-devhelp==1.0.6
+     + sphinxcontrib-htmlhelp==2.0.5
+     + sphinxcontrib-jsmath==1.0.1
+     + sphinxcontrib-qthelp==1.0.7
+     + sphinxcontrib-serializinghtml==1.1.10
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+     + zipp==3.18.1
     ");
 
     Ok(())
@@ -4080,17 +4369,17 @@ fn sync_custom_environment_path() -> Result<()> {
 
     // But if it's just an incompatible virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
-    uv_snapshot!(context.filters(), context.venv().arg("foo").arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("foo").arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Creating virtual environment at: foo
     Activate with: source foo/[BIN]/activate
-    "###);
+    ");
 
     // Even with some extraneous content...
     fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
@@ -5817,17 +6106,17 @@ fn sync_invalid_environment() -> Result<()> {
 
     // But if it's just an incompatible virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###);
+    ");
 
     // Even with some extraneous content...
     fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
@@ -5884,17 +6173,17 @@ fn sync_invalid_environment() -> Result<()> {
 
     // But if it's not a virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###);
+    ");
 
     // Which we detect by the presence of a `pyvenv.cfg` file
     fs_err::remove_file(context.temp_dir.join(".venv").join("pyvenv.cfg"))?;
@@ -6004,15 +6293,15 @@ fn sync_python_version() -> Result<()> {
     "###);
 
     // Unless explicitly requested...
-    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.10"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.10"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
-    error: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`
-    "###);
+    error: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
+    ");
 
     // But a pin should take precedence
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
@@ -6051,15 +6340,16 @@ fn sync_python_version() -> Result<()> {
     "###);
 
     // We should warn on subsequent uses, but respect the pinned version?
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
-    error: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`. Use `uv python pin` to update the `.python-version` file to a compatible version.
-    "###);
+    error: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
+    Use `uv python pin` to update the `.python-version` file to a compatible version
+    ");
 
     // Unless the pin file is outside the project, in which case we should just ignore it entirely
     let child_dir = context.temp_dir.child("child");
@@ -7768,7 +8058,7 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 
 #[test]
 fn sync_dry_run() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7845,52 +8135,49 @@ fn sync_dry_run() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = "==3.8.*"
+        requires-python = "==3.9.*"
         dependencies = ["iniconfig"]
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Would replace existing virtual environment at: .venv
+    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.12'` vs `python_full_version == '3.9.*'`
     Resolved 2 packages in [TIME]
     Would update lockfile at: uv.lock
     Would install 1 package
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Perform a full sync.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
+    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.12'` vs `python_full_version == '3.9.*'`
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Discovered existing environment at: .venv
-    Resolved 2 packages in [TIME]
-    Found up-to-date lockfile at: uv.lock
-    Audited 1 package in [TIME]
-    Would make no changes
-    "###);
+    let output = context.sync().arg("--dry-run").arg("-vv").output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Would replace existing virtual environment"),
+        "{}",
+        stderr
+    );
 
     Ok(())
 }
@@ -8373,6 +8660,7 @@ fn sync_locked_script() -> Result<()> {
 
     ----- stderr -----
     Recreating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
@@ -8384,6 +8672,7 @@ fn sync_locked_script() -> Result<()> {
 
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -8940,52 +9229,52 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Project `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Project `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Project `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Project `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Project `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     Ok(())
@@ -9604,6 +9893,56 @@ fn direct_url_dependency_metadata() -> Result<()> {
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + tqdm==4.67.1 (from https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_required_environment_hint() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.13.2"
+        dependencies = ["no-sdist-no-wheels-with-matching-platform-a"]
+
+        [[tool.uv.index]]
+        name = "packse"
+        url = "{}"
+        default = true
+        "#,
+        packse_index_url()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let mut filters = context.filters();
+    filters.push((
+        r"You're on [^ ]+ \(`.*`\)",
+        "You're on [PLATFORM] (`[TAG]`)",
+    ));
+
+    uv_snapshot!(filters, context.sync().env_remove("UV_EXCLUDE_NEWER"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Distribution `no-sdist-no-wheels-with-matching-platform-a==1.0.0 @ registry+https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/` can't be installed because it doesn't have a source distribution or wheel for the current platform
+
+    hint: You're on [PLATFORM] (`[TAG]`), but `no-sdist-no-wheels-with-matching-platform-a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding your platform to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
     ");
 
     Ok(())

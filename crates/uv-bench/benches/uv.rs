@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use uv_bench::criterion::black_box;
+use std::hint::black_box;
 use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
@@ -91,7 +91,7 @@ mod resolver {
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
-    use uv_distribution_types::{DependencyMetadata, IndexLocations};
+    use uv_distribution_types::{DependencyMetadata, IndexLocations, RequiresPython};
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
@@ -99,8 +99,8 @@ mod resolver {
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{
-        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
-        Resolver, ResolverEnvironment, ResolverOutput,
+        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
+        ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
     use uv_workspace::WorkspaceCache;
@@ -206,6 +206,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
+            interpreter.markers(),
             conflicts,
             Some(&TAGS),
             &flat_index,

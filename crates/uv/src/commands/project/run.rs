@@ -78,7 +78,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     modifications: Modifications,
     python: Option<String>,
@@ -291,7 +291,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 target,
                 &environment,
                 &extras.with_defaults(DefaultExtras::default()),
-                &dev.with_defaults(DefaultGroups::default()),
+                &groups.with_defaults(DefaultGroups::default()),
                 editable,
                 install_options,
                 modifications,
@@ -468,7 +468,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        for flag in dev.history().as_flags_pretty() {
+        for flag in groups.history().as_flags_pretty() {
             warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
         }
         if all_packages {
@@ -543,7 +543,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in extras.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            for flag in dev.history().as_flags_pretty() {
+            for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if locked {
@@ -560,7 +560,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in extras.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            for flag in dev.history().as_flags_pretty() {
+            for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if locked {
@@ -583,6 +583,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     project.workspace().install_path().display()
                 );
             }
+            // Determine the groups and extras to include.
+            let default_groups = default_dependency_groups(project.pyproject_toml())?;
+            let default_extras = DefaultExtras::default();
+            let groups = groups.with_defaults(default_groups);
+            let extras = extras.with_defaults(default_extras);
 
             let venv = if isolated {
                 debug!("Creating isolated virtual environment");
@@ -602,6 +607,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 } = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
+                    &groups,
                     project_dir,
                     no_config,
                 )
@@ -626,6 +632,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     validate_project_requires_python(
                         &interpreter,
                         Some(project.workspace()),
+                        &groups,
                         requires_python,
                         &source,
                     )?;
@@ -647,6 +654,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // project.
                 ProjectEnvironment::get_or_init(
                     project.workspace(),
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
                     &network_settings,
@@ -677,14 +685,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
-                // Validate that any referenced dependency groups are defined in the workspace.
-
-                // Determine the default groups to include.
-                let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-                // Determine the default extras to include.
-                let default_extras = DefaultExtras::default();
-
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
@@ -769,18 +769,15 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 };
 
                 let install_options = InstallOptions::default();
-                let dev = dev.with_defaults(default_groups);
-                let extras = extras.with_defaults(default_extras);
-
                 // Validate that the set of requested extras and development groups are defined in the lockfile.
                 target.validate_extras(&extras)?;
-                target.validate_groups(&dev)?;
+                target.validate_groups(&groups)?;
 
                 match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
-                    &dev,
+                    &groups,
                     editable,
                     install_options,
                     modifications,
