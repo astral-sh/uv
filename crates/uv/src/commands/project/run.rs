@@ -239,6 +239,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .await?
             .into_environment()?;
 
+            let _lock = environment.lock().await?;
+
             // Determine the lock mode.
             let mode = if frozen {
                 LockMode::Frozen
@@ -362,6 +364,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 )
                 .await?
                 .into_environment()?;
+
+                let _lock = environment.lock().await?;
 
                 let build_constraints = script
                     .metadata()
@@ -685,6 +689,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
+                let _lock = venv.lock().await?;
+
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
