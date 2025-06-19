@@ -114,10 +114,6 @@ pub struct Workspace {
     ///
     /// This table is overridden by the project indexes.
     indexes: Vec<Index>,
-    /// Indexes defined as sources in transitive path dependencies of this workspace.
-    ///
-    /// Used for lockfile validation.
-    path_dependency_source_indexes: Vec<Index>,
     /// The `pyproject.toml` of the workspace root.
     pyproject_toml: PyProjectToml,
 }
@@ -639,11 +635,6 @@ impl Workspace {
         &self.indexes
     }
 
-    /// Indexes defined as sources in transitive path dependencies of this workspace.
-    pub fn path_dependency_source_indexes(&self) -> &[Index] {
-        &self.path_dependency_source_indexes
-    }
-
     /// The `pyproject.toml` of the workspace.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         &self.pyproject_toml
@@ -751,18 +742,11 @@ impl Workspace {
             .and_then(|uv| uv.index)
             .unwrap_or_default();
 
-        let path_dependency_source_indexes = collect_path_dependency_source_indexes(
-            &workspace_root,
-            &workspace_indexes,
-            &workspace_pyproject_toml,
-        );
-
         Ok(Workspace {
             install_path: workspace_root,
             packages: workspace_members,
             sources: workspace_sources,
             indexes: workspace_indexes,
-            path_dependency_source_indexes,
             pyproject_toml: workspace_pyproject_toml,
         })
     }
@@ -944,6 +928,85 @@ impl Workspace {
             }
         }
         Ok(workspace_members)
+    }
+
+    /// Collects indexes provided as sources in (transitive) path dependencies that
+    /// have not already been defined in the workspace.
+    pub fn collect_path_dependency_source_indexes(&self) -> Vec<Index> {
+        let mut dependency_indexes = FxHashSet::default();
+        let mut seen = FxHashSet::default();
+
+        // We will only add indexes if we have not already seen the URLs.
+        let known_urls: FxHashSet<_> = self.indexes.iter().map(Index::url).collect();
+
+        let mut pyprojects = std::collections::VecDeque::new();
+        pyprojects.push_back((self.install_path.clone(), self.pyproject_toml.clone()));
+
+        while let Some((base_path, pyproject)) = pyprojects.pop_front() {
+            if let Some(tool_uv_sources) = pyproject
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.sources.as_ref())
+            {
+                for sources in tool_uv_sources.inner().values() {
+                    for source in sources.iter() {
+                        if let Source::Path { path, .. } = source {
+                            let dep_path = if path.as_ref().is_absolute() {
+                                path.as_ref().to_path_buf()
+                            } else {
+                                base_path.join(path)
+                            };
+
+                            // Canonicalize path to compare symlinks and relative paths correctly
+                            let Ok(canonical_path) = dep_path.canonicalize() else {
+                                debug!(
+                                    "Failed to canonicalize path dependency path: {}",
+                                    dep_path.display()
+                                );
+                                continue;
+                            };
+
+                            // Prevent infinite loops from circular dependencies
+                            if !seen.insert(canonical_path.clone()) {
+                                continue;
+                            }
+
+                            let dep_pyproject_path = canonical_path.join("pyproject.toml");
+
+                            match pyproject_toml_from_path(dep_pyproject_path.clone()) {
+                                Ok(dep_pyproject) => {
+                                    if let Some(dep_indexes) = dep_pyproject
+                                        .tool
+                                        .as_ref()
+                                        .and_then(|tool| tool.uv.as_ref())
+                                        .and_then(|uv| uv.index.as_ref())
+                                    {
+                                        dependency_indexes.extend(
+                                            dep_indexes
+                                                .iter()
+                                                .filter(|idx| !known_urls.contains(idx.url()))
+                                                .cloned(),
+                                        );
+                                    }
+
+                                    pyprojects.push_back((canonical_path, dep_pyproject));
+                                }
+                                Err(e) => {
+                                    debug!(
+                                        "Failed to read `pyproject.toml` in path dependency `{}`: {}",
+                                        dep_pyproject_path.display(),
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        dependency_indexes.into_iter().collect::<Vec<_>>()
     }
 }
 
@@ -1252,7 +1315,6 @@ impl ProjectWorkspace {
                     // workspace sources.
                     sources: BTreeMap::default(),
                     indexes: Vec::default(),
-                    path_dependency_source_indexes: Vec::default(),
                     pyproject_toml: project_pyproject_toml.clone(),
                 },
             });
@@ -1579,92 +1641,6 @@ fn pyproject_toml_from_path(pyproject_path: PathBuf) -> Result<PyProjectToml, Wo
         .map_err(|err| WorkspaceError::Toml(pyproject_path, Box::new(err)))
 }
 
-/// Collects indexes provided as sources in (transitive) path dependencies that
-/// have not already been defined in the workspace.
-fn collect_path_dependency_source_indexes(
-    workspace_root: &Path,
-    workspace_indexes: &[Index],
-    workspace_pyproject_toml: &PyProjectToml,
-) -> Vec<Index> {
-    let mut dependency_indexes = FxHashSet::default();
-    let mut seen = FxHashSet::default();
-
-    // We will only add indexes if we have not already seen the URLs.
-    let known_urls: FxHashSet<_> = workspace_indexes.iter().map(Index::url).collect();
-
-    let mut pyprojects = std::collections::VecDeque::new();
-    pyprojects.push_back((
-        workspace_root.to_path_buf(),
-        workspace_pyproject_toml.clone(),
-    ));
-
-    while let Some((base_path, pyproject)) = pyprojects.pop_front() {
-        if let Some(tool_uv_sources) = pyproject
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-        {
-            for sources in tool_uv_sources.inner().values() {
-                for source in sources.iter() {
-                    if let Source::Path { path, .. } = source {
-                        let dep_path = if path.as_ref().is_absolute() {
-                            path.as_ref().to_path_buf()
-                        } else {
-                            base_path.join(path)
-                        };
-
-                        // Canonicalize path to compare symlinks and relative paths correctly
-                        let Ok(canonical_path) = dep_path.canonicalize() else {
-                            debug!(
-                                "Failed to canonicalize path dependency path: {}",
-                                dep_path.display()
-                            );
-                            continue;
-                        };
-
-                        // Prevent infinite loops from circular dependencies
-                        if !seen.insert(canonical_path.clone()) {
-                            continue;
-                        }
-
-                        let dep_pyproject_path = canonical_path.join("pyproject.toml");
-
-                        match pyproject_toml_from_path(dep_pyproject_path.clone()) {
-                            Ok(dep_pyproject) => {
-                                if let Some(dep_indexes) = dep_pyproject
-                                    .tool
-                                    .as_ref()
-                                    .and_then(|tool| tool.uv.as_ref())
-                                    .and_then(|uv| uv.index.as_ref())
-                                {
-                                    dependency_indexes.extend(
-                                        dep_indexes
-                                            .iter()
-                                            .filter(|idx| !known_urls.contains(idx.url()))
-                                            .cloned(),
-                                    );
-                                }
-
-                                pyprojects.push_back((canonical_path, dep_pyproject));
-                            }
-                            Err(e) => {
-                                debug!(
-                                    "Failed to read `pyproject.toml` in path dependency `{}`: {}",
-                                    dep_pyproject_path.display(),
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    dependency_indexes.into_iter().collect::<Vec<_>>()
-}
-
 #[cfg(test)]
 #[cfg(unix)] // Avoid path escaping for the unit tests
 mod tests {
@@ -1753,7 +1729,6 @@ mod tests {
             },
             "sources": {},
             "indexes": [],
-            "path_dependency_source_indexes": [],
             "pyproject_toml": {
               "project": {
                 "name": "bird-feeder",
@@ -1807,7 +1782,6 @@ mod tests {
                 },
                 "sources": {},
                 "indexes": [],
-                "path_dependency_source_indexes": [],
                 "pyproject_toml": {
                   "project": {
                     "name": "bird-feeder",
@@ -1896,7 +1870,6 @@ mod tests {
                   ]
                 },
                 "indexes": [],
-                "path_dependency_source_indexes": [],
                 "pyproject_toml": {
                   "project": {
                     "name": "albatross",
@@ -2009,7 +1982,6 @@ mod tests {
                 },
                 "sources": {},
                 "indexes": [],
-                "path_dependency_source_indexes": [],
                 "pyproject_toml": {
                   "project": null,
                   "tool": {
@@ -2076,7 +2048,6 @@ mod tests {
                 },
                 "sources": {},
                 "indexes": [],
-                "path_dependency_source_indexes": [],
                 "pyproject_toml": {
                   "project": {
                     "name": "albatross",
@@ -2211,7 +2182,6 @@ mod tests {
                 },
                 "sources": {},
                 "indexes": [],
-                "path_dependency_source_indexes": [],
                 "pyproject_toml": {
                   "project": {
                     "name": "albatross",
@@ -2318,7 +2288,6 @@ mod tests {
                 },
                 "sources": {},
                 "indexes": [],
-                "path_dependency_source_indexes": [],
                 "pyproject_toml": {
                   "project": {
                     "name": "albatross",
@@ -2439,7 +2408,6 @@ mod tests {
                 },
                 "sources": {},
                 "indexes": [],
-                "path_dependency_source_indexes": [],
                 "pyproject_toml": {
                   "project": {
                     "name": "albatross",
@@ -2534,7 +2502,6 @@ mod tests {
                 },
                 "sources": {},
                 "indexes": [],
-                "path_dependency_source_indexes": [],
                 "pyproject_toml": {
                   "project": {
                     "name": "albatross",

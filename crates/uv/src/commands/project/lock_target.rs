@@ -215,14 +215,6 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
-    /// If this is a workspace, returns path dependency source indexes, otherwise return [`None`].
-    pub(crate) fn path_dependency_source_indexes(&self) -> Option<&[Index]> {
-        match self {
-            Self::Workspace(workspace) => Some(workspace.path_dependency_source_indexes()),
-            Self::Script(..) => None,
-        }
-    }
-
     /// Return the `Requires-Python` bound for the [`LockTarget`].
     #[allow(clippy::result_large_err)]
     pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
