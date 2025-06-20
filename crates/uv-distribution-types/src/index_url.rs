@@ -92,20 +92,15 @@ impl IndexUrl {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for IndexUrl {
-    fn schema_name() -> String {
-        "IndexUrl".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("IndexUrl")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path.".to_string()),
-              ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path."
+        })
     }
 }
 

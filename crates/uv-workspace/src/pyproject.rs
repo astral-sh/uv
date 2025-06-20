@@ -6,6 +6,7 @@
 //!
 //! Then lowers them into a dependency specification.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::ops::Deref;
@@ -813,12 +814,12 @@ impl<'de> serde::Deserialize<'de> for SerdePattern {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerdePattern {
-    fn schema_name() -> String {
-        <String as schemars::JsonSchema>::schema_name()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("SerdePattern")
     }
 
-    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        <String as schemars::JsonSchema>::json_schema(r#gen)
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        <String as schemars::JsonSchema>::json_schema(generator)
     }
 }
 

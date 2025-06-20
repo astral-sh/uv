@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -65,26 +66,16 @@ impl FromStr for PythonVersion {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PythonVersion {
-    fn schema_name() -> String {
-        String::from("PythonVersion")
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PythonVersion")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            string: Some(Box::new(schemars::schema::StringValidation {
-                pattern: Some(r"^3\.\d+(\.\d+)?$".to_string()),
-                ..schemars::schema::StringValidation::default()
-            })),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "A Python version specifier, e.g. `3.11` or `3.12.4`.".to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^3\.\d+(\.\d+)?$",
+            "description": "A Python version specifier, e.g. `3.11` or `3.12.4`."
+        })
     }
 }
 

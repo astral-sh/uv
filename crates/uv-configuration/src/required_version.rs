@@ -1,5 +1,5 @@
-use std::fmt::Formatter;
 use std::str::FromStr;
+use std::{borrow::Cow, fmt::Formatter};
 
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError};
 
@@ -36,20 +36,15 @@ impl FromStr for RequiredVersion {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for RequiredVersion {
-    fn schema_name() -> String {
-        String::from("RequiredVersion")
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("RequiredVersion")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A version specifier, e.g. `>=0.5.0` or `==0.5.0`.".to_string()),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A version specifier, e.g. `>=0.5.0` or `==0.5.0`."
+        })
     }
 }
 
