@@ -27,10 +27,12 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument};
 
+use uv_cache_key::cache_digest;
 use uv_configuration::PreviewMode;
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Requirement, Resolution};
+use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -201,6 +203,11 @@ impl Pep517Backend {
             {import}
         "#, backend_path = backend_path_encoded}
     }
+
+    fn is_setuptools(&self) -> bool {
+        // either `setuptools.build_meta` or `setuptools.build_meta:__legacy__`
+        self.backend.split(':').next() == Some("setuptools.build_meta")
+    }
 }
 
 /// Uses an [`Rc`] internally, clone freely.
@@ -252,6 +259,8 @@ pub struct SourceBuild {
     environment_variables: FxHashMap<OsString, OsString>,
     /// Runner for Python scripts.
     runner: PythonRunner,
+    /// A file lock representing the source tree, currently only used with setuptools.
+    _source_tree_lock: Option<LockedFile>,
 }
 
 impl SourceBuild {
@@ -385,6 +394,23 @@ impl SourceBuild {
             OsString::from(venv.scripts())
         };
 
+        // Depending on the command, setuptools puts `*.egg-info`, `build/`, and `dist/` in the
+        // source tree, and concurrent invocations of setuptools using the same source dir can
+        // stomp on each other. We need to lock something to fix that, but we don't want to dump a
+        // `.lock` file into the source tree that the user will need to .gitignore. Take a global
+        // proxy lock instead.
+        let mut source_tree_lock = None;
+        if pep517_backend.is_setuptools() {
+            debug!("Locking the source tree for setuptools");
+            let canonical_source_path = source_tree.canonicalize()?;
+            let lock_path = std::env::temp_dir().join(format!(
+                "uv-setuptools-{}.lock",
+                cache_digest(&canonical_source_path)
+            ));
+            source_tree_lock =
+                Some(LockedFile::acquire(lock_path, source_tree.to_string_lossy()).await?);
+        }
+
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         let runner = PythonRunner::new(concurrent_builds, level);
@@ -431,6 +457,7 @@ impl SourceBuild {
             environment_variables,
             modified_path,
             runner,
+            _source_tree_lock: source_tree_lock,
         })
     }
 
@@ -716,16 +743,12 @@ impl SourceBuild {
     pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = std::path::absolute(wheel_dir)?;
-        let filename = self.pep517_build(&wheel_dir, &self.pep517_backend).await?;
+        let filename = self.pep517_build(&wheel_dir).await?;
         Ok(filename)
     }
 
     /// Perform a PEP 517 build for a wheel or source distribution (sdist).
-    async fn pep517_build(
-        &self,
-        output_dir: &Path,
-        pep517_backend: &Pep517Backend,
-    ) -> Result<String, Error> {
+    async fn pep517_build(&self, output_dir: &Path) -> Result<String, Error> {
         // Write the hook output to a file so that we can read it back reliably.
         let outfile = self
             .temp_dir
@@ -737,7 +760,7 @@ impl SourceBuild {
             BuildKind::Sdist => {
                 debug!(
                     r#"Calling `{}.build_{}("{}", {})`"#,
-                    pep517_backend.backend,
+                    self.pep517_backend.backend,
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -750,7 +773,7 @@ impl SourceBuild {
                     with open("{}", "w") as fp:
                         fp.write(sdist_filename)
                     "#,
-                    pep517_backend.backend_import(),
+                    self.pep517_backend.backend_import(),
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -766,7 +789,7 @@ impl SourceBuild {
                     });
                 debug!(
                     r#"Calling `{}.build_{}("{}", {}, {})`"#,
-                    pep517_backend.backend,
+                    self.pep517_backend.backend,
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -780,7 +803,7 @@ impl SourceBuild {
                     with open("{}", "w") as fp:
                         fp.write(wheel_filename)
                     "#,
-                    pep517_backend.backend_import(),
+                    self.pep517_backend.backend_import(),
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -810,7 +833,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 format!(
                     "Call to `{}.build_{}` failed",
-                    pep517_backend.backend, self.build_kind
+                    self.pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
@@ -825,7 +848,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 format!(
                     "Call to `{}.build_{}` failed",
-                    pep517_backend.backend, self.build_kind
+                    self.pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
