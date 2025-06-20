@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use console::Term;
 
 use uv_fs::{CWD, Simplified};
+use uv_pep508::PackageName;
 use uv_requirements_txt::RequirementsTxtRequirement;
 
 #[derive(Debug, Clone)]
@@ -200,6 +201,16 @@ impl RequirementsSource {
         let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
             .with_context(|| format!("Failed to parse: `{name}`"))?;
 
+        Ok(Self::Package(requirement))
+    }
+
+    /// Parse a [`RequirementsSource`] from a [`PackageName`].
+    ///
+    /// Unlike [`RequirementsSource::from_package`], this method does not prompt the user and
+    /// expects a valid [`PackageName`] instead of an arbitrary string.
+    pub fn from_package_name(name: &PackageName) -> Result<Self> {
+        let requirement = RequirementsTxtRequirement::parse(name.as_str(), &*CWD, false)
+            .with_context(|| format!("Failed to parse: `{name}`"))?;
         Ok(Self::Package(requirement))
     }
 
