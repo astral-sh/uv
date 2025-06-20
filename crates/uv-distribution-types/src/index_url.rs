@@ -36,7 +36,8 @@ impl IndexUrl {
     /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
-    /// directory.
+    /// directory. Relative paths must be disambiguated by starting with "./" or "../" on Unix or
+    /// `.\\`, `..\\`, `./` or `../` on Windows.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
         let url = match split_scheme(path) {
             Some((scheme, ..)) => {
