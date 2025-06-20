@@ -355,11 +355,11 @@ explicit = true
 
 In some cases, you may want to use CPU-only builds in some cases, but CUDA-enabled builds in others,
 with the choice toggled by a user-provided extra (e.g., `uv sync --extra cpu` vs.
-`uv sync --extra cu124`).
+`uv sync --extra cu128`).
 
 With `tool.uv.sources`, you can use extra markers to specify the desired index for each enabled
 extra. For example, the following configuration would use PyTorch's CPU-only for
-`uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu124`:
+`uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu128`:
 
 ```toml
 [project]
@@ -410,7 +410,7 @@ explicit = true
 !!! note
 
     Since GPU-accelerated builds aren't available on macOS, the above configuration will fail to install
-    on macOS when the `cu124` extra is enabled.
+    on macOS when the `cu128` extra is enabled.
 
 ## The `uv pip` interface
 
