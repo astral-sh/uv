@@ -365,8 +365,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await?
                 .into_environment()?;
 
-                let _lock = environment.lock().await?;
-
                 let build_constraints = script
                     .metadata()
                     .tool
@@ -383,6 +381,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                                 .map(|constraint| Requirement::from(constraint.clone())),
                         )
                     });
+
+                let _lock = environment.lock().await?;
 
                 match update_environment(
                     environment,
