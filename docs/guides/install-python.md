@@ -120,6 +120,28 @@ To force uv to use the system Python, provide the `--no-managed-python` flag. Se
 [Python version preference](../concepts/python-versions.md#requiring-or-disabling-managed-python-versions)
 documentation for more details.
 
+## Upgrading Python versions
+
+!!! important
+
+    Support for upgrading Python patch versions is in _preview_. This means the behavior is
+    experimental and subject to change.
+
+To upgrade a Python version to the latest supported patch release:
+
+```console
+$ uv python upgrade 3.12
+```
+
+To upgrade all uv-managed Python versions:
+
+```console
+$ uv python upgrade
+```
+
+See the [`python upgrade`](../concepts/python-versions.md#upgrading-python-versions) documentation
+for more details.
+
 ## Next steps
 
 To learn more about `uv python`, see the [Python version concept](../concepts/python-versions.md)

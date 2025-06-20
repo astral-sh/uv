@@ -22,6 +22,7 @@ use regex::Regex;
 
 use tokio::io::AsyncWriteExt;
 use uv_cache::Cache;
+use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::{
@@ -959,6 +960,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv python upgrade` command with options shared across scenarios.
+    pub fn python_upgrade(&self) -> Command {
+        let mut command = self.new_command();
+        self.add_shared_options(&mut command, true);
+        command.arg("python").arg("upgrade");
+        command
+    }
+
     /// Create a `uv python pin` command with options shared across scenarios.
     pub fn python_pin(&self) -> Command {
         let mut command = self.new_command();
@@ -1434,6 +1443,7 @@ pub fn python_installations_for_versions(
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
                 &cache,
+                PreviewMode::Disabled,
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {

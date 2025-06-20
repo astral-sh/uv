@@ -7,6 +7,7 @@ use std::{collections::BTreeSet, ffi::OsString};
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_configuration::PreviewMode;
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledDist, Name};
 use uv_fs::Simplified;
@@ -80,6 +81,7 @@ pub(crate) async fn refine_interpreter(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
+    preview: PreviewMode,
 ) -> anyhow::Result<Option<Interpreter>, ProjectError> {
     let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
         err
@@ -151,6 +153,7 @@ pub(crate) async fn refine_interpreter(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await?
     .into_interpreter();
