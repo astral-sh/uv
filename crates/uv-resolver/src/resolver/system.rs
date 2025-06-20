@@ -86,4 +86,10 @@ mod tests {
         let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/cpu").unwrap();
         assert_eq!(SystemDependency::from_index(&url), None);
     }
+
+    #[test]
+    fn pytorch_xpu() {
+        let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/xpu").unwrap();
+        assert_eq!(SystemDependency::from_index(&url), None);
+    }
 }
