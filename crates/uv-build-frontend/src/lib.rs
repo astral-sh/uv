@@ -27,10 +27,12 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument};
 
+use uv_cache_key::cache_digest;
 use uv_configuration::PreviewMode;
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Requirement, Resolution};
+use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -731,6 +733,16 @@ impl SourceBuild {
             .temp_dir
             .path()
             .join(format!("build_{}.txt", self.build_kind));
+
+        // Take a file lock that representing the whole source tree, so that concurrent `uv build`
+        // commands can't interfere with each other. It might seem like it would be good enough to
+        // lock the output dir, but setuptools always writes to `build/` in the source tree,
+        // regardless of whether its output dir is set to somewhere else.
+        let canonical_source_path = self.source_tree.canonicalize()?;
+        let build_lock_path =
+            std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&canonical_source_path)));
+        let _lock =
+            LockedFile::acquire(build_lock_path, self.source_tree.to_string_lossy()).await?;
 
         // Construct the appropriate build script based on the build kind.
         let script = match self.build_kind {
