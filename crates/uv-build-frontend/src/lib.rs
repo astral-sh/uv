@@ -31,6 +31,7 @@ use uv_configuration::PreviewMode;
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Requirement, Resolution};
+use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -731,6 +732,11 @@ impl SourceBuild {
             .temp_dir
             .path()
             .join(format!("build_{}.txt", self.build_kind));
+
+        // Take a file lock in the output directory, so that concurrent `uv build` commands can't
+        // interfere with each other.
+        let _lock =
+            LockedFile::acquire(output_dir.join(".lock"), output_dir.to_string_lossy()).await?;
 
         // Construct the appropriate build script based on the build kind.
         let script = match self.build_kind {
