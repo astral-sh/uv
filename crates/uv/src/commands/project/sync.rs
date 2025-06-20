@@ -330,10 +330,10 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
+        Err(ProjectError::LockMismatch(prev, cur)) if dry_run.enabled() => {
             // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
             // sync operation, but exit with a non-zero status.
-            Outcome::LockMismatch(lock)
+            Outcome::LockMismatch(prev, cur)
         }
         Err(err) => return Err(err.into()),
     };
@@ -398,7 +398,7 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(lock) => Err(ProjectError::LockMismatch(lock).into()),
+        Outcome::LockMismatch(prev, cur) => Err(ProjectError::LockMismatch(prev, cur).into()),
     }
 }
 
@@ -409,15 +409,15 @@ enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>),
 }
 
 impl Outcome {
     /// Return the [`Lock`] associated with this outcome.
     fn lock(&self) -> &Lock {
         match self {
-            Self::Success(lock) => lock.lock(),
-            Self::LockMismatch(lock) => lock,
+            Self::Success(lock) => lock,
+            Self::LockMismatch(_prev, cur) => cur,
         }
     }
 }

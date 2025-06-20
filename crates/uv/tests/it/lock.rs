@@ -11822,12 +11822,17 @@ fn check_outdated_lock() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--check"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    Added iniconfig v2.0.0
+    Removed myproject v0.1.0
+    Added project v0.1.0
+    Removed sortedcollections v2.1.0
+    Removed sortedcontainers v2.4.0
+    The lockfile is outdated; run `uv lock` to update it
     ");
     Ok(())
 }
