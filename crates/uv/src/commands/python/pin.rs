@@ -57,16 +57,13 @@ pub(crate) async fn pin(
         }
     };
 
-    let version_file = if global {
-        if let Some(path) = user_uv_config_dir() {
-            PythonVersionFile::discover_user_config(path, &VersionFileDiscoveryOptions::default())
-                .await
-        } else {
-            Ok(None)
-        }
-    } else {
-        PythonVersionFile::discover(project_dir, &VersionFileDiscoveryOptions::default()).await
-    };
+    // Search for an existing file, we won't necessarily write to this, we'll construct a target
+    // path if there's a request later on.
+    let version_file = PythonVersionFile::discover(
+        project_dir,
+        &VersionFileDiscoveryOptions::default().with_no_local(global),
+    )
+    .await;
 
     if rm {
         let Some(file) = version_file? else {
