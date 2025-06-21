@@ -272,7 +272,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     context.assert_command("import poetry_editable").success();
 
     // Uninstall the editable by both path and name.
-    uv_snapshot!(context.filters(), context.pip_uninstall()
+    uv_snapshot!(context.pip_uninstall()
         .arg("poetry-editable")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
