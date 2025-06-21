@@ -24,6 +24,7 @@ use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform_tags::Platform;
 use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
+use uv_static::EnvVars;
 
 use crate::implementation::LenientImplementationName;
 use crate::platform::{Arch, Libc, Os};
@@ -584,6 +585,18 @@ impl Interpreter {
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
     pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+        if env::var(EnvVars::UV_ONLY_GLOBAL_LOCKS)
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false)
+        {
+            // Use global lockfile when UV_ONLY_GLOBAL_LOCKS is enabled
+            return LockedFile::acquire(
+                env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
+                self.sys_prefix.user_display(),
+            )
+            .await;
+        }
+
         if let Some(target) = self.target() {
             // If we're installing into a `--target`, use a target-specific lockfile.
             LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await

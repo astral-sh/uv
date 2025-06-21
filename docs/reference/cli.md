@@ -203,7 +203,9 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-run--only-dev"><a href="#uv-run--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-run--only-group"><a href="#uv-run--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+</dd><dt id="uv-run--only-global-locks"><a href="#uv-run--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-run--only-group"><a href="#uv-run--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-run--package"><a href="#uv-run--package"><code>--package</code></a> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace.</p>
@@ -354,7 +356,9 @@ uv init [OPTIONS] [PATH]
 <p>By default, uv searches for workspaces in the current directory or any parent directory.</p>
 </dd><dt id="uv-init--offline"><a href="#uv-init--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-init--package"><a href="#uv-init--package"><code>--package</code></a></dt><dd><p>Set up the project to be built as a Python package.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-init--only-global-locks"><a href="#uv-init--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-init--package"><a href="#uv-init--package"><code>--package</code></a></dt><dd><p>Set up the project to be built as a Python package.</p>
 <p>Defines a <code>[build-system]</code> for the project.</p>
 <p>This is the default behavior when using <code>--lib</code> or <code>--build-backend</code>.</p>
 <p>When using <code>--app</code>, this will include a <code>[project.scripts]</code> entrypoint and use a <code>src/</code> project structure.</p>
@@ -535,7 +539,9 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt id="uv-add--no-sync"><a href="#uv-add--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment</p>
 <p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-add--offline"><a href="#uv-add--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-add--optional"><a href="#uv-add--optional"><code>--optional</code></a> <i>optional</i></dt><dd><p>Add the requirements to the package's optional dependencies for the specified extra.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-add--only-global-locks"><a href="#uv-add--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-add--optional"><a href="#uv-add--optional"><code>--optional</code></a> <i>optional</i></dt><dd><p>Add the requirements to the package's optional dependencies for the specified extra.</p>
 <p>The group may then be activated when installing the project with the <code>--extra</code> flag.</p>
 <p>To enable an optional extra for this requirement instead, see <code>--extra</code>.</p>
 </dd><dt id="uv-add--package"><a href="#uv-add--package"><code>--package</code></a> <i>package</i></dt><dd><p>Add the dependency to a specific package in the workspace</p>
@@ -718,7 +724,9 @@ uv remove [OPTIONS] <PACKAGES>...
 </dd><dt id="uv-remove--no-sync"><a href="#uv-remove--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
 <p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-remove--offline"><a href="#uv-remove--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-remove--optional"><a href="#uv-remove--optional"><code>--optional</code></a> <i>optional</i></dt><dd><p>Remove the packages from the project's optional dependencies for the specified extra</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-remove--only-global-locks"><a href="#uv-remove--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-remove--optional"><a href="#uv-remove--optional"><code>--optional</code></a> <i>optional</i></dt><dd><p>Remove the packages from the project's optional dependencies for the specified extra</p>
 </dd><dt id="uv-remove--package"><a href="#uv-remove--package"><code>--package</code></a> <i>package</i></dt><dd><p>Remove the dependencies from a specific package in the workspace</p>
 </dd><dt id="uv-remove--prerelease"><a href="#uv-remove--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -887,7 +895,9 @@ uv version [OPTIONS] [VALUE]
 </dd><dt id="uv-version--no-sync"><a href="#uv-version--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
 <p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-version--offline"><a href="#uv-version--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-version--output-format"><a href="#uv-version--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The format of the output</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-version--only-global-locks"><a href="#uv-version--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-version--output-format"><a href="#uv-version--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The format of the output</p>
 <p>[default: text]</p><p>Possible values:</p>
 <ul>
 <li><code>text</code>:  Display the version as plain text</li>
@@ -1097,7 +1107,9 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-sync--only-dev"><a href="#uv-sync--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-sync--only-group"><a href="#uv-sync--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+</dd><dt id="uv-sync--only-global-locks"><a href="#uv-sync--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-sync--only-group"><a href="#uv-sync--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
@@ -1263,7 +1275,9 @@ uv lock [OPTIONS]
 </dd><dt id="uv-lock--no-sources"><a href="#uv-lock--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 </dd><dt id="uv-lock--offline"><a href="#uv-lock--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-lock--prerelease"><a href="#uv-lock--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-lock--only-global-locks"><a href="#uv-lock--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-lock--prerelease"><a href="#uv-lock--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
@@ -1460,7 +1474,9 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-export--only-dev"><a href="#uv-export--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-export--only-group"><a href="#uv-export--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+</dd><dt id="uv-export--only-global-locks"><a href="#uv-export--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-export--only-group"><a href="#uv-export--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-export--output-file"><a href="#uv-export--output-file"><code>--output-file</code></a>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
@@ -1635,7 +1651,9 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tree--only-dev"><a href="#uv-tree--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-tree--only-group"><a href="#uv-tree--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
+</dd><dt id="uv-tree--only-global-locks"><a href="#uv-tree--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-tree--only-group"><a href="#uv-tree--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-tree--outdated"><a href="#uv-tree--outdated"><code>--outdated</code></a></dt><dd><p>Show the latest available version of each package in the tree</p>
@@ -1881,7 +1899,9 @@ uv tool run [OPTIONS] [COMMAND]
 </dd><dt id="uv-tool-run--no-sources"><a href="#uv-tool-run--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 </dd><dt id="uv-tool-run--offline"><a href="#uv-tool-run--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-run--overrides"><a href="#uv-tool-run--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-run--only-global-locks"><a href="#uv-tool-run--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-tool-run--overrides"><a href="#uv-tool-run--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 <p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
 <p>While constraints are <em>additive</em>, in that they're combined with the requirements of the constituent packages, overrides are <em>absolute</em>, in that they completely replace the requirements of the constituent packages.</p>
 <p>May also be set with the <code>UV_OVERRIDE</code> environment variable.</p></dd><dt id="uv-tool-run--prerelease"><a href="#uv-tool-run--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
@@ -2049,7 +2069,9 @@ uv tool install [OPTIONS] <PACKAGE>
 </dd><dt id="uv-tool-install--no-sources"><a href="#uv-tool-install--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 </dd><dt id="uv-tool-install--offline"><a href="#uv-tool-install--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-install--overrides"><a href="#uv-tool-install--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-install--only-global-locks"><a href="#uv-tool-install--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-tool-install--overrides"><a href="#uv-tool-install--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 <p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
 <p>While constraints are <em>additive</em>, in that they're combined with the requirements of the constituent packages, overrides are <em>absolute</em>, in that they completely replace the requirements of the constituent packages.</p>
 <p>May also be set with the <code>UV_OVERRIDE</code> environment variable.</p></dd><dt id="uv-tool-install--prerelease"><a href="#uv-tool-install--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
@@ -2209,7 +2231,9 @@ uv tool upgrade [OPTIONS] <NAME>...
 </dd><dt id="uv-tool-upgrade--no-sources"><a href="#uv-tool-upgrade--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 </dd><dt id="uv-tool-upgrade--offline"><a href="#uv-tool-upgrade--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-upgrade--prerelease"><a href="#uv-tool-upgrade--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-upgrade--only-global-locks"><a href="#uv-tool-upgrade--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-tool-upgrade--prerelease"><a href="#uv-tool-upgrade--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
@@ -2287,7 +2311,9 @@ uv tool list [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-tool-list--offline"><a href="#uv-tool-list--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-list--project"><a href="#uv-tool-list--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-list--only-global-locks"><a href="#uv-tool-list--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-tool-list--project"><a href="#uv-tool-list--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -2355,7 +2381,9 @@ uv tool uninstall [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-tool-uninstall--no-python-downloads"><a href="#uv-tool-uninstall--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-tool-uninstall--offline"><a href="#uv-tool-uninstall--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-uninstall--project"><a href="#uv-tool-uninstall--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-uninstall--only-global-locks"><a href="#uv-tool-uninstall--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-tool-uninstall--project"><a href="#uv-tool-uninstall--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -2419,7 +2447,9 @@ uv tool update-shell [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-tool-update-shell--no-python-downloads"><a href="#uv-tool-update-shell--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-tool-update-shell--offline"><a href="#uv-tool-update-shell--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-update-shell--project"><a href="#uv-tool-update-shell--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-update-shell--only-global-locks"><a href="#uv-tool-update-shell--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-tool-update-shell--project"><a href="#uv-tool-update-shell--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -2496,7 +2526,9 @@ from the following environment variables, in order of preference:</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-tool-dir--no-python-downloads"><a href="#uv-tool-dir--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-tool-dir--offline"><a href="#uv-tool-dir--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-dir--project"><a href="#uv-tool-dir--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-dir--only-global-locks"><a href="#uv-tool-dir--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-tool-dir--project"><a href="#uv-tool-dir--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -2636,7 +2668,9 @@ uv python list [OPTIONS] [REQUEST]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-list--only-downloads"><a href="#uv-python-list--only-downloads"><code>--only-downloads</code></a></dt><dd><p>Only show available Python downloads.</p>
 <p>By default, installed distributions and available downloads for the current platform are shown.</p>
-</dd><dt id="uv-python-list--only-installed"><a href="#uv-python-list--only-installed"><code>--only-installed</code></a></dt><dd><p>Only show installed Python versions.</p>
+</dd><dt id="uv-python-list--only-global-locks"><a href="#uv-python-list--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-python-list--only-installed"><a href="#uv-python-list--only-installed"><code>--only-installed</code></a></dt><dd><p>Only show installed Python versions.</p>
 <p>By default, installed distributions and available downloads for the current platform are shown.</p>
 </dd><dt id="uv-python-list--output-format"><a href="#uv-python-list--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>Select the output format</p>
 <p>[default: text]</p><p>Possible values:</p>
@@ -2735,7 +2769,9 @@ uv python install [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-python-install--no-python-downloads"><a href="#uv-python-install--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-python-install--offline"><a href="#uv-python-install--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-install--project"><a href="#uv-python-install--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-install--only-global-locks"><a href="#uv-python-install--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-python-install--project"><a href="#uv-python-install--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -2812,7 +2848,9 @@ uv python find [OPTIONS] [REQUEST]
 </dd><dt id="uv-python-find--no-python-downloads"><a href="#uv-python-find--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-python-find--offline"><a href="#uv-python-find--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-find--project"><a href="#uv-python-find--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-find--only-global-locks"><a href="#uv-python-find--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-python-find--project"><a href="#uv-python-find--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -2894,7 +2932,9 @@ uv python pin [OPTIONS] [REQUEST]
 </dd><dt id="uv-python-pin--no-python-downloads"><a href="#uv-python-pin--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-python-pin--offline"><a href="#uv-python-pin--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-pin--project"><a href="#uv-python-pin--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-pin--only-global-locks"><a href="#uv-python-pin--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-python-pin--project"><a href="#uv-python-pin--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -2972,7 +3012,9 @@ from the following environment variables, in order of preference:</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-python-dir--no-python-downloads"><a href="#uv-python-dir--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-python-dir--offline"><a href="#uv-python-dir--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-dir--project"><a href="#uv-python-dir--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-dir--only-global-locks"><a href="#uv-python-dir--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-python-dir--project"><a href="#uv-python-dir--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -3038,7 +3080,9 @@ uv python uninstall [OPTIONS] <TARGETS>...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-python-uninstall--no-python-downloads"><a href="#uv-python-uninstall--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-python-uninstall--offline"><a href="#uv-python-uninstall--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-uninstall--project"><a href="#uv-python-uninstall--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-uninstall--only-global-locks"><a href="#uv-python-uninstall--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-python-uninstall--project"><a href="#uv-python-uninstall--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -3228,7 +3272,9 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-compile--only-binary"><a href="#uv-pip-compile--only-binary"><code>--only-binary</code></a> <i>only-binary</i></dt><dd><p>Only use pre-built wheels; don't build source distributions.</p>
 <p>When enabled, resolving will not run code from the given packages. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 <p>Multiple packages may be provided. Disable binaries for all packages with <code>:all:</code>. Clear previously specified packages with <code>:none:</code>.</p>
-</dd><dt id="uv-pip-compile--output-file"><a href="#uv-pip-compile--output-file"><code>--output-file</code></a>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the compiled requirements to the given <code>requirements.txt</code> or <code>pylock.toml</code> file.</p>
+</dd><dt id="uv-pip-compile--only-global-locks"><a href="#uv-pip-compile--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-compile--output-file"><a href="#uv-pip-compile--output-file"><code>--output-file</code></a>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the compiled requirements to the given <code>requirements.txt</code> or <code>pylock.toml</code> file.</p>
 <p>If the file already exists, the existing versions will be preferred when resolving dependencies, unless <code>--upgrade</code> is also specified.</p>
 </dd><dt id="uv-pip-compile--overrides"><a href="#uv-pip-compile--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 <p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
@@ -3497,7 +3543,9 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-sync--only-binary"><a href="#uv-pip-sync--only-binary"><code>--only-binary</code></a> <i>only-binary</i></dt><dd><p>Only use pre-built wheels; don't build source distributions.</p>
 <p>When enabled, resolving will not run code from the given packages. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 <p>Multiple packages may be provided. Disable binaries for all packages with <code>:all:</code>. Clear previously specified packages with <code>:none:</code>.</p>
-</dd><dt id="uv-pip-sync--prefix"><a href="#uv-pip-sync--prefix"><code>--prefix</code></a> <i>prefix</i></dt><dd><p>Install packages into <code>lib</code>, <code>bin</code>, and other top-level folders under the specified directory, as if a virtual environment were present at that location.</p>
+</dd><dt id="uv-pip-sync--only-global-locks"><a href="#uv-pip-sync--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-sync--prefix"><a href="#uv-pip-sync--prefix"><code>--prefix</code></a> <i>prefix</i></dt><dd><p>Install packages into <code>lib</code>, <code>bin</code>, and other top-level folders under the specified directory, as if a virtual environment were present at that location.</p>
 <p>In general, prefer the use of <code>--python</code> to install into an alternate environment, as scripts and other artifacts installed via <code>--prefix</code> will reference the installing interpreter, rather than any interpreter added to the <code>--prefix</code> directory, rendering them non-portable.</p>
 </dd><dt id="uv-pip-sync--project"><a href="#uv-pip-sync--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
@@ -3765,7 +3813,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-install--only-binary"><a href="#uv-pip-install--only-binary"><code>--only-binary</code></a> <i>only-binary</i></dt><dd><p>Only use pre-built wheels; don't build source distributions.</p>
 <p>When enabled, resolving will not run code from the given packages. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
 <p>Multiple packages may be provided. Disable binaries for all packages with <code>:all:</code>. Clear previously specified packages with <code>:none:</code>.</p>
-</dd><dt id="uv-pip-install--overrides"><a href="#uv-pip-install--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
+</dd><dt id="uv-pip-install--only-global-locks"><a href="#uv-pip-install--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-install--overrides"><a href="#uv-pip-install--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 <p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
 <p>While constraints are <em>additive</em>, in that they're combined with the requirements of the constituent packages, overrides are <em>absolute</em>, in that they completely replace the requirements of the constituent packages.</p>
 <p>May also be set with the <code>UV_OVERRIDE</code> environment variable.</p></dd><dt id="uv-pip-install--prefix"><a href="#uv-pip-install--prefix"><code>--prefix</code></a> <i>prefix</i></dt><dd><p>Install packages into <code>lib</code>, <code>bin</code>, and other top-level folders under the specified directory, as if a virtual environment were present at that location.</p>
@@ -3980,7 +4030,9 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-uninstall--no-python-downloads"><a href="#uv-pip-uninstall--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-uninstall--offline"><a href="#uv-pip-uninstall--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-uninstall--prefix"><a href="#uv-pip-uninstall--prefix"><code>--prefix</code></a> <i>prefix</i></dt><dd><p>Uninstall packages from the specified <code>--prefix</code> directory</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-uninstall--only-global-locks"><a href="#uv-pip-uninstall--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-uninstall--prefix"><a href="#uv-pip-uninstall--prefix"><code>--prefix</code></a> <i>prefix</i></dt><dd><p>Uninstall packages from the specified <code>--prefix</code> directory</p>
 </dd><dt id="uv-pip-uninstall--project"><a href="#uv-pip-uninstall--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
@@ -4050,7 +4102,9 @@ uv pip freeze [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-freeze--no-python-downloads"><a href="#uv-pip-freeze--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-freeze--offline"><a href="#uv-pip-freeze--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-freeze--path"><a href="#uv-pip-freeze--path"><code>--path</code></a> <i>paths</i></dt><dd><p>Restrict to the specified installation path for listing packages (can be used multiple times)</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-freeze--only-global-locks"><a href="#uv-pip-freeze--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-freeze--path"><a href="#uv-pip-freeze--path"><code>--path</code></a> <i>paths</i></dt><dd><p>Restrict to the specified installation path for listing packages (can be used multiple times)</p>
 </dd><dt id="uv-pip-freeze--project"><a href="#uv-pip-freeze--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
@@ -4158,7 +4212,9 @@ uv pip list [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-list--no-python-downloads"><a href="#uv-pip-list--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-list--offline"><a href="#uv-pip-list--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-list--outdated"><a href="#uv-pip-list--outdated"><code>--outdated</code></a></dt><dd><p>List outdated packages.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-list--only-global-locks"><a href="#uv-pip-list--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-list--outdated"><a href="#uv-pip-list--outdated"><code>--outdated</code></a></dt><dd><p>List outdated packages.</p>
 <p>The latest version of each package will be shown alongside the installed version. Up-to-date packages will be omitted from the output.</p>
 </dd><dt id="uv-pip-list--project"><a href="#uv-pip-list--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
@@ -4232,7 +4288,9 @@ uv pip show [OPTIONS] [PACKAGE]...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-show--no-python-downloads"><a href="#uv-pip-show--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-show--offline"><a href="#uv-pip-show--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-show--project"><a href="#uv-pip-show--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-show--only-global-locks"><a href="#uv-pip-show--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-show--project"><a href="#uv-pip-show--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -4333,7 +4391,9 @@ uv pip tree [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-tree--no-python-downloads"><a href="#uv-pip-tree--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-tree--offline"><a href="#uv-pip-tree--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-tree--outdated"><a href="#uv-pip-tree--outdated"><code>--outdated</code></a></dt><dd><p>Show the latest available version of each package in the tree</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-tree--only-global-locks"><a href="#uv-pip-tree--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-tree--outdated"><a href="#uv-pip-tree--outdated"><code>--outdated</code></a></dt><dd><p>Show the latest available version of each package in the tree</p>
 </dd><dt id="uv-pip-tree--package"><a href="#uv-pip-tree--package"><code>--package</code></a> <i>package</i></dt><dd><p>Display only the specified packages</p>
 </dd><dt id="uv-pip-tree--project"><a href="#uv-pip-tree--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
@@ -4403,7 +4463,9 @@ uv pip check [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-check--no-python-downloads"><a href="#uv-pip-check--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-check--offline"><a href="#uv-pip-check--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-check--project"><a href="#uv-pip-check--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-pip-check--only-global-locks"><a href="#uv-pip-check--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-pip-check--project"><a href="#uv-pip-check--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -4529,7 +4591,9 @@ uv venv [OPTIONS] [PATH]
 </dd><dt id="uv-venv--no-python-downloads"><a href="#uv-venv--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-venv--offline"><a href="#uv-venv--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-venv--project"><a href="#uv-venv--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-venv--only-global-locks"><a href="#uv-venv--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-venv--project"><a href="#uv-venv--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -4691,7 +4755,9 @@ uv build [OPTIONS] [SRC]
 <p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
 <p>May also be set with the <code>UV_NO_VERIFY_HASHES</code> environment variable.</p></dd><dt id="uv-build--offline"><a href="#uv-build--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-build--out-dir"><a href="#uv-build--out-dir"><code>--out-dir</code></a>, <code>-o</code> <i>out-dir</i></dt><dd><p>The output directory to which distributions should be written.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-build--only-global-locks"><a href="#uv-build--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-build--out-dir"><a href="#uv-build--out-dir"><code>--out-dir</code></a>, <code>-o</code> <i>out-dir</i></dt><dd><p>The output directory to which distributions should be written.</p>
 <p>Defaults to the <code>dist</code> subdirectory within the source directory, or the directory containing the source distribution archive.</p>
 </dd><dt id="uv-build--package"><a href="#uv-build--package"><code>--package</code></a> <i>package</i></dt><dd><p>Build a specific package in the workspace.</p>
 <p>The workspace will be discovered from the provided source directory, or the current directory if no source directory is provided.</p>
@@ -4818,7 +4884,9 @@ uv publish --publish-url https://upload.pypi.org/legacy/ --check-url https://pyp
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-publish--no-python-downloads"><a href="#uv-publish--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-publish--offline"><a href="#uv-publish--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-publish--password"><a href="#uv-publish--password"><code>--password</code></a>, <code>-p</code> <i>password</i></dt><dd><p>The password for the upload</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-publish--only-global-locks"><a href="#uv-publish--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-publish--password"><a href="#uv-publish--password"><code>--password</code></a>, <code>-p</code> <i>password</i></dt><dd><p>The password for the upload</p>
 <p>May also be set with the <code>UV_PUBLISH_PASSWORD</code> environment variable.</p></dd><dt id="uv-publish--project"><a href="#uv-publish--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
@@ -4912,7 +4980,9 @@ uv cache clean [OPTIONS] [PACKAGE]...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-cache-clean--no-python-downloads"><a href="#uv-cache-clean--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-cache-clean--offline"><a href="#uv-cache-clean--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-cache-clean--project"><a href="#uv-cache-clean--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-cache-clean--only-global-locks"><a href="#uv-cache-clean--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-cache-clean--project"><a href="#uv-cache-clean--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -4973,7 +5043,9 @@ uv cache prune [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-cache-prune--no-python-downloads"><a href="#uv-cache-prune--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-cache-prune--offline"><a href="#uv-cache-prune--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-cache-prune--project"><a href="#uv-cache-prune--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-cache-prune--only-global-locks"><a href="#uv-cache-prune--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-cache-prune--project"><a href="#uv-cache-prune--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -5039,7 +5111,9 @@ uv cache dir [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-cache-dir--no-python-downloads"><a href="#uv-cache-dir--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-cache-dir--offline"><a href="#uv-cache-dir--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-cache-dir--project"><a href="#uv-cache-dir--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-cache-dir--only-global-locks"><a href="#uv-cache-dir--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-cache-dir--project"><a href="#uv-cache-dir--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -5119,7 +5193,9 @@ uv self update [OPTIONS] [TARGET_VERSION]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-self-update--no-python-downloads"><a href="#uv-self-update--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-self-update--offline"><a href="#uv-self-update--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-self-update--project"><a href="#uv-self-update--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-self-update--only-global-locks"><a href="#uv-self-update--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-self-update--project"><a href="#uv-self-update--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -5178,7 +5254,9 @@ uv self version [OPTIONS]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-self-version--no-python-downloads"><a href="#uv-self-version--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-self-version--offline"><a href="#uv-self-version--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-self-version--output-format"><a href="#uv-self-version--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dt id="uv-self-version--project"><a href="#uv-self-version--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-self-version--only-global-locks"><a href="#uv-self-version--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-self-version--output-format"><a href="#uv-self-version--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dt id="uv-self-version--project"><a href="#uv-self-version--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -5218,7 +5296,9 @@ uv generate-shell-completion [OPTIONS] <SHELL>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 <p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-generate-shell-completion--no-managed-python"><a href="#uv-generate-shell-completion--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
 <p>Instead, uv will search for a suitable Python version on the system.</p>
-<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-generate-shell-completion--project"><a href="#uv-generate-shell-completion--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-generate-shell-completion--only-global-locks"><a href="#uv-generate-shell-completion--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-generate-shell-completion--project"><a href="#uv-generate-shell-completion--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
@@ -5277,7 +5357,9 @@ uv help [OPTIONS] [COMMAND]...
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-help--no-python-downloads"><a href="#uv-help--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-help--offline"><a href="#uv-help--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-help--project"><a href="#uv-help--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-help--only-global-locks"><a href="#uv-help--only-global-locks"><code>--only-global-locks</code></a></dt><dd><p>Only use global lockfiles during environment operations.</p>
+<p>By default, uv tries to set up a lockfile inside of the root directory where the python binary resides. This is an issue on environments where that directory may be read-only, such as Nix/NixOS</p>
+<p>May also be set with the <code>UV_ONLY_GLOBAL_LOCKS</code> environment variable.</p></dd><dt id="uv-help--project"><a href="#uv-help--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>

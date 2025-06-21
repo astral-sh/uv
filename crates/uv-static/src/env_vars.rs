@@ -146,6 +146,9 @@ impl EnvVars {
     /// Require use of uv-managed Python versions.
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
 
+    /// Only use global lockfiles during environment operations.
+    pub const UV_ONLY_GLOBAL_LOCKS: &'static str = "UV_ONLY_GLOBAL_LOCKS";
+
     /// Disable use of uv-managed Python versions.
     pub const UV_NO_MANAGED_PYTHON: &'static str = "UV_NO_MANAGED_PYTHON";
 
