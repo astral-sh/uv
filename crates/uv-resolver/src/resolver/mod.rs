@@ -1814,7 +1814,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .options
                     .torch_backend
                     .as_ref()
-                    .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Auto { .. }))
+                    .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Cuda { .. }))
                     .and_then(|_| pins.get(name, version).and_then(ResolvedDist::index))
                     .map(IndexUrl::url)
                     .and_then(SystemDependency::from_index)
