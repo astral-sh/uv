@@ -15,7 +15,10 @@ use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_static::EnvVars;
 use uv_version::version;
 
-use crate::{Fetch, GitSource, Reporter};
+use crate::{
+    Fetch, GitSource, Reporter,
+    rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {
@@ -77,10 +80,18 @@ impl GitResolver {
             return Ok(None);
         };
 
+        // Check if we're rate-limited by GitHub, before determining the Git reference
+        if GITHUB_RATE_LIMIT_STATUS.is_active() {
+            debug!("Rate-limited by GitHub. Skipping GitHub fast path attempt for: {url}");
+            return Ok(None);
+        }
+
         // Determine the Git reference.
         let rev = url.reference().as_rev();
 
-        let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{rev}");
+        let base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
+            .unwrap_or("https://api.github.com/repos".to_owned());
+        let url = format!("{base_url}/{owner}/{repo}/commits/{rev}");
 
         debug!("Querying GitHub for commit at: {url}");
         let mut request = client.get(&url);
@@ -91,13 +102,17 @@ impl GitResolver {
         );
 
         let response = request.send().await?;
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             // Returns a 404 if the repository does not exist, and a 422 if GitHub is unable to
             // resolve the requested rev.
-            debug!(
-                "GitHub API request failed for: {url} ({})",
-                response.status()
-            );
+            debug!("GitHub API request failed for: {url} ({})", status);
+
+            if is_github_rate_limited(&response) {
+                // Mark that we are being rate-limited by GitHub
+                GITHUB_RATE_LIMIT_STATUS.activate();
+            }
+
             return Ok(None);
         }
 
