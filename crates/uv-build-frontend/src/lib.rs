@@ -806,6 +806,14 @@ impl SourceBuild {
             )
             .instrument(span)
             .await?;
+
+        for line in &output.stderr {
+            debug!("{line}");
+        }
+        for line in &output.stdout {
+            debug!("{line}");
+        }
+
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
