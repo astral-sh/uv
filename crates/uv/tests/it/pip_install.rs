@@ -5753,6 +5753,8 @@ fn deptry_gitignore() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("deptry_reproducer @ {}", source_dist_dir.join("deptry_reproducer-0.1.0.tar.gz").simplified_display()))
         .arg("--strict")
+        // Set by the test harness, needed by the test
+        .env("RUSTUP_TOOLCHAIN", std::env::var("RUSTUP_TOOLCHAIN").unwrap())
         .current_dir(source_dist_dir), @r###"
     success: true
     exit_code: 0
