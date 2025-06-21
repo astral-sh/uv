@@ -171,6 +171,8 @@ pub enum TorchMode {
     #[serde(rename = "rocm4.0.1")]
     #[cfg_attr(feature = "clap", clap(name = "rocm4.0.1"))]
     Rocm401,
+    /// Use the PyTorch index for Intel XPU.
+    Xpu,
 }
 
 /// The strategy to use when determining the appropriate PyTorch index.
@@ -237,6 +239,7 @@ impl TorchStrategy {
             TorchMode::Rocm42 => Ok(Self::Backend(TorchBackend::Rocm42)),
             TorchMode::Rocm41 => Ok(Self::Backend(TorchBackend::Rocm41)),
             TorchMode::Rocm401 => Ok(Self::Backend(TorchBackend::Rocm401)),
+            TorchMode::Xpu => Ok(Self::Backend(TorchBackend::Xpu)),
         }
     }
 
@@ -356,6 +359,7 @@ pub enum TorchBackend {
     Rocm42,
     Rocm41,
     Rocm401,
+    Xpu,
 }
 
 impl TorchBackend {
@@ -403,6 +407,7 @@ impl TorchBackend {
             Self::Rocm42 => &ROCM42_INDEX_URL,
             Self::Rocm41 => &ROCM41_INDEX_URL,
             Self::Rocm401 => &ROCM401_INDEX_URL,
+            Self::Xpu => &XPU_INDEX_URL,
         }
     }
 
@@ -465,6 +470,7 @@ impl TorchBackend {
             TorchBackend::Rocm42 => None,
             TorchBackend::Rocm41 => None,
             TorchBackend::Rocm401 => None,
+            TorchBackend::Xpu => None,
         }
     }
 
@@ -512,6 +518,7 @@ impl TorchBackend {
             TorchBackend::Rocm42 => Some(Version::new([4, 2])),
             TorchBackend::Rocm41 => Some(Version::new([4, 1])),
             TorchBackend::Rocm401 => Some(Version::new([4, 0, 1])),
+            TorchBackend::Xpu => None,
         }
     }
 }
@@ -562,6 +569,7 @@ impl FromStr for TorchBackend {
             "rocm4.2" => Ok(TorchBackend::Rocm42),
             "rocm4.1" => Ok(TorchBackend::Rocm41),
             "rocm4.0.1" => Ok(TorchBackend::Rocm401),
+            "xpu" => Ok(TorchBackend::Xpu),
             _ => Err(format!("Unknown PyTorch backend: {s}")),
         }
     }
@@ -725,3 +733,5 @@ static ROCM41_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm4.1").unwrap());
 static ROCM401_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm4.0.1").unwrap());
+static XPU_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/xpu").unwrap());

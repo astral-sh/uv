@@ -2701,6 +2701,13 @@
           "enum": [
             "rocm4.0.1"
           ]
+        },
+        {
+          "description": "Use the PyTorch index for Intel XPU.",
+          "type": "string",
+          "enum": [
+            "xpu"
+          ]
         }
       ]
     },
