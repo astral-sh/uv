@@ -43,15 +43,36 @@ impl Ord for Arch {
             return self.variant.cmp(&other.variant);
         }
 
-        let native = Arch::from_env();
+        // For the time being, manually make aarch64 windows disfavored
+        // on its own host platform, because most packages don't have wheels for
+        // aarch64 windows, making emulation more useful than native execution!
+        //
+        // The reason we do this in "sorting" and not "supports" is so that we don't
+        // *refuse* to use an aarch64 windows pythons if they happen to be installed
+        // and nothing else is available.
+        //
+        // Similarly if someone manually requests an aarch64 windows install, we
+        // should respect that request (this is the way users should "override"
+        // this behaviour).
+        let preferred = if cfg!(all(windows, target_arch = "aarch64")) {
+            Arch {
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            }
+        } else {
+            // Prefer native architectures
+            Arch::from_env()
+        };
 
-        // Prefer native architectures
-        match (self.family == native.family, other.family == native.family) {
+        match (
+            self.family == preferred.family,
+            other.family == preferred.family,
+        ) {
             (true, true) => unreachable!(),
             (true, false) => std::cmp::Ordering::Less,
             (false, true) => std::cmp::Ordering::Greater,
             (false, false) => {
-                // Both non-native, fallback to lexicographic order
+                // Both non-preferred, fallback to lexicographic order
                 self.family.to_string().cmp(&other.family.to_string())
             }
         }
