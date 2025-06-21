@@ -841,8 +841,10 @@ fn version_set_dynamic() -> Result<()> {
     Ok(())
 }
 
-// Should fallback to `uv --version` if this pyproject.toml isn't usable for whatever reason
+// Previously would fallback to `uv --version` if this pyproject.toml isn't usable for whatever reason
 // (In this case, because tool.uv.managed = false)
+//
+// This fallback path is now deprecated and we just get an error.
 #[test]
 fn version_get_fallback_unmanaged() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -860,13 +862,12 @@ fn version_get_fallback_unmanaged() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.version(), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+    error: The project is marked as unmanaged: `[TEMP_DIR]/`
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -911,13 +912,12 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.version()
         .arg("--short"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+    error: The project is marked as unmanaged: `[TEMP_DIR]/`
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -988,25 +988,14 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
         .collect::<Vec<_>>();
     if git_version_info_expected() {
         uv_snapshot!(filters, context.version()
-          .arg("--output-format").arg("json"), @r#"
-      success: true
-      exit_code: 0
-      ----- stdout -----
-      {
-        "package_name": "uv",
-        "version": "[VERSION]",
-        "commit_info": {
-          "short_commit_hash": "[LONGHASH]",
-          "commit_hash": "[LONGHASH]",
-          "commit_date": "[DATE]",
-          "last_tag": "[TAG]",
-          "commits_since_last_tag": [COUNT]
-        }
-      }
+          .arg("--output-format").arg("json"), @r"
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-      ----- stderr -----
-      warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
-      "#);
+        ----- stderr -----
+        error: The project is marked as unmanaged: `[TEMP_DIR]/`
+        ");
     } else {
         uv_snapshot!(filters, context.version()
           .arg("--output-format").arg("json"), @r#"
