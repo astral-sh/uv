@@ -5,6 +5,8 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
+use uv_fs::copy_dir_all;
+
 use crate::common::{TestContext, get_bin, uv_snapshot};
 
 #[test]
@@ -211,16 +213,18 @@ fn uninstall_editable_by_name() -> Result<()> {
 #[cfg(feature = "pypi")]
 fn uninstall_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
+    let poetry_editable = context.temp_dir.child("packages").child("poetry_editable");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(
+    // Copy into the temporary directory.
+    copy_dir_all(
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
-            .as_os_str()
-            .to_str()
-            .expect("Path is valid unicode"),
+            .join("scripts/packages/poetry_editable"),
+        &poetry_editable,
     )?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(poetry_editable.as_os_str().to_str().unwrap())?;
 
     context
         .pip_sync()
@@ -232,15 +236,15 @@ fn uninstall_by_path() -> Result<()> {
 
     // Uninstall the editable by path.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(poetry_editable.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-    "###
+     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+    "
     );
 
     context.assert_command("import poetry_editable").failure();
@@ -252,16 +256,18 @@ fn uninstall_by_path() -> Result<()> {
 #[cfg(feature = "pypi")]
 fn uninstall_duplicate_by_path() -> Result<()> {
     let context = TestContext::new("3.12");
+    let poetry_editable = context.temp_dir.child("packages").child("poetry_editable");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(
+    // Copy into the temporary directory.
+    copy_dir_all(
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
-            .as_os_str()
-            .to_str()
-            .expect("Path is valid unicode"),
+            .join("scripts/packages/poetry_editable"),
+        &poetry_editable,
     )?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(poetry_editable.as_os_str().to_str().unwrap())?;
 
     context
         .pip_sync()
@@ -274,15 +280,15 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     // Uninstall the editable by both path and name.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("poetry-editable")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(poetry_editable.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-    "###
+     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+    "
     );
 
     context.assert_command("import poetry_editable").failure();
