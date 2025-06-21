@@ -263,7 +263,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
             .expect("Path is valid unicode"),
     )?;
 
-    uv_snapshot!(context.filters(), context
+    uv_snapshot!(context
         .pip_sync()
         .arg("-vv")
         .arg(requirements_txt.path()), @r"
