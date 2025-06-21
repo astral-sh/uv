@@ -41,7 +41,7 @@ use crate::{BrokenSymlink, Interpreter, PythonInstallationKey, PythonVersion};
 /// A request to find a Python installation.
 ///
 /// See [`PythonRequest::from_str`].
-#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
+#[derive(Debug, Clone, Eq, Default, Hash)]
 pub enum PythonRequest {
     /// An appropriate default Python installation
     ///
@@ -66,6 +66,12 @@ pub enum PythonRequest {
     /// A request for a specific Python installation key e.g. `cpython-3.12-x86_64-linux-gnu`
     /// Generally these refer to managed Python downloads.
     Key(PythonDownloadRequest),
+}
+
+impl PartialEq for PythonRequest {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_canonical_string() == other.to_canonical_string()
+    }
 }
 
 impl<'a> serde::Deserialize<'a> for PythonRequest {

@@ -14,11 +14,13 @@ use uv_distribution_types::{
     NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
 };
+use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -72,7 +74,25 @@ pub(crate) async fn install(
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    let python_request = python.as_deref().map(PythonRequest::parse);
+    let (python_request, explicit_python_request) = if let Some(request) = python.as_deref() {
+        (Some(PythonRequest::parse(request)), true)
+    } else {
+        // Discover a global Python version pin, if no request was made
+        (
+            PythonVersionFile::discover(
+                // TODO(zanieb): We don't use the directory, should we expose another interface?
+                // Should `no_local` be implied by `None` here?
+                &*CWD,
+                &VersionFileDiscoveryOptions::default()
+                    // TODO(zanieb): Propagate `no_config` from the global options to here
+                    .with_no_config(false)
+                    .with_no_local(true),
+            )
+            .await?
+            .and_then(PythonVersionFile::into_version),
+            false,
+        )
+    };
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
@@ -363,13 +383,30 @@ pub(crate) async fn install(
                         environment.interpreter().sys_executable().display()
                     );
                     true
-                } else {
+                } else if explicit_python_request {
                     let _ = writeln!(
                         printer.stderr(),
                         "Ignoring existing environment for `{from}`: the requested Python interpreter does not match the environment interpreter",
                         from = from.name.cyan(),
                     );
                     false
+                } else {
+                    // Allow the existing environment if the user didn't explicitly request another
+                    // version
+                    if let Some(ref tool_receipt) = existing_tool_receipt {
+                        if settings.reinstall.is_all() && tool_receipt.python().is_none() && python_request.is_some() {
+                            let _ = writeln!(
+                                printer.stderr(),
+                                "Ignoring existing environment for `{from}`: the Python interpreter does not match the environment interpreter",
+                                from = from.name.cyan(),
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    } else {
+                        true
+                    }
                 }
             });
 
@@ -602,7 +639,12 @@ pub(crate) async fn install(
         &installed_tools,
         options,
         force || invalid_tool_receipt,
-        python_request,
+        // Only persist the Python request if it was explicitly provided
+        if explicit_python_request {
+            python_request
+        } else {
+            None
+        },
         requirements,
         constraints,
         overrides,
