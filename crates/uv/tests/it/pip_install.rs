@@ -2068,7 +2068,35 @@ fn install_git_public_https_missing_branch_or_tag() {
 
 #[tokio::test]
 #[cfg(feature = "git")]
-async fn install_git_public_rate_limited_by_github_rest_api() {
+async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(403))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("pip-test-package @ git+https://github.com/pypa/pip-test-package@5547fa909e83df8bd743d3978d6667497983a4b7")
+        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pip-test-package==0.1.1 (from git+https://github.com/pypa/pip-test-package@5547fa909e83df8bd743d3978d6667497983a4b7)
+    ");
+}
+
+#[tokio::test]
+#[cfg(feature = "git")]
+async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
     use uv_client::DEFAULT_RETRIES;
 
     let context = TestContext::new("3.12");
@@ -2076,7 +2104,7 @@ async fn install_git_public_rate_limited_by_github_rest_api() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(429))
-        .expect(1 + u64::from(DEFAULT_RETRIES))
+        .expect(1 + u64::from(DEFAULT_RETRIES)) // Middleware retries on 429 by default
         .mount(&server)
         .await;
 
