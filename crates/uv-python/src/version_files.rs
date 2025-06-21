@@ -217,6 +217,12 @@ impl PythonVersionFile {
         }
     }
 
+    /// Create a new representation of a global Python version file.
+    pub fn new_global() -> Option<Self> {
+        let path = user_uv_config_dir()?.join(PYTHON_VERSION_FILENAME);
+        Some(Self::new(path))
+    }
+
     /// Return the first request declared in the file, if any.
     pub fn version(&self) -> Option<&PythonRequest> {
         self.versions.first()
@@ -260,6 +266,9 @@ impl PythonVersionFile {
     /// Update the version file on the file system.
     pub async fn write(&self) -> Result<(), std::io::Error> {
         debug!("Writing Python versions to `{}`", self.path.display());
+        if let Some(parent) = self.path.parent() {
+            fs_err::tokio::create_dir_all(parent).await?;
+        }
         fs::tokio::write(
             &self.path,
             self.versions

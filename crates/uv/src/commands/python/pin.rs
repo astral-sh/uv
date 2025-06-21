@@ -9,7 +9,6 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{DependencyGroupsWithDefaults, PreviewMode};
-use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
@@ -72,10 +71,22 @@ pub(crate) async fn pin(
             }
             bail!("No Python version file found");
         };
+
+        if !global
+            && PythonVersionFile::new_global().is_some_and(|global| file.path() == global.path())
+        {
+            bail!("No Python version file found; use `--rm --global` to remove the global pin");
+        }
+
         fs_err::tokio::remove_file(file.path()).await?;
         writeln!(
             printer.stdout(),
-            "Removed Python version file at `{}`",
+            "Removed {} at `{}`",
+            if global {
+                "global Python pin"
+            } else {
+                "Python version file"
+            },
             file.path().user_display()
         )?;
         return Ok(ExitStatus::Success);
@@ -192,12 +203,11 @@ pub(crate) async fn pin(
     let existing = version_file.ok().flatten();
     // TODO(zanieb): Allow updating the discovered version file with an `--update` flag.
     let new = if global {
-        let Some(config_dir) = user_uv_config_dir() else {
-            return Err(anyhow::anyhow!("No user-level config directory found."));
+        let Some(new) = PythonVersionFile::new_global() else {
+            // TODO(zanieb): We should find a nice way to surface that as an error
+            bail!("Failed to determine directory for global Python pin");
         };
-        fs_err::tokio::create_dir_all(&config_dir).await?;
-        PythonVersionFile::new(config_dir.join(PYTHON_VERSION_FILENAME))
-            .with_versions(vec![request])
+        new.with_versions(vec![request])
     } else {
         PythonVersionFile::new(project_dir.join(PYTHON_VERSION_FILENAME))
             .with_versions(vec![request])
