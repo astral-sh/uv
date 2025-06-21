@@ -16,16 +16,22 @@ def find_uv_bin() -> str:
     targets = [
         # The scripts directory for the current Python
         sysconfig.get_path("scripts"),
-        # The scripts directory for the base prefix (if different)
+        # The scripts directory for the base prefix
         sysconfig.get_path("scripts", vars={"base": sys.base_prefix}),
         # The user scheme scripts directory, e.g., `~/.local/bin`
         sysconfig.get_path("scripts", scheme=_user_scheme()),
-        # Adjacent to the package root, e.g. from, `pip install --target`
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "bin"),
+        # Above the package root, e.g., from `pip install --prefix`
+        # with module path `<prefix>/lib/python3.13/site-packages/uv`
+        _join(_parents(_module_path(), 4), "bin"),
+        # Adjacent to the package root, e.g., from `pip install --target`
+        # with module path `<target>/uv`
+        _join(_parents(_module_path(), 1), "bin"),
     ]
 
     seen = set()
     for target in targets:
+        if not target:
+            continue
         if target in seen:
             continue
         seen.add(target)
@@ -37,6 +43,26 @@ def find_uv_bin() -> str:
         f"Could not find the uv binary in any of the following locations:\n"
         f"{os.linesep.join(f' - {target}' for target in seen)}\n"
     )
+
+
+def _module_path() -> str | None:
+    path = os.path.dirname(__file__)
+    return path
+
+
+def _parents(path: str | None, n: int) -> str | None:
+    if not path:
+        return None
+    parts = path.split(os.sep)
+    if len(parts) < n:
+        return None
+    return os.sep.join(parts[:-n])
+
+
+def _join(path: str | None, *parts: str) -> str | None:
+    if not path:
+        return None
+    return os.path.join(path, *parts)
 
 
 def _user_scheme() -> str:
