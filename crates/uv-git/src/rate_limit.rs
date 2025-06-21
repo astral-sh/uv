@@ -19,10 +19,10 @@ impl GitHubRateLimitStatus {
     }
 
     pub(crate) fn activate(&self) {
-        self.0.store(true, Ordering::SeqCst);
+        self.0.store(true, Ordering::Relaxed);
     }
 
     pub(crate) fn is_active(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.0.load(Ordering::Relaxed)
     }
 }
