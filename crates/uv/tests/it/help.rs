@@ -43,6 +43,8 @@ fn help() {
 
     Python options:
           --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --only-global-locks    Only use global lockfiles during environment operations [env:
+                                 UV_ONLY_GLOBAL_LOCKS=]
           --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
@@ -122,6 +124,8 @@ fn help_flag() {
 
     Python options:
           --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --only-global-locks    Only use global lockfiles during environment operations [env:
+                                 UV_ONLY_GLOBAL_LOCKS=]
           --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
@@ -200,6 +204,8 @@ fn help_short_flag() {
 
     Python options:
           --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --only-global-locks    Only use global lockfiles during environment operations [env:
+                                 UV_ONLY_GLOBAL_LOCKS=]
           --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
@@ -323,6 +329,15 @@ fn help_subcommand() {
               system Python versions.
               
               [env: UV_MANAGED_PYTHON=]
+
+          --only-global-locks
+              Only use global lockfiles during environment operations.
+              
+              By default, uv tries to set up a lockfile inside of the root directory where the python
+              binary resides. This is an issue on environments where that directory may be read-only,
+              such as Nix/NixOS
+              
+              [env: UV_ONLY_GLOBAL_LOCKS=]
 
           --no-managed-python
               Disable use of uv-managed Python versions.
@@ -582,6 +597,15 @@ fn help_subsubcommand() {
               
               [env: UV_MANAGED_PYTHON=]
 
+          --only-global-locks
+              Only use global lockfiles during environment operations.
+              
+              By default, uv tries to set up a lockfile inside of the root directory where the python
+              binary resides. This is an issue on environments where that directory may be read-only,
+              such as Nix/NixOS
+              
+              [env: UV_ONLY_GLOBAL_LOCKS=]
+
           --no-managed-python
               Disable use of uv-managed Python versions.
               
@@ -731,6 +755,8 @@ fn help_flag_subcommand() {
 
     Python options:
           --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --only-global-locks    Only use global lockfiles during environment operations [env:
+                                 UV_ONLY_GLOBAL_LOCKS=]
           --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
@@ -808,6 +834,8 @@ fn help_flag_subsubcommand() {
 
     Python options:
           --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --only-global-locks    Only use global lockfiles during environment operations [env:
+                                 UV_ONLY_GLOBAL_LOCKS=]
           --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
@@ -962,6 +990,8 @@ fn help_with_global_option() {
 
     Python options:
           --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --only-global-locks    Only use global lockfiles during environment operations [env:
+                                 UV_ONLY_GLOBAL_LOCKS=]
           --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
@@ -1083,6 +1113,8 @@ fn help_with_no_pager() {
 
     Python options:
           --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --only-global-locks    Only use global lockfiles during environment operations [env:
+                                 UV_ONLY_GLOBAL_LOCKS=]
           --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
