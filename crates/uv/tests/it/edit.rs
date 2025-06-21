@@ -9364,7 +9364,7 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
     let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
     fs_err::copy(&wheel_src, &wheel_dst)?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9393,7 +9393,7 @@ fn add_index_with_non_existent_relative_path() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9423,7 +9423,7 @@ fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result
         url = "https://pypi-proxy.fly.dev/simple"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9446,12 +9446,16 @@ fn add_index_empty_directory() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
     "#})?;
 
     let packages = context.temp_dir.child("test-index");
     packages.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9462,6 +9466,33 @@ fn add_index_empty_directory() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn add_index_with_ambiguous_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'test-index' for '--index <INDEX>': Relative paths must be disambiguated from index names (use `./test-index`)
+
+    For more information, try '--help'.
     ");
 
     Ok(())
