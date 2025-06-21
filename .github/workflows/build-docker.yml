@@ -294,16 +294,11 @@ jobs:
           set -x
           readarray -t lines <<< "$ANNOTATIONS"; annotations=(); for line in "${lines[@]}"; do annotations+=(--annotation "$line"); done
           for image in $IMAGES; do
-            for tag in $TAGS; do
-              # The tags are fully qualified, so skip the ones that do not match the image
-              if [[ "$tag" != "${image}"* ]]; then
-                continue
-              fi
-              docker buildx imagetools create \
-                "${annotations[@]}" \
-                -t "${tag}" \
-                "${image}@${DIGEST}"
-            done
+            readarray -t lines < <(grep "^${image}:" <<< "$TAGS"); tags=(); for line in "${lines[@]}"; do tags+=(-t "$line"); done
+            docker buildx imagetools create \
+              "${annotations[@]}" \
+              "${tags[@]}" \
+              "${image}@${DIGEST}"
           done
 
       # See `docker-annotate-base` for details.
@@ -365,23 +360,16 @@ jobs:
           TAGS: ${{ needs.docker-publish-base.outputs.image-tags }}
           ANNOTATIONS: ${{ needs.docker-publish-base.outputs.image-annotations }}
         # The readarray part is used to make sure the quoting and special characters are preserved on expansion (e.g. spaces)
-        # The jq command expands the docker/metadata json "tags" array entry to `-t tag1 -t tag2 ...` for each tag in the array
-        # The printf will expand the base image with the `<UV_BASE_IMG>@sha256:<sha256> ...` for each sha256 in the directory
-        # The final command becomes `docker buildx imagetools create -t tag1 -t tag2 ... <UV_BASE_IMG>@sha256:<sha256_1> <UV_BASE_IMG>@sha256:<sha256_2> ...`
+        # The final command becomes `docker buildx imagetools create --annotation 'index:foo=1' --annotation 'index:bar=2' ... -t tag1 -t tag2 ... <IMG>@sha256:<sha256>`
         run: |
           set -x
           readarray -t lines <<< "$ANNOTATIONS"; annotations=(); for line in "${lines[@]}"; do annotations+=(--annotation "$line"); done
           for image in $IMAGES; do
-            for tag in $TAGS; do
-              # The tags are fully qualified, so skip the ones that do not match the image
-              if [[ "$tag" != "${image}"* ]]; then
-                continue
-              fi
-              docker buildx imagetools create \
-                "${annotations[@]}" \
-                -t "${tag}" \
-                "${image}@${DIGEST}"
-            done
+            readarray -t lines < <(grep "^${image}:" <<< "$TAGS"); tags=(); for line in "${lines[@]}"; do tags+=(-t "$line"); done
+            docker buildx imagetools create \
+              "${annotations[@]}" \
+              "${tags[@]}" \
+              "${image}@${DIGEST}"
           done
 
       # Now that we've modified the manifest, we need to attest it again.
@@ -413,4 +401,3 @@ jobs:
         with:
           subject-name: ${{ env.UV_GHCR_IMAGE }}
           subject-digest: ${{ steps.manifest-digest.outputs.digest }}
-          # push-to-registry is explicitly not enabled to maintain full control over the top image
