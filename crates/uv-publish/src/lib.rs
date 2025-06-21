@@ -390,7 +390,7 @@ pub async fn upload(
     download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
-    let form_metadata = form_metadata(file, filename)
+    let form_metadata = FormMetadata::read_from_file(file, filename)
         .await
         .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
 
@@ -644,108 +644,118 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
     Ok(Metadata23::parse(&contents)?)
 }
 
-/// Collect the non-file fields for the multipart request from the package METADATA.
-///
-/// Reference implementation: <https://github.com/pypi/warehouse/blob/d2c36d992cf9168e0518201d998b2707a3ef1e72/warehouse/forklift/legacy.py#L1376-L1430>
-async fn form_metadata(
-    file: &Path,
-    filename: &DistFilename,
-) -> Result<Vec<(&'static str, String)>, PublishPrepareError> {
-    let hash_hex = hash_file(file, Hasher::from(HashAlgorithm::Sha256)).await?;
+#[derive(Debug, Clone)]
+struct FormMetadata(Vec<(&'static str, String)>);
 
-    let Metadata23 {
-        metadata_version,
-        name,
-        version,
-        platforms,
-        // Not used by PyPI legacy upload
-        supported_platforms: _,
-        summary,
-        description,
-        description_content_type,
-        keywords,
-        home_page,
-        download_url,
-        author,
-        author_email,
-        maintainer,
-        maintainer_email,
-        license,
-        license_expression,
-        license_files,
-        classifiers,
-        requires_dist,
-        provides_dist,
-        obsoletes_dist,
-        requires_python,
-        requires_external,
-        project_urls,
-        provides_extras,
-        dynamic,
-    } = metadata(file, filename).await?;
+impl FormMetadata {
+    /// Collect the non-file fields for the multipart request from the package METADATA.
+    ///
+    /// Reference implementation: <https://github.com/pypi/warehouse/blob/d2c36d992cf9168e0518201d998b2707a3ef1e72/warehouse/forklift/legacy.py#L1376-L1430>
+    async fn read_from_file(
+        file: &Path,
+        filename: &DistFilename,
+    ) -> Result<Self, PublishPrepareError> {
+        let hash_hex = hash_file(file, Hasher::from(HashAlgorithm::Sha256)).await?;
 
-    let mut form_metadata = vec![
-        (":action", "file_upload".to_string()),
-        ("sha256_digest", hash_hex.digest.to_string()),
-        ("protocol_version", "1".to_string()),
-        ("metadata_version", metadata_version.clone()),
-        // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
-        // * <https://github.com/pypa/twine/issues/743>
-        // * <https://github.com/pypa/twine/blob/5bf3f38ff3d8b2de47b7baa7b652c697d7a64776/twine/package.py#L57-L65>
-        // warehouse seems to call `packaging.utils.canonicalize_name` nowadays and has a separate
-        // `normalized_name`, so we'll start with this and we'll readjust if there are user reports.
-        ("name", name.clone()),
-        ("version", version.clone()),
-        ("filetype", filename.filetype().to_string()),
-    ];
+        let Metadata23 {
+            metadata_version,
+            name,
+            version,
+            platforms,
+            // Not used by PyPI legacy upload
+            supported_platforms: _,
+            summary,
+            description,
+            description_content_type,
+            keywords,
+            home_page,
+            download_url,
+            author,
+            author_email,
+            maintainer,
+            maintainer_email,
+            license,
+            license_expression,
+            license_files,
+            classifiers,
+            requires_dist,
+            provides_dist,
+            obsoletes_dist,
+            requires_python,
+            requires_external,
+            project_urls,
+            provides_extras,
+            dynamic,
+        } = metadata(file, filename).await?;
 
-    if let DistFilename::WheelFilename(wheel) = filename {
-        form_metadata.push(("pyversion", wheel.python_tags().iter().join(".")));
-    } else {
-        form_metadata.push(("pyversion", "source".to_string()));
+        let mut form_metadata = vec![
+            (":action", "file_upload".to_string()),
+            ("sha256_digest", hash_hex.digest.to_string()),
+            ("protocol_version", "1".to_string()),
+            ("metadata_version", metadata_version.clone()),
+            // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
+            // * <https://github.com/pypa/twine/issues/743>
+            // * <https://github.com/pypa/twine/blob/5bf3f38ff3d8b2de47b7baa7b652c697d7a64776/twine/package.py#L57-L65>
+            // warehouse seems to call `packaging.utils.canonicalize_name` nowadays and has a separate
+            // `normalized_name`, so we'll start with this and we'll readjust if there are user reports.
+            ("name", name.clone()),
+            ("version", version.clone()),
+            ("filetype", filename.filetype().to_string()),
+        ];
+
+        if let DistFilename::WheelFilename(wheel) = filename {
+            form_metadata.push(("pyversion", wheel.python_tags().iter().join(".")));
+        } else {
+            form_metadata.push(("pyversion", "source".to_string()));
+        }
+
+        let mut add_option = |name, value: Option<String>| {
+            if let Some(some) = value.clone() {
+                form_metadata.push((name, some));
+            }
+        };
+
+        add_option("author", author);
+        add_option("author_email", author_email);
+        add_option("description", description);
+        add_option("description_content_type", description_content_type);
+        add_option("download_url", download_url);
+        add_option("home_page", home_page);
+        add_option("keywords", keywords);
+        add_option("license", license);
+        add_option("license_expression", license_expression);
+        add_option("maintainer", maintainer);
+        add_option("maintainer_email", maintainer_email);
+        add_option("summary", summary);
+
+        // The GitLab PyPI repository API implementation requires this metadata field and twine always
+        // includes it in the request, even when it's empty.
+        form_metadata.push(("requires_python", requires_python.unwrap_or(String::new())));
+
+        let mut add_vec = |name, values: Vec<String>| {
+            for i in values {
+                form_metadata.push((name, i.clone()));
+            }
+        };
+
+        add_vec("classifiers", classifiers);
+        add_vec("dynamic", dynamic);
+        add_vec("license_file", license_files);
+        add_vec("obsoletes_dist", obsoletes_dist);
+        add_vec("platform", platforms);
+        add_vec("project_urls", project_urls);
+        add_vec("provides_dist", provides_dist);
+        add_vec("provides_extra", provides_extras);
+        add_vec("requires_dist", requires_dist);
+        add_vec("requires_external", requires_external);
+
+        Ok(Self(form_metadata))
     }
 
-    let mut add_option = |name, value: Option<String>| {
-        if let Some(some) = value.clone() {
-            form_metadata.push((name, some));
-        }
-    };
-
-    add_option("author", author);
-    add_option("author_email", author_email);
-    add_option("description", description);
-    add_option("description_content_type", description_content_type);
-    add_option("download_url", download_url);
-    add_option("home_page", home_page);
-    add_option("keywords", keywords);
-    add_option("license", license);
-    add_option("license_expression", license_expression);
-    add_option("maintainer", maintainer);
-    add_option("maintainer_email", maintainer_email);
-    add_option("summary", summary);
-
-    // The GitLab PyPI repository API implementation requires this metadata field and twine always
-    // includes it in the request, even when it's empty.
-    form_metadata.push(("requires_python", requires_python.unwrap_or(String::new())));
-
-    let mut add_vec = |name, values: Vec<String>| {
-        for i in values {
-            form_metadata.push((name, i.clone()));
-        }
-    };
-
-    add_vec("classifiers", classifiers);
-    add_vec("dynamic", dynamic);
-    add_vec("license_file", license_files);
-    add_vec("obsoletes_dist", obsoletes_dist);
-    add_vec("platform", platforms);
-    add_vec("project_urls", project_urls);
-    add_vec("provides_dist", provides_dist);
-    add_vec("provides_extra", provides_extras);
-    add_vec("requires_dist", requires_dist);
-    add_vec("requires_external", requires_external);
-
-    Ok(form_metadata)
+    /// Returns an iterator over the metadata fields.
+    fn iter(&self) -> std::slice::Iter<'_, (&'static str, String)> {
+        self.0.iter()
+    }
 }
 
 /// Build the upload request.
@@ -758,11 +768,11 @@ async fn build_request<'a>(
     registry: &DisplaySafeUrl,
     client: &'a BaseClient,
     credentials: &Credentials,
-    form_metadata: &[(&'static str, String)],
+    form_metadata: &FormMetadata,
     reporter: Arc<impl Reporter>,
 ) -> Result<(RequestBuilder<'a>, usize), PublishPrepareError> {
     let mut form = reqwest::multipart::Form::new();
-    for (key, value) in form_metadata {
+    for (key, value) in form_metadata.iter() {
         form = form.text(*key, value.clone());
     }
 
@@ -888,15 +898,18 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
 
 #[cfg(test)]
 mod tests {
-    use crate::{Reporter, build_request, form_metadata};
-    use insta::{assert_debug_snapshot, assert_snapshot};
-    use itertools::Itertools;
     use std::path::PathBuf;
     use std::sync::Arc;
+
+    use insta::{assert_debug_snapshot, assert_snapshot};
+    use itertools::Itertools;
+
     use uv_auth::Credentials;
     use uv_client::BaseClientBuilder;
     use uv_distribution_filename::DistFilename;
     use uv_redacted::DisplaySafeUrl;
+
+    use crate::{FormMetadata, Reporter, build_request};
 
     struct DummyReporter;
 
@@ -916,7 +929,9 @@ mod tests {
         let file = PathBuf::from("../../scripts/links/").join(raw_filename);
         let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
-        let form_metadata = form_metadata(&file, &filename).await.unwrap();
+        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+            .await
+            .unwrap();
 
         let formatted_metadata = form_metadata
             .iter()
@@ -1028,7 +1043,9 @@ mod tests {
         let file = PathBuf::from("../../scripts/links/").join(raw_filename);
         let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
-        let form_metadata = form_metadata(&file, &filename).await.unwrap();
+        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+            .await
+            .unwrap();
 
         let formatted_metadata = form_metadata
             .iter()
