@@ -77,7 +77,7 @@ jobs:
       packages: write # for GHCR image pushes
       attestations: write # for GHCR attestations
     environment:
-      name: release
+      name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
     outputs:
       image-tags: ${{ steps.meta.outputs.tags }}
       image-annotations: ${{ steps.meta.outputs.annotations }}
@@ -155,7 +155,7 @@ jobs:
     name: ${{ needs.docker-plan.outputs.action }} ${{ matrix.image-mapping }}
     runs-on: ubuntu-latest
     environment:
-      name: release
+      name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
     needs:
       - docker-plan
       - docker-publish-base
@@ -330,7 +330,7 @@ jobs:
     name: annotate uv
     runs-on: ubuntu-latest
     environment:
-      name: release
+      name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
     needs:
       - docker-plan
       - docker-publish-base
