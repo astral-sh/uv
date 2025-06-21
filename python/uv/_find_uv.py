@@ -5,36 +5,38 @@ import sys
 import sysconfig
 
 
+class UvNotFound(FileNotFoundError): ...
+
+
 def find_uv_bin() -> str:
     """Return the uv binary path."""
 
     uv_exe = "uv" + sysconfig.get_config_var("EXE")
 
-    # Search in the scripts directory for the current prefix
-    path = os.path.join(sysconfig.get_path("scripts"), uv_exe)
-    if os.path.isfile(path):
-        return path
+    targets = [
+        # The scripts directory for the current Python
+        sysconfig.get_path("scripts"),
+        # The scripts directory for the base prefix (if different)
+        sysconfig.get_path("scripts", vars={"base": sys.base_prefix}),
+        # The user scheme scripts directory, e.g., `~/.local/bin`
+        sysconfig.get_path("scripts", scheme=_user_scheme()),
+        # Adjacent to the package root, e.g. from, `pip install --target`
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "bin"),
+    ]
 
-    # If in a virtual environment, also search in the base prefix's scripts directory
-    if sys.prefix != sys.base_prefix:
-        path = os.path.join(
-            sysconfig.get_path("scripts", vars={"base": sys.base_prefix}), uv_exe
-        )
+    seen = set()
+    for target in targets:
+        if target in seen:
+            continue
+        seen.add(target)
+        path = os.path.join(target, uv_exe)
         if os.path.isfile(path):
             return path
 
-    # Search in the user scheme scripts directory, e.g., `~/.local/bin`
-    path = os.path.join(sysconfig.get_path("scripts", scheme=_user_scheme()), uv_exe)
-    if os.path.isfile(path):
-        return path
-
-    # Search in `bin` adjacent to package root (as created by `pip install --target`).
-    pkg_root = os.path.dirname(os.path.dirname(__file__))
-    target_path = os.path.join(pkg_root, "bin", uv_exe)
-    if os.path.isfile(target_path):
-        return target_path
-
-    raise FileNotFoundError(path)
+    raise UvNotFound(
+        f"Could not find the uv binary in any of the following locations:\n"
+        f"{os.linesep.join(f' - {target}' for target in seen)}\n"
+    )
 
 
 def _user_scheme() -> str:
