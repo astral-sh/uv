@@ -308,7 +308,8 @@ jobs:
             --no-default-features \
             --features python,pypi,python-managed \
             --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow \
+            -- uninstall_duplicate_by_path
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
