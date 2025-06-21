@@ -577,6 +577,7 @@ pub fn is_temporary(path: impl AsRef<Path>) -> bool {
 
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
+#[must_use]
 pub struct LockedFile(fs_err::File);
 
 impl LockedFile {
