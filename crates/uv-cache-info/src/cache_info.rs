@@ -215,6 +215,7 @@ impl CacheInfo {
         // If we have any globs, process them in a single pass.
         if !globs.is_empty() {
             let walker = globwalk::GlobWalkerBuilder::from_patterns(directory, &globs)
+                .follow_links(true)
                 .file_type(globwalk::FileType::FILE | globwalk::FileType::SYMLINK)
                 .build()?;
             for entry in walker {
