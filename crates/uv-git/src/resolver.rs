@@ -6,7 +6,6 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use fs_err::tokio as fs;
-use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
@@ -16,7 +15,10 @@ use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_static::EnvVars;
 use uv_version::version;
 
-use crate::{Fetch, GitSource, Reporter, rate_limit::GITHUB_RATE_LIMIT_STATUS};
+use crate::{
+    Fetch, GitSource, Reporter,
+    rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {
@@ -106,8 +108,8 @@ impl GitResolver {
             // resolve the requested rev.
             debug!("GitHub API request failed for: {url} ({})", status);
 
-            // Mark that we are currently being rate-limited by GitHub.
-            if status == StatusCode::TOO_MANY_REQUESTS {
+            if is_github_rate_limited(&response) {
+                // Mark that we are being rate-limited by GitHub
                 GITHUB_RATE_LIMIT_STATUS.activate();
             }
 

@@ -1,3 +1,4 @@
+use reqwest::Response;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A global state on whether we are being rate-limited by GitHub's REST API.
@@ -25,4 +26,17 @@ impl GitHubRateLimitStatus {
     pub(crate) fn is_active(&self) -> bool {
         self.0.load(Ordering::Relaxed)
     }
+}
+
+
+/// Determine if GitHub is applying rate-limiting based on the response
+pub(crate) fn is_github_rate_limited(response: &Response) -> bool {
+    // Check if our remaining quota is within the rate limit window.
+    // If it's "0", mark that we are currently being rate-limited by GitHub.
+    // Source: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#checking-the-status-of-your-rate-limit.
+    response
+        .headers()
+        .get("x-ratelimit-remaining")
+        .and_then(|h| h.to_str().ok())
+        == Some("0")
 }

@@ -20,7 +20,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
 
-use crate::rate_limit::GITHUB_RATE_LIMIT_STATUS;
+use crate::rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited};
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -817,8 +817,8 @@ fn github_fast_path(
 
         let response = request.send().await?;
 
-        // Mark that we are currently being rate-limited by GitHub.
-        if response.status() == StatusCode::TOO_MANY_REQUESTS {
+        if is_github_rate_limited(&response) {
+            // Mark that we are being rate-limited by GitHub
             GITHUB_RATE_LIMIT_STATUS.activate();
         }
 
