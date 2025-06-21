@@ -657,9 +657,9 @@ fn check() -> Result<()> {
     )?;
 
     // Running `uv sync --check` should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -669,8 +669,8 @@ fn check() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    error: The environment is outdated; run `uv sync` to update the environment
-    "###);
+    The environment is outdated; run `uv sync` to update the environment
+    ");
 
     // Sync the environment.
     uv_snapshot!(context.filters(), context.sync(), @r###"

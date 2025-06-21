@@ -232,6 +232,18 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
+        Err(ProjectError::LockMismatch(previous, lock)) => {
+            // we're --locked and there was a mismatch, show all changes and exit as Failure
+            for event in LockEvent::detect_changes(previous.as_deref(), &lock, dry_run) {
+                writeln!(printer.stderr(), "{event}")?;
+            }
+            writeln!(
+                printer.stderr(),
+                "{}",
+                "The lockfile is outdated; run `uv lock` to update it".bold()
+            )?;
+            Ok(ExitStatus::Failure)
+        }
         Err(ProjectError::Operation(err)) => {
             diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
@@ -340,8 +352,11 @@ impl<'env> LockOperation<'env> {
                 .await?;
 
                 // If the lockfile changed, return an error.
-                if matches!(result, LockResult::Changed(_, _)) {
-                    return Err(ProjectError::LockMismatch(Box::new(result.into_lock())));
+                if let LockResult::Changed(prev, cur) = result {
+                    return Err(ProjectError::LockMismatch(
+                        prev.map(Box::new),
+                        Box::new(cur),
+                    ));
                 }
 
                 Ok(result)
