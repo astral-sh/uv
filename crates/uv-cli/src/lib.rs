@@ -159,6 +159,20 @@ pub struct GlobalArgs {
     )]
     pub managed_python: bool,
 
+    /// Only use global lockfiles during environment operations.
+    ///
+    /// By default, uv tries to set up a lockfile inside of the root directory where
+    /// the python binary resides. This is an issue on environments where that directory
+    /// may be read-only, such as Nix/NixOS
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        env = EnvVars::UV_ONLY_GLOBAL_LOCKS,
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub only_global_locks: bool,
+
     /// Disable use of uv-managed Python versions.
     ///
     /// Instead, uv will search for a suitable Python version on the system.

@@ -270,6 +270,10 @@ Use to disable line wrapping for diagnostics.
 
 Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
 
+### `UV_ONLY_GLOBAL_LOCKS`
+
+Only use global lockfiles during environment operations.
+
 ### `UV_OVERRIDE`
 
 Equivalent to the `--override` command-line argument. If set, uv will use this file
