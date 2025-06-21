@@ -13,12 +13,12 @@ pub static ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Enable user-facing warnings.
 pub fn enable() {
-    ENABLED.store(true, std::sync::atomic::Ordering::SeqCst);
+    ENABLED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Disable user-facing warnings.
 pub fn disable() {
-    ENABLED.store(false, std::sync::atomic::Ordering::SeqCst);
+    ENABLED.store(false, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Warn a user, if warnings are enabled.
@@ -28,7 +28,7 @@ macro_rules! warn_user {
         use $crate::anstream::eprintln;
         use $crate::owo_colors::OwoColorize;
 
-        if $crate::ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+        if $crate::ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
             let message = format!("{}", format_args!($($arg)*));
             let formatted = message.bold();
             eprintln!("{}{} {formatted}", "warning".yellow().bold(), ":".bold());
@@ -46,7 +46,7 @@ macro_rules! warn_user_once {
         use $crate::anstream::eprintln;
         use $crate::owo_colors::OwoColorize;
 
-        if $crate::ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+        if $crate::ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
             if let Ok(mut states) = $crate::WARNINGS.lock() {
                 let message = format!("{}", format_args!($($arg)*));
                 if states.insert(message.clone()) {
