@@ -6,7 +6,7 @@ use rustc_hash::FxHashSet;
 
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{IndexLocations, Requirement};
-use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
@@ -107,41 +107,10 @@ impl RequiresDist {
             SourceStrategy::Disabled => &empty,
         };
 
-        // Collect the dependency groups.
-        let dependency_groups = {
-            // First, collect `tool.uv.dev_dependencies`
-            let dev_dependencies = project_workspace
-                .current_project()
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dev_dependencies.as_ref());
-
-            // Then, collect `dependency-groups`
-            let dependency_groups = project_workspace
-                .current_project()
-                .pyproject_toml()
-                .dependency_groups
-                .iter()
-                .flatten()
-                .collect::<BTreeMap<_, _>>();
-
-            // Flatten the dependency groups.
-            let mut dependency_groups =
-                FlatDependencyGroups::from_dependency_groups(&dependency_groups)
-                    .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
-
-            // Add the `dev` group, if `dev-dependencies` is defined.
-            if let Some(dev_dependencies) = dev_dependencies {
-                dependency_groups
-                    .entry(DEV_DEPENDENCIES.clone())
-                    .or_insert_with(Vec::new)
-                    .extend(dev_dependencies.clone());
-            }
-
-            dependency_groups
-        };
+        let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+            project_workspace.current_project().root(),
+            project_workspace.current_project().pyproject_toml(),
+        )?;
 
         // Now that we've resolved the dependency groups, we can validate that each source references
         // a valid extra or group, if present.
@@ -150,9 +119,10 @@ impl RequiresDist {
         // Lower the dependency groups.
         let dependency_groups = dependency_groups
             .into_iter()
-            .map(|(name, requirements)| {
+            .map(|(name, flat_group)| {
                 let requirements = match source_strategy {
-                    SourceStrategy::Enabled => requirements
+                    SourceStrategy::Enabled => flat_group
+                        .requirements
                         .into_iter()
                         .flat_map(|requirement| {
                             let requirement_name = requirement.name.clone();
@@ -182,9 +152,11 @@ impl RequiresDist {
                             )
                         })
                         .collect::<Result<Box<_>, _>>(),
-                    SourceStrategy::Disabled => {
-                        Ok(requirements.into_iter().map(Requirement::from).collect())
-                    }
+                    SourceStrategy::Disabled => Ok(flat_group
+                        .requirements
+                        .into_iter()
+                        .map(Requirement::from)
+                        .collect()),
                 }?;
                 Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
             })
@@ -265,7 +237,7 @@ impl RequiresDist {
 
                 if let Some(group) = source.group() {
                     // If the group doesn't exist at all, error.
-                    let Some(dependencies) = dependency_groups.get(group) else {
+                    let Some(flat_group) = dependency_groups.get(group) else {
                         return Err(MetadataError::MissingSourceGroup(
                             name.clone(),
                             group.clone(),
@@ -273,7 +245,8 @@ impl RequiresDist {
                     };
 
                     // If there is no such requirement with the group, error.
-                    if !dependencies
+                    if !flat_group
+                        .requirements
                         .iter()
                         .any(|requirement| requirement.name == *name)
                     {

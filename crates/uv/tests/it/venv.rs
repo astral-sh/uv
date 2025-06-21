@@ -475,17 +475,195 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     context.venv.assert(predicates::path::is_dir());
 
     // We warn if we receive an incompatible version
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn create_venv_respects_group_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.9", "3.10", "3.11", "3.12"]);
+
+    // Without a Python requirement, we use the first on the PATH
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // With `requires-python = ">=3.10"` on the default group, we pick 3.10
+    // However non-default groups should not be consulted!
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.10"}
+        other = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // When the top-level requires-python and default group requires-python
+    // both apply, their intersection is used. However non-default groups
+    // should not be consulted! (here the top-level wins)
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.10"}
+        other = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // When the top-level requires-python and default group requires-python
+    // both apply, their intersection is used. However non-default groups
+    // should not be consulted! (here the group wins)
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.11"}
+        other = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // We warn if we receive an incompatible version
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `tool.uv.dependency-groups.dev.requires-python`).
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // We error if there's no compatible version
+    // non-default groups are not consulted here!
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = "<3.12"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.12"}
+        other = {requires-python = ">=3.11"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Found conflicting Python requirements:
+      │ - foo: <3.12
+      │ - foo:dev: >=3.12
+    "
     );
 
     Ok(())
@@ -579,6 +757,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn seed() {
     let context = TestContext::new_with_versions(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv()
@@ -602,6 +781,7 @@ fn seed() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn seed_older_python_version() {
     let context = TestContext::new_with_versions(&["3.11"]);
     uv_snapshot!(context.filters(), context.venv()
@@ -688,14 +868,14 @@ fn create_venv_unknown_python_patch() {
         "###
         );
     } else {
-        uv_snapshot!(&mut command, @r###"
+        uv_snapshot!(&mut command, @r"
         success: false
         exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
           × No interpreter found for Python 3.12.100 in managed installations or search path
-        "###
+        "
         );
     }
 
@@ -875,27 +1055,27 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn windows_shims() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.8"]);
+    let context = TestContext::new_with_versions(&["3.10", "3.9"]);
     let shim_path = context.temp_dir.child("shim");
 
-    let py38 = context
+    let py39 = context
         .python_versions
         .last()
         .expect("python_path_with_versions to set up the python versions");
 
-    // We want 3.8 and the first version should be 3.9.
+    // We want 3.9 and the first version should be 3.10.
     // Picking the last is necessary to prove that shims work because the python version selects
     // the python version from the first path segment by default, so we take the last to prove it's not
     // returning that version.
-    assert!(py38.0.to_string().contains("3.8"));
+    assert!(py39.0.to_string().contains("3.9"));
 
-    // Write the shim script that forwards the arguments to the python3.8 installation.
+    // Write the shim script that forwards the arguments to the python3.9 installation.
     fs_err::create_dir(&shim_path)?;
     fs_err::write(
         shim_path.child("python.bat"),
         format!(
             "@echo off\r\n{}/python.exe %*",
-            py38.1.parent().unwrap().display()
+            py39.1.parent().unwrap().display()
         ),
     )?;
 
@@ -908,7 +1088,7 @@ fn windows_shims() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###

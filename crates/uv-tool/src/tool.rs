@@ -7,6 +7,7 @@ use toml_edit::{Array, Item, Table, Value, value};
 use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
 use uv_pypi_types::VerbatimParsedUrl;
+use uv_python::PythonRequest;
 use uv_settings::ToolOptions;
 
 /// A tool entry.
@@ -22,7 +23,7 @@ pub struct Tool {
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,
     /// The Python requested by the user during installation.
-    python: Option<String>,
+    python: Option<PythonRequest>,
     /// A mapping of entry point names to their metadata.
     entrypoints: Vec<ToolEntrypoint>,
     /// The [`ToolOptions`] used to install this tool.
@@ -40,7 +41,7 @@ struct ToolWire {
     overrides: Vec<Requirement>,
     #[serde(default)]
     build_constraint_dependencies: Vec<Requirement>,
-    python: Option<String>,
+    python: Option<PythonRequest>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
     options: ToolOptions,
@@ -164,7 +165,7 @@ impl Tool {
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
         build_constraints: Vec<Requirement>,
-        python: Option<String>,
+        python: Option<PythonRequest>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
         options: ToolOptions,
     ) -> Self {
@@ -280,7 +281,13 @@ impl Tool {
         }
 
         if let Some(ref python) = self.python {
-            table.insert("python", value(python));
+            table.insert(
+                "python",
+                value(serde::Serialize::serialize(
+                    &python,
+                    toml_edit::ser::ValueSerializer::new(),
+                )?),
+            );
         }
 
         table.insert("entrypoints", {
@@ -327,7 +334,7 @@ impl Tool {
         &self.build_constraints
     }
 
-    pub fn python(&self) -> &Option<String> {
+    pub fn python(&self) -> &Option<PythonRequest> {
         &self.python
     }
 

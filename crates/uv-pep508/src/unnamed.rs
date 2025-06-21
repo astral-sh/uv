@@ -66,9 +66,9 @@ impl UnnamedRequirementUrl for VerbatimUrl {
 /// dependencies. This isn't compliant with PEP 508, but is common in `requirements.txt`, which
 /// is implementation-defined.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
-pub struct UnnamedRequirement<Url: UnnamedRequirementUrl = VerbatimUrl> {
+pub struct UnnamedRequirement<ReqUrl: UnnamedRequirementUrl = VerbatimUrl> {
     /// The direct URL that defines the version specifier.
-    pub url: Url,
+    pub url: ReqUrl,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     pub extras: Box<[ExtraName]>,

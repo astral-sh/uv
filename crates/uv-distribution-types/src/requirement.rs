@@ -4,7 +4,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use thiserror::Error;
-use url::Url;
 
 use uv_distribution_filename::DistExtension;
 use uv_fs::{CWD, PortablePath, PortablePathBuf, relative_to};
@@ -14,6 +13,7 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
+use uv_redacted::DisplaySafeUrl;
 
 use crate::{IndexMetadata, IndexUrl};
 
@@ -391,7 +391,7 @@ pub enum RequirementSource {
     /// e.g.`foo @ https://example.org/foo-1.0.zip`.
     Url {
         /// The remote location of the archive file, without subdirectory fragment.
-        location: Url,
+        location: DisplaySafeUrl,
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
         subdirectory: Option<Box<Path>>,
@@ -682,7 +682,7 @@ enum RequirementSourceWire {
     Git { git: String },
     /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
     Direct {
-        url: Url,
+        url: DisplaySafeUrl,
         subdirectory: Option<PortablePathBuf>,
     },
     /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
@@ -697,7 +697,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<Url>,
+        index: Option<DisplaySafeUrl>,
         conflict: Option<ConflictItem>,
     },
 }
@@ -711,7 +711,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 conflict,
             } => {
                 let index = index.map(|index| index.url.into_url()).map(|mut index| {
-                    redact_credentials(&mut index);
+                    index.remove_credentials();
                     index
                 });
                 Self::Registry {
@@ -736,8 +736,8 @@ impl From<RequirementSource> for RequirementSourceWire {
             } => {
                 let mut url = git.repository().clone();
 
-                // Redact the credentials.
-                redact_credentials(&mut url);
+                // Remove the credentials.
+                url.remove_credentials();
 
                 // Clear out any existing state.
                 url.set_fragment(None);
@@ -826,7 +826,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {
-                let mut repository = Url::parse(&git)?;
+                let mut repository = DisplaySafeUrl::parse(&git)?;
 
                 let mut reference = GitReference::DefaultBranch;
                 let mut subdirectory: Option<PortablePathBuf> = None;
@@ -848,13 +848,14 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 repository.set_fragment(None);
                 repository.set_query(None);
 
-                // Redact the credentials.
-                redact_credentials(&mut repository);
+                // Remove the credentials.
+                repository.remove_credentials();
 
                 // Create a PEP 508-compatible URL.
-                let mut url = Url::parse(&format!("git+{repository}"))?;
+                let mut url = DisplaySafeUrl::parse(&format!("git+{repository}"))?;
                 if let Some(rev) = reference.as_str() {
-                    url.set_path(&format!("{}@{}", url.path(), rev));
+                    let path = format!("{}@{}", url.path(), rev);
+                    url.set_path(&path);
                 }
                 if let Some(subdirectory) = subdirectory.as_ref() {
                     url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
@@ -938,18 +939,6 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             }
         }
     }
-}
-
-/// Remove the credentials from a URL, allowing the generic `git` username (without a password)
-/// in SSH URLs, as in, `ssh://git@github.com/...`.
-pub fn redact_credentials(url: &mut Url) {
-    // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
-    // username.
-    if url.scheme() == "ssh" && url.username() == "git" && url.password().is_none() {
-        return;
-    }
-    let _ = url.set_password(None);
-    let _ = url.set_username("");
 }
 
 #[cfg(test)]

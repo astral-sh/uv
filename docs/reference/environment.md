@@ -235,6 +235,10 @@ non-editable
 
 Ignore `.env` files when executing `uv run` commands.
 
+### `UV_NO_GITHUB_FAST_PATH`
+
+Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
+
 ### `UV_NO_INSTALLER_METADATA`
 
 Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.

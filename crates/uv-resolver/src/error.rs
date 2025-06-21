@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
+use owo_colors::OwoColorize;
 use pubgrub::{
     DefaultStringReporter, DerivationTree, Derived, External, Range, Ranges, Reporter, Term,
 };
@@ -13,7 +14,8 @@ use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
-use uv_pep440::{LocalVersionSlice, LowerBound, Version};
+use uv_pep440::{LocalVersionSlice, LowerBound, Version, VersionSpecifier};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 
@@ -163,6 +165,7 @@ pub struct NoSolutionError {
     fork_urls: ForkUrls,
     fork_indexes: ForkIndexes,
     env: ResolverEnvironment,
+    current_environment: MarkerEnvironment,
     tags: Option<Tags>,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
@@ -184,6 +187,7 @@ impl NoSolutionError {
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
+        current_environment: MarkerEnvironment,
         tags: Option<Tags>,
         workspace_members: BTreeSet<PackageName>,
         options: Options,
@@ -202,6 +206,7 @@ impl NoSolutionError {
             fork_urls,
             fork_indexes,
             env,
+            current_environment,
             tags,
             workspace_members,
             options,
@@ -353,6 +358,44 @@ impl NoSolutionError {
     pub fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.env.clone())
     }
+
+    /// Hint at limiting the resolver environment if universal resolution failed for a target
+    /// that is not the current platform or not the current Python version.
+    fn hint_disjoint_targets(&self, f: &mut Formatter) -> std::fmt::Result {
+        // Only applicable to universal resolution.
+        let Some(markers) = self.env.fork_markers() else {
+            return Ok(());
+        };
+
+        // TODO(konsti): This is a crude approximation to telling the user the difference
+        // between their Python version and the relevant Python version range from the marker.
+        let current_python_version = self.current_environment.python_version().version.clone();
+        let current_python_marker = MarkerTree::expression(MarkerExpression::Version {
+            key: MarkerValueVersion::PythonVersion,
+            specifier: VersionSpecifier::equals_version(current_python_version.clone()),
+        });
+        if markers.is_disjoint(current_python_marker) {
+            write!(
+                f,
+                "\n\n{}{} While the active Python version is {}, \
+                the resolution failed for other Python versions supported by your \
+                project. Consider limiting your project's supported Python versions \
+                using `requires-python`.",
+                "hint".bold().cyan(),
+                ":".bold(),
+                current_python_version,
+            )?;
+        } else if !markers.evaluate(&self.current_environment, &[]) {
+            write!(
+                f,
+                "\n\n{}{} The resolution failed for an environment that is not the current one, \
+                consider limiting the environments with `tool.uv.environments`.",
+                "hint".bold().cyan(),
+                ":".bold(),
+            )?;
+        }
+        Ok(())
+    }
 }
 
 impl std::fmt::Debug for NoSolutionError {
@@ -372,6 +415,7 @@ impl std::fmt::Debug for NoSolutionError {
             fork_urls,
             fork_indexes,
             env,
+            current_environment,
             tags,
             workspace_members,
             options,
@@ -389,6 +433,7 @@ impl std::fmt::Debug for NoSolutionError {
             .field("fork_urls", fork_urls)
             .field("fork_indexes", fork_indexes)
             .field("env", env)
+            .field("current_environment", current_environment)
             .field("tags", tags)
             .field("workspace_members", workspace_members)
             .field("options", options)
@@ -472,6 +517,8 @@ impl std::fmt::Display for NoSolutionError {
         for hint in additional_hints {
             write!(f, "\n\n{hint}")?;
         }
+
+        self.hint_disjoint_targets(f)?;
 
         Ok(())
     }

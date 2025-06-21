@@ -569,12 +569,20 @@ pub(crate) fn install_data(
 
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
-                trace!(?dist_name, "Installing data/data");
+                trace!(
+                    ?dist_name,
+                    "Installing data/data to {}",
+                    layout.scheme.data.user_display()
+                );
                 // Move the content of the folder to the root of the venv
                 move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
-                trace!(?dist_name, "Installing data/scripts");
+                trace!(
+                    ?dist_name,
+                    "Installing data/scripts to {}",
+                    layout.scheme.scripts.user_display()
+                );
                 let mut rename_or_copy = RenameOrCopy::default();
                 let mut initialized = false;
                 for file in fs::read_dir(path)? {
@@ -613,16 +621,28 @@ pub(crate) fn install_data(
                 }
             }
             Some("headers") => {
-                trace!(?dist_name, "Installing data/headers");
                 let target_path = layout.scheme.include.join(dist_name.as_str());
+                trace!(
+                    ?dist_name,
+                    "Installing data/headers to {}",
+                    target_path.user_display()
+                );
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
-                trace!(?dist_name, "Installing data/purelib");
+                trace!(
+                    ?dist_name,
+                    "Installing data/purelib to {}",
+                    layout.scheme.purelib.user_display()
+                );
                 move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
             }
             Some("platlib") => {
-                trace!(?dist_name, "Installing data/platlib");
+                trace!(
+                    ?dist_name,
+                    "Installing data/platlib to {}",
+                    layout.scheme.platlib.user_display()
+                );
                 move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
             }
             _ => {

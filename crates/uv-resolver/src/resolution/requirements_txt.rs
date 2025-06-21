@@ -4,16 +4,16 @@ use std::path::Path;
 
 use itertools::Itertools;
 
-use uv_distribution_types::{DistributionMetadata, Name, ResolvedDist, Verbatim, VersionOrUrlRef};
+use uv_distribution_types::{
+    DistributionMetadata, Name, RequiresPython, ResolvedDist, SimplifiedMarkerTree, Verbatim,
+    VersionOrUrlRef,
+};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, Scheme, split_scheme};
 use uv_pypi_types::HashDigest;
 
-use crate::{
-    requires_python::{RequiresPython, SimplifiedMarkerTree},
-    resolution::AnnotatedDist,
-};
+use crate::resolution::AnnotatedDist;
 
 #[derive(Debug, Clone)]
 /// A pinned package with its resolved distribution and all the extras that were pinned for it.

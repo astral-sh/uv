@@ -27,7 +27,7 @@ use uv_cli::SelfUpdateArgs;
 use uv_cli::{
     BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
     ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
-    ToolNamespace, TopLevelArgs, VersionArgs, compat::CompatArgs,
+    ToolNamespace, TopLevelArgs, compat::CompatArgs,
 };
 use uv_configuration::min_stack_size;
 use uv_fs::{CWD, Simplified};
@@ -35,6 +35,7 @@ use uv_fs::{CWD, Simplified};
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
+use uv_python::PythonRequest;
 use uv_requirements::RequirementsSource;
 use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -347,9 +348,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (duration_layer, _duration_guard) = logging::setup_duration()?;
+    let (durations_layer, _duration_guard) = logging::setup_durations()?;
     #[cfg(not(feature = "tracing-durations-export"))]
-    let duration_layer = None::<tracing_subscriber::layer::Identity>;
+    let durations_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
         match globals.verbose {
             0 => logging::Level::Off,
@@ -357,7 +358,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             2 => logging::Level::TraceUv,
             3.. => logging::Level::TraceAll,
         },
-        duration_layer,
+        durations_layer,
         globals.color,
     )?;
 
@@ -793,6 +794,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.network_settings,
                 args.dry_run,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -814,6 +816,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.paths,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -845,6 +848,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -866,6 +870,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.files,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -897,6 +902,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -915,6 +921,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Cache(CacheNamespace {
@@ -1016,10 +1023,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 }
             });
 
+            let python_request: Option<PythonRequest> =
+                args.settings.python.as_deref().map(PythonRequest::parse);
+
             commands::venv(
                 &project_dir,
                 args.path,
-                args.settings.python.as_deref(),
+                python_request,
                 args.settings.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1046,6 +1056,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Project(project) => {
             Box::pin(run_project(
+                cli.top_level.global_args.project.is_some(),
                 project,
                 &project_dir,
                 run_command,
@@ -1066,7 +1077,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                     dry_run,
                 }),
-        }) => commands::self_update(target_version, token, dry_run, printer).await,
+        }) => {
+            commands::self_update(
+                target_version,
+                token,
+                dry_run,
+                printer,
+                globals.network_settings,
+            )
+            .await
+        }
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
@@ -1084,33 +1104,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 is not available. Please use your package manager to update uv."
             );
         }
-        Commands::Version(VersionArgs {
-            value,
-            bump,
-            dry_run,
-            short,
-            output_format,
-        }) => {
-            // If they specified any of these flags, they probably don't mean `uv self version`
-            let strict = cli.top_level.global_args.project.is_some()
-                || globals.preview.is_enabled()
-                || dry_run
-                || bump.is_some()
-                || value.is_some();
-            commands::project_version(
-                &project_dir,
-                value,
-                bump,
-                dry_run,
-                short,
-                output_format,
-                strict,
-                &workspace_cache,
-                printer,
-            )
-            .await
-        }
-
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
@@ -1306,6 +1299,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_paths,
                 args.show_version_specifiers,
                 args.show_with,
+                args.show_extras,
                 &cache,
                 printer,
             )
@@ -1386,6 +1380,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1395,12 +1390,43 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonInstallSettings::resolve(args, filesystem);
             show_settings!(args);
+            // TODO(john): If we later want to support `--upgrade`, we need to replace this.
+            let upgrade = false;
 
             commands::python_install(
                 &project_dir,
                 args.install_dir,
                 args.targets,
                 args.reinstall,
+                upgrade,
+                args.force,
+                args.python_install_mirror,
+                args.pypy_install_mirror,
+                args.python_downloads_json_url,
+                globals.network_settings,
+                args.default,
+                globals.python_downloads,
+                cli.top_level.no_config,
+                globals.preview,
+                printer,
+            )
+            .await
+        }
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::Upgrade(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonUpgradeSettings::resolve(args, filesystem);
+            show_settings!(args);
+            let reinstall = false;
+            let upgrade = true;
+
+            commands::python_install(
+                &project_dir,
+                args.install_dir,
+                args.targets,
+                reinstall,
+                upgrade,
                 args.force,
                 args.python_install_mirror,
                 args.pypy_install_mirror,
@@ -1449,6 +1475,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     cli.top_level.no_config,
                     &cache,
                     printer,
+                    globals.preview,
                 )
                 .await
             } else {
@@ -1462,6 +1489,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     globals.python_preference,
                     &cache,
                     printer,
+                    globals.preview,
                 )
                 .await
             }
@@ -1480,10 +1508,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.resolved,
                 globals.python_preference,
+                globals.python_downloads,
                 args.no_project,
                 args.global,
+                args.rm,
+                args.install_mirrors,
+                globals.network_settings,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1614,6 +1647,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
 /// Run a [`ProjectCommand`].
 async fn run_project(
+    project_was_explicit: bool,
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
@@ -1715,7 +1749,7 @@ async fn run_project(
                 args.no_project,
                 no_config,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
                 args.modifications,
                 args.python,
@@ -1763,7 +1797,7 @@ async fn run_project(
                 args.all_packages,
                 args.package,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
                 args.install_options,
                 args.modifications,
@@ -1923,6 +1957,7 @@ async fn run_project(
                 args.editable,
                 args.dependency_type,
                 args.raw,
+                args.bounds,
                 args.indexes,
                 args.rev,
                 args.tag,
@@ -1989,6 +2024,53 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::Version(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::VersionSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
+            // If they specified any of these flags, they probably don't mean `uv self version`
+            let strict = project_was_explicit
+                || globals.preview.is_enabled()
+                || args.dry_run
+                || args.bump.is_some()
+                || args.value.is_some()
+                || args.package.is_some();
+            Box::pin(commands::project_version(
+                args.value,
+                args.bump,
+                args.short,
+                args.output_format,
+                strict,
+                project_dir,
+                args.package,
+                args.dry_run,
+                args.locked,
+                args.frozen,
+                args.active,
+                args.no_sync,
+                args.python,
+                args.install_mirrors,
+                args.settings,
+                globals.network_settings,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.installer_metadata,
+                globals.concurrency,
+                no_config,
+                &cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::TreeSettings::resolve(args, filesystem);
@@ -2006,7 +2088,7 @@ async fn run_project(
 
             Box::pin(commands::tree(
                 project_dir,
-                args.dev,
+                args.groups,
                 args.locked,
                 args.frozen,
                 args.universal,
@@ -2058,7 +2140,7 @@ async fn run_project(
                 args.install_options,
                 args.output_file,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
                 args.locked,
                 args.frozen,

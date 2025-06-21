@@ -17,7 +17,9 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, download_to_disk, packse_index_url, uv_snapshot};
+use crate::common::{
+    DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, packse_index_url, uv_snapshot,
+};
 
 #[test]
 fn compile_requirements_in() -> Result<()> {
@@ -2105,6 +2107,7 @@ fn omit_non_matching_annotation() -> Result<()> {
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
 /// incompatible sdist <https://github.com/astral-sh/uv/issues/388>
+#[cfg(feature = "python-eol")]
 #[test]
 fn compile_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -5563,6 +5566,7 @@ coverage = ["example[test]", "extras>=0.0.1,<=0.0.2"]
 ///
 /// `voluptuous==0.15.1` requires Python 3.9 or later, so we should resolve to an earlier version
 /// and avoiding building 0.15.1 at all.
+#[cfg(feature = "python-eol")]
 #[test]
 fn requires_python_prefetch() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -6957,7 +6961,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
       ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Metadata for `validation` (v2.0.0) could not be parsed:
-            Failed to parse version: Unexpected end of version specifier, expected operator:
+            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
             12
             ^^
     "###
@@ -13551,7 +13555,7 @@ fn ignore_invalid_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -13580,7 +13584,7 @@ fn incompatible_build_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -13590,7 +13594,7 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.txt")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13601,7 +13605,7 @@ fn compatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -13610,7 +13614,7 @@ fn compatible_build_constraint() -> Result<()> {
 /// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
@@ -13648,6 +13652,7 @@ build-constraint-dependencies = [
 }
 
 /// Include `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
+#[cfg(feature = "python-eol")]
 #[test]
 fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -13691,7 +13696,7 @@ build-constraint-dependencies = [
 /// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
@@ -13776,7 +13781,7 @@ build-constraint-dependencies = [
 /// Merge CLI args `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
 #[test]
 fn compatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     // incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
@@ -13942,7 +13947,7 @@ fn invalid_extra() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn symlink() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
 
@@ -13958,7 +13963,7 @@ fn symlink() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.in")
         .arg("--output-file")
-        .arg("requirements-symlink.txt"), @r###"
+        .arg("requirements-symlink.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13966,18 +13971,14 @@ fn symlink() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --output-file requirements-symlink.txt
     anyio==4.3.0
         # via -r requirements.in
-    exceptiongroup==1.2.0
-        # via anyio
     idna==3.6
         # via anyio
     sniffio==1.3.1
         # via anyio
-    typing-extensions==4.10.0
-        # via anyio
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
-    "###
+    Resolved 3 packages in [TIME]
+    "
     );
 
     // The symlink should still be a symlink.
@@ -14047,16 +14048,16 @@ fn compile_enumerate_no_versions() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in"),
-    @r###"
+    @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and rooster-blue<=0.0.8 depends on Python>=3.11,<4.0, we can conclude that rooster-blue<=0.0.8 cannot be used.
+      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and all versions of rooster-blue depend on Python>=3.11,<4.0, we can conclude that all versions of rooster-blue cannot be used.
           And because you require rooster-blue, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     Ok(())
 }
@@ -14486,6 +14487,7 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
 /// dynamic metadata.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8767>
+#[cfg(feature = "python-eol")]
 #[test]
 fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2024-11-04T00:00:00Z");
@@ -14495,7 +14497,7 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--universal")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14505,7 +14507,9 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
       ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
           hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
-    "###);
+
+          hint: While the active Python version is 3.8, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    ");
 
     Ok(())
 }
@@ -14814,20 +14818,37 @@ fn invalid_platform() -> Result<()> {
         .pip_compile()
         .arg("--python-platform")
         .arg("linux")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only open3d<=0.18.0 is available and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
-          And because open3d>=0.16.0,<=0.18.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only the following versions of open3d are available:
+              open3d==0.8.0.0
+              open3d==0.9.0.0
+              open3d==0.10.0.0
+              open3d==0.10.0.1
+              open3d==0.11.0
+              open3d==0.11.1
+              open3d==0.11.2
+              open3d==0.12.0
+              open3d==0.13.0
+              open3d==0.14.1
+              open3d==0.15.1
+              open3d==0.15.2
+              open3d==0.16.0
+              open3d==0.16.1
+              open3d==0.17.0
+              open3d==0.18.0
+          and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
+          And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
 
           hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
 
           hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
-    "###);
+    ");
 
     Ok(())
 }
@@ -14986,6 +15007,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "python-eol")]
 #[test]
 fn disjoint_requires_python() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -15086,6 +15108,7 @@ fn dynamic_version_source_dist() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "python-eol")]
 #[test]
 fn max_python_requirement() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2024-12-18T00:00:00Z");
@@ -15760,7 +15783,106 @@ fn invalid_group() -> Result<()> {
 }
 
 #[test]
-fn project_and_group() -> Result<()> {
+fn project_and_group_workspace_inherit() -> Result<()> {
+    // Checking that --project is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+
+            [tool.uv.sources]
+            pytest = { workspace = true }
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("packages");
+        subdir.create_dir_all()?;
+
+        let pytest_dir = subdir.child("pytest");
+        pytest_dir.create_dir_all()?;
+        let pytest_toml = pytest_dir.child("pyproject.toml");
+        pytest_toml.write_str(
+            r#"
+            [project]
+            name = "pytest"
+            version = "4.0.0"
+            requires-python = ">=3.12"
+            "#,
+        )?;
+
+        let sniffio_dir = subdir.child("sniffio");
+        sniffio_dir.create_dir_all()?;
+        let sniffio_toml = sniffio_dir.child("pyproject.toml");
+        sniffio_toml.write_str(
+            r#"
+            [project]
+            name = "sniffio"
+            version = "1.3.1"
+            requires-python = ">=3.12"
+            "#,
+        )?;
+
+        let subproject_dir = subdir.child("mysubproject");
+        subproject_dir.create_dir_all()?;
+        let subproject_toml = subproject_dir.child("pyproject.toml");
+        subproject_toml.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.sources]
+            sniffio = { workspace = true }
+
+            [dependency-groups]
+            foo = ["iniconfig", "anyio", "sniffio", "pytest"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    // Check that the workspace's sources are discovered and consulted
+    let context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("packages/mysubproject/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group packages/mysubproject/pyproject.toml:foo
+    anyio==4.3.0
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    idna==3.6
+        # via anyio
+    iniconfig==2.0.0
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    pytest @ file://[TEMP_DIR]/packages/pytest
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    sniffio @ file://[TEMP_DIR]/packages/sniffio
+        # via
+        #   mysubproject (packages/mysubproject/pyproject.toml:foo)
+        #   anyio
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn project_and_group_workspace() -> Result<()> {
     // Checking that --project is handled properly with --group
     fn new_context() -> Result<TestContext> {
         let context = TestContext::new("3.12");
@@ -15994,6 +16116,7 @@ fn directory_and_group() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/10957>
+#[cfg(feature = "python-eol")]
 #[test]
 fn compile_preserve_requires_python_split() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");

@@ -39,10 +39,9 @@ if hasattr(sys, "implementation"):
         # GraalPy reports the CPython version as sys.implementation.version,
         # so we need to discover the GraalPy version from the cache_tag
         import re
+
         implementation_version = re.sub(
-            r"graalpy(\d)(\d+)-\d+",
-            r"\1.\2",
-            sys.implementation.cache_tag
+            r"graalpy(\d)(\d+)-\d+", r"\1.\2", sys.implementation.cache_tag
         )
     else:
         implementation_version = format_full_version(sys.implementation.version)
@@ -510,6 +509,24 @@ def get_operating_system_and_architecture():
             "major": int(version[0]),
             "minor": int(version[1]),
         }
+    elif operating_system == "emscripten":
+        pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
+        if not pyodide_abi_version:
+            print(
+                json.dumps(
+                    {
+                        "result": "error",
+                        "kind": "emscripten_not_pyodide",
+                    }
+                )
+            )
+            sys.exit(0)
+        version = pyodide_abi_version.split("_")
+        operating_system = {
+            "name": "pyodide",
+            "major": int(version[0]),
+            "minor": int(version[1]),
+        }
     elif operating_system in [
         "freebsd",
         "netbsd",
@@ -565,7 +582,6 @@ def main() -> None:
     elif os_and_arch["os"]["name"] == "musllinux":
         manylinux_compatible = True
 
-
     # By default, pip uses sysconfig on Python 3.10+.
     # But Python distributors can override this decision by setting:
     #     sysconfig._PIP_USE_SYSCONFIG = True / False
@@ -590,7 +606,7 @@ def main() -> None:
             except (ImportError, AttributeError):
                 pass
 
-            import distutils.dist
+            import distutils.dist  # noqa: F401
         except ImportError:
             # We require distutils, but it's not installed; this is fairly
             # common in, e.g., deadsnakes where distutils is packaged
@@ -623,7 +639,10 @@ def main() -> None:
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
         # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.
-        "standalone": sysconfig.get_config_var("prefix") == "/install" or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE")),
+        "standalone": (
+            sysconfig.get_config_var("prefix") == "/install"
+            or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE"))
+        ),
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,

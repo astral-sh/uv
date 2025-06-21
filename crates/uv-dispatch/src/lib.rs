@@ -226,6 +226,7 @@ impl BuildContext for BuildDispatch<'_> {
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
+            self.interpreter.markers(),
             // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
@@ -432,6 +433,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.build_extra_env_vars.clone(),
             build_output,
             self.concurrency.builds,
+            self.preview,
         )
         .boxed_local()
         .await?;

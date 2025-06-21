@@ -3,6 +3,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use uv_cache::Cache;
+use uv_configuration::{DependencyGroupsWithDefaults, PreviewMode};
 use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -31,6 +32,7 @@ pub(crate) async fn find(
     python_preference: PythonPreference,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let environment_preference = if system {
         EnvironmentPreference::OnlySystem
@@ -56,6 +58,8 @@ pub(crate) async fn find(
         }
     };
 
+    // Don't enable the requires-python settings on groups
+    let groups = DependencyGroupsWithDefaults::none();
     let WorkspacePython {
         source,
         python_request,
@@ -63,6 +67,7 @@ pub(crate) async fn find(
     } = WorkspacePython::from_request(
         request.map(|request| PythonRequest::parse(&request)),
         project.as_ref().map(VirtualProject::workspace),
+        &groups,
         project_dir,
         no_config,
     )
@@ -73,6 +78,7 @@ pub(crate) async fn find(
         environment_preference,
         python_preference,
         cache,
+        preview,
     )?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
@@ -80,6 +86,7 @@ pub(crate) async fn find(
         match validate_project_requires_python(
             python.interpreter(),
             project.as_ref().map(VirtualProject::workspace),
+            &groups,
             &requires_python,
             &source,
         ) {
@@ -116,6 +123,7 @@ pub(crate) async fn find_script(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let interpreter = match ScriptInterpreter::discover(
         script,
@@ -129,6 +137,7 @@ pub(crate) async fn find_script(
         Some(false),
         cache,
         printer,
+        preview,
     )
     .await
     {

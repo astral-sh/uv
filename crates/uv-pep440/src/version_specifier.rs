@@ -627,7 +627,15 @@ impl FromStr for VersionSpecifier {
         // operator but we don't know yet if it has a star
         let operator = s.eat_while(['=', '!', '~', '<', '>']);
         if operator.is_empty() {
-            return Err(ParseErrorKind::MissingOperator.into());
+            // Attempt to parse the version from the rest of the scanner to provide a more useful error message in MissingOperator.
+            // If it is not able to be parsed (i.e. not a valid version), it will just be None and no additional info will be added to the error message.
+            s.eat_while(|c: char| c.is_whitespace());
+            let version = s.eat_while(|c: char| !c.is_whitespace());
+            s.eat_while(|c: char| c.is_whitespace());
+            return Err(ParseErrorKind::MissingOperator(VersionOperatorBuildError {
+                version_pattern: VersionPattern::from_str(version).ok(),
+            })
+            .into());
         }
         let operator = Operator::from_str(operator).map_err(ParseErrorKind::InvalidOperator)?;
         s.eat_while(|c: char| c.is_whitespace());
@@ -695,6 +703,25 @@ impl std::fmt::Display for VersionSpecifierBuildError {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct VersionOperatorBuildError {
+    version_pattern: Option<VersionPattern>,
+}
+
+impl std::error::Error for VersionOperatorBuildError {}
+
+impl std::fmt::Display for VersionOperatorBuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Unexpected end of version specifier, expected operator")?;
+        if let Some(version_pattern) = &self.version_pattern {
+            let version_specifier =
+                VersionSpecifier::from_pattern(Operator::Equal, version_pattern.clone()).unwrap();
+            write!(f, ". Did you mean `{version_specifier}`?")?;
+        }
+        Ok(())
+    }
+}
+
 /// The specific kind of error that can occur when building a version specifier
 /// from an operator and version pair.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -748,9 +775,7 @@ impl std::fmt::Display for VersionSpecifierParseError {
             ParseErrorKind::InvalidOperator(ref err) => err.fmt(f),
             ParseErrorKind::InvalidVersion(ref err) => err.fmt(f),
             ParseErrorKind::InvalidSpecifier(ref err) => err.fmt(f),
-            ParseErrorKind::MissingOperator => {
-                write!(f, "Unexpected end of version specifier, expected operator")
-            }
+            ParseErrorKind::MissingOperator(ref err) => err.fmt(f),
             ParseErrorKind::MissingVersion => {
                 write!(f, "Unexpected end of version specifier, expected version")
             }
@@ -768,7 +793,7 @@ enum ParseErrorKind {
     InvalidOperator(OperatorParseError),
     InvalidVersion(VersionPatternParseError),
     InvalidSpecifier(VersionSpecifierBuildError),
-    MissingOperator,
+    MissingOperator(VersionOperatorBuildError),
     MissingVersion,
     InvalidTrailing(String),
 }
@@ -1357,6 +1382,32 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_specifier_missing_operator_error() {
+        let result = VersionSpecifiers::from_str("3.12");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            indoc! {"
+            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
+            3.12
+            ^^^^
+            "}
+        );
+    }
+
+    #[test]
+    fn test_parse_specifier_missing_operator_invalid_version_error() {
+        let result = VersionSpecifiers::from_str("blergh");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            indoc! {r"
+            Failed to parse version: Unexpected end of version specifier, expected operator:
+            blergh
+            ^^^^^^
+            "}
+        );
+    }
+
+    #[test]
     fn test_non_star_after_star() {
         let result = VersionSpecifiers::from_str("== 0.9.*.1");
         assert_eq!(
@@ -1386,7 +1437,10 @@ mod tests {
         let result = VersionSpecifiers::from_str("blergh");
         assert_eq!(
             result.unwrap_err().inner.err,
-            ParseErrorKind::MissingOperator.into(),
+            ParseErrorKind::MissingOperator(VersionOperatorBuildError {
+                version_pattern: None
+            })
+            .into(),
         );
     }
 
@@ -1395,7 +1449,13 @@ mod tests {
     fn test_invalid_specifier() {
         let specifiers = [
             // Operator-less specifier
-            ("2.0", ParseErrorKind::MissingOperator.into()),
+            (
+                "2.0",
+                ParseErrorKind::MissingOperator(VersionOperatorBuildError {
+                    version_pattern: VersionPattern::from_str("2.0").ok(),
+                })
+                .into(),
+            ),
             // Invalid operator
             (
                 "=>2.0",
@@ -1735,7 +1795,9 @@ mod tests {
     fn error_message_version_specifiers_parse_error() {
         let specs = ">=1.2.3, 5.4.3, >=3.4.5";
         let err = VersionSpecifierParseError {
-            kind: Box::new(ParseErrorKind::MissingOperator),
+            kind: Box::new(ParseErrorKind::MissingOperator(VersionOperatorBuildError {
+                version_pattern: VersionPattern::from_str("5.4.3").ok(),
+            })),
         };
         let inner = Box::new(VersionSpecifiersParseErrorInner {
             err,
@@ -1748,7 +1810,7 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "\
-Failed to parse version: Unexpected end of version specifier, expected operator:
+Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==5.4.3`?:
 >=1.2.3, 5.4.3, >=3.4.5
         ^^^^^^
 "

@@ -54,8 +54,12 @@ impl GitResolver {
     pub async fn github_fast_path(
         &self,
         url: &GitUrl,
-        client: ClientWithMiddleware,
+        client: &ClientWithMiddleware,
     ) -> Result<Option<GitOid>, GitResolverError> {
+        if std::env::var_os(EnvVars::UV_NO_GITHUB_FAST_PATH).is_some() {
+            return Ok(None);
+        }
+
         let reference = RepositoryReference::from(url);
 
         // If the URL is already precise, return it.
@@ -126,7 +130,7 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
-        client: ClientWithMiddleware,
+        client: impl Into<ClientWithMiddleware>,
         disable_ssl: bool,
         offline: bool,
         cache: PathBuf,

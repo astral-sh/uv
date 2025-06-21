@@ -25,131 +25,20 @@
 //! ```
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::LazyLock;
 
 use itertools::{Either, Itertools};
 use tracing::trace;
 
+use crate::sysconfig::generated_mappings::DEFAULT_VARIABLE_UPDATES;
 use crate::sysconfig::parser::{Error as ParseError, SysconfigData, Value};
 
 mod cursor;
+mod generated_mappings;
 mod parser;
-
-/// Replacement mode for sysconfig values.
-#[derive(Debug)]
-enum ReplacementMode {
-    Partial { from: String },
-    Full,
-}
-
-/// A replacement entry to patch in sysconfig data.
-#[derive(Debug)]
-struct ReplacementEntry {
-    mode: ReplacementMode,
-    to: String,
-}
-
-impl ReplacementEntry {
-    /// Patches a sysconfig value either partially (replacing a specific word) or fully.
-    fn patch(&self, entry: &str) -> String {
-        match &self.mode {
-            ReplacementMode::Partial { from } => entry
-                .split_whitespace()
-                .map(|word| if word == from { &self.to } else { word })
-                .collect::<Vec<_>>()
-                .join(" "),
-            ReplacementMode::Full => self.to.clone(),
-        }
-    }
-}
-
-/// Mapping for sysconfig keys to lookup and replace with the appropriate entry.
-static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, Vec<ReplacementEntry>>> =
-    LazyLock::new(|| {
-        BTreeMap::from_iter([
-            (
-                "CC".to_string(),
-                vec![
-                    ReplacementEntry {
-                        mode: ReplacementMode::Partial {
-                            from: "clang".to_string(),
-                        },
-                        to: "cc".to_string(),
-                    },
-                    ReplacementEntry {
-                        mode: ReplacementMode::Partial {
-                            from: "/usr/bin/aarch64-linux-gnu-gcc".to_string(),
-                        },
-                        to: "cc".to_string(),
-                    },
-                ],
-            ),
-            (
-                "CXX".to_string(),
-                vec![
-                    ReplacementEntry {
-                        mode: ReplacementMode::Partial {
-                            from: "clang++".to_string(),
-                        },
-                        to: "c++".to_string(),
-                    },
-                    ReplacementEntry {
-                        mode: ReplacementMode::Partial {
-                            from: "/usr/bin/x86_64-linux-gnu-g++".to_string(),
-                        },
-                        to: "c++".to_string(),
-                    },
-                ],
-            ),
-            (
-                "BLDSHARED".to_string(),
-                vec![ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang".to_string(),
-                    },
-                    to: "cc".to_string(),
-                }],
-            ),
-            (
-                "LDSHARED".to_string(),
-                vec![ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang".to_string(),
-                    },
-                    to: "cc".to_string(),
-                }],
-            ),
-            (
-                "LDCXXSHARED".to_string(),
-                vec![ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang++".to_string(),
-                    },
-                    to: "c++".to_string(),
-                }],
-            ),
-            (
-                "LINKCC".to_string(),
-                vec![ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang".to_string(),
-                    },
-                    to: "cc".to_string(),
-                }],
-            ),
-            (
-                "AR".to_string(),
-                vec![ReplacementEntry {
-                    mode: ReplacementMode::Full,
-                    to: "ar".to_string(),
-                }],
-            ),
-        ])
-    });
+mod replacements;
 
 /// Update the `sysconfig` data in a Python installation.
 pub(crate) fn update_sysconfig(

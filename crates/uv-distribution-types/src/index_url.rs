@@ -11,10 +11,12 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_redacted::DisplaySafeUrl;
 
 use crate::{Index, IndexStatusCodeStrategy, Verbatim};
 
-static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
+static PYPI_URL: LazyLock<DisplaySafeUrl> =
+    LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
@@ -69,7 +71,7 @@ impl IndexUrl {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root(&self) -> Option<Url> {
+    pub fn root(&self) -> Option<DisplaySafeUrl> {
         let mut segments = self.url().path_segments()?;
         let last = match segments.next_back()? {
             // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
@@ -77,7 +79,8 @@ impl IndexUrl {
             segment => segment,
         };
 
-        if !last.eq_ignore_ascii_case("simple") {
+        // We also handle `/+simple` as it's used in devpi
+        if !(last.eq_ignore_ascii_case("simple") || last.eq_ignore_ascii_case("+simple")) {
             return None;
         }
 
@@ -108,7 +111,7 @@ impl schemars::JsonSchema for IndexUrl {
 
 impl IndexUrl {
     /// Return the raw URL for the index.
-    pub fn url(&self) -> &Url {
+    pub fn url(&self) -> &DisplaySafeUrl {
         match self {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),
@@ -116,8 +119,8 @@ impl IndexUrl {
         }
     }
 
-    /// Convert the index URL into a [`Url`].
-    pub fn into_url(self) -> Url {
+    /// Convert the index URL into a [`DisplaySafeUrl`].
+    pub fn into_url(self) -> DisplaySafeUrl {
         match self {
             Self::Pypi(url) => url.to_url(),
             Self::Url(url) => url.to_url(),
@@ -126,7 +129,7 @@ impl IndexUrl {
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
-    pub fn redacted(&self) -> Cow<'_, Url> {
+    pub fn without_credentials(&self) -> Cow<'_, DisplaySafeUrl> {
         let url = self.url();
         if url.username().is_empty() && url.password().is_none() {
             Cow::Borrowed(url)
@@ -222,7 +225,7 @@ impl From<VerbatimUrl> for IndexUrl {
     }
 }
 
-impl From<IndexUrl> for Url {
+impl From<IndexUrl> for DisplaySafeUrl {
     fn from(index: IndexUrl) -> Self {
         match index {
             IndexUrl::Pypi(url) => url.to_url(),
@@ -508,30 +511,23 @@ impl<'a> IndexUrls {
     /// iterator.
     pub fn defined_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
-            Either::Left(std::iter::empty())
-        } else {
-            Either::Right(
-                {
-                    let mut seen = FxHashSet::default();
-                    self.indexes
-                        .iter()
-                        .filter(move |index| {
-                            index.name.as_ref().is_none_or(|name| seen.insert(name))
-                        })
-                        .filter(|index| !index.default)
-                }
-                .chain({
-                    let mut seen = FxHashSet::default();
-                    self.indexes
-                        .iter()
-                        .filter(move |index| {
-                            index.name.as_ref().is_none_or(|name| seen.insert(name))
-                        })
-                        .find(|index| index.default)
-                        .into_iter()
-                }),
-            )
+            return Either::Left(std::iter::empty());
         }
+
+        let mut seen = FxHashSet::default();
+        let (non_default, default) = self
+            .indexes
+            .iter()
+            .filter(move |index| {
+                if let Some(name) = &index.name {
+                    seen.insert(name)
+                } else {
+                    true
+                }
+            })
+            .partition::<Vec<_>, _>(|index| !index.default);
+
+        Either::Right(non_default.into_iter().chain(default))
     }
 
     /// Return the `--no-index` flag.

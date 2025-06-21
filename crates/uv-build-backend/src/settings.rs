@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uv_macros::OptionsMetadata;
-use uv_pypi_types::Identifier;
 
 /// Settings for the uv build backend (`uv_build`).
 ///
@@ -32,6 +31,13 @@ pub struct BuildBackendSettings {
     ///
     /// The default module name is the package name with dots and dashes replaced by underscores.
     ///
+    /// Package names need to be valid Python identifiers, and the directory needs to contain a
+    /// `__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
+    /// being the module name, and which contain a `__init__.pyi` file.
+    ///
+    /// For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
+    /// `foo-stubs.bar`.
+    ///
     /// Note that using this option runs the risk of creating two packages with different names but
     /// the same module names. Installing such packages together leads to unspecified behavior,
     /// often with corrupted files or directory trees.
@@ -40,7 +46,7 @@ pub struct BuildBackendSettings {
         value_type = "str",
         example = r#"module-name = "sklearn""#
     )]
-    pub module_name: Option<Identifier>,
+    pub module_name: Option<String>,
 
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
@@ -78,6 +84,56 @@ pub struct BuildBackendSettings {
         example = r#"wheel-exclude = ["*.bin"]"#
     )]
     pub wheel_exclude: Vec<String>,
+
+    /// Build a namespace package.
+    ///
+    /// Build a PEP 420 implicit namespace package, allowing more than one root `__init__.py`.
+    ///
+    /// Use this option when the namespace package contains multiple root `__init__.py`, for
+    /// namespace packages with a single root `__init__.py` use a dotted `module-name` instead.
+    ///
+    /// To compare dotted `module-name` and `namespace = true`, the first example below can be
+    /// expressed with `module-name = "cloud.database"`: There is one root `__init__.py` `database`.
+    /// In the second example, we have three roots (`cloud.database`, `cloud.database_pro`,
+    /// `billing.modules.database_pro`), so `namespace = true` is required.
+    ///
+    /// ```text
+    /// src
+    /// └── cloud
+    ///     └── database
+    ///         ├── __init__.py
+    ///         ├── query_builder
+    ///         │   └── __init__.py
+    ///         └── sql
+    ///             ├── parser.py
+    ///             └── __init__.py
+    /// ```
+    ///
+    /// ```text
+    /// src
+    /// ├── cloud
+    /// │   ├── database
+    /// │   │   ├── __init__.py
+    /// │   │   ├── query_builder
+    /// │   │   │   └── __init__.py
+    /// │   │   └── sql
+    /// │   │       ├── __init__.py
+    /// │   │       └── parser.py
+    /// │   └── database_pro
+    /// │       ├── __init__.py
+    /// │       └── query_builder.py
+    /// └── billing
+    ///     └── modules
+    ///         └── database_pro
+    ///             ├── __init__.py
+    ///             └── sql.py
+    /// ```
+    #[option(
+        default = r#"false"#,
+        value_type = "bool",
+        example = r#"namespace = true"#
+    )]
+    pub namespace: bool,
 
     /// Data includes for wheels.
     ///
@@ -123,6 +179,7 @@ impl Default for BuildBackendSettings {
             default_excludes: true,
             source_exclude: Vec::new(),
             wheel_exclude: Vec::new(),
+            namespace: false,
             data: WheelDataIncludes::default(),
         }
     }

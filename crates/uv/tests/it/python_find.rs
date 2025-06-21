@@ -97,15 +97,14 @@ fn python_find() {
     let arch = Arch::from_env();
 
     uv_snapshot!(context.filters(), context.python_find()
-    .arg(format!("cpython-3.12-{os}-{arch}"))
-    , @r###"
+        .arg(format!("cpython-3.12-{os}-{arch}")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.12]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Request PyPy (which should be missing)
     uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r"
@@ -319,15 +318,15 @@ fn python_find_project() {
     "###);
 
     // Unless explicitly requested
-    uv_snapshot!(context.filters(), context.python_find().arg("3.10"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.10"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.10]
 
     ----- stderr -----
-    warning: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`
-    "###);
+    warning: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
+    ");
 
     // Or `--no-project` is used
     uv_snapshot!(context.filters(), context.python_find().arg("--no-project"), @r###"
@@ -368,15 +367,16 @@ fn python_find_project() {
     "###);
 
     // We should warn on subsequent uses, but respect the pinned version?
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.10]
 
     ----- stderr -----
-    warning: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`. Use `uv python pin` to update the `.python-version` file to a compatible version.
-    "###);
+    warning: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11` (from `project.requires-python`)
+    Use `uv python pin` to update the `.python-version` file to a compatible version
+    ");
 
     // Unless the pin file is outside the project, in which case we should just ignore it
     let child_dir = context.temp_dir.child("child");
@@ -750,24 +750,24 @@ fn python_required_python_major_minor() {
         .unwrap();
 
     // Find `python3.11`, which is `>=3.11.4`.
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/child/python3.11
 
     ----- stderr -----
-    "###);
+    ");
 
     // Find `python3.11`, which is `>3.11.4`.
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/child/python3.11
 
     ----- stderr -----
-    "###);
+    ");
 
     // Fail to find any matching Python interpreter.
     uv_snapshot!(context.filters(), context.python_find().arg(">3.11.255, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"

@@ -630,7 +630,9 @@ class GraalPyFinder(Finder):
             for download in batch:
                 url = download.url + ".sha256"
                 checksum_requests.append(self.client.get(url))
-            for download, resp in zip(batch, await asyncio.gather(*checksum_requests)):
+            for download, resp in zip(
+                batch, await asyncio.gather(*checksum_requests), strict=False
+            ):
                 try:
                     resp.raise_for_status()
                 except httpx.HTTPStatusError as e:
@@ -729,7 +731,7 @@ async def find() -> None:
     }
     if token:
         headers["Authorization"] = "Bearer " + token
-    client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=15)
+    client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=60)
 
     finders = [
         CPythonFinder(client),

@@ -68,16 +68,18 @@ fn source_dist_matcher(
     includes.push(globset::escape("pyproject.toml"));
 
     // Check that the source tree contains a module.
-    let (_, module_root) = find_roots(
+    let (src_root, module_relative) = find_roots(
         source_tree,
         pyproject_toml,
         &settings.module_root,
-        settings.module_name.as_ref(),
+        settings.module_name.as_deref(),
+        settings.namespace,
     )?;
     // The wheel must not include any files included by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
     let import_path = uv_fs::normalize_path(
-        &uv_fs::relative_to(module_root, source_tree).expect("module root is inside source tree"),
+        &uv_fs::relative_to(src_root.join(module_relative), source_tree)
+            .expect("module root is inside source tree"),
     )
     .portable_display()
     .to_string();

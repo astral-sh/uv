@@ -1,4 +1,4 @@
-use crate::common::{TestContext, uv_snapshot};
+use crate::common::{DEFAULT_PYTHON_VERSION, TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -7,7 +7,6 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
-use std::process::Command;
 use zip::ZipArchive;
 
 #[test]
@@ -898,7 +897,7 @@ fn build_constraints() -> Result<()> {
 
 #[test]
 fn build_sha() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let filters = context
         .filters()
         .into_iter()
@@ -1857,7 +1856,7 @@ fn build_unconfigured_setuptools() -> Result<()> {
      + greet==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    uv_snapshot!(context.filters(), Command::new(context.interpreter()).arg("-c").arg("import greet"), @r###"
+    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import greet"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
