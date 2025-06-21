@@ -302,6 +302,7 @@ jobs:
           # Avoid permission errors during concurrent tests
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
+          UV_LOG_CONTEXT: 1
         shell: bash
         run: |
           cargo nextest run \

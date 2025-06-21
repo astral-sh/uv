@@ -263,26 +263,35 @@ fn uninstall_duplicate_by_path() -> Result<()> {
             .expect("Path is valid unicode"),
     )?;
 
-    context
+    uv_snapshot!(context.filters(), context
         .pip_sync()
-        .arg(requirements_txt.path())
-        .assert()
-        .success();
+        .arg("-vv")
+        .arg(requirements_txt.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+    ");
 
     context.assert_command("import poetry_editable").success();
 
     // Uninstall the editable by both path and name.
     uv_snapshot!(context.pip_uninstall()
         .arg("poetry-editable")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-    "###
+     - poetry-editable==0.1.0 (from file:///Users/zb/workspace/uv/scripts/packages/poetry_editable)
+    "
     );
 
     context.assert_command("import poetry_editable").failure();
