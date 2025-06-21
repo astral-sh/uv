@@ -339,14 +339,14 @@ jobs:
     steps:
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: astral
+          password: ${{ secrets.DOCKERHUB_TOKEN_RW }}
 
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          username: astral
-          password: ${{ secrets.DOCKERHUB_TOKEN_RW }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Depot doesn't support annotating images, so we need to do so manually
       # afterwards. Mutating the manifest is desirable regardless, because we
