@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.8.0/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```pwsh-session
-    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.7.13/install.ps1 | iex"
+    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.8.0/install.ps1 | iex"
     ```
 
 !!! tip
