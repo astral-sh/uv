@@ -103,7 +103,7 @@ mod resolver {
         ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
-    use uv_workspace::WorkspaceCache;
+    use uv_workspace::{WorkspaceCache, pyproject::ExtraBuildDependencies};
 
     static MARKERS: LazyLock<MarkerEnvironment> = LazyLock::new(|| {
         MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -141,6 +141,7 @@ mod resolver {
         universal: bool,
     ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
+        let extra_build_dependencies = ExtraBuildDependencies::default();
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
@@ -185,6 +186,7 @@ mod resolver {
             IndexStrategy::default(),
             &config_settings,
             build_isolation,
+            &extra_build_dependencies,
             LinkMode::default(),
             &build_options,
             &hashes,

@@ -30,6 +30,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_warnings::warn_user;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
@@ -352,7 +353,7 @@ async fn venv_impl(
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
-
+        let extra_build_dependencies = ExtraBuildDependencies::default();
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
             &client,
@@ -366,6 +367,7 @@ async fn venv_impl(
             index_strategy,
             &config_settings,
             BuildIsolation::Isolated,
+            &extra_build_dependencies,
             link_mode,
             &build_options,
             &build_hasher,

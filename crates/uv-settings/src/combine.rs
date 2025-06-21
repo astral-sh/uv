@@ -1,5 +1,5 @@
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::{collections::BTreeMap, num::NonZeroUsize};
 
 use url::Url;
 
@@ -113,6 +113,21 @@ impl<T> Combine for Option<Vec<T>> {
         match (self, other) {
             (Some(mut a), Some(b)) => {
                 a.extend(b);
+                Some(a)
+            }
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl<K: Ord, T> Combine for Option<BTreeMap<K, Vec<T>>> {
+    /// Combine two maps of vecs by combining their vecs
+    fn combine(self, other: Option<BTreeMap<K, Vec<T>>>) -> Option<BTreeMap<K, Vec<T>>> {
+        match (self, other) {
+            (Some(mut a), Some(b)) => {
+                for (key, value) in b {
+                    a.entry(key).or_default().extend(value);
+                }
                 Some(a)
             }
             (a, b) => a.or(b),

@@ -20,7 +20,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
-use uv_workspace::pyproject_mut::AddBoundsKind;
+use uv_workspace::{pyproject::ExtraBuildDependencies, pyproject_mut::AddBoundsKind};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -370,6 +370,7 @@ pub struct ResolverOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub no_sources: Option<bool>,
 }
 
@@ -610,6 +611,20 @@ pub struct ResolverInstallerOptions {
     "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    /// Additional build dependencies for dependencies.
+    ///
+    /// This is intended for enabling more packages to be built with
+    /// build-isolation, by adding dependencies that they ambiently
+    /// assume to exist (`setuptools` and `pip` being common).
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+        [extra-build-dependencies] 
+        pytest = ["setuptools"]
+    "#
+    )]
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Limit candidate packages to those that were uploaded prior to a given point in time.
     ///
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
@@ -1106,6 +1121,20 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    /// Additional build dependencies for dependencies.
+    ///
+    /// This is intended for enabling more packages to be built with
+    /// build-isolation, by adding dependencies that they ambiently
+    /// assume to exist (`setuptools` and `pip` being common).
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [extra-build-dependencies]
+            pytest = ["setuptools"]
+        "#
+    )]
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[option(
@@ -1660,6 +1689,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             no_binary_package: value.no_binary_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             no_sources: value.no_sources,
         }
     }
@@ -1715,6 +1745,7 @@ pub struct ToolOptions {
     pub config_settings: Option<ConfigSettings>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
@@ -1742,6 +1773,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             config_settings: value.config_settings,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
@@ -1771,6 +1803,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             config_settings: value.config_settings,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
@@ -1823,6 +1856,7 @@ pub struct OptionsWire {
     config_settings: Option<ConfigSettings>,
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
+    extra_build_dependencies: Option<ExtraBuildDependencies>,
     exclude_newer: Option<ExcludeNewer>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
@@ -1939,6 +1973,7 @@ impl From<OptionsWire> for Options {
             sources,
             default_groups,
             dependency_groups,
+            extra_build_dependencies,
             dev_dependencies,
             managed,
             package,
@@ -1978,6 +2013,7 @@ impl From<OptionsWire> for Options {
                 config_settings,
                 no_build_isolation,
                 no_build_isolation_package,
+                extra_build_dependencies,
                 exclude_newer,
                 link_mode,
                 compile_bytecode,

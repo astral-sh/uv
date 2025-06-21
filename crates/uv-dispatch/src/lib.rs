@@ -39,6 +39,7 @@ use uv_types::{
     InFlight,
 };
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 #[derive(Debug, Error)]
 pub enum BuildDispatchError {
@@ -87,6 +88,7 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
+    extra_build_dependencies: &'a ExtraBuildDependencies,
     link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
@@ -113,6 +115,7 @@ impl<'a> BuildDispatch<'a> {
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
+        extra_build_dependencies: &'a ExtraBuildDependencies,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
@@ -134,6 +137,7 @@ impl<'a> BuildDispatch<'a> {
             index_strategy,
             config_settings,
             build_isolation,
+            extra_build_dependencies,
             link_mode,
             build_options,
             hasher,
@@ -428,6 +432,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.workspace_cache(),
             self.config_settings.clone(),
             self.build_isolation,
+            self.extra_build_dependencies,
             &build_stack,
             build_kind,
             self.build_extra_env_vars.clone(),
