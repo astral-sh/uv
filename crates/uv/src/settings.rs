@@ -237,6 +237,7 @@ pub(crate) struct InitSettings {
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) cursor_rules: bool,
 }
 
 impl InitSettings {
@@ -263,6 +264,8 @@ impl InitSettings {
             pin_python,
             no_workspace,
             python,
+            cursor_rules,
+            no_cursor_rules,
             ..
         } = args;
 
@@ -299,6 +302,7 @@ impl InitSettings {
             no_workspace,
             python: python.and_then(Maybe::into_option),
             install_mirrors,
+            cursor_rules: flag(cursor_rules, no_cursor_rules).unwrap_or(true), // Default to true (auto-detect)
         }
     }
 }
