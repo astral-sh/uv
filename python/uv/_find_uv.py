@@ -18,14 +18,14 @@ def find_uv_bin() -> str:
         sysconfig.get_path("scripts"),
         # The scripts directory for the base prefix
         sysconfig.get_path("scripts", vars={"base": sys.base_prefix}),
-        # The user scheme scripts directory, e.g., `~/.local/bin`
-        sysconfig.get_path("scripts", scheme=_user_scheme()),
         # Above the package root, e.g., from `pip install --prefix`
         # with module path `<prefix>/lib/python3.13/site-packages/uv`
         _join(_parents(_module_path(), 4), "bin"),
         # Adjacent to the package root, e.g., from `pip install --target`
         # with module path `<target>/uv`
         _join(_parents(_module_path(), 1), "bin"),
+        # The user scheme scripts directory, e.g., `~/.local/bin`
+        sysconfig.get_path("scripts", scheme=_user_scheme()),
     ]
 
     seen = set()
