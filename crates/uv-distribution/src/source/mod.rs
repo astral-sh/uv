@@ -1060,7 +1060,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
-            if resource.editable {
+            if resource.editable.unwrap_or(false) {
                 WheelCache::Editable(resource.url).root()
             } else {
                 WheelCache::Path(resource.url).root()
@@ -1173,7 +1173,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
-            if resource.editable {
+            if resource.editable.unwrap_or(false) {
                 WheelCache::Editable(resource.url).root()
             } else {
                 WheelCache::Path(resource.url).root()
