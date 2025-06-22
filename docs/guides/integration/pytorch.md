@@ -85,21 +85,21 @@ In such cases, the first step is to add the relevant PyTorch index to your `pypr
     explicit = true
     ```
 
-=== "CUDA 12.1"
+=== "CUDA 12.6"
 
     ```toml
     [[tool.uv.index]]
-    name = "pytorch-cu121"
-    url = "https://download.pytorch.org/whl/cu121"
+    name = "pytorch-cu126"
+    url = "https://download.pytorch.org/whl/cu126"
     explicit = true
     ```
 
-=== "CUDA 12.4"
+=== "CUDA 12.8"
 
     ```toml
     [[tool.uv.index]]
-    name = "pytorch-cu124"
-    url = "https://download.pytorch.org/whl/cu124"
+    name = "pytorch-cu128"
+    url = "https://download.pytorch.org/whl/cu128"
     explicit = true
     ```
 
@@ -108,7 +108,7 @@ In such cases, the first step is to add the relevant PyTorch index to your `pypr
     ```toml
     [[tool.uv.index]]
     name = "pytorch-rocm"
-    url = "https://download.pytorch.org/whl/rocm6.2"
+    url = "https://download.pytorch.org/whl/rocm6.3"
     explicit = true
     ```
 
@@ -154,7 +154,7 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ]
     ```
 
-=== "CUDA 12.1"
+=== "CUDA 12.6"
 
     PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
     the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
@@ -162,14 +162,14 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+      { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     torchvision = [
-      { index = "pytorch-cu121", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+      { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
-=== "CUDA 12.4"
+=== "CUDA 12.8"
 
     PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
     the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
@@ -177,10 +177,10 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+      { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     torchvision = [
-      { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+      { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
@@ -355,11 +355,11 @@ explicit = true
 
 In some cases, you may want to use CPU-only builds in some cases, but CUDA-enabled builds in others,
 with the choice toggled by a user-provided extra (e.g., `uv sync --extra cpu` vs.
-`uv sync --extra cu124`).
+`uv sync --extra cu128`).
 
 With `tool.uv.sources`, you can use extra markers to specify the desired index for each enabled
 extra. For example, the following configuration would use PyTorch's CPU-only for
-`uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu124`:
+`uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu128`:
 
 ```toml
 [project]
@@ -410,7 +410,7 @@ explicit = true
 !!! note
 
     Since GPU-accelerated builds aren't available on macOS, the above configuration will fail to install
-    on macOS when the `cu124` extra is enabled.
+    on macOS when the `cu128` extra is enabled.
 
 ## The `uv pip` interface
 
@@ -433,25 +433,31 @@ $ uv pip install torch torchvision torchaudio --index-url https://download.pytor
 
 ## Automatic backend selection
 
-In [preview](../../reference/settings.md#preview), uv can automatically select the appropriate
-PyTorch index at runtime by inspecting the system configuration via `--torch-backend=auto` (or
-`UV_TORCH_BACKEND=auto`):
+uv supports automatic selection of the appropriate PyTorch index via the `--torch-backend=auto`
+command-line argument (or the `UV_TORCH_BACKEND=auto` environment variable), as in:
 
 ```shell
+$ # With a command-line argument.
+$ uv pip install torch --torch-backend=auto
+
+$ # With an environment variable.
 $ UV_TORCH_BACKEND=auto uv pip install torch
 ```
 
-When enabled, uv will query for the installed CUDA driver version and use the most-compatible
-PyTorch index for all relevant packages (e.g., `torch`, `torchvision`, etc.). If no such CUDA driver
-is found, uv will fall back to the CPU-only index. uv will continue to respect existing index
-configuration for any packages outside the PyTorch ecosystem.
+When enabled, uv will query for the installed CUDA driver and AMD GPU versions then use the
+most-compatible PyTorch index for all relevant packages (e.g., `torch`, `torchvision`, etc.). If no
+such GPU is found, uv will fall back to the CPU-only index. uv will continue to respect existing
+index configuration for any packages outside the PyTorch ecosystem.
 
-To select a specific backend (e.g., `cu126`), set `--torch-backend=cu126` (or
-`UV_TORCH_BACKEND=cu126`).
+You can also select a specific backend (e.g., CUDA 12.6) with `--torch-backend=cu126` (or
+`UV_TORCH_BACKEND=cu126`):
 
-At present, `--torch-backend` is only available in the `uv pip` interface, and only supports
-detection of CUDA drivers (as opposed to other accelerators like ROCm or Intel GPUs).
+```shell
+$ # With a command-line argument.
+$ uv pip install torch torchvision --torch-backend=cu126
 
-As `--torch-backend` is a preview feature, it should be considered experimental and is not governed
-by uv's standard [versioning policy](../../reference/policies/versioning.md). `--torch-backend` may
-change or be removed entirely in future versions of uv.
+$ # With an environment variable.
+$ UV_TORCH_BACKEND=cu126 uv pip install torch torchvision
+```
+
+At present, `--torch-backend` is only available in the `uv pip` interface.

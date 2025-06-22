@@ -157,6 +157,7 @@ pub(crate) async fn pip_sync(
             EnvironmentPreference::from_system_flag(system, false),
             python_preference,
             &cache,
+            preview,
         )?;
         report_interpreter(&installation, true, printer)?;
         PythonEnvironment::from_installation(installation)
@@ -168,6 +169,7 @@ pub(crate) async fn pip_sync(
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
             &cache,
+            preview,
         )?;
         report_target_environment(&environment, &cache, printer)?;
         environment
@@ -277,20 +279,18 @@ pub(crate) async fn pip_sync(
     }
 
     // Determine the PyTorch backend.
-    let torch_backend = torch_backend.map(|mode| {
-        if preview.is_disabled() {
-            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
-        }
-
-        TorchStrategy::from_mode(
-            mode,
-            python_platform
-                .map(TargetTriple::platform)
-                .as_ref()
-                .unwrap_or(interpreter.platform())
-                .os(),
-        )
-    }).transpose()?;
+    let torch_backend = torch_backend
+        .map(|mode| {
+            TorchStrategy::from_mode(
+                mode,
+                python_platform
+                    .map(TargetTriple::platform)
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?

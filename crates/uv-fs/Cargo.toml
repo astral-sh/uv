@@ -16,7 +16,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }

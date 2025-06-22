@@ -13,7 +13,6 @@ pub trait CompatArgs {
 /// For example, users often pass `--allow-unsafe`, which is unnecessary with uv. But it's a
 /// nice user experience to warn, rather than fail, when users pass `--allow-unsafe`.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipCompileCompatArgs {
     #[clap(long, hide = true)]
     allow_unsafe: bool,
@@ -159,7 +158,6 @@ impl CompatArgs for PipCompileCompatArgs {
 ///
 /// These represent a subset of the `pip list` interface that uv supports by default.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipListCompatArgs {
     #[clap(long, hide = true)]
     disable_pip_version_check: bool,
@@ -184,7 +182,6 @@ impl CompatArgs for PipListCompatArgs {
 ///
 /// These represent a subset of the `pip-sync` interface that uv supports by default.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipSyncCompatArgs {
     #[clap(short, long, hide = true)]
     ask: bool,
@@ -268,7 +265,6 @@ enum Resolver {
 ///
 /// These represent a subset of the `virtualenv` interface that uv supports by default.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct VenvCompatArgs {
     #[clap(long, hide = true)]
     clear: bool,
@@ -327,7 +323,6 @@ impl CompatArgs for VenvCompatArgs {
 ///
 /// These represent a subset of the `pip install` interface that uv supports by default.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipInstallCompatArgs {
     #[clap(long, hide = true)]
     disable_pip_version_check: bool,
@@ -361,7 +356,6 @@ impl CompatArgs for PipInstallCompatArgs {
 ///
 /// These represent a subset of the `pip` interface that exists on all commands.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipGlobalCompatArgs {
     #[clap(long, hide = true)]
     disable_pip_version_check: bool,

@@ -143,8 +143,8 @@ reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
 reqwest = { version = "=0.12.15", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
-reqwest-middleware = { version = "0.4.0", features = ["multipart"] }
-reqwest-retry = { version = "0.7.0" }
+reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8", features = ["multipart"] }
+reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.2" }
@@ -183,7 +183,7 @@ unscanny = { version = "0.1.0" }
 url = { version = "2.5.2", features = ["serde"] }
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "06ec5a5f59ffaeb6cf5079c6cb184467da06c9db" }
 walkdir = { version = "2.5.0" }
-which = { version = "7.0.0", features = ["regex"] }
+which = { version = "8.0.0", features = ["regex"] }
 windows = { version = "0.59.0", features = ["Win32_Storage_FileSystem"] }
 windows-core = { version = "0.59.0" }
 windows-registry = { version = "0.5.0" }
@@ -214,6 +214,7 @@ missing_panics_doc = "allow"
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
 similar_names = "allow"
+struct_excessive_bools = "allow"
 too_many_arguments = "allow"
 too_many_lines = "allow"
 used_underscore_binding = "allow"
@@ -296,85 +297,6 @@ codegen-units = 1
 [profile.dist]
 inherits = "release"
 
-# Config for 'dist'
-[workspace.metadata.dist]
-# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.28.4"
-# make a package being included in our releases opt-in instead of opt-out
-dist = false
-# CI backends to support
-ci = "github"
-# The installers to generate for each app
-installers = ["shell", "powershell"]
-# The archive format to use for windows builds (defaults .zip)
-windows-archive = ".zip"
-# The archive format to use for non-windows builds (defaults .tar.xz)
-unix-archive = ".tar.gz"
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = [
-  "aarch64-apple-darwin",
-  "aarch64-pc-windows-msvc",
-  "aarch64-unknown-linux-gnu",
-  "aarch64-unknown-linux-musl",
-  "arm-unknown-linux-musleabihf",
-  "armv7-unknown-linux-gnueabihf",
-  "armv7-unknown-linux-musleabihf",
-  "i686-pc-windows-msvc",
-  "i686-unknown-linux-gnu",
-  "i686-unknown-linux-musl",
-  "powerpc64-unknown-linux-gnu",
-  "powerpc64le-unknown-linux-gnu",
-  "riscv64gc-unknown-linux-gnu",
-  "s390x-unknown-linux-gnu",
-  "x86_64-apple-darwin",
-  "x86_64-pc-windows-msvc",
-  "x86_64-unknown-linux-gnu",
-  "x86_64-unknown-linux-musl",
-]
-# Whether to auto-include files like READMEs, LICENSEs, and CHANGELOGs (default true)
-auto-includes = false
-# Whether dist should create a Github Release or use an existing draft
-create-release = true
-# Which actions to run on pull requests
-pr-run-mode = "plan"
-# Whether CI should trigger releases with dispatches instead of tag pushes
-dispatch-releases = true
-# Which phase dist should use to create the GitHub release
-github-release = "announce"
-# Whether CI should include auto-generated code to build local artifacts
-build-local-artifacts = false
-# Local artifacts jobs to run in CI
-local-artifacts-jobs = ["./build-binaries", "./build-docker"]
-# Publish jobs to run in CI
-publish-jobs = ["./publish-pypi"]
-# Post-announce jobs to run in CI
-post-announce-jobs = ["./publish-docs"]
-# Custom permissions for GitHub Jobs
-github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read", id-token = "write", attestations = "write" } }
-# Whether to install an updater program
-install-updater = false
-# Path that installers should place binaries in
-install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
-
-[workspace.metadata.dist.github-custom-runners]
-global = "depot-ubuntu-latest-4"
-
-[workspace.metadata.dist.min-glibc-version]
-# Override glibc version for specific target triplets.
-aarch64-unknown-linux-gnu = "2.28"
-riscv64gc-unknown-linux-gnu = "2.31"
-# Override all remaining glibc versions.
-"*" = "2.17"
-
-[workspace.metadata.dist.github-action-commits]
-"actions/checkout" = "11bd71901bbe5b1630ceea73d27597364c9af683" # v4
-"actions/upload-artifact" = "6027e3dd177782cd8ab9af838c04fd81a07f1d47" # v4.6.2
-"actions/download-artifact" = "d3f86a106a0bac45b974a628896c90dbdf5c8093" # v4.3.0
-"actions/attest-build-provenance" = "c074443f1aee8d4aeeae555aebba3282517141b2" #v2.2.3
-
-[workspace.metadata.dist.binaries]
-"*" = ["uv", "uvx"]
-# Add "uvw" binary for Windows targets
-aarch64-pc-windows-msvc = ["uv", "uvx", "uvw"]
-i686-pc-windows-msvc = ["uv", "uvx", "uvw"]
-x86_64-pc-windows-msvc = ["uv", "uvx", "uvw"]
+[patch.crates-io]
+reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
+reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }

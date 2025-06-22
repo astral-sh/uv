@@ -831,7 +831,7 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
                 tag_marker.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformMachine,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("x86_64"),
+                    value: arcstr::literal!("AMD64"),
                 }));
                 marker.or(tag_marker);
             }
@@ -925,7 +925,7 @@ mod tests {
         );
         assert_markers(
             "numpy-2.2.1-cp313-cp313t-win_amd64.whl",
-            "sys_platform == 'win32' and platform_machine == 'x86_64'",
+            "sys_platform == 'win32' and platform_machine == 'AMD64'",
         );
         assert_markers(
             "numpy-2.2.1-cp313-cp313t-win_arm64.whl",

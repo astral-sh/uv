@@ -768,6 +768,36 @@ impl Lock {
         }
     }
 
+    /// Checks whether the new requires-python specification is disjoint with
+    /// the fork markers in this lock file.
+    ///
+    /// If they are disjoint, then the union of the fork markers along with the
+    /// given requires-python specification (converted to a marker tree) are
+    /// returned.
+    ///
+    /// When disjoint, the fork markers in the lock file should be dropped and
+    /// not used.
+    pub fn requires_python_coverage(
+        &self,
+        new_requires_python: &RequiresPython,
+    ) -> Result<(), (MarkerTree, MarkerTree)> {
+        let fork_markers_union = if self.fork_markers().is_empty() {
+            self.requires_python.to_marker_tree()
+        } else {
+            let mut fork_markers_union = MarkerTree::FALSE;
+            for fork_marker in self.fork_markers() {
+                fork_markers_union.or(fork_marker.pep508());
+            }
+            fork_markers_union
+        };
+        let new_requires_python = new_requires_python.to_marker_tree();
+        if fork_markers_union.is_disjoint(new_requires_python) {
+            Err((fork_markers_union, new_requires_python))
+        } else {
+            Ok(())
+        }
+    }
+
     /// Returns the TOML representation of this lockfile.
     pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
         // Catch a lockfile where the union of fork markers doesn't cover the supported

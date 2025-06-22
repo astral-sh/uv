@@ -511,30 +511,23 @@ impl<'a> IndexUrls {
     /// iterator.
     pub fn defined_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
-            Either::Left(std::iter::empty())
-        } else {
-            Either::Right(
-                {
-                    let mut seen = FxHashSet::default();
-                    self.indexes
-                        .iter()
-                        .filter(move |index| {
-                            index.name.as_ref().is_none_or(|name| seen.insert(name))
-                        })
-                        .filter(|index| !index.default)
-                }
-                .chain({
-                    let mut seen = FxHashSet::default();
-                    self.indexes
-                        .iter()
-                        .filter(move |index| {
-                            index.name.as_ref().is_none_or(|name| seen.insert(name))
-                        })
-                        .find(|index| index.default)
-                        .into_iter()
-                }),
-            )
+            return Either::Left(std::iter::empty());
         }
+
+        let mut seen = FxHashSet::default();
+        let (non_default, default) = self
+            .indexes
+            .iter()
+            .filter(move |index| {
+                if let Some(name) = &index.name {
+                    seen.insert(name)
+                } else {
+                    true
+                }
+            })
+            .partition::<Vec<_>, _>(|index| !index.default);
+
+        Either::Right(non_default.into_iter().chain(default))
     }
 
     /// Return the `--no-index` flag.

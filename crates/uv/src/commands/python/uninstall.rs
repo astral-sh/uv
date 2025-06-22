@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -13,8 +14,10 @@ use tracing::{debug, warn};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::{ManagedPythonInstallations, python_executable_dir};
-use uv_python::{PythonInstallationKey, PythonRequest};
+use uv_python::managed::{
+    ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,
+};
+use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -87,7 +90,6 @@ async fn do_uninstall(
         // Always include pre-releases in uninstalls
         .map(|result| result.map(|request| request.with_prereleases(true)))
         .collect::<Result<Vec<_>>>()?;
-
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut matching_installations = BTreeSet::default();
     for (request, download_request) in requests.iter().zip(download_requests) {
@@ -216,6 +218,63 @@ async fn do_uninstall(
             &mut errors,
         );
         uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
+    }
+
+    // Read all existing managed installations and find the highest installed patch
+    // for each installed minor version. Ensure the minor version link directory
+    // is still valid.
+    let uninstalled_minor_versions = &uninstalled.iter().fold(
+        IndexSet::<&PythonInstallationMinorVersionKey>::default(),
+        |mut minor_versions, key| {
+            minor_versions.insert(PythonInstallationMinorVersionKey::ref_cast(key));
+            minor_versions
+        },
+    );
+    let remaining_installations: Vec<_> = installations.find_all()?.collect();
+    let remaining_minor_versions =
+        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+            remaining_installations.iter(),
+        );
+
+    for (_, installation) in remaining_minor_versions
+        .iter()
+        .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
+    {
+        installation.update_minor_version_link(preview)?;
+    }
+    // For each uninstalled installation, check if there are no remaining installations
+    // for its minor version. If there are none remaining, remove the symlink directory
+    // (or junction on Windows) if it exists.
+    for installation in &matching_installations {
+        if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
+            if let Some(minor_version_link) =
+                PythonMinorVersionLink::from_installation(installation, preview)
+            {
+                if minor_version_link.exists() {
+                    let result = if cfg!(windows) {
+                        fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
+                    } else {
+                        fs_err::remove_file(minor_version_link.symlink_directory.as_path())
+                    };
+                    if result.is_err() {
+                        return Err(anyhow::anyhow!(
+                            "Failed to remove symlink directory {}",
+                            minor_version_link.symlink_directory.display()
+                        ));
+                    }
+                    let symlink_term = if cfg!(windows) {
+                        "junction"
+                    } else {
+                        "symlink directory"
+                    };
+                    debug!(
+                        "Removed {}: {}",
+                        symlink_term,
+                        minor_version_link.symlink_directory.to_string_lossy()
+                    );
+                }
+            }
+        }
     }
 
     // Report on any uninstalled installations.

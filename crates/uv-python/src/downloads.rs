@@ -53,6 +53,12 @@ pub enum Error {
     TooManyParts(String),
     #[error("Failed to download {0}")]
     NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
+    #[error("Request failed after {retries} retries")]
+    NetworkErrorWithRetries {
+        #[source]
+        err: Box<Error>,
+        retries: u32,
+    },
     #[error("Failed to download {0}")]
     NetworkMiddlewareError(DisplaySafeUrl, #[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
@@ -105,14 +111,14 @@ pub enum Error {
     },
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: &'static str,
     sha256: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct PythonDownloadRequest {
     pub(crate) version: Option<VersionRequest>,
     pub(crate) implementation: Option<ImplementationName>,
@@ -125,7 +131,7 @@ pub struct PythonDownloadRequest {
     pub(crate) prereleases: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArchRequest {
     Explicit(Arch),
     Environment(Arch),
@@ -1143,8 +1149,20 @@ fn parse_json_downloads(
 }
 
 impl Error {
-    pub(crate) fn from_reqwest(url: DisplaySafeUrl, err: reqwest::Error) -> Self {
-        Self::NetworkError(url, WrappedReqwestError::from(err))
+    pub(crate) fn from_reqwest(
+        url: DisplaySafeUrl,
+        err: reqwest::Error,
+        retries: Option<u32>,
+    ) -> Self {
+        let err = Self::NetworkError(url, WrappedReqwestError::from(err));
+        if let Some(retries) = retries {
+            Self::NetworkErrorWithRetries {
+                err: Box::new(err),
+                retries,
+            }
+        } else {
+            err
+        }
     }
 
     pub(crate) fn from_reqwest_middleware(
@@ -1260,10 +1278,15 @@ async fn read_url(
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
 
-        // Ensure the request was successful.
-        response
-            .error_for_status_ref()
-            .map_err(|err| Error::from_reqwest(url, err))?;
+        let retry_count = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value());
+
+        // Check the status code.
+        let response = response
+            .error_for_status()
+            .map_err(|err| Error::from_reqwest(url, err, retry_count))?;
 
         let size = response.content_length();
         let stream = response

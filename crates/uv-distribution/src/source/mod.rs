@@ -728,8 +728,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             })
             .await
             .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => err,
+                CachedClientError::Client { err, .. } => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, force a refresh.
@@ -747,8 +747,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         )
                         .await
                         .map_err(|err| match err {
-                            CachedClientError::Callback(err) => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Callback { err, .. } => err,
+                            CachedClientError::Client { err, .. } => Error::Client(err),
                         })
                 })
                 .await
@@ -1583,7 +1583,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .unmanaged
                         .uncached_client(resource.git.repository())
-                        .clone(),
+                        .raw_client(),
                 )
                 .await
             {
@@ -1866,7 +1866,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .github_fast_path(
                 git,
-                client.unmanaged.uncached_client(git.repository()).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(git.repository())
+                    .raw_client(),
             )
             .await?
             .is_some()
@@ -2084,8 +2087,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     )
                     .await
                     .map_err(|err| match err {
-                        CachedClientError::Callback(err) => err,
-                        CachedClientError::Client(err) => Error::Client(err),
+                        CachedClientError::Callback { err, .. } => err,
+                        CachedClientError::Client { err, .. } => Error::Client(err),
                     })
             })
             .await

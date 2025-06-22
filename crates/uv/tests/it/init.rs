@@ -929,6 +929,65 @@ fn init_script_file_conflicts() -> Result<()> {
     Ok(())
 }
 
+// Init script should not trash an existing shebang.
+#[test]
+fn init_script_shebang() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script_path = context.temp_dir.child("script.py");
+
+    let contents = "#! /usr/bin/env python3\nprint(\"Hello, world!\")";
+    fs_err::write(&script_path, contents)?;
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: If you execute script.py directly, it might ignore its inline metadata.
+    Consider replacing its shebang with: #!/usr/bin/env -S uv run --script
+    Initialized script at `script.py`
+    ");
+    let resulting_script = fs_err::read_to_string(&script_path)?;
+    assert_snapshot!(resulting_script, @r#"
+    #! /usr/bin/env python3
+    #
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    print("Hello, world!")
+    "#
+    );
+
+    // If the shebang already contains `uv`, the result is the same, but we suppress the warning.
+    let contents = "#!/usr/bin/env -S uv run --script\nprint(\"Hello, world!\")";
+    fs_err::write(&script_path, contents)?;
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `script.py`
+    ");
+    let resulting_script = fs_err::read_to_string(&script_path)?;
+    assert_snapshot!(resulting_script, @r#"
+    #!/usr/bin/env -S uv run --script
+    #
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    print("Hello, world!")
+    "#
+    );
+
+    Ok(())
+}
+
 /// Run `uv init --lib` with an existing py.typed file
 #[test]
 fn init_py_typed_exists() -> Result<()> {

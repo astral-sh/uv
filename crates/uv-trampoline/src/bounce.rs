@@ -78,7 +78,34 @@ fn make_child_cmdline() -> CString {
 
     // Only execute the trampoline again if it's a script, otherwise, just invoke Python.
     match kind {
-        TrampolineKind::Python => {}
+        TrampolineKind::Python => {
+            // SAFETY: `std::env::set_var` is safe to call on Windows, and
+            // this code only ever runs on Windows.
+            unsafe {
+                // Setting this env var will cause `getpath.py` to set
+                // `executable` to the path to this trampoline. This is
+                // the approach taken by CPython for Python Launchers
+                // (in `launcher.c`). This allows virtual environments to
+                // be correctly detected when using trampolines.
+                std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+
+                // If this is not a virtual environment and `PYTHONHOME` has
+                // not been set, then set `PYTHONHOME` to the parent directory of
+                // the executable. This ensures that the correct installation
+                // directories are added to `sys.path` when running with a junction
+                // trampoline.
+                let python_home_set =
+                    std::env::var("PYTHONHOME").is_ok_and(|home| !home.is_empty());
+                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
+                    std::env::set_var(
+                        "PYTHONHOME",
+                        python_exe
+                            .parent()
+                            .expect("Python executable should have a parent directory"),
+                    );
+                }
+            }
+        }
         TrampolineKind::Script => {
             // Use the full executable name because CMD only passes the name of the executable (but not the path)
             // when e.g. invoking `black` instead of `<PATH_TO_VENV>/Scripts/black` and Python then fails
@@ -116,6 +143,20 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
         }
     }
     command.extend(br#"""#);
+}
+
+/// Checks if the given executable is part of a virtual environment
+///
+/// Checks if a `pyvenv.cfg` file exists in grandparent directory of the given executable.
+/// PEP 405 specifies a more robust procedure (checking both the parent and grandparent
+/// directory and then scanning for a `home` key), but in practice we have found this to
+/// be unnecessary.
+fn is_virtualenv(executable: &Path) -> bool {
+    executable
+        .parent()
+        .and_then(Path::parent)
+        .map(|path| path.join("pyvenv.cfg").is_file())
+        .unwrap_or(false)
 }
 
 /// Reads the executable binary from the back to find:
@@ -240,10 +281,18 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         parent_dir.join(path)
     };
 
-    // NOTICE: dunce adds 5kb~
-    let path = dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
-        error_and_exit("Failed to canonicalize script path");
-    });
+    let path = if !path.is_absolute() || matches!(kind, TrampolineKind::Script) {
+        // NOTICE: dunce adds 5kb~
+        // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
+        // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
+        dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
+            error_and_exit("Failed to canonicalize script path");
+        })
+    } else {
+        // For Python trampolines with absolute paths, we skip `dunce::canonicalize` to
+        // avoid resolving junctions.
+        path
+    };
 
     (kind, path)
 }

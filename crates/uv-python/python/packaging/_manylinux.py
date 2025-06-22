@@ -161,8 +161,7 @@ def _parse_glibc_version(version_str: str) -> _GLibCVersion:
     m = re.match(r"(?P<major>[0-9]+)\.(?P<minor>[0-9]+)", version_str)
     if not m:
         warnings.warn(
-            f"Expected glibc version with 2 components major.minor,"
-            f" got: {version_str}",
+            f"Expected glibc version with 2 components major.minor, got: {version_str}",
             RuntimeWarning,
         )
         return _GLibCVersion(-1, -1)
@@ -255,5 +254,6 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
                 if _is_compatible(arch, glibc_version):
                     yield "manylinux_{}_{}_{}".format(*glibc_version, arch)
                     # Handle the legacy manylinux1, manylinux2010, manylinux2014 tags.
-                    if legacy_tag := _LEGACY_MANYLINUX_MAP.get(glibc_version):
+                    legacy_tag = _LEGACY_MANYLINUX_MAP.get(glibc_version)
+                    if legacy_tag:
                         yield f"{legacy_tag}_{arch}"

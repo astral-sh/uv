@@ -195,6 +195,7 @@ pub(crate) async fn add(
                     &client_builder,
                     cache,
                     &reporter,
+                    preview,
                 )
                 .await?;
                 Pep723Script::init(&path, requires_python.specifiers()).await?
@@ -217,6 +218,7 @@ pub(crate) async fn add(
             active,
             cache,
             printer,
+            preview,
         )
         .await?
         .into_interpreter();
@@ -286,6 +288,7 @@ pub(crate) async fn add(
                 active,
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter();
@@ -307,6 +310,7 @@ pub(crate) async fn add(
                 cache,
                 DryRun::Disabled,
                 printer,
+                preview,
             )
             .await?
             .into_environment()?;
@@ -512,8 +516,9 @@ pub(crate) async fn add(
     )?;
 
     // Validate any indexes that were provided on the command-line to ensure
-    // they point to existing directories when using path URLs.
-    for index in &indexes {
+    // they point to existing non-empty directories when using path URLs.
+    let mut valid_indexes = Vec::with_capacity(indexes.len());
+    for index in indexes {
         if let IndexUrl::Path(url) = &index.url {
             let path = url
                 .to_file_path()
@@ -521,8 +526,14 @@ pub(crate) async fn add(
             if !path.is_dir() {
                 bail!("Directory not found for index: {url}");
             }
+            if fs_err::read_dir(&path)?.next().is_none() {
+                warn_user_once!("Index directory `{url}` is empty, skipping");
+                continue;
+            }
         }
+        valid_indexes.push(index);
     }
+    let indexes = valid_indexes;
 
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {

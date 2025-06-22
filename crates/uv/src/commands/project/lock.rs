@@ -114,6 +114,7 @@ pub(crate) async fn lock(
                 &client_builder,
                 cache,
                 &reporter,
+                preview,
             )
             .await?;
             Some(Pep723Script::init(&path, requires_python.specifiers()).await?)
@@ -155,6 +156,7 @@ pub(crate) async fn lock(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -170,6 +172,7 @@ pub(crate) async fn lock(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -983,11 +986,52 @@ impl ValidatedLock {
                 return Ok(Self::Unusable(lock));
             }
             Upgrade::Packages(_) => {
-                // If the user specified `--upgrade-package`, then at best we can prefer some of
-                // the existing versions.
-                debug!("Ignoring existing lockfile due to `--upgrade-package`");
-                return Ok(Self::Preferable(lock));
+                // This is handled below, after some checks regarding fork
+                // markers. In particular, we'd like to return `Preferable`
+                // here, but we shouldn't if the fork markers cannot be
+                // reused.
             }
+        }
+
+        // NOTE: It's important that this appears before any possible path that
+        // returns `Self::Preferable`. In particular, if our fork markers are
+        // bunk, then we shouldn't return a result that indicates we should try
+        // to re-use the existing fork markers.
+        if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
+            warn_user!(
+                "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
+                fork_markers_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+                environments_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // NOTE: Similarly as above, this should also appear before any
+        // possible code path that can return `Self::Preferable`.
+        if let Err((fork_markers_union, requires_python_marker)) =
+            lock.requires_python_coverage(requires_python)
+        {
+            warn_user!(
+                "Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `{}` vs `{}`",
+                fork_markers_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+                requires_python_marker
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        if let Upgrade::Packages(_) = upgrade {
+            // If the user specified `--upgrade-package`, then at best we can prefer some of
+            // the existing versions.
+            debug!("Ignoring existing lockfile due to `--upgrade-package`");
+            return Ok(Self::Preferable(lock));
         }
 
         // If the Requires-Python bound has changed, we have to perform a clean resolution, since
@@ -1018,19 +1062,6 @@ impl ValidatedLock {
             debug!(
                 "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
-            );
-            return Ok(Self::Versions(lock));
-        }
-
-        if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
-            warn_user!(
-                "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
-                fork_markers_union
-                    .try_to_string()
-                    .unwrap_or("true".to_string()),
-                environments_union
-                    .try_to_string()
-                    .unwrap_or("true".to_string()),
             );
             return Ok(Self::Versions(lock));
         }

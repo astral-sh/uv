@@ -16,11 +16,13 @@ uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-settings = { workspace = true }
+uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 fs-err = { workspace = true, features = ["tokio"] }
 indoc = { workspace = true }
 memchr = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 toml = { workspace = true }

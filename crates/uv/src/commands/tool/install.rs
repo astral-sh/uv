@@ -33,7 +33,9 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
     sync_environment, update_environment,
 };
-use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
+use crate::commands::tool::common::{
+    finalize_tool_install, refine_interpreter, remove_entrypoints,
+};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
@@ -85,6 +87,7 @@ pub(crate) async fn install(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await?
     .into_interpreter();
@@ -506,6 +509,7 @@ pub(crate) async fn install(
                         python_preference,
                         python_downloads,
                         &cache,
+                        preview,
                     )
                     .await
                     .ok()
@@ -552,7 +556,7 @@ pub(crate) async fn install(
             },
         };
 
-        let environment = installed_tools.create_environment(&from.name, interpreter)?;
+        let environment = installed_tools.create_environment(&from.name, interpreter, preview)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.
@@ -592,13 +596,13 @@ pub(crate) async fn install(
         }
     };
 
-    install_executables(
+    finalize_tool_install(
         &environment,
         &from.name,
         &installed_tools,
         options,
         force || invalid_tool_receipt,
-        python,
+        python_request,
         requirements,
         constraints,
         overrides,

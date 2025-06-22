@@ -94,7 +94,6 @@ const STYLES: Styles = Styles::styled()
     disable_version_flag = true
 )]
 #[command(styles=STYLES)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Box<Commands>,
@@ -142,7 +141,6 @@ pub struct TopLevelArgs {
 
 #[derive(Parser, Debug, Clone)]
 #[command(next_help_heading = "Global options", next_display_order = 1000)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
     #[arg(
         global = true,
@@ -535,7 +533,6 @@ pub struct HelpArgs {
 
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("operation"))]
-#[allow(clippy::struct_excessive_bools)]
 pub struct VersionArgs {
     /// Set the project version to this value
     ///
@@ -666,7 +663,6 @@ pub struct SelfUpdateArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct CacheNamespace {
     #[command(subcommand)]
     pub command: CacheCommand,
@@ -696,14 +692,12 @@ pub enum CacheCommand {
 }
 
 #[derive(Args, Debug)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct CleanArgs {
     /// The packages to remove from the cache.
     pub package: Vec<PackageName>,
 }
 
 #[derive(Args, Debug)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PruneArgs {
     /// Optimize the cache for persistence in a continuous integration environment, like GitHub
     /// Actions.
@@ -723,7 +717,6 @@ pub struct PruneArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipNamespace {
     #[command(subcommand)]
     pub command: PipCommand,
@@ -1104,7 +1097,6 @@ fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
@@ -1452,7 +1444,6 @@ pub struct PipCompileArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipSyncArgs {
     /// Include all packages listed in the given `requirements.txt` files.
     ///
@@ -1709,7 +1700,6 @@ pub struct PipSyncArgs {
 
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipInstallArgs {
     /// Install all listed packages.
     ///
@@ -2024,7 +2014,6 @@ pub struct PipInstallArgs {
 
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipUninstallArgs {
     /// Uninstall all listed packages.
     #[arg(group = "sources")]
@@ -2113,7 +2102,6 @@ pub struct PipUninstallArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipFreezeArgs {
     /// Exclude any editable packages from output.
     #[arg(long)]
@@ -2168,7 +2156,6 @@ pub struct PipFreezeArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipListArgs {
     /// Only include editable projects.
     #[arg(short, long)]
@@ -2244,7 +2231,6 @@ pub struct PipListArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipCheckArgs {
     /// The Python interpreter for which packages should be checked.
     ///
@@ -2280,7 +2266,6 @@ pub struct PipCheckArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipShowArgs {
     /// The package(s) to display.
     pub package: Vec<PackageName>,
@@ -2334,7 +2319,6 @@ pub struct PipShowArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipTreeArgs {
     /// Show the version constraint(s) imposed on each package.
     #[arg(long)]
@@ -2391,7 +2375,6 @@ pub struct PipTreeArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct BuildArgs {
     /// The directory from which distributions should be built, or a source
     /// distribution archive to build into a wheel.
@@ -2538,7 +2521,6 @@ pub struct BuildArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct VenvArgs {
     /// The Python interpreter to use for the virtual environment.
     ///
@@ -2734,7 +2716,6 @@ pub enum AuthorFrom {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct InitArgs {
     /// The path to use for the project/script.
     ///
@@ -2892,7 +2873,6 @@ pub struct InitArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
     /// Include optional dependencies from the specified extra name.
     ///
@@ -3179,7 +3159,6 @@ pub struct RunArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
     /// Include optional dependencies from the specified extra name.
     ///
@@ -3436,7 +3415,6 @@ pub struct SyncArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct LockArgs {
     /// Check if the lockfile is up-to-date.
     ///
@@ -3498,7 +3476,6 @@ pub struct LockArgs {
 
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
-#[allow(clippy::struct_excessive_bools)]
 pub struct AddArgs {
     /// The packages to add, as PEP 508 requirements (e.g., `ruff==0.5.0`).
     #[arg(group = "sources")]
@@ -3683,7 +3660,6 @@ pub struct AddArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct RemoveArgs {
     /// The names of the dependencies to remove (e.g., `ruff`).
     #[arg(required = true)]
@@ -3778,7 +3754,6 @@ pub struct RemoveArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct TreeArgs {
     /// Show a platform-independent dependency tree.
     ///
@@ -3918,7 +3893,6 @@ pub struct TreeArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ExportArgs {
     /// The format to which `uv.lock` should be exported.
     ///
@@ -4133,7 +4107,6 @@ pub struct ExportArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ToolNamespace {
     #[command(subcommand)]
     pub command: ToolCommand,
@@ -4226,7 +4199,6 @@ pub enum ToolCommand {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ToolRunArgs {
     /// The command to run.
     ///
@@ -4345,7 +4317,6 @@ pub struct UvxArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ToolInstallArgs {
     /// The package to install commands from.
     pub package: String,
@@ -4434,7 +4405,6 @@ pub struct ToolInstallArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ToolListArgs {
     /// Whether to display the path to each tool environment and installed executable.
     #[arg(long)]
@@ -4473,7 +4443,6 @@ pub struct ToolListArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ToolDirArgs {
     /// Show the directory into which `uv tool` will install executables.
     ///
@@ -4492,7 +4461,6 @@ pub struct ToolDirArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
     #[arg(required = true)]
@@ -4504,7 +4472,6 @@ pub struct ToolUninstallArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ToolUpgradeArgs {
     /// The name of the tool to upgrade, along with an optional version specifier.
     #[arg(required = true)]
@@ -4734,7 +4701,6 @@ pub struct ToolUpgradeArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PythonNamespace {
     #[command(subcommand)]
     pub command: PythonCommand,
@@ -4777,6 +4743,24 @@ pub enum PythonCommand {
     /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
 
+    /// Upgrade installed Python versions to the latest supported patch release (requires the
+    /// `--preview` flag).
+    ///
+    /// A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions
+    /// may be provided to perform more than one upgrade.
+    ///
+    /// If no target version is provided, then uv will upgrade all managed CPython versions.
+    ///
+    /// During an upgrade, uv will not uninstall outdated patch versions.
+    ///
+    /// When an upgrade is performed, virtual environments created by uv will automatically
+    /// use the new version. However, if the virtual environment was created before the
+    /// upgrade functionality was added, it will continue to use the old Python version; to enable
+    /// upgrades, the environment must be recreated.
+    ///
+    /// Upgrades are not yet supported for alternative implementations, like PyPy.
+    Upgrade(PythonUpgradeArgs),
+
     /// Search for a Python installation.
     ///
     /// Displays the path to the Python executable.
@@ -4814,7 +4798,6 @@ pub enum PythonCommand {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PythonListArgs {
     /// A Python request to filter by.
     ///
@@ -4869,7 +4852,6 @@ pub struct PythonListArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PythonDirArgs {
     /// Show the directory into which `uv python` will install Python executables.
     ///
@@ -4887,7 +4869,6 @@ pub struct PythonDirArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PythonInstallArgs {
     /// The directory to store the Python installation in.
     ///
@@ -4966,7 +4947,50 @@ pub struct PythonInstallArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
+pub struct PythonUpgradeArgs {
+    /// The directory Python installations are stored in.
+    ///
+    /// If provided, `UV_PYTHON_INSTALL_DIR` will need to be set for subsequent operations for uv to
+    /// discover the Python installation.
+    ///
+    /// See `uv python dir` to view the current Python installation directory. Defaults to
+    /// `~/.local/share/uv/python`.
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
+    pub install_dir: Option<PathBuf>,
+
+    /// The Python minor version(s) to upgrade.
+    ///
+    /// If no target version is provided, then uv will upgrade all managed CPython versions.
+    #[arg(env = EnvVars::UV_PYTHON)]
+    pub targets: Vec<String>,
+
+    /// Set the URL to use as the source for downloading Python installations.
+    ///
+    /// The provided URL will replace
+    /// `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
+    /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    pub mirror: Option<String>,
+
+    /// Set the URL to use as the source for downloading PyPy installations.
+    ///
+    /// The provided URL will replace `https://downloads.python.org/pypy` in, e.g.,
+    /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
+    pub pypy_mirror: Option<String>,
+
+    /// URL pointing to JSON of custom Python installations.
+    ///
+    /// Note that currently, only local paths are supported.
+    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
+    pub python_downloads_json_url: Option<String>,
+}
+
+#[derive(Args)]
 pub struct PythonUninstallArgs {
     /// The directory where the Python was installed.
     #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
@@ -4984,7 +5008,6 @@ pub struct PythonUninstallArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PythonFindArgs {
     /// The Python request.
     ///
@@ -5033,7 +5056,6 @@ pub struct PythonFindArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PythonPinArgs {
     /// The Python version request.
     ///
@@ -5082,7 +5104,6 @@ pub struct PythonPinArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct GenerateShellCompletionArgs {
     /// The shell to generate the completion script for
     pub shell: clap_complete_command::Shell,
@@ -5121,7 +5142,6 @@ pub struct GenerateShellCompletionArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct IndexArgs {
     /// The URLs to use when resolving dependencies, in addition to the default index.
     ///
@@ -5196,7 +5216,6 @@ pub struct IndexArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
     #[arg(
@@ -5222,7 +5241,6 @@ pub struct RefreshArgs {
 }
 
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct BuildOptionsArgs {
     /// Don't build source distributions.
     ///
@@ -5278,7 +5296,6 @@ pub struct BuildOptionsArgs {
 
 /// Arguments that are used by commands that need to install (but not resolve) packages.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct InstallerArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
@@ -5420,7 +5437,6 @@ pub struct InstallerArgs {
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ResolverArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
@@ -5587,7 +5603,6 @@ pub struct ResolverArgs {
 
 /// Arguments that are used by commands that need to resolve and install packages.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct ResolverInstallerArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,
@@ -5804,7 +5819,6 @@ pub struct ResolverInstallerArgs {
 
 /// Arguments that are used by commands that need to fetch from the Simple API.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct FetchArgs {
     #[command(flatten)]
     pub index_args: IndexArgs,

@@ -235,9 +235,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 cache,
                 DryRun::Disabled,
                 printer,
+                preview,
             )
             .await?
             .into_environment()?;
+
+            let _lock = environment.lock().await?;
 
             // Determine the lock mode.
             let mode = if frozen {
@@ -359,6 +362,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     cache,
                     DryRun::Disabled,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -379,6 +383,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                                 .map(|constraint| Requirement::from(constraint.clone())),
                         )
                     });
+
+                let _lock = environment.lock().await?;
 
                 match update_environment(
                     environment,
@@ -433,6 +439,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     active.map_or(Some(false), Some),
                     cache,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -446,6 +453,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
+                    false,
+                    preview,
                 )?;
 
                 Some(environment.into_interpreter())
@@ -624,6 +633,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
+                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -648,6 +658,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
+                    false,
+                    preview,
                 )?
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
@@ -666,6 +678,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     cache,
                     DryRun::Disabled,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_environment()?
@@ -685,6 +698,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
+                let _lock = venv.lock().await?;
+
                 // Determine the lock mode.
                 let mode = if frozen {
                     LockMode::Frozen
@@ -850,6 +865,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
+                    preview,
                 )
                 .await?;
 
@@ -869,6 +885,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
+                    false,
+                    preview,
                 )?;
                 venv.into_interpreter()
             } else {
