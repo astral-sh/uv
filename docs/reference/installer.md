@@ -11,7 +11,7 @@ To change the installation path, use `UV_INSTALL_DIR`:
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/custom/path" sh
+    $ curl -LsSf --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/custom/path" sh
     ```
 
 === "Windows"
@@ -26,7 +26,7 @@ The installer may also update your shell profiles to ensure the uv binary is on 
 disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
 
 ```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+$ curl -LsSf --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
 ```
 
 If installed with `INSTALLER_NO_MODIFY_PATH`, subsequent operations, like `uv self update`, will not
@@ -38,7 +38,7 @@ In ephemeral environments like CI, use `UV_UNMANAGED_INSTALL` to install uv to a
 preventing the installer from modifying shell profiles or environment variables:
 
 ```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/custom/path" sh
+$ curl -LsSf --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/custom/path" sh
 ```
 
 The use of `UV_UNMANAGED_INSTALL` will also disable self-updates (via `uv self update`).
@@ -50,5 +50,5 @@ options can be passed directly to the installation script. For example, to see t
 options:
 
 ```console
-$ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
+$ curl -LsSf --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | sh -s -- --help
 ```

@@ -13,7 +13,7 @@ uv provides a standalone installer to download and install uv:
     Use `curl` to download the script and execute it with `sh`:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/install.sh | sh
+    $ curl -LsSf --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | sh
     ```
 
     If your system doesn't have `curl`, you can use `wget`:
@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh
+    $ curl -LsSf --proto '=https' --tlsv1.2 https://astral.sh/uv/0.7.13/install.sh | sh
     ```
 
 === "Windows"
@@ -51,7 +51,7 @@ uv provides a standalone installer to download and install uv:
     === "macOS and Linux"
 
         ```console
-        $ curl -LsSf https://astral.sh/uv/install.sh | less
+        $ curl -LsSf --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | less
         ```
 
     === "Windows"

@@ -1642,7 +1642,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Download binary for last version"
-        run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xvz
+        run: curl -LsSf --proto '=https' --tlsv1.2 "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xvz
 
       - name: "Check cache compatibility"
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-x86_64-unknown-linux-gnu/uv
@@ -1664,7 +1664,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Download binary for last version"
-        run: curl -LsSf "https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz" | tar -xvz
+        run: curl -LsSf --proto '=https' --tlsv1.2 "https://github.com/astral-sh/uv/releases/latest/download/uv-aarch64-apple-darwin.tar.gz" | tar -xvz
 
       - name: "Check cache compatibility"
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
@@ -2310,7 +2310,7 @@ jobs:
 
       # Download embedded Python.
       - name: "Download embedded Python"
-        run: curl -LsSf https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-amd64.zip -o python-3.11.8-embed-amd64.zip
+        run: curl -LsSf --proto '=https' --tlsv1.2 https://www.python.org/ftp/python/3.11.8/python-3.11.8-embed-amd64.zip -o python-3.11.8-embed-amd64.zip
 
       - name: "Unzip embedded Python"
         run: 7z x python-3.11.8-embed-amd64.zip -oembedded-python

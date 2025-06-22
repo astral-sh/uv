@@ -42,7 +42,7 @@ Install uv with our official standalone installer:
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/install.sh | sh
+    $ curl -LsSf --proto '=https' --tlsv1.2 https://astral.sh/uv/install.sh | sh
     ```
 
 === "Windows"
