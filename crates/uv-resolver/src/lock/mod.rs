@@ -2371,7 +2371,13 @@ impl Package {
         let sdist = match &self.id.source {
             Source::Path(path) => {
                 // A direct path source can also be a wheel, so validate the extension.
-                let DistExtension::Source(ext) = DistExtension::from_path(path)? else {
+                let DistExtension::Source(ext) = DistExtension::from_path(path).map_err(|err| {
+                    LockErrorKind::MissingExtension {
+                        id: self.id.clone(),
+                        err,
+                    }
+                })?
+                else {
                     return Ok(None);
                 };
                 let install_path = absolute_path(workspace_root, path)?;
@@ -2444,7 +2450,14 @@ impl Package {
             }
             Source::Direct(url, direct) => {
                 // A direct URL source can also be a wheel, so validate the extension.
-                let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
+                let DistExtension::Source(ext) =
+                    DistExtension::from_path(url.base_str()).map_err(|err| {
+                        LockErrorKind::MissingExtension {
+                            id: self.id.clone(),
+                            err,
+                        }
+                    })?
+                else {
                     return Ok(None);
                 };
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
@@ -2483,7 +2496,12 @@ impl Package {
                     .ok_or_else(|| LockErrorKind::MissingFilename {
                         id: self.id.clone(),
                     })?;
-                let ext = SourceDistExtension::from_path(filename.as_ref())?;
+                let ext = SourceDistExtension::from_path(filename.as_ref()).map_err(|err| {
+                    LockErrorKind::MissingExtension {
+                        id: self.id.clone(),
+                        err,
+                    }
+                })?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename),
@@ -2535,7 +2553,12 @@ impl Package {
                     .ok_or_else(|| LockErrorKind::MissingFilename {
                         id: self.id.clone(),
                     })?;
-                let ext = SourceDistExtension::from_path(filename.as_ref())?;
+                let ext = SourceDistExtension::from_path(filename.as_ref()).map_err(|err| {
+                    LockErrorKind::MissingExtension {
+                        id: self.id.clone(),
+                        err,
+                    }
+                })?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename),
@@ -5222,8 +5245,13 @@ enum LockErrorKind {
     ),
     /// An error that occurs when the extension can't be determined
     /// for a given wheel or source distribution.
-    #[error("Failed to parse file extension; expected one of: {0}")]
-    MissingExtension(#[from] ExtensionError),
+    #[error("Failed to parse file extension for `{id}`; expected one of: {err}", id = id.cyan())]
+    MissingExtension {
+        /// The filename that was expected to have an extension.
+        id: PackageId,
+        /// The list of valid extensions that were expected.
+        err: ExtensionError,
+    },
     /// Failed to parse a Git source URL.
     #[error("Failed to parse Git URL")]
     InvalidGitSourceUrl(
