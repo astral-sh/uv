@@ -5135,7 +5135,6 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror 2.0.12",
- "url",
  "uv-cache-key",
  "uv-normalize",
  "uv-pep440",
