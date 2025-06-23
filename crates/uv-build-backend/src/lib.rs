@@ -317,7 +317,7 @@ fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<Pa
 /// Whether a [`DirEntry`] is a file or a symlink to a file.
 ///
 /// Since we don't copy the file, but read it, a symlink to a file works like a regular file.
-fn is_file_ish_dir_entry(entry: &DirEntry) -> io::Result<bool> {
+fn is_fileish_dir_entry(entry: &DirEntry) -> io::Result<bool> {
     if entry.file_type().is_file() {
         return Ok(true);
     }

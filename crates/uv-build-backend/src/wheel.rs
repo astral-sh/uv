@@ -18,7 +18,7 @@ use uv_warnings::warn_user_once;
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
-    is_file_ish_dir_entry,
+    is_fileish_dir_entry,
 };
 
 /// Build a wheel from the source tree and place it in the output directory.
@@ -179,7 +179,7 @@ fn write_wheel(
 
         if entry.file_type().is_dir() {
             wheel_writer.write_directory(&wheel_path)?;
-        } else if is_file_ish_dir_entry(&entry)? {
+        } else if is_fileish_dir_entry(&entry)? {
             wheel_writer.write_file(&wheel_path, entry.path())?;
         } else {
             // TODO(konsti): We may want to support symlinks, there is support for installing them.
@@ -527,7 +527,7 @@ fn wheel_subdir_from_globs(
 
         if entry.file_type().is_dir() {
             wheel_writer.write_directory(&relative_licenses)?;
-        } else if is_file_ish_dir_entry(&entry)? {
+        } else if is_fileish_dir_entry(&entry)? {
             debug!("Adding {} file: `{}`", globs_field, relative.user_display());
             wheel_writer.write_file(&relative_licenses, entry.path())?;
         } else {

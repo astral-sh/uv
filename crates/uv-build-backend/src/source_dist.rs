@@ -2,7 +2,7 @@ use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
     BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
-    is_file_ish_dir_entry,
+    is_fileish_dir_entry,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -263,7 +263,7 @@ fn write_source_dist(
                     .portable_display()
                     .to_string(),
             )?;
-        } else if is_file_ish_dir_entry(&entry)? {
+        } else if is_fileish_dir_entry(&entry)? {
             writer.write_file(
                 &Path::new(&top_level)
                     .join(relative)
