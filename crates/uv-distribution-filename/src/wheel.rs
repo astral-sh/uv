@@ -521,8 +521,14 @@ mod tests {
         let url = Url::parse(url_str).unwrap();
         let wheel_filename = WheelFilename::try_from(&url).unwrap();
 
-        assert_eq!(wheel_filename.name, PackageName::from_str("pyfory").unwrap());
-        assert_eq!(wheel_filename.version, Version::from_str("0.12.0.dev0").unwrap());
+        assert_eq!(
+            wheel_filename.name,
+            PackageName::from_str("pyfory").unwrap()
+        );
+        assert_eq!(
+            wheel_filename.version,
+            Version::from_str("0.12.0.dev0").unwrap()
+        );
         assert_eq!(
             wheel_filename.to_string(),
             "pyfory-0.12.0.dev0-cp312-cp312-linux_aarch64.whl"
@@ -532,8 +538,14 @@ mod tests {
         let url_no_query_str = "https://example.com/files/some_package-1.0.0-py3-none-any.whl";
         let url_no_query = Url::parse(url_no_query_str).unwrap();
         let wheel_filename_no_query = WheelFilename::try_from(&url_no_query).unwrap();
-        assert_eq!(wheel_filename_no_query.name, PackageName::from_str("some_package").unwrap());
-        assert_eq!(wheel_filename_no_query.version, Version::from_str("1.0.0").unwrap());
+        assert_eq!(
+            wheel_filename_no_query.name,
+            PackageName::from_str("some_package").unwrap()
+        );
+        assert_eq!(
+            wheel_filename_no_query.version,
+            Version::from_str("1.0.0").unwrap()
+        );
         assert_eq!(
             wheel_filename_no_query.to_string(),
             "some_package-1.0.0-py3-none-any.whl"
@@ -543,8 +555,14 @@ mod tests {
         let initial_failing_url_str = "https://foo.r2.cloudflarestorage.com/bar/pyfory-0.12.0.dev0-cp312-cp312-linux_aarch64.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=foo%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20250623T043147Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=bar";
         let initial_failing_url = Url::parse(initial_failing_url_str).unwrap();
         let initial_failing_filename = WheelFilename::try_from(&initial_failing_url).unwrap();
-        assert_eq!(initial_failing_filename.name, PackageName::from_str("pyfory").unwrap());
-        assert_eq!(initial_failing_filename.version, Version::from_str("0.12.0.dev0").unwrap());
+        assert_eq!(
+            initial_failing_filename.name,
+            PackageName::from_str("pyfory").unwrap()
+        );
+        assert_eq!(
+            initial_failing_filename.version,
+            Version::from_str("0.12.0.dev0").unwrap()
+        );
         assert_eq!(
             initial_failing_filename.tags.to_string(),
             "cp312-cp312-linux_aarch64"
@@ -558,8 +576,14 @@ mod tests {
         let no_query_url_str = "https://files.pythonhosted.org/packages/3d/7c/389464e0930e35858ec913991984f7015bd2a482190d9689111079141e70/numpy-1.26.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl";
         let no_query_url = Url::parse(no_query_url_str).unwrap();
         let no_query_filename = WheelFilename::try_from(&no_query_url).unwrap();
-        assert_eq!(no_query_filename.name, PackageName::from_str("numpy").unwrap());
-        assert_eq!(no_query_filename.version, Version::from_str("1.26.3").unwrap());
+        assert_eq!(
+            no_query_filename.name,
+            PackageName::from_str("numpy").unwrap()
+        );
+        assert_eq!(
+            no_query_filename.version,
+            Version::from_str("1.26.3").unwrap()
+        );
         assert_eq!(
             no_query_filename.to_string(),
             "numpy-1.26.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
@@ -569,8 +593,14 @@ mod tests {
         let path_mimics_wheel_str = "https://example.com/foo-1.0-py3-none-any.whl/realpackage-2.0-py3-none-any.whl?query=param";
         let path_mimics_wheel_url = Url::parse(path_mimics_wheel_str).unwrap();
         let path_mimics_wheel_filename = WheelFilename::try_from(&path_mimics_wheel_url).unwrap();
-        assert_eq!(path_mimics_wheel_filename.name, PackageName::from_str("realpackage").unwrap());
-        assert_eq!(path_mimics_wheel_filename.version, Version::from_str("2.0").unwrap());
+        assert_eq!(
+            path_mimics_wheel_filename.name,
+            PackageName::from_str("realpackage").unwrap()
+        );
+        assert_eq!(
+            path_mimics_wheel_filename.version,
+            Version::from_str("2.0").unwrap()
+        );
         assert_eq!(
             path_mimics_wheel_filename.to_string(),
             "realpackage-2.0-py3-none-any.whl"
