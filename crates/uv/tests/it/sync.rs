@@ -9943,3 +9943,341 @@ fn sync_required_environment_hint() -> Result<()> {
 
     Ok(())
 }
+
+/// See: <https://github.com/astral-sh/uv/issues/11648>
+#[test]
+fn conflicting_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        foo = [
+            "child",
+        ]
+        bar = [
+            "child",
+        ]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "foo" },
+            { group = "bar" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        child = [
+            { path = "./child", editable = true, group = "foo" },
+            { path = "./child", editable = false, group = "bar" },
+        ]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+        )?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { directory = "child" }
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.dev-dependencies]
+        bar = [
+            { name = "child", version = "0.1.0", source = { directory = "child" } },
+        ]
+        foo = [
+            { name = "child", version = "0.1.0", source = { editable = "child" } },
+        ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        bar = [{ name = "child", directory = "child" }]
+        foo = [{ name = "child", editable = "child" }]
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"child","version":"0.1.0","editable_project_location":"[TEMP_DIR]/child"}]
+
+    ----- stderr -----
+    "#);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"child","version":"0.1.0"}]
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11648>
+#[test]
+fn undeclared_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        foo = [
+            "child",
+        ]
+        bar = [
+            "child",
+        ]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "foo" },
+            { group = "bar" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        child = [
+            { path = "./child", editable = true, group = "foo" },
+            { path = "./child", group = "bar" },
+        ]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+        )?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { directory = "child" }
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.dev-dependencies]
+        bar = [
+            { name = "child", version = "0.1.0", source = { directory = "child" } },
+        ]
+        foo = [
+            { name = "child", version = "0.1.0", source = { editable = "child" } },
+        ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        bar = [{ name = "child", directory = "child" }]
+        foo = [{ name = "child", editable = "child" }]
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"child","version":"0.1.0","editable_project_location":"[TEMP_DIR]/child"}]
+
+    ----- stderr -----
+    "#);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"child","version":"0.1.0"}]
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}

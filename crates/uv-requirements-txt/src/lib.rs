@@ -2064,8 +2064,10 @@ mod test {
                                                 fragment: None,
                                             },
                                             install_path: "/foo/bar",
-                                            editable: true,
-                                            virtual: false,
+                                            editable: Some(
+                                                true,
+                                            ),
+                                            virtual: None,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {

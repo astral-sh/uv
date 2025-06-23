@@ -619,6 +619,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.python_requirement,
                     &state.pubgrub,
                 )?;
+
                 match forked_deps {
                     ForkedDependencies::Unavailable(reason) => {
                         // Then here, if we get a reason that we consider unrecoverable, we should

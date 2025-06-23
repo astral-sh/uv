@@ -799,7 +799,7 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
             return true;
         };
 
-        !dist.r#virtual
+        !dist.r#virtual.unwrap_or(false)
     })
 }
 
@@ -817,8 +817,8 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
             let Dist::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
                 install_path,
-                editable: true,
-                r#virtual: false,
+                editable: Some(true),
+                r#virtual,
                 url,
             })) = dist.as_ref()
             else {
@@ -829,8 +829,8 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
                 dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
                     name: name.clone(),
                     install_path: install_path.clone(),
-                    editable: false,
-                    r#virtual: false,
+                    editable: Some(false),
+                    r#virtual: *r#virtual,
                     url: url.clone(),
                 }))),
                 version: version.clone(),

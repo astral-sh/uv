@@ -10880,7 +10880,7 @@ fn lock_sources_source_tree() -> Result<()> {
 }
 
 /// Lock a project in which a given dependency is requested from two different members, once as
-/// editable, and once as non-editable.
+/// editable, and once as non-editable. This should trigger a conflicting URL error.
 #[test]
 fn lock_editable() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -11020,86 +11020,16 @@ fn lock_editable() -> Result<()> {
         library = { path = "../../library", editable = true }
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    "###);
-
-    let lock = context.read("uv.lock");
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 2
-        requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
-        members = [
-            "leaf",
-            "workspace",
-        ]
-
-        [[package]]
-        name = "leaf"
-        version = "0.1.0"
-        source = { editable = "packages/leaf" }
-        dependencies = [
-            { name = "library" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "library", editable = "library" }]
-
-        [[package]]
-        name = "library"
-        version = "0.1.0"
-        source = { editable = "library" }
-
-        [[package]]
-        name = "workspace"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "library" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "library", directory = "library" }]
-        "#
-        );
-    });
-
-    // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    "###);
-
-    // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + library==0.1.0 (from file://[TEMP_DIR]/library)
-    "###);
+    error: Requirements contain conflicting URLs for package `library` in all marker environments:
+    - ../../library
+    - ./library
+    ");
 
     Ok(())
 }
