@@ -3,8 +3,47 @@
 <!-- prettier-ignore-start -->
 
 
-## 0.7.13
+## 0.7.14
 
+### Enhancements
+
+- Add XPU to `--torch-backend` ([#14172](https://github.com/astral-sh/uv/pull/14172))
+- Add ROCm backends to `--torch-backend` ([#14120](https://github.com/astral-sh/uv/pull/14120))
+- Add `[tool.uv.dependency-groups].mygroup.requires-python` ([#13735](https://github.com/astral-sh/uv/pull/13735))
+- Add auto-detection for AMD GPUs ([#14176](https://github.com/astral-sh/uv/pull/14176))
+- Show retries for HTTP status code errors ([#13897](https://github.com/astral-sh/uv/pull/13897))
+- Support transparent Python patch version upgrades ([#13954](https://github.com/astral-sh/uv/pull/13954))
+- Warn on empty index directory ([#13940](https://github.com/astral-sh/uv/pull/13940))
+- Publish to DockerHub ([#14088](https://github.com/astral-sh/uv/pull/14088))
+
+### Performance
+
+- Make cold resolves about 10% faster ([#14035](https://github.com/astral-sh/uv/pull/14035))
+
+### Preview features
+
+- Remove preview label from `--torch-backend` ([#14119](https://github.com/astral-sh/uv/pull/14119))
+
+### Bug fixes
+
+- Don't use walrus operator in interpreter query script ([#14108](https://github.com/astral-sh/uv/pull/14108))
+- Fix handling of changes to `requires-python` ([#14076](https://github.com/astral-sh/uv/pull/14076))
+- Fix implied `platform_machine` marker for `win_amd64` platform tag ([#14041](https://github.com/astral-sh/uv/pull/14041))
+- Only update existing symlink directories on preview uninstall ([#14179](https://github.com/astral-sh/uv/pull/14179))
+- Serialize Python requests for tools as canonicalized strings ([#14109](https://github.com/astral-sh/uv/pull/14109))
+- Support netrc and same-origin credential propagation on index redirects ([#14126](https://github.com/astral-sh/uv/pull/14126))
+- Support reading `dependency-groups` from pyproject.tomls with no `[project]` ([#13742](https://github.com/astral-sh/uv/pull/13742))
+- Handle an existing shebang in `uv init --script` ([#14141](https://github.com/astral-sh/uv/pull/14141))
+- Prevent concurrent updates of the environment in `uv run` ([#14153](https://github.com/astral-sh/uv/pull/14153))
+- Filter managed Python distributions by platform before querying when included in request ([#13936](https://github.com/astral-sh/uv/pull/13936))
+
+### Documentation
+
+- Replace cuda124 with cuda128 ([#14168](https://github.com/astral-sh/uv/pull/14168))
+- Document the way member sources shadow workspace sources ([#14136](https://github.com/astral-sh/uv/pull/14136))
+- Sync documented PyTorch integration index for CUDA and ROCm versions from PyTorch website ([#14100](https://github.com/astral-sh/uv/pull/14100))
+
+## 0.7.13
 
 ### Python
 
