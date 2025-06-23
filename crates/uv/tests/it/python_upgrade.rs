@@ -13,18 +13,18 @@ fn python_upgrade() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM] (python3.10)
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
     ");
 
     // Don't accept patch version as argument to upgrade command
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10.17"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -130,14 +130,14 @@ fn python_upgrade_transparent_from_venv() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM] (python3.10)
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
     ");
 
     // Create a virtual environment
@@ -147,7 +147,7 @@ fn python_upgrade_transparent_from_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.8
+    Using CPython 3.10.17
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -156,7 +156,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -171,7 +171,7 @@ fn python_upgrade_transparent_from_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.8
+    Using CPython 3.10.17
     Creating virtual environment at: .venv2
     Activate with: source .venv2/[BIN]/activate
     ");
@@ -181,7 +181,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -232,14 +232,14 @@ fn python_upgrade_transparent_from_venv_preview() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version using `--preview`
-    uv_snapshot!(context.filters(), context.python_install().arg("3.10.8").arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.10.17").arg("--preview"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM] (python3.10)
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
     ");
 
     // Create a virtual environment
@@ -249,7 +249,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.8
+    Using CPython 3.10.17
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -258,7 +258,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -295,14 +295,14 @@ fn python_upgrade_ignored_with_python_pin() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM] (python3.10)
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
     ");
 
     // Create a virtual environment
@@ -312,17 +312,17 @@ fn python_upgrade_ignored_with_python_pin() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.8
+    Using CPython 3.10.17
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
 
     // Pin to older patch version
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.10.17"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `.python-version` to `3.10.8`
+    Pinned `.python-version` to `3.10.17`
 
     ----- stderr -----
     ");
@@ -343,7 +343,7 @@ fn python_upgrade_ignored_with_python_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -360,24 +360,24 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM] (python3.10)
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
     ");
 
     // Create a virtual environment with a patch version
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10.17"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.8
+    Using CPython 3.10.17
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -386,7 +386,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -408,7 +408,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -426,14 +426,14 @@ fn python_transparent_upgrade_venv_venv() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM] (python3.10)
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
     ");
 
     // Create an initial virtual environment
@@ -443,7 +443,7 @@ fn python_transparent_upgrade_venv_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.8
+    Using CPython 3.10.17
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -465,7 +465,7 @@ fn python_transparent_upgrade_venv_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.8 interpreter at: .venv/[BIN]/python
+    Using CPython 3.10.17 interpreter at: .venv/[BIN]/python
     Creating virtual environment at: .venv2
     Activate with: source .venv2/[BIN]/activate
     ");
@@ -477,7 +477,7 @@ fn python_transparent_upgrade_venv_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -588,14 +588,14 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     let bin_dir = context.temp_dir.child("bin");
 
     // Install earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM] (python3.10)
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
     ");
 
     // Create first virtual environment
@@ -605,7 +605,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.10.8
+    Using CPython 3.10.17
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -630,7 +630,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "

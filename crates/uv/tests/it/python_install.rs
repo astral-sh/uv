@@ -1742,14 +1742,14 @@ fn install_multiple_patches() {
     fs_err::remove_dir_all(&context.venv).unwrap();
 
     // Install 3.10 patches in descending order list
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17").arg("3.10.8"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17").arg("3.10.16"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed 2 versions in [TIME]
-     + cpython-3.10.8-[PLATFORM]
+     + cpython-3.10.16-[PLATFORM]
      + cpython-3.10.17-[PLATFORM] (python3.10)
     "
     );
