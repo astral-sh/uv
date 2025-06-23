@@ -993,14 +993,9 @@ impl InterpreterInfo {
                         .symlink_metadata()
                         .is_ok_and(|metadata| metadata.is_symlink())
                     {
-                        let venv = executable
-                            .parent()
-                            .and_then(Path::parent)
-                            .map(|path| path.join("pyvenv.cfg").is_file())
-                            .unwrap_or(false);
                         Error::BrokenSymlink(BrokenSymlink {
                             path: executable.to_path_buf(),
-                            venv,
+                            venv: uv_fs::is_virtualenv_executable(executable),
                         })
                     } else {
                         Error::NotFound(executable.to_path_buf())

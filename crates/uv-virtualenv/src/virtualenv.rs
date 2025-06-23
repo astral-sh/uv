@@ -85,7 +85,7 @@ pub(crate) fn create(
             } else if metadata.is_dir() {
                 if allow_existing {
                     debug!("Allowing existing directory");
-                } else if location.join("pyvenv.cfg").is_file() {
+                } else if uv_fs::is_virtualenv_base(location) {
                     debug!("Removing existing directory");
 
                     // On Windows, if the current executable is in the directory, guard against
