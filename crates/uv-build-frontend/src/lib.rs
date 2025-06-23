@@ -739,8 +739,8 @@ impl SourceBuild {
         // lock the output dir, but setuptools always writes to `build/` in the source tree,
         // regardless of whether its output dir is set to somewhere else.
         let canonical_source_path = self.source_tree.canonicalize()?;
-        let build_lock_path =
-            std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&canonical_source_path)));
+        let build_lock_path = uv_fs::locks_temp_dir()?
+            .join(format!("uv-{}.lock", cache_digest(&canonical_source_path)));
         let _lock =
             LockedFile::acquire(build_lock_path, self.source_tree.to_string_lossy()).await?;
 

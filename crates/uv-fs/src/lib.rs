@@ -778,3 +778,69 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
     }
     Ok(())
 }
+
+/// The path to a shared, world-writeable directory for creating locks, to avoid polluting `/tmp`.
+/// On Linux this is `/tmp/uv_locks`, if `$TMPDIR` is unset.
+pub fn locks_temp_dir() -> std::io::Result<PathBuf> {
+    let locks_dir_path = std::env::temp_dir().join("uv-locks");
+    if !locks_dir_path.is_dir() {
+        create_world_writeable_dir(&locks_dir_path)?;
+    }
+    Ok(locks_dir_path)
+}
+
+#[cfg(unix)]
+fn create_world_writeable_dir(path: &Path) -> std::io::Result<()> {
+    // We need the new directory to have 0o777 permissions on Unix, but if we create it and then
+    // set those permissions, there's a small window in between where other processes could race in
+    // and get IO errors. You'd think we could use `DirBuilderExt::mode` from the standard library
+    // to set the permissions during creation, but the process-wide "umask" interferes with that,
+    // and we can't change our own umask without interfering other threads. Spawn a subprocess that
+    // can set its own umask before creating the dir for us. This is expensive, but we only need to
+    // do it the first time. The `-p` flag makes it not an error for multiple callers to do this
+    // concurrently.
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        // The -p flag makes it not an error for multiple callers to do this concurrently. The 1 at
+        // the top of 1777 is the "sticky bit", which prevents different users from deleting each
+        // other's files. It hardly matters for us in practice, but this is exactly the sort of use
+        // case it's intended for, and we might as well set it.
+        .arg(r#"umask 0 && mkdir -p -m 1777 -- "$1""#)
+        .arg("--")
+        .arg(path)
+        .output()
+        .unwrap();
+    if !output.status.success() {
+        return Err(std::io::Error::other(format!(
+            "`mkdir {}` failed: {}",
+            path.to_string_lossy(),
+            String::from_utf8_lossy(&output.stderr),
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn create_world_writeable_dir(path: &Path) -> std::io::Result<()> {
+    // Windows doesn't have Unix-style file permission. Just create the dir.
+    fs_err::create_dir_all(path)
+}
+
+#[test]
+fn test_create_world_writeable_dir() -> io::Result<()> {
+    let parent_dir = tempfile::tempdir()?;
+    let new_dir_path = parent_dir.path().join("foo");
+    create_world_writeable_dir(&new_dir_path)?;
+    assert!(new_dir_path.exists());
+    assert!(new_dir_path.is_dir());
+    #[cfg(unix)]
+    {
+        // On Unix only, explicitly check the permissions mask of the new directory.
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = fs_err::metadata(&new_dir_path)?;
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o777);
+    }
+    // Create a file in the new directory, for good measure.
+    fs_err::File::create(new_dir_path.join("bar.txt"))?;
+    Ok(())
+}

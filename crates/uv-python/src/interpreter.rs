@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::OnceLock;
-use std::{env, io};
 
 use configparser::ini::Ini;
 use fs_err as fs;
@@ -625,7 +625,8 @@ impl Interpreter {
         } else {
             // Otherwise, use a global lockfile.
             LockedFile::acquire(
-                env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
+                uv_fs::locks_temp_dir()?
+                    .join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
                 self.sys_prefix.user_display(),
             )
             .await
