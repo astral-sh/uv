@@ -9,6 +9,7 @@
 
 - Add XPU to `--torch-backend` ([#14172](https://github.com/astral-sh/uv/pull/14172))
 - Add ROCm backends to `--torch-backend` ([#14120](https://github.com/astral-sh/uv/pull/14120))
+- Remove preview label from `--torch-backend` ([#14119](https://github.com/astral-sh/uv/pull/14119))
 - Add `[tool.uv.dependency-groups].mygroup.requires-python` ([#13735](https://github.com/astral-sh/uv/pull/13735))
 - Add auto-detection for AMD GPUs ([#14176](https://github.com/astral-sh/uv/pull/14176))
 - Show retries for HTTP status code errors ([#13897](https://github.com/astral-sh/uv/pull/13897))
@@ -19,10 +20,6 @@
 ### Performance
 
 - Make cold resolves about 10% faster ([#14035](https://github.com/astral-sh/uv/pull/14035))
-
-### Preview features
-
-- Remove preview label from `--torch-backend` ([#14119](https://github.com/astral-sh/uv/pull/14119))
 
 ### Bug fixes
 
