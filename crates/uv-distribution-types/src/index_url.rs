@@ -12,6 +12,7 @@ use url::{ParseError, Url};
 
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_redacted::DisplaySafeUrl;
+use uv_warnings::warn_user;
 
 use crate::{Index, IndexStatusCodeStrategy, Verbatim};
 
@@ -36,8 +37,7 @@ impl IndexUrl {
     /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
-    /// directory. Relative paths must be disambiguated by starting with "./" or "../" on Unix or
-    /// `.\\`, `..\\`, `./` or `../` on Windows.
+    /// directory.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
         let url = match split_scheme(path) {
             Some((scheme, ..)) => {
@@ -141,6 +141,30 @@ impl IndexUrl {
             Cow::Owned(url)
         }
     }
+
+    /// Warn user if the given URL was provided as an ambiguous relative path.
+    ///
+    /// This is a temporary warning. Ambiguous values will not be
+    /// accepted in the future.
+    pub fn warn_on_disambiguated_relative_path(&self) {
+        let Self::Path(verbatim_url) = &self else {
+            return;
+        };
+
+        if let Some(path) = verbatim_url.given() {
+            if !is_disambiguated_path(path) {
+                if cfg!(windows) {
+                    warn_user!(
+                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `.\\{path}` or `./{path}`). Support for ambiguous values will be removed in the future"
+                    );
+                } else {
+                    warn_user!(
+                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./{path}`). Support for ambiguous values will be removed in the future"
+                    );
+                }
+            }
+        }
+    }
 }
 
 impl Display for IndexUrl {
@@ -161,6 +185,28 @@ impl Verbatim for IndexUrl {
             Self::Path(url) => url.verbatim(),
         }
     }
+}
+
+/// Checks if a path is disambiguated.
+///
+/// Disambiguated paths are absolute paths, paths with valid schemes,
+/// and paths starting with "./" or "../" on Unix or ".\\", "..\\",
+/// "./", or "../" on Windows.
+fn is_disambiguated_path(path: &str) -> bool {
+    if cfg!(windows) {
+        if path.starts_with(".\\") || path.starts_with("..\\") || path.starts_with('/') {
+            return true;
+        }
+    }
+    if path.starts_with("./") || path.starts_with("../") || Path::new(path).is_absolute() {
+        return true;
+    }
+    // Check if the path has a scheme (like `file://`)
+    if let Some((scheme, _)) = split_scheme(path) {
+        return Scheme::parse(scheme).is_some();
+    }
+    // This is an ambiguous relative path
+    false
 }
 
 /// An error that can occur when parsing an [`IndexUrl`].
@@ -624,5 +670,43 @@ impl IndexCapabilities {
             .entry(index_url)
             .or_insert(Flags::empty())
             .insert(Flags::FORBIDDEN);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_index_url_parse_valid_paths() {
+        // Absolute path
+        assert!(is_disambiguated_path("/absolute/path"));
+        // Relative path
+        assert!(is_disambiguated_path("./relative/path"));
+        assert!(is_disambiguated_path("../../relative/path"));
+        if cfg!(windows) {
+            // Windows absolute path
+            assert!(is_disambiguated_path("C:/absolute/path"));
+            // Windows relative path
+            assert!(is_disambiguated_path(".\\relative\\path"));
+            assert!(is_disambiguated_path("..\\..\\relative\\path"));
+        }
+    }
+
+    #[test]
+    fn test_index_url_parse_ambiguous_paths() {
+        // Test single-segment ambiguous path
+        assert!(!is_disambiguated_path("index"));
+        // Test multi-segment ambiguous path
+        assert!(!is_disambiguated_path("relative/path"));
+    }
+
+    #[test]
+    fn test_index_url_parse_with_schemes() {
+        assert!(is_disambiguated_path("file:///absolute/path"));
+        assert!(is_disambiguated_path("https://registry.com/simple/"));
+        assert!(is_disambiguated_path(
+            "git+https://github.com/example/repo.git"
+        ));
     }
 }

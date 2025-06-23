@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use uv_auth::{AuthPolicy, Credentials};
-use uv_pep508::{Scheme, split_scheme};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::index_name::{IndexName, IndexNameError};
@@ -279,9 +278,6 @@ impl FromStr for Index {
         }
 
         // Otherwise, assume the source is a URL.
-        if !is_disambiguated_path(s) {
-            return Err(IndexSourceError::AmbiguousPath(s.to_string()));
-        }
         let url = IndexUrl::from_str(s)?;
         Ok(Self {
             name: None,
@@ -295,27 +291,6 @@ impl FromStr for Index {
             ignore_error_codes: None,
         })
     }
-}
-
-/// Checks if a path is disambiguated.
-///
-/// Disambiguated paths are absolute paths, paths with valid schemes,
-/// and paths starting with "./" (or ".\\" on Windows).
-fn is_disambiguated_path(path: &str) -> bool {
-    if cfg!(windows) {
-        if path.starts_with(".\\") || path.starts_with("..\\") || path.starts_with('/') {
-            return true;
-        }
-    }
-    if path.starts_with("./") || path.starts_with("../") || Path::new(path).is_absolute() {
-        return true;
-    }
-    // Check if the path has a scheme (like `https://`)
-    if let Some((scheme, _)) = split_scheme(path) {
-        return Scheme::parse(scheme).is_some();
-    }
-    // This is an ambiguous relative path
-    false
 }
 
 /// An [`IndexUrl`] along with the metadata necessary to query the index.
@@ -408,44 +383,4 @@ pub enum IndexSourceError {
     IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
-    #[error("Relative paths must be disambiguated from index names (use `./{0}`)")]
-    AmbiguousPath(String),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_index_url_parse_valid_paths() {
-        // Valid URL
-        assert!(is_disambiguated_path("https://pypi.org/simple"));
-        // Absolute path
-        assert!(is_disambiguated_path("/absolute/path"));
-        // Windows absolute path
-        #[cfg(windows)]
-        assert!(is_disambiguated_path("C:/absolute/path"));
-        // Relative path
-        assert!(is_disambiguated_path("./relative/path"));
-        // Windows relative path
-        #[cfg(windows)]
-        assert!(is_disambiguated_path(".\\relative\\path"));
-    }
-
-    #[test]
-    fn test_index_url_parse_ambiguous_paths() {
-        // Test multi-segment ambiguous path (no `./` prefix)
-        assert!(!is_disambiguated_path("relative/path"));
-        // Test single-segment ambiguous path
-        assert!(!is_disambiguated_path("index"));
-    }
-
-    #[test]
-    fn test_index_url_parse_with_schemes() {
-        assert!(is_disambiguated_path("file:///absolute/path"));
-        assert!(is_disambiguated_path("https://registry.com/simple/"));
-        assert!(is_disambiguated_path(
-            "git+https://github.com/example/repo.git"
-        ));
-    }
 }
