@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
+use walkdir::DirEntry;
 
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
@@ -311,6 +312,19 @@ fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<Pa
     }
 
     Ok(module_relative)
+}
+
+/// Whether a [`DirEntry`] is a file or a symlink to a file.
+///
+/// Since we don't copy the file, but read it, a symlink to a file works like a regular file.
+fn is_file_ish_dir_entry(entry: &DirEntry) -> io::Result<bool> {
+    if entry.file_type().is_file() {
+        return Ok(true);
+    }
+    if entry.path_is_symlink() {
+        return Ok(fs_err::metadata(entry.path())?.file_type().is_file());
+    }
+    Ok(false)
 }
 
 #[cfg(test)]
