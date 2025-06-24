@@ -7139,12 +7139,12 @@ fn lock_exclusion() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "project", virtual = "../" }]
+        requires-dist = [{ name = "project", directory = "../" }]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "../" }
+        source = { directory = "../" }
         "#
         );
     });
@@ -7727,7 +7727,7 @@ fn lock_dev_transitive() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "baz", editable = "baz" },
-            { name = "foo", virtual = "../foo" },
+            { name = "foo", directory = "../foo" },
             { name = "iniconfig", specifier = ">1" },
         ]
 
@@ -7749,7 +7749,7 @@ fn lock_dev_transitive() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { virtual = "../foo" }
+        source = { directory = "../foo" }
 
         [package.metadata]
 
@@ -13566,7 +13566,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.1.0"
-        source = { virtual = "dependency" }
+        source = { directory = "dependency" }
         dependencies = [
             { name = "iniconfig", marker = "python_full_version >= '3.10'" },
         ]
@@ -13592,7 +13592,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "dependency", marker = "python_full_version >= '3.10'", virtual = "dependency" }]
+        requires-dist = [{ name = "dependency", marker = "python_full_version >= '3.10'", directory = "dependency" }]
         "#
         );
     });
@@ -16870,9 +16870,9 @@ fn lock_explicit_virtual_project() -> Result<()> {
     Ok(())
 }
 
-/// Lock a project that is implicitly virtual (by way of omitting `build-system`).
+/// Lock a project with a dev dependency
 #[test]
-fn lock_implicit_virtual_project() -> Result<()> {
+fn lock_project_dev_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -17088,10 +17088,9 @@ fn lock_implicit_virtual_project() -> Result<()> {
     Ok(())
 }
 
-/// Lock a project that has a path dependency that is implicitly virtual (by way of omitting
-/// `build-system`).
+/// Lock a project that has a path dependency
 #[test]
-fn lock_implicit_virtual_path() -> Result<()> {
+fn lock_path_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -17158,7 +17157,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         [[package]]
         name = "child"
         version = "0.1.0"
-        source = { virtual = "child" }
+        source = { directory = "child" }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -17196,7 +17195,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "anyio", specifier = ">3" },
-            { name = "child", virtual = "child" },
+            { name = "child", directory = "child" },
         ]
 
         [[package]]
@@ -17233,19 +17232,20 @@ fn lock_implicit_virtual_path() -> Result<()> {
     "###);
 
     // Install from the lockfile. The virtual project should _not_ be installed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
      + anyio==4.3.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      + idna==3.6
      + iniconfig==2.0.0
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }

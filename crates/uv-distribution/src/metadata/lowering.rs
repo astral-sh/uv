@@ -16,7 +16,7 @@ use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository
 use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
 use uv_redacted::DisplaySafeUrl;
 use uv_workspace::Workspace;
-use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
+use uv_workspace::pyproject::{Source, Sources};
 
 use crate::metadata::GitWorkspaceMember;
 
@@ -723,14 +723,8 @@ fn path_source(
             })
         } else {
             // Determine whether the project is a package or virtual.
-            let is_package = package.unwrap_or_else(|| {
-                let pyproject_path = install_path.join("pyproject.toml");
-                fs_err::read_to_string(&pyproject_path)
-                    .ok()
-                    .and_then(|contents| PyProjectToml::from_string(contents).ok())
-                    .map(|pyproject_toml| pyproject_toml.is_package())
-                    .unwrap_or(true)
-            });
+            // Default to `package = true` for path sources.
+            let is_package = package.unwrap_or(true);
 
             Ok(RequirementSource::Directory {
                 install_path: install_path.into_boxed_path(),
