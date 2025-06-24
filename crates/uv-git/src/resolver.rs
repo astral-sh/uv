@@ -123,7 +123,7 @@ impl GitResolver {
                 // Mark that we are being rate-limited by GitHub
                 GITHUB_RATE_LIMIT_STATUS.activate();
             }
-            
+
             return Ok(None);
         }
 
