@@ -9,7 +9,6 @@ pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
-use std::fs::FileType;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -55,8 +54,6 @@ pub enum Error {
         #[source]
         err: walkdir::Error,
     },
-    #[error("Unsupported file type {:?}: `{}`", _1, _0.user_display())]
-    UnsupportedFileType(PathBuf, FileType),
     #[error("Failed to write wheel zip archive")]
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
@@ -86,6 +83,16 @@ trait DirectoryWriter {
     ///
     /// Files added through the method are considered generated when listing included files.
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
+
+    /// Add the file or directory to the path.
+    fn write_dir_entry(&mut self, entry: &DirEntry, target_path: &str) -> Result<(), Error> {
+        if entry.file_type().is_dir() {
+            self.write_directory(target_path)?;
+        } else {
+            self.write_file(target_path, entry.path())?;
+        }
+        Ok(())
+    }
 
     /// Add a local file.
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error>;
@@ -312,19 +319,6 @@ fn module_path_from_module_name(src_root: &Path, module_name: &str) -> Result<Pa
     }
 
     Ok(module_relative)
-}
-
-/// Whether a [`DirEntry`] is a file or a symlink to a file.
-///
-/// Since we don't copy the file, but read it, a symlink to a file works like a regular file.
-fn is_fileish_dir_entry(entry: &DirEntry) -> io::Result<bool> {
-    if entry.file_type().is_file() {
-        return Ok(true);
-    }
-    if entry.path_is_symlink() {
-        return Ok(fs_err::metadata(entry.path())?.file_type().is_file());
-    }
-    Ok(false)
 }
 
 #[cfg(test)]
