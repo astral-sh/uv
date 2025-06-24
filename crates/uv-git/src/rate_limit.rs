@@ -15,7 +15,7 @@ pub(crate) static GITHUB_RATE_LIMIT_STATUS: GitHubRateLimitStatus = GitHubRateLi
 pub(crate) struct GitHubRateLimitStatus(AtomicBool);
 
 impl GitHubRateLimitStatus {
-    pub(crate) const fn new() -> Self {
+    const fn new() -> Self {
         Self(AtomicBool::new(false))
     }
 
