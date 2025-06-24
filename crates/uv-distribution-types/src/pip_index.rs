@@ -3,7 +3,7 @@
 //! flags set.
 
 use serde::{Deserialize, Deserializer, Serialize};
-use std::path::Path;
+use std::{borrow::Cow, path::Path};
 
 use crate::{Index, IndexUrl};
 
@@ -50,14 +50,14 @@ macro_rules! impl_index {
 
         #[cfg(feature = "schemars")]
         impl schemars::JsonSchema for $name {
-            fn schema_name() -> String {
+            fn schema_name() -> Cow<'static, str> {
                 IndexUrl::schema_name()
             }
 
             fn json_schema(
-                r#gen: &mut schemars::r#gen::SchemaGenerator,
-            ) -> schemars::schema::Schema {
-                IndexUrl::json_schema(r#gen)
+                generator: &mut schemars::generate::SchemaGenerator,
+            ) -> schemars::Schema {
+                IndexUrl::json_schema(generator)
             }
         }
     };

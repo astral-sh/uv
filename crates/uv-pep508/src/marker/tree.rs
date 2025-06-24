@@ -1707,23 +1707,15 @@ impl Display for MarkerTreeContents {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for MarkerTree {
-    fn schema_name() -> String {
-        "MarkerTree".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("MarkerTree")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`"
-                        .to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`"
+        })
     }
 }
 
@@ -2515,7 +2507,7 @@ mod test {
     #[test]
     fn test_simplification_extra_versus_other() {
         // Here, the `extra != 'foo'` cannot be simplified out, because
-        // `extra == 'foo'` can be true even when `extra == 'bar`' is true.
+        // `extra == 'foo'` can be true even when `extra == 'bar'`' is true.
         assert_simplifies(
             r#"extra != "foo" and (extra == "bar" or extra == "baz")"#,
             "(extra == 'bar' and extra != 'foo') or (extra == 'baz' and extra != 'foo')",

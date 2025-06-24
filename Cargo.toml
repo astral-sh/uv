@@ -151,7 +151,7 @@ rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
 rustix = { version = "1.0.0", default-features = false, features = ["fs", "std"] }
 same-file = { version = "1.0.6" }
-schemars = { version = "0.8.21", features = ["url"] }
+schemars = { version = "1.0.0", features = ["url2"] }
 seahash = { version = "4.1.0" }
 self-replace = { version = "1.5.0" }
 serde = { version = "1.0.210", features = ["derive", "rc"] }

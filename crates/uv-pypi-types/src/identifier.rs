@@ -1,4 +1,5 @@
 use serde::{Serialize, Serializer};
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
 use thiserror::Error;
@@ -99,25 +100,16 @@ impl Serialize for Identifier {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for Identifier {
-    fn schema_name() -> String {
-        "Identifier".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Identifier")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            string: Some(Box::new(schemars::schema::StringValidation {
-                // Best-effort Unicode support (https://stackoverflow.com/a/68844380/3549270)
-                pattern: Some(r"^[_\p{Alphabetic}][_0-9\p{Alphabetic}]*$".to_string()),
-                ..schemars::schema::StringValidation::default()
-            })),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("An identifier in Python".to_string()),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^[_\p{Alphabetic}][_0-9\p{Alphabetic}]*$",
+            "description": "An identifier in Python"
+        })
     }
 }
 

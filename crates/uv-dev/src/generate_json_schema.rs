@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anstream::println;
 use anyhow::{Result, bail};
 use pretty_assertions::StrComparison;
-use schemars::{JsonSchema, schema_for};
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use uv_settings::Options as SettingsOptions;
@@ -91,7 +91,10 @@ const REPLACEMENTS: &[(&str, &str)] = &[
 
 /// Generate the JSON schema for the combined options as a string.
 fn generate() -> String {
-    let schema = schema_for!(CombinedOptions);
+    let settings = schemars::generate::SchemaSettings::draft07();
+    let generator = schemars::SchemaGenerator::new(settings);
+    let schema = generator.into_root_schema_for::<CombinedOptions>();
+
     let mut output = serde_json::to_string_pretty(&schema).unwrap();
 
     for (value, replacement) in REPLACEMENTS {
