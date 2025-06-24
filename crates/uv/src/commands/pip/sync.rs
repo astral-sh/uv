@@ -157,6 +157,7 @@ pub(crate) async fn pip_sync(
             EnvironmentPreference::from_system_flag(system, false),
             python_preference,
             &cache,
+            preview,
         )?;
         report_interpreter(&installation, true, printer)?;
         PythonEnvironment::from_installation(installation)
@@ -168,6 +169,7 @@ pub(crate) async fn pip_sync(
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
             &cache,
+            preview,
         )?;
         report_target_environment(&environment, &cache, printer)?;
         environment

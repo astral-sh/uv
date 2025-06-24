@@ -3800,9 +3800,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.103"
+version = "2.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4307e30089d6fd6aff212f2da3a1f9e32f3223b1f010fb09b7c95f90f3ca1e8"
+checksum = "17b6f705963418cdb9927482fa304bc562ece2fdd4f616084c50b7023b435a40"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4570,7 +4570,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.7.13"
+version = "0.7.14"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4583,6 +4583,7 @@ dependencies = [
  "console",
  "ctrlc",
  "dotenvy",
+ "dunce",
  "etcetera",
  "filetime",
  "flate2",
@@ -4590,6 +4591,7 @@ dependencies = [
  "futures",
  "http",
  "ignore",
+ "indexmap",
  "indicatif",
  "indoc",
  "insta",
@@ -4734,7 +4736,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.7.13"
+version = "0.7.14"
 dependencies = [
  "anyhow",
  "uv-build-backend",
@@ -4947,6 +4949,7 @@ dependencies = [
  "uv-torch",
  "uv-version",
  "uv-warnings",
+ "wiremock",
 ]
 
 [[package]]
@@ -5133,7 +5136,6 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror 2.0.12",
- "url",
  "uv-cache-key",
  "uv-normalize",
  "uv-pep440",
@@ -5548,15 +5550,18 @@ dependencies = [
  "assert_fs",
  "clap",
  "configparser",
+ "dunce",
  "fs-err 3.1.1",
  "futures",
  "goblin",
+ "indexmap",
  "indoc",
  "insta",
  "itertools 0.14.0",
  "once_cell",
  "owo-colors",
  "procfs",
+ "ref-cast",
  "regex",
  "reqwest",
  "reqwest-middleware",
@@ -5581,6 +5586,7 @@ dependencies = [
  "uv-cache-info",
  "uv-cache-key",
  "uv-client",
+ "uv-configuration",
  "uv-dirs",
  "uv-distribution-filename",
  "uv-extract",
@@ -5743,6 +5749,7 @@ dependencies = [
  "fs-err 3.1.1",
  "indoc",
  "memchr",
+ "regex",
  "serde",
  "thiserror 2.0.12",
  "toml",
@@ -5752,6 +5759,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-settings",
+ "uv-warnings",
  "uv-workspace",
 ]
 
@@ -5842,6 +5850,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "uv-cache",
+ "uv-configuration",
  "uv-dirs",
  "uv-distribution-types",
  "uv-fs",
@@ -5914,7 +5923,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.7.13"
+version = "0.7.14"
 
 [[package]]
 name = "uv-virtualenv"
@@ -5926,6 +5935,7 @@ dependencies = [
  "self-replace",
  "thiserror 2.0.12",
  "tracing",
+ "uv-configuration",
  "uv-fs",
  "uv-pypi-types",
  "uv-python",

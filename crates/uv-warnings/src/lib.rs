@@ -24,7 +24,7 @@ pub fn disable() {
 /// Warn a user, if warnings are enabled.
 #[macro_export]
 macro_rules! warn_user {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         use $crate::anstream::eprintln;
         use $crate::owo_colors::OwoColorize;
 
@@ -33,7 +33,7 @@ macro_rules! warn_user {
             let formatted = message.bold();
             eprintln!("{}{} {formatted}", "warning".yellow().bold(), ":".bold());
         }
-    };
+    }};
 }
 
 pub static WARNINGS: LazyLock<Mutex<FxHashSet<String>>> = LazyLock::new(Mutex::default);
@@ -42,7 +42,7 @@ pub static WARNINGS: LazyLock<Mutex<FxHashSet<String>>> = LazyLock::new(Mutex::d
 /// message.
 #[macro_export]
 macro_rules! warn_user_once {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         use $crate::anstream::eprintln;
         use $crate::owo_colors::OwoColorize;
 
@@ -54,5 +54,5 @@ macro_rules! warn_user_once {
                 }
             }
         }
-    };
+    }};
 }

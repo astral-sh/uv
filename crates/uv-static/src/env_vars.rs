@@ -718,9 +718,13 @@ impl EnvVars {
     /// This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
     pub const COLUMNS: &'static str = "COLUMNS";
 
-    /// The CUDA driver version to assume when inferring the PyTorch backend.
+    /// The CUDA driver version to assume when inferring the PyTorch backend (e.g., `550.144.03`).
     #[attr_hidden]
     pub const UV_CUDA_DRIVER_VERSION: &'static str = "UV_CUDA_DRIVER_VERSION";
+
+    /// The AMD GPU architecture to assume when inferring the PyTorch backend (e.g., `gfx1100`).
+    #[attr_hidden]
+    pub const UV_AMD_GPU_ARCHITECTURE: &'static str = "UV_AMD_GPU_ARCHITECTURE";
 
     /// Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
     pub const UV_TORCH_BACKEND: &'static str = "UV_TORCH_BACKEND";

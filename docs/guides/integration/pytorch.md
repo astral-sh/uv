@@ -355,11 +355,11 @@ explicit = true
 
 In some cases, you may want to use CPU-only builds in some cases, but CUDA-enabled builds in others,
 with the choice toggled by a user-provided extra (e.g., `uv sync --extra cpu` vs.
-`uv sync --extra cu124`).
+`uv sync --extra cu128`).
 
 With `tool.uv.sources`, you can use extra markers to specify the desired index for each enabled
 extra. For example, the following configuration would use PyTorch's CPU-only for
-`uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu124`:
+`uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu128`:
 
 ```toml
 [project]
@@ -410,7 +410,7 @@ explicit = true
 !!! note
 
     Since GPU-accelerated builds aren't available on macOS, the above configuration will fail to install
-    on macOS when the `cu124` extra is enabled.
+    on macOS when the `cu128` extra is enabled.
 
 ## The `uv pip` interface
 
@@ -444,10 +444,10 @@ $ # With an environment variable.
 $ UV_TORCH_BACKEND=auto uv pip install torch
 ```
 
-When enabled, uv will query for the installed CUDA driver version and use the most-compatible
-PyTorch index for all relevant packages (e.g., `torch`, `torchvision`, etc.). If no such CUDA driver
-is found, uv will fall back to the CPU-only index. uv will continue to respect existing index
-configuration for any packages outside the PyTorch ecosystem.
+When enabled, uv will query for the installed CUDA driver and AMD GPU versions then use the
+most-compatible PyTorch index for all relevant packages (e.g., `torch`, `torchvision`, etc.). If no
+such GPU is found, uv will fall back to the CPU-only index. uv will continue to respect existing
+index configuration for any packages outside the PyTorch ecosystem.
 
 You can also select a specific backend (e.g., CUDA 12.6) with `--torch-backend=cu126` (or
 `UV_TORCH_BACKEND=cu126`):
@@ -460,5 +460,4 @@ $ # With an environment variable.
 $ UV_TORCH_BACKEND=cu126 uv pip install torch torchvision
 ```
 
-At present, `--torch-backend` is only available in the `uv pip` interface, and only supports
-detection of CUDA drivers (as opposed to other accelerators like ROCm or Intel GPUs).
+At present, `--torch-backend` is only available in the `uv pip` interface.
