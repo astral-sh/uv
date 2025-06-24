@@ -888,13 +888,8 @@ impl Error {
                 | InterpreterError::BrokenSymlink(BrokenSymlink { path, .. }) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
-                    if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
-                        .then(|| {
-                            path.parent()
-                                .and_then(Path::parent)
-                                .map(|path| path.join("pyvenv.cfg").try_exists())
-                        })
-                        .flatten()
+                    if matches!(source, PythonSource::ActiveEnvironment)
+                        && uv_fs::is_virtualenv_executable(path)
                     {
                         true
                     } else {

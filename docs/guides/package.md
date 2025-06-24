@@ -31,8 +31,8 @@ the effect of declaring a build system in the
     This setting makes PyPI reject your uploaded package from publishing. It does not affect
     security or privacy settings on alternative registries.
 
-    We also recommend only generating per-project tokens: Without a PyPI token matching the project,
-    it can't be accidentally published.
+    We also recommend only generating [per-project PyPI API tokens](https://pypi.org/help/#apitoken):
+    Without a PyPI token matching the project, it can't be accidentally published.
 
 ## Building your package
 

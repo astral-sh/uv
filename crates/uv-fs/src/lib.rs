@@ -575,6 +575,30 @@ pub fn is_temporary(path: impl AsRef<Path>) -> bool {
         .is_some_and(|name| name.starts_with(".tmp"))
 }
 
+/// Checks if the grandparent directory of the given executable is the base
+/// of a virtual environment.
+///
+/// The procedure described in PEP 405 includes checking both the parent and
+/// grandparent directory of an executable, but in practice we've found this to
+/// be unnecessary.
+pub fn is_virtualenv_executable(executable: impl AsRef<Path>) -> bool {
+    executable
+        .as_ref()
+        .parent()
+        .and_then(Path::parent)
+        .is_some_and(is_virtualenv_base)
+}
+
+/// Returns `true` if a path is the base path of a virtual environment,
+/// indicated by the presence of a `pyvenv.cfg` file.
+///
+/// The procedure described in PEP 405 includes scanning `pyvenv.cfg`
+/// for a `home` key, but in practice we've found this to be
+/// unnecessary.
+pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
+    path.as_ref().join("pyvenv.cfg").is_file()
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 pub struct LockedFile(fs_err::File);

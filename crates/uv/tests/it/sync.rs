@@ -355,6 +355,7 @@ fn mixed_requires_python() -> Result<()> {
 /// Ensure that group requires-python solves an actual problem
 #[test]
 #[cfg(not(windows))]
+#[cfg(feature = "python-eol")]
 fn group_requires_python_useful_defaults() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8", "3.9"]);
 
@@ -499,6 +500,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
 /// Ensure that group requires-python solves an actual problem
 #[test]
 #[cfg(not(windows))]
+#[cfg(feature = "python-eol")]
 fn group_requires_python_useful_non_defaults() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8", "3.9"]);
 
@@ -9939,6 +9941,35 @@ fn sync_required_environment_hint() -> Result<()> {
     error: Distribution `no-sdist-no-wheels-with-matching-platform-a==1.0.0 @ registry+https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/` can't be installed because it doesn't have a source distribution or wheel for the current platform
 
     hint: You're on [PLATFORM] (`[TAG]`), but `no-sdist-no-wheels-with-matching-platform-a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding your platform to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_url_with_query_parameters() -> Result<()> {
+    let context = TestContext::new("3.13").with_exclude_newer("2025-03-24T19:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.13.2"
+        dependencies = ["source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar"]
+        "#
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar)
     ");
 
     Ok(())
