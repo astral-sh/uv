@@ -147,7 +147,7 @@ impl PartialOrd<SmallString> for rkyv::string::ArchivedString {
 /// An [`schemars::JsonSchema`] implementation for [`SmallString`].
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SmallString {
-    fn always_inline_schema() -> bool {
+    fn inline_schema() -> bool {
         true
     }
 

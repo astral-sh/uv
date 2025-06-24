@@ -2478,6 +2478,11 @@
           "description": "Use the PyTorch index for ROCm 4.0.1.",
           "type": "string",
           "const": "rocm4.0.1"
+        },
+        {
+          "description": "Use the PyTorch index for Intel XPU.",
+          "type": "string",
+          "const": "xpu"
         }
       ]
     },
