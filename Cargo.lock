@@ -6700,8 +6700,9 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wiremock"
-version = "0.6.3"
-source = "git+https://github.com/astral-sh/wiremock-rs?rev=b79b69f62521df9f83a54e866432397562eae789#b79b69f62521df9f83a54e866432397562eae789"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2b8b99d4cdbf36b239a9532e31fe4fb8acc38d1897c1761e161550a7dc78e6a"
 dependencies = [
  "assert-json-diff",
  "async-trait",
