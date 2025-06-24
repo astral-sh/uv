@@ -71,8 +71,8 @@ pub enum PlatformTag {
     Illumos { release_arch: SmallString },
     /// Ex) `solaris_11_4_x86_64`
     Solaris { release_arch: SmallString },
-    /// Ex) `pyodide_2024_0_wasm32`
-    Pyodide { major: u16, minor: u16 },
+    /// Ex) `emscripten_3_1_58_wasm32`
+    Emscripten { major: u16, minor: u16, patch: u16 },
 }
 
 impl PlatformTag {
@@ -99,7 +99,7 @@ impl PlatformTag {
             PlatformTag::Haiku { .. } => Some("Haiku"),
             PlatformTag::Illumos { .. } => Some("Illumos"),
             PlatformTag::Solaris { .. } => Some("Solaris"),
-            PlatformTag::Pyodide { .. } => Some("Pyodide"),
+            PlatformTag::Emscripten { .. } => Some("Emscripten"),
         }
     }
 }
@@ -265,7 +265,13 @@ impl std::fmt::Display for PlatformTag {
             Self::Haiku { release_arch } => write!(f, "haiku_{release_arch}"),
             Self::Illumos { release_arch } => write!(f, "illumos_{release_arch}"),
             Self::Solaris { release_arch } => write!(f, "solaris_{release_arch}_64bit"),
-            Self::Pyodide { major, minor } => write!(f, "pyodide_{major}_{minor}_wasm32"),
+            Self::Emscripten {
+                major,
+                minor,
+                patch,
+            } => {
+                write!(f, "emscripten_{major}_{minor}_{patch}_wasm32")
+            }
         }
     }
 }
@@ -620,33 +626,49 @@ impl FromStr for PlatformTag {
             });
         }
 
-        if let Some(rest) = s.strip_prefix("pyodide_") {
-            let mid =
+        if let Some(rest) = s.strip_prefix("emscripten_") {
+            let rest =
                 rest.strip_suffix("_wasm32")
                     .ok_or_else(|| ParsePlatformTagError::InvalidArch {
-                        platform: "pyodide",
+                        platform: "emscripten",
                         tag: s.to_string(),
                     })?;
-            let underscore = memchr::memchr(b'_', mid.as_bytes()).ok_or_else(|| {
+            let underscore = memchr::memchr(b'_', rest.as_bytes()).ok_or_else(|| {
                 ParsePlatformTagError::InvalidFormat {
-                    platform: "pyodide",
+                    platform: "emscripten",
                     tag: s.to_string(),
                 }
             })?;
-            let major: u16 = mid[..underscore].parse().map_err(|_| {
+            let major: u16 = rest[..underscore].parse().map_err(|_| {
                 ParsePlatformTagError::InvalidMajorVersion {
-                    platform: "pyodide",
+                    platform: "emscripten",
                     tag: s.to_string(),
                 }
             })?;
-
-            let minor: u16 = mid[underscore + 1..].parse().map_err(|_| {
+            let rest = &rest[underscore + 1..];
+            let underscore = memchr::memchr(b'_', rest.as_bytes()).ok_or_else(|| {
+                ParsePlatformTagError::InvalidFormat {
+                    platform: "emscripten",
+                    tag: s.to_string(),
+                }
+            })?;
+            let minor: u16 = rest[..underscore].parse().map_err(|_| {
                 ParsePlatformTagError::InvalidMinorVersion {
-                    platform: "pyodide",
+                    platform: "emscripten",
                     tag: s.to_string(),
                 }
             })?;
-            return Ok(Self::Pyodide { major, minor });
+            let patch: u16 = rest[underscore + 1..].parse().map_err(|_| {
+                ParsePlatformTagError::InvalidMinorVersion {
+                    platform: "emscripten",
+                    tag: s.to_string(),
+                }
+            })?;
+            return Ok(Self::Emscripten {
+                major,
+                minor,
+                patch,
+            });
         }
 
         Err(ParsePlatformTagError::UnknownFormat(s.to_string()))
@@ -934,22 +956,23 @@ mod tests {
     }
 
     #[test]
-    fn pyodide_platform() {
-        let tag = PlatformTag::Pyodide {
-            major: 2024,
-            minor: 0,
+    fn emscripten_platform() {
+        let tag = PlatformTag::Emscripten {
+            major: 3,
+            minor: 1,
+            patch: 58,
         };
         assert_eq!(
-            PlatformTag::from_str("pyodide_2024_0_wasm32").as_ref(),
+            PlatformTag::from_str("emscripten_3_1_58_wasm32").as_ref(),
             Ok(&tag)
         );
-        assert_eq!(tag.to_string(), "pyodide_2024_0_wasm32");
+        assert_eq!(tag.to_string(), "emscripten_3_1_58_wasm32");
 
         assert_eq!(
-            PlatformTag::from_str("pyodide_2024_0_wasm64"),
+            PlatformTag::from_str("emscripten_3_1_58_wasm64"),
             Err(ParsePlatformTagError::InvalidArch {
-                platform: "pyodide",
-                tag: "pyodide_2024_0_wasm64".to_string()
+                platform: "emscripten",
+                tag: "emscripten_3_1_58_wasm64".to_string()
             })
         );
     }

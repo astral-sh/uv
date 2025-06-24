@@ -618,10 +618,16 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             }]
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
-            vec![PlatformTag::Pyodide {
-                major: *major,
-                minor: *minor,
-            }]
+            // See: https://pyodide.org/en/stable/development/abi.html#pyodide-2024-0
+            if *major == 2024 && *minor == 0 {
+                vec![PlatformTag::Emscripten {
+                    major: 3,
+                    minor: 1,
+                    patch: 58,
+                }]
+            } else {
+                vec![]
+            }
         }
         _ => {
             return Err(PlatformError::OsVersionDetectionError(format!(

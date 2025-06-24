@@ -68,7 +68,7 @@ impl fmt::Display for Os {
             Self::Illumos { .. } => write!(f, "illumos"),
             Self::Haiku { .. } => write!(f, "haiku"),
             Self::Android { .. } => write!(f, "android"),
-            Self::Pyodide { .. } => write!(f, "pyodide"),
+            Self::Pyodide { major, minor } => write!(f, "pyodide_{major}_{minor}"),
         }
     }
 }
