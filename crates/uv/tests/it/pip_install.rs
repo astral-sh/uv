@@ -2080,7 +2080,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
 
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg("pip-test-package @ git+https://github.com/pypa/pip-test-package@5547fa909e83df8bd743d3978d6667497983a4b7")
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
     success: true
     exit_code: 0
@@ -2090,7 +2090,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + pip-test-package==0.1.1 (from git+https://github.com/pypa/pip-test-package@5547fa909e83df8bd743d3978d6667497983a4b7)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     ");
 }
 
@@ -2110,7 +2110,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
 
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg("pip-test-package @ git+https://github.com/pypa/pip-test-package@5547fa909e83df8bd743d3978d6667497983a4b7")
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
     success: true
     exit_code: 0
@@ -2120,7 +2120,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + pip-test-package==0.1.1 (from git+https://github.com/pypa/pip-test-package@5547fa909e83df8bd743d3978d6667497983a4b7)
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     ");
 }
 
