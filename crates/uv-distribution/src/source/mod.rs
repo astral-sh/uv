@@ -1860,6 +1860,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         };
 
+        // If the URL is already precise, return it.
+        if self.build_context.git().get_precise(git).is_some() {
+            debug!("Precise commit already known: {source}");
+            return Ok(());
+        }
+
         // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
         if self
             .build_context
