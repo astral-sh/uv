@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::fmt::Display;
 use std::path::PathBuf;
 use uv_macros::OptionsMetadata;
 
