@@ -46,6 +46,21 @@ impl GitResolver {
         self.0.get(reference)
     }
 
+    pub fn get_precise(&self, url: &GitUrl) -> Option<GitOid> {
+        // If the URL is already precise, return it.
+        if let Some(precise) = url.precise() {
+            return Some(precise);
+        }
+
+        // If we know the precise commit already, return it.
+        let reference = RepositoryReference::from(url);
+        if let Some(precise) = self.get(&reference) {
+            return Some(*precise);
+        }
+
+        None
+    }
+
     /// Resolve a Git URL to a specific commit without performing any Git operations.
     ///
     /// Returns a [`GitOid`] if the URL has already been resolved (i.e., is available in the cache),
@@ -59,16 +74,9 @@ impl GitResolver {
             return Ok(None);
         }
 
-        let reference = RepositoryReference::from(url);
-
-        // If the URL is already precise, return it.
-        if let Some(precise) = url.precise() {
+        // If the URL is already precise or we know the precise commit, return it.
+        if let Some(precise) = self.get_precise(url) {
             return Ok(Some(precise));
-        }
-
-        // If we know the precise commit already, return it.
-        if let Some(precise) = self.get(&reference) {
-            return Ok(Some(*precise));
         }
 
         // If the URL is a GitHub URL, attempt to resolve it via the GitHub API.
@@ -80,10 +88,10 @@ impl GitResolver {
         // Determine the Git reference.
         let rev = url.reference().as_rev();
 
-        let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{rev}");
+        let github_api_url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{rev}");
 
-        debug!("Querying GitHub for commit at: {url}");
-        let mut request = client.get(&url);
+        debug!("Querying GitHub for commit at: {github_api_url}");
+        let mut request = client.get(&github_api_url);
         request = request.header("Accept", "application/vnd.github.3.sha");
         request = request.header(
             "User-Agent",
@@ -95,7 +103,7 @@ impl GitResolver {
             // Returns a 404 if the repository does not exist, and a 422 if GitHub is unable to
             // resolve the requested rev.
             debug!(
-                "GitHub API request failed for: {url} ({})",
+                "GitHub API request failed for: {github_api_url} ({})",
                 response.status()
             );
             return Ok(None);
@@ -108,7 +116,7 @@ impl GitResolver {
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
         // resolve to the same precise commit.
-        self.insert(reference, precise);
+        self.insert(RepositoryReference::from(url), precise);
 
         Ok(Some(precise))
     }
