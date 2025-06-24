@@ -80,7 +80,7 @@ async fn simple_io_err() {
     ----- stderr -----
     error: Failed to fetch: `[SERVER]/tqdm/`
       Caused by: Request failed after 3 retries
-      Caused by: error sending request for url ([SERVER]/tqdm/)
+      Caused by: error sending request
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
@@ -134,7 +134,7 @@ async fn find_links_io_error() {
     error: Failed to read `--find-links` URL: [SERVER]/
       Caused by: Failed to fetch: `[SERVER]/`
       Caused by: Request failed after 3 retries
-      Caused by: error sending request for url ([SERVER]/)
+      Caused by: error sending request
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
@@ -189,7 +189,7 @@ async fn direct_url_io_error() {
       × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Request failed after 3 retries
-      ├─▶ error sending request for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+      ├─▶ error sending request
       ├─▶ client error (SendRequest)
       ╰─▶ connection closed before message completed
     ");
@@ -278,7 +278,7 @@ async fn python_install_io_error() {
     error: Failed to install cpython-3.10.0-macos-aarch64-none
       Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
       Caused by: Request failed after 3 retries
-      Caused by: error sending request for url ([SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst)
+      Caused by: error sending request
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
     ");
