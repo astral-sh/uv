@@ -355,6 +355,7 @@ fn mixed_requires_python() -> Result<()> {
 /// Ensure that group requires-python solves an actual problem
 #[test]
 #[cfg(not(windows))]
+#[cfg(feature = "python-eol")]
 fn group_requires_python_useful_defaults() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8", "3.9"]);
 
@@ -499,6 +500,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
 /// Ensure that group requires-python solves an actual problem
 #[test]
 #[cfg(not(windows))]
+#[cfg(feature = "python-eol")]
 fn group_requires_python_useful_non_defaults() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8", "3.9"]);
 
