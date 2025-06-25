@@ -7,12 +7,10 @@
 
 ### Enhancements
 
-- Allow symlinks in the build backend ([#14212](https://github.com/astral-sh/uv/pull/14212))
 - Consistently use `Ordering::Relaxed` for standalone atomic use cases ([#14190](https://github.com/astral-sh/uv/pull/14190))
 - Warn on ambiguous relative paths for `--index` ([#14152](https://github.com/astral-sh/uv/pull/14152))
 - Skip GitHub fast path when rate-limited ([#13033](https://github.com/astral-sh/uv/pull/13033))
-- Update schemars 1.0.0 ([#13693](https://github.com/astral-sh/uv/pull/13693))
-- Update wiremock to 0.6.4 ([#14238](https://github.com/astral-sh/uv/pull/14238))
+- Preserve newlines in `schema.json` descriptions ([#13693](https://github.com/astral-sh/uv/pull/13693))
 
 ### Bug fixes
 
@@ -22,6 +20,10 @@
 ### Documentation
 
 - Add a link to PyPI FAQ to clarify what per-project token is ([#14242](https://github.com/astral-sh/uv/pull/14242))
+
+### Preview features
+
+- Allow symlinks in the build backend ([#14212](https://github.com/astral-sh/uv/pull/14212))
 
 ## 0.7.14
 
