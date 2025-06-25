@@ -23,11 +23,6 @@
 
 - Add a link to PyPI FAQ to clarify what per-project token is ([#14242](https://github.com/astral-sh/uv/pull/14242))
 
-### Other changes
-
-- Don't log GitHub fast path usage if it's cached ([#14235](https://github.com/astral-sh/uv/pull/14235))
-- Remove wheel filename benchmark ([#14240](https://github.com/astral-sh/uv/pull/14240))
-
 ## 0.7.14
 
 ### Enhancements
