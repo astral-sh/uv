@@ -516,7 +516,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         name = "foo"
         version = "1.0.0"
         dependencies = []
-        
+
         [dependency-groups]
         dev = ["sortedcontainers"]
         other = ["sniffio"]
@@ -549,7 +549,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.11"
         dependencies = []
-        
+
         [dependency-groups]
         dev = ["sortedcontainers"]
         other = ["sniffio"]
@@ -582,7 +582,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.10"
         dependencies = []
-        
+
         [dependency-groups]
         dev = ["sortedcontainers"]
         other = ["sniffio"]
@@ -612,7 +612,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         name = "foo"
         version = "1.0.0"
         dependencies = []
-        
+
         [dependency-groups]
         dev = ["sortedcontainers"]
 
@@ -643,7 +643,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         version = "1.0.0"
         requires-python = "<3.12"
         dependencies = []
-        
+
         [dependency-groups]
         dev = ["sortedcontainers"]
         other = ["sniffio"]
@@ -1050,6 +1050,39 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Run `uv venv` followed by `uv venv --allow-existing`.
+#[test]
+fn create_venv_then_allow_existing() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a venv
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // Create a venv again with `--allow-existing`
+    uv_snapshot!(context.filters(), context.venv()
+        .arg("--allow-existing"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
 }
 
 #[test]
