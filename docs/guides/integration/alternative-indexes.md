@@ -370,7 +370,8 @@ before uploading artifacts.
 
 ## JFrog's Artifactory
 
-Parameters `-t "$JFROG_TOKEN"` used to the JFrog returns code 401 Unauthorized (Wrong username was used).
+Parameters `-t "$JFROG_TOKEN"` used to the JFrog returns code 401 Unauthorized (Wrong username was
+used).
 
 To authenticate, pass your token as the password and set the username to an empty string:
 
