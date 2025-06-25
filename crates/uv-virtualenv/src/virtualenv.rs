@@ -147,6 +147,7 @@ pub(crate) fn create(
     // Create a `.gitignore` file to ignore all files in the venv.
     fs::write(location.join(".gitignore"), "*")?;
 
+    let mut using_minor_version_link = false;
     let executable_target = if upgradeable && interpreter.is_standalone() {
         if let Some(minor_version_link) = PythonMinorVersionLink::from_executable(
             base_python.as_path(),
@@ -167,6 +168,7 @@ pub(crate) fn create(
                     &minor_version_link.symlink_directory.display(),
                     &base_python.display()
                 );
+                using_minor_version_link = true;
                 minor_version_link.symlink_executable.clone()
             }
         } else {
@@ -228,7 +230,7 @@ pub(crate) fn create(
     // interpreters, this target path includes a minor version junction to enable
     // transparent upgrades.
     if cfg!(windows) {
-        if interpreter.is_standalone() {
+        if using_minor_version_link {
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
             create_link_to_executable(target.as_path(), executable_target.clone())
                 .map_err(Error::Python)?;
