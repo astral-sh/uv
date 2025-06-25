@@ -494,6 +494,88 @@ fn add_git_private_raw() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+#[cfg(feature = "git")]
+async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(403))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
+        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "git")]
+async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Result<()> {
+    use uv_client::DEFAULT_RETRIES;
+
+    let context = TestContext::new("3.12");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(429))
+        .expect(1 + u64::from(DEFAULT_RETRIES)) // Middleware retries on 429 by default
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
+        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    Ok(())
+}
+
 #[test]
 #[cfg(feature = "git")]
 fn add_git_error() -> Result<()> {
@@ -9364,7 +9446,7 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
     let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
     fs_err::copy(&wheel_src, &wheel_dst)?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9393,7 +9475,7 @@ fn add_index_with_non_existent_relative_path() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9423,7 +9505,7 @@ fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result
         url = "https://pypi-proxy.fly.dev/simple"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9446,12 +9528,16 @@ fn add_index_empty_directory() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
     "#})?;
 
     let packages = context.temp_dir.child("test-index");
     packages.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9462,6 +9548,46 @@ fn add_index_empty_directory() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn add_index_with_ambiguous_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let mut filters = context.filters();
+    filters.push((r"\./|\.\\\\", r"[PREFIX]"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    #[cfg(unix)]
+    uv_snapshot!(filters, context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `[PREFIX]test-index`). Support for ambiguous values will be removed in the future
+    error: Directory not found for index: file://[TEMP_DIR]/test-index
+    ");
+
+    #[cfg(windows)]
+    uv_snapshot!(filters, context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `[PREFIX]test-index` or `[PREFIX]test-index`). Support for ambiguous values will be removed in the future
+    error: Directory not found for index: file://[TEMP_DIR]/test-index
     ");
 
     Ok(())

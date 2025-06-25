@@ -164,7 +164,7 @@ fn write_wheel(
             .path()
             .strip_prefix(source_tree)
             .expect("walkdir starts with root");
-        let wheel_path = entry
+        let entry_path = entry
             .path()
             .strip_prefix(&src_root)
             .expect("walkdir starts with root");
@@ -172,21 +172,10 @@ fn write_wheel(
             trace!("Excluding from module: `{}`", match_path.user_display());
             continue;
         }
-        let wheel_path = wheel_path.portable_display().to_string();
 
-        debug!("Adding to wheel: `{wheel_path}`");
-
-        if entry.file_type().is_dir() {
-            wheel_writer.write_directory(&wheel_path)?;
-        } else if entry.file_type().is_file() {
-            wheel_writer.write_file(&wheel_path, entry.path())?;
-        } else {
-            // TODO(konsti): We may want to support symlinks, there is support for installing them.
-            return Err(Error::UnsupportedFileType(
-                entry.path().to_path_buf(),
-                entry.file_type(),
-            ));
-        }
+        let entry_path = entry_path.portable_display().to_string();
+        debug!("Adding to wheel: {entry_path}");
+        wheel_writer.write_dir_entry(&entry, &entry_path)?;
     }
     debug!("Visited {files_visited} files for wheel build");
 
@@ -519,23 +508,12 @@ fn wheel_subdir_from_globs(
             continue;
         }
 
-        let relative_licenses = Path::new(target)
+        let license_path = Path::new(target)
             .join(relative)
             .portable_display()
             .to_string();
-
-        if entry.file_type().is_dir() {
-            wheel_writer.write_directory(&relative_licenses)?;
-        } else if entry.file_type().is_file() {
-            debug!("Adding {} file: `{}`", globs_field, relative.user_display());
-            wheel_writer.write_file(&relative_licenses, entry.path())?;
-        } else {
-            // TODO(konsti): We may want to support symlinks, there is support for installing them.
-            return Err(Error::UnsupportedFileType(
-                entry.path().to_path_buf(),
-                entry.file_type(),
-            ));
-        }
+        debug!("Adding for {}: `{}`", globs_field, relative.user_display());
+        wheel_writer.write_dir_entry(&entry, &license_path)?;
     }
     Ok(())
 }

@@ -41,6 +41,7 @@ pub(crate) struct Tools {
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(from = "OptionsWire", rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(!from))]
 pub struct Options {
     #[serde(flatten)]
     pub globals: GlobalOptions,

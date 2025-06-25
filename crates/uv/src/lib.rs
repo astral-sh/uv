@@ -400,7 +400,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     }))?;
 
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::SeqCst);
+    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 
     debug!("uv {}", uv_cli::version::uv_self_version());
 

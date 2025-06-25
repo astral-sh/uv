@@ -1,5 +1,5 @@
 use serde::{Deserialize, Deserializer};
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 use url::Url;
 
 /// A host specification (wildcard, or host, with optional scheme and/or port) for which
@@ -143,20 +143,15 @@ impl std::fmt::Display for TrustedHost {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for TrustedHost {
-    fn schema_name() -> String {
-        "TrustedHost".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("TrustedHost")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A host or host-port pair.".to_string()),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A host or host-port pair."
+        })
     }
 }
 

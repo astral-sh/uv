@@ -151,7 +151,7 @@ rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
 rustix = { version = "1.0.0", default-features = false, features = ["fs", "std"] }
 same-file = { version = "1.0.6" }
-schemars = { version = "0.8.21", features = ["url"] }
+schemars = { version = "1.0.0", features = ["url2"] }
 seahash = { version = "4.1.0" }
 self-replace = { version = "1.5.0" }
 serde = { version = "1.0.210", features = ["derive", "rc"] }
@@ -189,7 +189,7 @@ windows-core = { version = "0.59.0" }
 windows-registry = { version = "0.5.0" }
 windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO", "Win32_System_Registry"] }
-wiremock = { git = "https://github.com/astral-sh/wiremock-rs", rev = "b79b69f62521df9f83a54e866432397562eae789" }
+wiremock = { version = "0.6.4" }
 xz2 = { version = "0.1.7" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
 

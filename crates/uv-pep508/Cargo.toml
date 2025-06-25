@@ -41,7 +41,7 @@ version-ranges = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.40.0" }
-serde_json = { version = "1.0.128" }
+serde_json = { workspace = true }
 tracing-test = { version = "0.2.5" }
 
 [features]

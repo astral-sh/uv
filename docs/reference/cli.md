@@ -123,6 +123,7 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt id="uv-run--index"><a href="#uv-run--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-run--index-strategy"><a href="#uv-run--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -479,6 +480,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt id="uv-add--index"><a href="#uv-add--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-add--index-strategy"><a href="#uv-add--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -663,6 +665,7 @@ uv remove [OPTIONS] <PACKAGES>...
 </dd><dt id="uv-remove--index"><a href="#uv-remove--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-remove--index-strategy"><a href="#uv-remove--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -832,6 +835,7 @@ uv version [OPTIONS] [VALUE]
 </dd><dt id="uv-version--index"><a href="#uv-version--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-version--index-strategy"><a href="#uv-version--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -1022,6 +1026,7 @@ uv sync [OPTIONS]
 </dd><dt id="uv-sync--index"><a href="#uv-sync--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-sync--index-strategy"><a href="#uv-sync--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -1210,6 +1215,7 @@ uv lock [OPTIONS]
 </dd><dt id="uv-lock--index"><a href="#uv-lock--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-lock--index-strategy"><a href="#uv-lock--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -1383,6 +1389,7 @@ uv export [OPTIONS]
 </dd><dt id="uv-export--index"><a href="#uv-export--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-export--index-strategy"><a href="#uv-export--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -1568,6 +1575,7 @@ uv tree [OPTIONS]
 </dd><dt id="uv-tree--index"><a href="#uv-tree--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-tree--index-strategy"><a href="#uv-tree--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -1827,6 +1835,7 @@ uv tool run [OPTIONS] [COMMAND]
 </dd><dt id="uv-tool-run--index"><a href="#uv-tool-run--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-tool-run--index-strategy"><a href="#uv-tool-run--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -1997,6 +2006,7 @@ uv tool install [OPTIONS] <PACKAGE>
 </dd><dt id="uv-tool-install--index"><a href="#uv-tool-install--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-tool-install--index-strategy"><a href="#uv-tool-install--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -2157,6 +2167,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 </dd><dt id="uv-tool-upgrade--index"><a href="#uv-tool-upgrade--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-tool-upgrade--index-strategy"><a href="#uv-tool-upgrade--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -3257,6 +3268,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 </dd><dt id="uv-pip-compile--index"><a href="#uv-pip-compile--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-pip-compile--index-strategy"><a href="#uv-pip-compile--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -3536,6 +3548,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </dd><dt id="uv-pip-sync--index"><a href="#uv-pip-sync--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-pip-sync--index-strategy"><a href="#uv-pip-sync--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -3800,6 +3813,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 </dd><dt id="uv-pip-install--index"><a href="#uv-pip-install--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-pip-install--index-strategy"><a href="#uv-pip-install--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -4219,6 +4233,7 @@ uv pip list [OPTIONS]
 </dd><dt id="uv-pip-list--index"><a href="#uv-pip-list--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-pip-list--index-strategy"><a href="#uv-pip-list--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -4392,6 +4407,7 @@ uv pip tree [OPTIONS]
 </dd><dt id="uv-pip-tree--index"><a href="#uv-pip-tree--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-pip-tree--index-strategy"><a href="#uv-pip-tree--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -4579,6 +4595,7 @@ uv venv [OPTIONS] [PATH]
 </dd><dt id="uv-venv--index"><a href="#uv-venv--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-venv--index-strategy"><a href="#uv-venv--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>
@@ -4729,6 +4746,7 @@ uv build [OPTIONS] [SRC]
 </dd><dt id="uv-build--index"><a href="#uv-build--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+<p>Index names are not supported as values. Relative paths must be disambiguated from index names with <code>./</code> or <code>../</code> on Unix or <code>.\\</code>, <code>..\\</code>, <code>./</code> or <code>../</code> on Windows.</p>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p></dd><dt id="uv-build--index-strategy"><a href="#uv-build--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 <p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p><p>Possible values:</p>

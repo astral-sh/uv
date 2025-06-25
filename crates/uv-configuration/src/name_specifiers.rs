@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use uv_pep508::PackageName;
 
@@ -63,28 +63,16 @@ impl<'de> serde::Deserialize<'de> for PackageNameSpecifier {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PackageNameSpecifier {
-    fn schema_name() -> String {
-        "PackageNameSpecifier".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PackageNameSpecifier")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            string: Some(Box::new(schemars::schema::StringValidation {
-                // See: https://packaging.python.org/en/latest/specifications/name-normalization/#name-format
-                pattern: Some(
-                    r"^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
-                        .to_string(),
-                ),
-                ..schemars::schema::StringValidation::default()
-            })),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.".to_string()),
-              ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$",
+            "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
+        })
     }
 }
 
