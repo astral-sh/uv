@@ -171,6 +171,17 @@ impl UrlString {
                 .unwrap_or_else(|| self.0.clone()),
         )
     }
+
+    /// Return the [`UrlString`] with trailing slash removed.
+    #[must_use]
+    pub fn without_trailing_slash(&self) -> Self {
+        Self(
+            self.as_ref()
+                .strip_suffix('/')
+                .map(SmallString::from)
+                .unwrap_or_else(|| self.0.clone()),
+        )
+    }
 }
 
 impl AsRef<str> for UrlString {
