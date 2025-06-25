@@ -5130,6 +5130,9 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by
     /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are provided,
     /// earlier values take priority.
+    ///
+    /// Index names are not supported as values. Relative paths must be disambiguated from index
+    /// names with `./` or `../` on Unix or `.\\`, `..\\`, `./` or `../` on Windows.
     //
     // The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
     // value parsing mechanism, which processes one value at a time, in order to handle

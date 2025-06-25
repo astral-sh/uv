@@ -1386,6 +1386,12 @@ impl AddSettings {
             )
             .collect::<Vec<_>>();
 
+        // Warn user if an ambiguous relative path was passed as a value for
+        // `--index` or `--default-index`.
+        indexes
+            .iter()
+            .for_each(|index| index.url().warn_on_disambiguated_relative_path());
+
         // If the user passed an `--index-url` or `--extra-index-url`, warn.
         if installer
             .index_args
