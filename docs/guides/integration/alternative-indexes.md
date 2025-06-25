@@ -368,6 +368,20 @@ $ uv publish
 Note this method is not preferable because uv cannot check if the package is already published
 before uploading artifacts.
 
-## Other package indexes
+## JFrog's Artifactory
 
-uv is also known to work with JFrog's Artifactory.
+Parameters `-t "$JFROG_TOKEN"` used to the JFrog returns code 401 Unauthorized (Wrong username was used).
+
+To authenticate, pass your token as the password and set the username to an empty string:
+
+```console
+uv publish --index <index_name> -u "" -p "$JFROG_TOKEN"
+```
+
+Alternatively, you can set environment variables:
+
+```console
+$ export UV_PUBLISH_USERNAME=""
+$ export UV_PUBLISH_PASSWORD="$JFROG_TOKEN"
+$ uv publish --index <index_name>
+```
