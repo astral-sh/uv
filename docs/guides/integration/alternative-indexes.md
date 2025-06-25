@@ -142,7 +142,7 @@ To use Google Artifact Registry, add the index to your project:
 ```toml title="pyproject.toml"
 [[tool.uv.index]]
 name = "private-registry"
-url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
+url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>/simple/"
 ```
 
 ### Authenticate with a Google access token
@@ -219,8 +219,8 @@ First, add a `publish-url` to the index you want to publish packages to. For exa
 ```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
 name = "private-registry"
-url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
-publish-url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
+url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>/simple/"
+publish-url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>/"
 ```
 
 Then, configure credentials (if not using keyring):
@@ -239,7 +239,7 @@ $ uv publish --index private-registry
 To use `uv publish` without adding the `publish-url` to the project, you can set `UV_PUBLISH_URL`:
 
 ```console
-$ export UV_PUBLISH_URL=https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>
+$ export UV_PUBLISH_URL=https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>/
 $ uv publish
 ```
 
