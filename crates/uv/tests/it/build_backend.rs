@@ -768,3 +768,93 @@ fn complex_namespace_packages() -> Result<()> {
     );
     Ok(())
 }
+
+/// Test that a symlinked file (here: license) gets included.
+#[test]
+#[cfg(unix)]
+fn symlinked_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    context
+        .init()
+        .arg("--preview")
+        .arg("--build-backend")
+        .arg("uv")
+        .arg(project.path())
+        .assert()
+        .success();
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        license-files = ["LICENSE"]
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let license_file = context.temp_dir.child("LICENSE");
+    let license_symlink = project.child("LICENSE");
+
+    let license_text = "Project license";
+    license_file.write_str(license_text)?;
+    fs_err::os::unix::fs::symlink(license_file.path(), license_symlink.path())?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project-1.0.0.tar.gz
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project-1.0.0-py3-none-any.whl
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("project-1.0.0-py3-none-any.whl"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==1.0.0 (from file://[TEMP_DIR]/project-1.0.0-py3-none-any.whl)
+    ");
+
+    // Check that we included the actual license text and not a broken symlink.
+    let installed_license = context
+        .site_packages()
+        .join("project-1.0.0.dist-info")
+        .join("licenses")
+        .join("LICENSE");
+    assert!(
+        fs_err::symlink_metadata(&installed_license)?
+            .file_type()
+            .is_file()
+    );
+    let license = fs_err::read_to_string(&installed_license)?;
+    assert_eq!(license, license_text);
+
+    Ok(())
+}

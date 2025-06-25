@@ -250,32 +250,16 @@ fn write_source_dist(
             .expect("walkdir starts with root");
 
         if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
-            trace!("Excluding: `{}`", relative.user_display());
+            trace!("Excluding from sdist: `{}`", relative.user_display());
             continue;
         }
 
-        debug!("Including {}", relative.user_display());
-        if entry.file_type().is_dir() {
-            writer.write_directory(
-                &Path::new(&top_level)
-                    .join(relative)
-                    .portable_display()
-                    .to_string(),
-            )?;
-        } else if entry.file_type().is_file() {
-            writer.write_file(
-                &Path::new(&top_level)
-                    .join(relative)
-                    .portable_display()
-                    .to_string(),
-                entry.path(),
-            )?;
-        } else {
-            return Err(Error::UnsupportedFileType(
-                relative.to_path_buf(),
-                entry.file_type(),
-            ));
-        }
+        let entry_path = Path::new(&top_level)
+            .join(relative)
+            .portable_display()
+            .to_string();
+        debug!("Adding to sdist: {}", relative.user_display());
+        writer.write_dir_entry(&entry, &entry_path)?;
     }
     debug!("Visited {files_visited} files for source dist build");
 
