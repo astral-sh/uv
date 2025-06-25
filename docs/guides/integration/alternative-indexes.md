@@ -375,7 +375,7 @@ Parameters `-t "$JFROG_TOKEN"` used to the JFrog returns code 401 Unauthorized (
 To authenticate, pass your token as the password and set the username to an empty string:
 
 ```console
-uv publish --index <index_name> -u "" -p "$JFROG_TOKEN"
+$ uv publish --index <index_name> -u "" -p "$JFROG_TOKEN"
 ```
 
 Alternatively, you can set environment variables:
