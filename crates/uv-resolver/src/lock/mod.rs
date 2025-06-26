@@ -2545,9 +2545,12 @@ impl Package {
                     name: name.clone(),
                     version: version.clone(),
                 })?;
-                let file_url =
-                    DisplaySafeUrl::from_file_path(workspace_root.join(path).join(file_path))
-                        .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_path = workspace_root.join(path).join(file_path);
+                let file_url = DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
+                    LockErrorKind::PathToUrl {
+                        path: file_path.into_boxed_path(),
+                    }
+                })?;
                 let filename = sdist
                     .filename()
                     .ok_or_else(|| LockErrorKind::MissingFilename {
@@ -3250,7 +3253,9 @@ impl Source {
                 Ok(Source::Registry(source))
             }
             IndexUrl::Path(url) => {
-                let path = url.to_file_path().map_err(|()| LockErrorKind::UrlToPath)?;
+                let path = url
+                    .to_file_path()
+                    .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
                 let path = relative_to(&path, root)
                     .or_else(|_| std::path::absolute(&path))
                     .map_err(LockErrorKind::IndexRelativePath)?;
@@ -3810,14 +3815,17 @@ impl SourceDist {
                 }))
             }
             IndexUrl::Path(path) => {
-                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath)?;
-                let reg_dist_path = reg_dist
+                let index_path = path
+                    .to_file_path()
+                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                let reg_dist_url = reg_dist
                     .file
                     .url
                     .to_url()
-                    .map_err(LockErrorKind::InvalidUrl)?
+                    .map_err(LockErrorKind::InvalidUrl)?;
+                let reg_dist_path = reg_dist_url
                     .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath)?;
+                    .map_err(|()| LockErrorKind::UrlToPath { url: reg_dist_url })?;
                 let path = relative_to(&reg_dist_path, index_path)
                     .or_else(|_| std::path::absolute(&reg_dist_path))
                     .map_err(LockErrorKind::DistributionRelativePath)?
@@ -4140,14 +4148,13 @@ impl Wheel {
                 })
             }
             IndexUrl::Path(path) => {
-                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath)?;
-                let wheel_path = wheel
-                    .file
-                    .url
-                    .to_url()
-                    .map_err(LockErrorKind::InvalidUrl)?
+                let index_path = path
                     .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath)?;
+                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                let wheel_url = wheel.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                let wheel_path = wheel_url
+                    .to_file_path()
+                    .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
                 let path = relative_to(&wheel_path, index_path)
                     .or_else(|_| std::path::absolute(&wheel_path))
                     .map_err(LockErrorKind::DistributionRelativePath)?
@@ -4236,9 +4243,12 @@ impl Wheel {
                         .into());
                     }
                 };
-                let file_url =
-                    DisplaySafeUrl::from_file_path(root.join(index_path).join(file_path))
-                        .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_path = root.join(index_path).join(file_path);
+                let file_url = DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
+                    LockErrorKind::PathToUrl {
+                        path: file_path.into_boxed_path(),
+                    }
+                })?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename.to_string()),
@@ -5449,11 +5459,11 @@ enum LockErrorKind {
         VerbatimUrlError,
     ),
     /// An error that occurs when converting a path to a URL.
-    #[error("Failed to convert path to URL")]
-    PathToUrl,
+    #[error("Failed to convert path to URL: {path}", path = path.display().cyan())]
+    PathToUrl { path: Box<Path> },
     /// An error that occurs when converting a URL to a path
-    #[error("Failed to convert URL to path")]
-    UrlToPath,
+    #[error("Failed to convert URL to path: {url}", url = url.cyan())]
+    UrlToPath { url: DisplaySafeUrl },
     /// An error that occurs when multiple packages with the same
     /// name were found when identifying the root packages.
     #[error("Found multiple packages matching `{name}`", name = name.cyan())]
