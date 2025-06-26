@@ -378,7 +378,7 @@ To use it, add the index to your project:
 ```toml title="pyproject.toml"
 [[tool.uv.index]]
 name = "private-registry"
-url = "https://<organization>.jfrog.io/artifactory/api/pypi/pypi-general/simple"
+url = "https://<organization>.jfrog.io/artifactory/api/pypi/<repository>/simple"
 ```
 
 ### Authenticate with username and password
@@ -406,8 +406,8 @@ Add a `publish-url` to your index definition:
 ```toml title="pyproject.toml"
 [[tool.uv.index]]
 name = "private-registry"
-url = "https://<organization>.jfrog.io/artifactory/api/pypi/pypi-general/simple"
-publish-url = "https://<organization>.jfrog.io/artifactory/api/pypi/pypi-general-local"
+url = "https://<organization>.jfrog.io/artifactory/api/pypi/<repository>/simple"
+publish-url = "https://<organization>.jfrog.io/artifactory/api/pypi/<repository>"
 ```
 
 If you use the `-t "$JFROG_TOKEN"` parameter with JFrog, you will receive a 401 Unauthorized error
