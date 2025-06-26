@@ -12,12 +12,20 @@ uv supports all build backends (as specified by [PEP 517](https://peps.python.or
 also provides a native build backend (`uv_build`) that integrates tightly with uv to improve
 performance and user experience.
 
-## Using the uv build backend
+## Choosing a build backend
 
 !!! important
 
     The uv build backend currently **only supports pure Python code**. An alternative backend is to
     build a [library with extension modules](../concepts/projects/init.md#projects-with-extension-modules).
+
+The uv build backend comes with good defaults (no extra configuration to get started), it integrates
+tightly with uv, prevents mistakes and finally, it is extremely fast. While it supports a number of
+options for configuring your project structure, when build scripts or a more flexible project layout
+are required, consider using the
+[hatchling](https://hatch.pypa.io/latest/config/build/#build-system) build backend.
+
+## Using the uv build backend
 
 To use uv as a build backend in an existing project, add `uv_build` to the
 [`[build-system]`](../concepts/projects/config.md#build-systems) section in your `pyproject.toml`:
