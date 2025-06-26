@@ -4686,6 +4686,22 @@ fn run_groups_requires_python() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
+    // TMP: Attempt to catch this flake with verbose output
+    // See https://github.com/astral-sh/uv/issues/14160
+    let output = context
+        .run()
+        .arg("python")
+        .arg("-c")
+        .arg("import typing_extensions")
+        .arg("-vv")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Removed virtual environment"),
+        "{}",
+        stderr
+    );
+
     // Going back to just "dev" we shouldn't churn the venv needlessly
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("-c").arg("import typing_extensions"), @r"
