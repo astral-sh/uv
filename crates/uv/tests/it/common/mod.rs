@@ -13,7 +13,6 @@ use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
-use etcetera::BaseStrategy;
 use futures::StreamExt;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -417,15 +416,7 @@ impl TestContext {
     /// returns resolved symlink). This is problematic, as we _don't_ want to resolve symlinks
     /// for user-provided paths.
     pub fn test_bucket_dir() -> PathBuf {
-        env::var(EnvVars::UV_INTERNAL__TEST_DIR)
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                etcetera::base_strategy::choose_base_strategy()
-                    .expect("Failed to find base strategy")
-                    .data_dir()
-                    .join("uv")
-                    .join("tests")
-            })
+        std::env::temp_dir()
     }
 
     /// Create a new test context with multiple Python versions.
