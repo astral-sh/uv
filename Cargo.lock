@@ -4695,7 +4695,6 @@ dependencies = [
  "uv-client",
  "uv-configuration",
  "uv-console",
- "uv-dirs",
  "uv-dispatch",
  "uv-distribution",
  "uv-distribution-filename",
