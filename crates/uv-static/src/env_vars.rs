@@ -359,10 +359,6 @@ impl EnvVars {
     #[attr_hidden]
     pub const UV_INTERNAL__SHOW_DERIVATION_TREE: &'static str = "UV_INTERNAL__SHOW_DERIVATION_TREE";
 
-    /// Used to set a temporary directory for some tests.
-    #[attr_hidden]
-    pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
-
     /// Path to system-level configuration directory on Unix systems.
     pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";
 

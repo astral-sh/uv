@@ -4584,7 +4584,6 @@ dependencies = [
  "ctrlc",
  "dotenvy",
  "dunce",
- "etcetera",
  "filetime",
  "flate2",
  "fs-err 3.1.1",
