@@ -72,9 +72,7 @@ pub(crate) async fn pin(
             bail!("No Python version file found");
         };
 
-        if !global
-            && PythonVersionFile::new_global().is_some_and(|global| file.path() == global.path())
-        {
+        if !global && file.is_global() {
             bail!("No Python version file found; use `--rm --global` to remove the global pin");
         }
 
@@ -203,7 +201,7 @@ pub(crate) async fn pin(
     let existing = version_file.ok().flatten();
     // TODO(zanieb): Allow updating the discovered version file with an `--update` flag.
     let new = if global {
-        let Some(new) = PythonVersionFile::new_global() else {
+        let Some(new) = PythonVersionFile::global() else {
             // TODO(zanieb): We should find a nice way to surface that as an error
             bail!("Failed to determine directory for global Python pin");
         };
