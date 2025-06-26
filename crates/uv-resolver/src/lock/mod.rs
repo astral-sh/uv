@@ -2541,16 +2541,30 @@ impl Package {
                     .as_ref()
                     .expect("version for registry source");
 
-                let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
-                    name: name.clone(),
-                    version: version.clone(),
-                })?;
-                let file_path = workspace_root.join(path).join(file_path);
-                let file_url = DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
-                    LockErrorKind::PathToUrl {
-                        path: file_path.into_boxed_path(),
+                let file_url = match sdist {
+                    SourceDist::Url { url: file_url, .. } => {
+                        FileLocation::AbsoluteUrl(file_url.clone())
                     }
-                })?;
+                    SourceDist::Path {
+                        path: file_path, ..
+                    } => {
+                        let file_path = workspace_root.join(path).join(file_path);
+                        let file_url =
+                            DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
+                                LockErrorKind::PathToUrl {
+                                    path: file_path.into_boxed_path(),
+                                }
+                            })?;
+                        FileLocation::AbsoluteUrl(UrlString::from(file_url))
+                    }
+                    SourceDist::Metadata { .. } => {
+                        return Err(LockErrorKind::MissingPath {
+                            name: name.clone(),
+                            version: version.clone(),
+                        }
+                        .into());
+                    }
+                };
                 let filename = sdist
                     .filename()
                     .ok_or_else(|| LockErrorKind::MissingFilename {
@@ -2571,9 +2585,10 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
+                    url: file_url,
                     yanked: None,
                 });
+
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(workspace_root.join(path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
@@ -3688,14 +3703,6 @@ impl SourceDist {
         }
     }
 
-    fn path(&self) -> Option<&Path> {
-        match &self {
-            SourceDist::Metadata { .. } => None,
-            SourceDist::Url { .. } => None,
-            SourceDist::Path { path, .. } => Some(path),
-        }
-    }
-
     pub(crate) fn hash(&self) -> Option<&Hash> {
         match &self {
             SourceDist::Metadata { metadata } => metadata.hash.as_ref(),
@@ -3818,34 +3825,57 @@ impl SourceDist {
                 let index_path = path
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
-                let reg_dist_url = reg_dist
+                let url = reg_dist
                     .file
                     .url
                     .to_url()
                     .map_err(LockErrorKind::InvalidUrl)?;
-                let reg_dist_path = reg_dist_url
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: reg_dist_url })?;
-                let path = relative_to(&reg_dist_path, index_path)
-                    .or_else(|_| std::path::absolute(&reg_dist_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?
-                    .into_boxed_path();
-                let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
-                let size = reg_dist.file.size;
-                let upload_time = reg_dist
-                    .file
-                    .upload_time_utc_ms
-                    .map(Timestamp::from_millisecond)
-                    .transpose()
-                    .map_err(LockErrorKind::InvalidTimestamp)?;
-                Ok(Some(SourceDist::Path {
-                    path,
-                    metadata: SourceDistMetadata {
-                        hash,
-                        size,
-                        upload_time,
-                    },
-                }))
+
+                if url.scheme() == "file" {
+                    let reg_dist_path = url
+                        .to_file_path()
+                        .map_err(|()| LockErrorKind::UrlToPath { url })?;
+                    let path = relative_to(&reg_dist_path, index_path)
+                        .or_else(|_| std::path::absolute(&reg_dist_path))
+                        .map_err(LockErrorKind::DistributionRelativePath)?
+                        .into_boxed_path();
+                    let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
+                    let size = reg_dist.file.size;
+                    let upload_time = reg_dist
+                        .file
+                        .upload_time_utc_ms
+                        .map(Timestamp::from_millisecond)
+                        .transpose()
+                        .map_err(LockErrorKind::InvalidTimestamp)?;
+                    Ok(Some(SourceDist::Path {
+                        path,
+                        metadata: SourceDistMetadata {
+                            hash,
+                            size,
+                            upload_time,
+                        },
+                    }))
+                } else {
+                    let url = normalize_file_location(&reg_dist.file.url)
+                        .map_err(LockErrorKind::InvalidUrl)
+                        .map_err(LockError::from)?;
+                    let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
+                    let size = reg_dist.file.size;
+                    let upload_time = reg_dist
+                        .file
+                        .upload_time_utc_ms
+                        .map(Timestamp::from_millisecond)
+                        .transpose()
+                        .map_err(LockErrorKind::InvalidTimestamp)?;
+                    Ok(Some(SourceDist::Url {
+                        url,
+                        metadata: SourceDistMetadata {
+                            hash,
+                            size,
+                            upload_time,
+                        },
+                    }))
+                }
             }
         }
     }
@@ -4152,20 +4182,42 @@ impl Wheel {
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
                 let wheel_url = wheel.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                let wheel_path = wheel_url
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
-                let path = relative_to(&wheel_path, index_path)
-                    .or_else(|_| std::path::absolute(&wheel_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?
-                    .into_boxed_path();
-                Ok(Wheel {
-                    url: WheelWireSource::Path { path },
-                    hash: None,
-                    size: None,
-                    upload_time: None,
-                    filename,
-                })
+
+                if wheel_url.scheme() == "file" {
+                    let wheel_path = wheel_url
+                        .to_file_path()
+                        .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
+                    let path = relative_to(&wheel_path, index_path)
+                        .or_else(|_| std::path::absolute(&wheel_path))
+                        .map_err(LockErrorKind::DistributionRelativePath)?
+                        .into_boxed_path();
+                    Ok(Wheel {
+                        url: WheelWireSource::Path { path },
+                        hash: None,
+                        size: None,
+                        upload_time: None,
+                        filename,
+                    })
+                } else {
+                    let url = normalize_file_location(&wheel.file.url)
+                        .map_err(LockErrorKind::InvalidUrl)
+                        .map_err(LockError::from)?;
+                    let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+                    let size = wheel.file.size;
+                    let upload_time = wheel
+                        .file
+                        .upload_time_utc_ms
+                        .map(Timestamp::from_millisecond)
+                        .transpose()
+                        .map_err(LockErrorKind::InvalidTimestamp)?;
+                    Ok(Wheel {
+                        url: WheelWireSource::Url { url },
+                        hash,
+                        size,
+                        filename,
+                        upload_time,
+                    })
+                }
             }
         }
     }
@@ -4203,8 +4255,10 @@ impl Wheel {
 
         match source {
             RegistrySource::Url(url) => {
-                let file_url = match &self.url {
-                    WheelWireSource::Url { url } => url,
+                let file_location = match &self.url {
+                    WheelWireSource::Url { url: file_url } => {
+                        FileLocation::AbsoluteUrl(file_url.clone())
+                    }
                     WheelWireSource::Path { .. } | WheelWireSource::Filename { .. } => {
                         return Err(LockErrorKind::MissingUrl {
                             name: filename.name,
@@ -4220,7 +4274,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(file_url.clone()),
+                    url: file_location,
                     yanked: None,
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -4233,9 +4287,21 @@ impl Wheel {
                 })
             }
             RegistrySource::Path(index_path) => {
-                let file_path = match &self.url {
-                    WheelWireSource::Path { path } => path,
-                    WheelWireSource::Url { .. } | WheelWireSource::Filename { .. } => {
+                let file_location = match &self.url {
+                    WheelWireSource::Url { url: file_url } => {
+                        FileLocation::AbsoluteUrl(file_url.clone())
+                    }
+                    WheelWireSource::Path { path: file_path } => {
+                        let file_path = root.join(index_path).join(file_path);
+                        let file_url =
+                            DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
+                                LockErrorKind::PathToUrl {
+                                    path: file_path.into_boxed_path(),
+                                }
+                            })?;
+                        FileLocation::AbsoluteUrl(UrlString::from(file_url))
+                    }
+                    WheelWireSource::Filename { .. } => {
                         return Err(LockErrorKind::MissingPath {
                             name: filename.name,
                             version: filename.version,
@@ -4243,12 +4309,6 @@ impl Wheel {
                         .into());
                     }
                 };
-                let file_path = root.join(index_path).join(file_path);
-                let file_url = DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
-                    LockErrorKind::PathToUrl {
-                        path: file_path.into_boxed_path(),
-                    }
-                })?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename.to_string()),
@@ -4256,7 +4316,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
+                    url: file_location,
                     yanked: None,
                 });
                 let index = IndexUrl::from(
