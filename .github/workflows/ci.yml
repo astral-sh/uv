@@ -266,7 +266,7 @@ jobs:
     timeout-minutes: 15
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: depot-windows-2022-16
+    runs-on: github-windows-2025-x86_64-16
     name: "cargo test | windows"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
