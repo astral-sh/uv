@@ -5,9 +5,11 @@ use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+use console::Term;
 use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_configuration::PreviewMode;
@@ -53,6 +55,7 @@ pub(crate) fn create(
     prompt: Prompt,
     system_site_packages: bool,
     allow_existing: bool,
+    clear: bool,
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
@@ -83,10 +86,17 @@ pub(crate) fn create(
                     format!("File exists at `{}`", location.user_display()),
                 )));
             } else if metadata.is_dir() {
+                let confirmation_required = !clear && !allow_existing;
+                let confirmed_clear = confirmation_required && confirm_clear(location)?;
+
                 if allow_existing {
-                    debug!("Allowing existing directory");
-                } else if uv_fs::is_virtualenv_base(location) {
-                    debug!("Removing existing directory");
+                    debug!("Allowing existing directory due to `--allow-existing`");
+                } else if clear || confirmed_clear {
+                    if clear {
+                        debug!("Removing existing directory due to `--clear`");
+                    } else {
+                        debug!("Removing existing directory");
+                    }
 
                     // On Windows, if the current executable is in the directory, guard against
                     // self-deletion.
@@ -110,8 +120,12 @@ pub(crate) fn create(
                     return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
                         format!(
-                            "The directory `{}` exists, but it's not a virtual environment",
-                            location.user_display()
+                            "The directory `{}` exists. \n\n{}{} Use `{}` to remove the directory first or `{}` to write to the directory without clearing",
+                            location.user_display(),
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            "--clear".green(),
+                            "--allow-existing".green(),
                         ),
                     )));
                 }
@@ -462,6 +476,19 @@ pub(crate) fn create(
         executable,
         base_executable: base_python,
     })
+}
+
+fn confirm_clear(location: &Path) -> Result<bool, io::Error> {
+    let term = Term::stderr();
+    if term.is_term() {
+        let prompt = format!(
+            "The directory `{}` exists. Did you mean to clear its contents (`--clear`)?",
+            location.user_display(),
+        );
+        uv_console::confirm(&prompt, &term, true)
+    } else {
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

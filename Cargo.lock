@@ -5996,13 +5996,16 @@ version = "0.7.20"
 name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
+ "console",
  "fs-err 3.1.1",
  "itertools 0.14.0",
+ "owo-colors",
  "pathdiff",
  "self-replace",
  "thiserror 2.0.12",
  "tracing",
  "uv-configuration",
+ "uv-console",
  "uv-fs",
  "uv-pypi-types",
  "uv-python",

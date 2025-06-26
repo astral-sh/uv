@@ -21,14 +21,17 @@ workspace = true
 
 [dependencies]
 uv-configuration = { workspace = true }
+uv-console = { workspace = true }
 uv-fs = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-shell = { workspace = true }
 uv-version = { workspace = true }
 
+console = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
+owo-colors = { workspace = true }
 pathdiff = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
