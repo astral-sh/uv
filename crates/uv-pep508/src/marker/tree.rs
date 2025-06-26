@@ -236,20 +236,22 @@ impl MarkerOperator {
     }
 
     /// Inverts this marker operator.
-    pub(crate) fn invert(self) -> MarkerOperator {
-        match self {
+    ///
+    /// `~=` has no inverse.
+    pub(crate) fn invert(self) -> Option<MarkerOperator> {
+        Some(match self {
             Self::LessThan => Self::GreaterThan,
             Self::LessEqual => Self::GreaterEqual,
             Self::GreaterThan => Self::LessThan,
             Self::GreaterEqual => Self::LessEqual,
             Self::Equal => Self::Equal,
             Self::NotEqual => Self::NotEqual,
-            Self::TildeEqual => Self::TildeEqual,
+            Self::TildeEqual => return None,
             Self::In => Self::Contains,
             Self::NotIn => Self::NotContains,
             Self::Contains => Self::In,
             Self::NotContains => Self::NotIn,
-        }
+        })
     }
 
     /// Negates this marker operator.
@@ -481,6 +483,10 @@ pub enum MarkerExpression {
         key: MarkerValueVersion,
         specifier: VersionSpecifier,
     },
+    VersionInvertedTilde {
+        key: MarkerValueVersion,
+        specifier: VersionSpecifier,
+    },
     /// A version in list expression, e.g. `<version key> in <quoted list of PEP 440 versions>`.
     ///
     /// A special case of [`MarkerExpression::String`] with the [`MarkerOperator::In`] operator for
@@ -514,6 +520,8 @@ pub enum MarkerExpression {
 pub(crate) enum MarkerExpressionKind {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
     Version(MarkerValueVersion),
+    /// An inverted tilde-equal version expression, e.g. `<version key> ~= <quoted PEP 440 version>`.
+    VersionInvertedTilde(MarkerValueVersion),
     /// A version "in" expression, e.g. `<version key> in <quoted list of PEP 440 versions>`.
     VersionIn(MarkerValueVersion),
     /// A string marker comparison, e.g. `sys_platform == '...'`.
@@ -597,6 +605,9 @@ impl MarkerExpression {
     pub(crate) fn kind(&self) -> MarkerExpressionKind {
         match self {
             MarkerExpression::Version { key, .. } => MarkerExpressionKind::Version(*key),
+            MarkerExpression::VersionInvertedTilde { key, .. } => {
+                MarkerExpressionKind::VersionInvertedTilde(*key)
+            }
             MarkerExpression::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
             MarkerExpression::String { key, .. } => MarkerExpressionKind::String(*key),
             MarkerExpression::Extra { .. } => MarkerExpressionKind::Extra,
@@ -614,6 +625,10 @@ impl Display for MarkerExpression {
                     return write!(f, "{key} {op} '{version}.*'");
                 }
                 write!(f, "{key} {op} '{version}'")
+            }
+            MarkerExpression::VersionInvertedTilde { key, specifier } => {
+                let (op, version) = (specifier.operator(), specifier.version());
+                write!(f, "'{version}' {op} {key}")
             }
             MarkerExpression::VersionIn {
                 key,
@@ -633,7 +648,8 @@ impl Display for MarkerExpression {
                     operator,
                     MarkerOperator::Contains | MarkerOperator::NotContains
                 ) {
-                    return write!(f, "'{value}' {} {key}", operator.invert());
+                    // Unwrap safety: The conditional above.
+                    return write!(f, "'{value}' {} {key}", operator.invert().unwrap());
                 }
 
                 write!(f, "{key} {operator} '{value}'")
@@ -2611,7 +2627,7 @@ mod test {
         );
         assert_eq!(
             m("'3.6' ~= python_version").negate(),
-            m("python_version < '3.6' or python_version != '3.*'")
+            m("python_full_version < '3' or python_full_version >= '3.7'")
         );
         assert_eq!(
             m("python_version ~= '3.6.2'").negate(),
@@ -3343,5 +3359,75 @@ mod test {
         let left = left_tree.try_to_string().unwrap();
         let right = "python_full_version == '3.0.*'";
         assert_eq!(left, right, "{left} != {right}");
+    }
+
+    #[test]
+    fn test_tilde_equal_normalization() {
+        let marker1 = MarkerTree::from_str("python_version ~= '3.10.0'").unwrap();
+        let marker2 =
+            MarkerTree::from_str("python_version >= '3.10.0' and python_version < '3.11.0'")
+                .unwrap();
+        assert_eq!(marker1, marker2);
+
+        // Two digit versions such as `python_version` get padded with a zero, so they can never
+        // match
+        let marker1 = MarkerTree::from_str("python_version ~= '3.10.1'").unwrap();
+        let marker2 = MarkerTree::FALSE;
+        assert_eq!(marker1, marker2);
+
+        let marker1 = MarkerTree::from_str("python_version ~= '3.10'").unwrap();
+        let marker2 =
+            MarkerTree::from_str("python_version >= '3.10' and python_version < '4.0'").unwrap();
+        assert_eq!(marker1, marker2);
+
+        let marker1 = MarkerTree::from_str("python_full_version ~= '3.10.0'").unwrap();
+        let marker2 = MarkerTree::from_str(
+            "python_full_version >= '3.10.0' and python_full_version < '3.11.0'",
+        )
+        .unwrap();
+        assert_eq!(marker1, marker2);
+
+        let marker1 = MarkerTree::from_str("python_full_version ~= '3.10'").unwrap();
+        let marker2 =
+            MarkerTree::from_str("python_full_version >= '3.10' and python_full_version < '4.0'")
+                .unwrap();
+        assert_eq!(marker1, marker2);
+    }
+
+    #[test]
+    fn test_tilde_equal_inverted_normalization() {
+        let marker1 = MarkerTree::from_str("'3.0' ~= python_version").unwrap();
+        let marker2 =
+            MarkerTree::from_str("python_version >= '3' and python_version <= '3.0'").unwrap();
+        assert_eq!(marker1, marker2);
+
+        let marker1 = MarkerTree::from_str("'3.10' ~= python_version").unwrap();
+        let marker2 =
+            MarkerTree::from_str("python_version >= '3' and python_version <= '3.10'").unwrap();
+        assert_eq!(marker1, marker2);
+
+        let marker1 = MarkerTree::from_str("'3.10.0' ~= python_version").unwrap();
+        let marker2 =
+            MarkerTree::from_str("python_version >= '3' and python_version <= '3.10'").unwrap();
+        assert_eq!(marker1, marker2);
+
+        let marker1 = MarkerTree::from_str("'3.10' ~= python_full_version").unwrap();
+        let marker2 = MarkerTree::from_str(
+            "python_full_version < '3.11' and python_full_version >= '3.10.0'",
+        )
+        .unwrap();
+        assert_eq!(marker1, marker2);
+
+        let marker1 = MarkerTree::from_str("'3.10.10' ~= python_full_version").unwrap();
+        let marker2 = MarkerTree::from_str(
+            "python_full_version < '3.11' and python_full_version >= '3.10.0'",
+        )
+        .unwrap();
+        assert_eq!(marker1, marker2);
+
+        assert_simplifies(
+            "python_version == '3.0.*'",
+            "python_full_version == '3.0.*'",
+        );
     }
 }

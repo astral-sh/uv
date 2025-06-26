@@ -47,6 +47,7 @@
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::hash::Hash;
 use std::ops::Bound;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
@@ -179,6 +180,57 @@ impl InternerGuard<'_> {
                         ),
                         Err(node) => return node,
                     }
+                }
+            },
+            MarkerExpression::VersionInvertedTilde { key, specifier } => match key {
+                MarkerValueVersion::ImplementationVersion => {
+                    // The number of segments in the implementation version is unknown and may
+                    // only be a single one not support with tilde equal
+                    return NodeId::FALSE;
+                }
+                MarkerValueVersion::PythonFullVersion => {
+                    // Given `3.10 ~= python_full_version`,
+                    // which matches for 3.10.0, 3.10.1, ... it becomes
+                    // `python_full_version < 3.11 and python_version >= 3.10`
+                    let major = specifier.version().release().first().copied().unwrap_or(0);
+                    let minor = specifier.version().release().get(1).copied().unwrap_or(0);
+                    let upper_bound = Version::new([major, minor + 1, 0]);
+                    let lower_bound = if minor == 0 {
+                        Version::new([major])
+                    } else {
+                        Version::new([major, minor])
+                    };
+                    let ranges = release_specifier_to_range(VersionSpecifier::less_than_version(
+                        upper_bound,
+                    ))
+                    .intersection(&release_specifier_to_range(
+                        VersionSpecifier::greater_than_equal_version(lower_bound),
+                    ));
+                    (
+                        Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                        Edges::from_version_ranges(&ranges),
+                    )
+                }
+                // Normalize `python_version` markers to `python_full_version` nodes.
+                MarkerValueVersion::PythonVersion => {
+                    // Given `3.10 ~= python_version`,
+                    // which matches for 3.0, 3.1, ..., 3.9, 3.10, it becomes
+                    // `python_full_version < 3.11 and python_version >= 3`
+                    let major = specifier.version().release().first().copied().unwrap_or(0);
+                    let minor = specifier.version().release().get(1).copied().unwrap_or(0);
+                    let upper_bound = Version::new([major, minor + 1]);
+                    let lower_bound = Version::new([major]);
+                    let ranges = release_specifier_to_range(VersionSpecifier::less_than_version(
+                        upper_bound,
+                    ))
+                    .intersection(&release_specifier_to_range(
+                        VersionSpecifier::greater_than_equal_version(lower_bound),
+                    ));
+
+                    (
+                        Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                        Edges::from_version_ranges(&ranges),
+                    )
                 }
             },
             // A variable representing the output of a version key. Edges correspond
@@ -701,7 +753,7 @@ impl InternerGuard<'_> {
         if matches!(i, NodeId::TRUE) {
             let var = Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion);
             let edges = Edges::Version {
-                edges: Edges::from_range(&py_range),
+                edges: Edges::from_ranges(&py_range),
             };
             return self.create_node(var, edges).negate(i);
         }
@@ -1208,15 +1260,21 @@ impl Edges {
         };
 
         Edges::String {
-            edges: Edges::from_range(&range),
+            edges: Edges::from_ranges(&range),
         }
     }
 
-    /// Returns the [`Edges`] for a version specifier.
+    /// Returns the [`Edges`] for a version r.
     fn from_specifier(specifier: VersionSpecifier) -> Edges {
         let specifier = release_specifier_to_range(normalize_specifier(specifier));
         Edges::Version {
-            edges: Edges::from_range(&specifier),
+            edges: Edges::from_ranges(&specifier),
+        }
+    }
+
+    fn from_version_ranges(ranges: &Ranges<Version>) -> Edges {
+        Edges::Version {
+            edges: Edges::from_ranges(ranges),
         }
     }
 
@@ -1239,7 +1297,7 @@ impl Edges {
         }
 
         Ok(Edges::Version {
-            edges: Edges::from_range(&range),
+            edges: Edges::from_ranges(&range),
         })
     }
 
@@ -1260,25 +1318,25 @@ impl Edges {
         }
 
         Edges::Version {
-            edges: Edges::from_range(&range),
+            edges: Edges::from_ranges(&range),
         }
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_range<T>(range: &Ranges<T>) -> SmallVec<(Ranges<T>, NodeId)>
+    fn from_ranges<T>(ranges: &Ranges<T>) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Ord + Clone,
     {
         let mut edges = SmallVec::new();
 
         // Add the `true` edges.
-        for (start, end) in range.iter() {
+        for (start, end) in ranges.iter() {
             let range = Ranges::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::TRUE));
         }
 
         // Add the `false` edges.
-        for (start, end) in range.complement().iter() {
+        for (start, end) in ranges.complement().iter() {
             let range = Ranges::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::FALSE));
         }
@@ -1553,8 +1611,12 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     // distinction between versions like `3.9` and `3.9.0`. Otherwise, their output would depend on
     // which form was added to the global marker interner first.
     //
-    // Note that we cannot strip trailing `0`s for star equality, as `==3.0.*` is different from `==3.*`.
-    if !operator.is_star() {
+    // Note that we cannot strip trailing `0`s for star and tilde equality, as `==3.0.*` is
+    // different from `==3.*`, and `~=3.10` is different from `~3.10.1`.
+    if !matches!(
+        operator,
+        Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual
+    ) {
         if let Some(end) = release.iter().rposition(|segment| *segment != 0) {
             if end > 0 {
                 release = &release[..=end];
@@ -1590,10 +1652,10 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
     // result in a `python_version` marker of `3.7`. For this reason, we must consider the range
     // of values that would satisfy a `python_version` specifier when truncated in order to transform
     // the specifier into its `python_full_version` equivalent.
-    if let Some((major, minor)) = major_minor {
+    let specifier = if let Some((major, minor)) = major_minor {
         let version = Version::new([major, minor]);
 
-        Ok(match specifier.operator() {
+        match specifier.operator() {
             // `python_version == 3.7` is equivalent to `python_full_version == 3.7.*`.
             Operator::Equal | Operator::ExactEqual => {
                 VersionSpecifier::equals_star_version(version)
@@ -1616,17 +1678,34 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
 
             // `==3.7.*`, `!=3.7.*`, `~=3.7` already represent the equivalent `python_full_version`
             // comparison.
-            Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => specifier,
-        })
+            Operator::EqualStar | Operator::NotEqualStar => specifier,
+            Operator::TildeEqual => specifier,
+        }
     } else {
         let [major, minor, ..] = *specifier.version().release() else {
             unreachable!()
         };
 
-        Ok(match specifier.operator() {
+        match specifier.operator() {
             // `python_version` cannot have more than two release segments, so equality is impossible.
-            Operator::Equal | Operator::ExactEqual | Operator::EqualStar | Operator::TildeEqual => {
+            Operator::Equal | Operator::ExactEqual | Operator::EqualStar => {
                 return Err(NodeId::FALSE);
+            }
+
+            // For `python_version ~= "3.11.4"`, 3.11 would never match but 3.11.5 would.
+            // Only `python_version` where the remaining digits are zero can match, e.g.
+            // `python_version ~= "3.11.0"`.
+            Operator::TildeEqual => {
+                if specifier
+                    .version()
+                    .release()
+                    .iter()
+                    .skip(2)
+                    .any(|segment| *segment > 0)
+                {
+                    return Err(NodeId::FALSE);
+                }
+                specifier
             }
 
             // Similarly, inequalities are always `true`.
@@ -1641,8 +1720,10 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
             Operator::GreaterThan | Operator::GreaterThanEqual => {
                 VersionSpecifier::greater_than_equal_version(Version::new([major, minor + 1]))
             }
-        })
-    }
+        }
+    };
+
+    Ok(specifier)
 }
 
 /// Compares the start of two ranges that are known to be disjoint.

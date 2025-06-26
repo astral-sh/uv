@@ -417,6 +417,10 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
                     .negate()
                     .is_some_and(|negated| negated == *specifier2.operator())
         }
+        MarkerExpression::VersionInvertedTilde { .. } => {
+            // The inversion is not a single expression.
+            false
+        }
         MarkerExpression::VersionIn {
             key,
             versions,
