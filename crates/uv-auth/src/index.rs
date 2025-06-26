@@ -86,7 +86,7 @@ impl Indexes {
         Self(FxHashSet::default())
     }
 
-    /// Create a new [`AuthIndexUrls`] from an iterator of [`AuthIndexUrl`]s.
+    /// Create a new [`Indexes`] instance from an iterator of [`Index`]s.
     pub fn from_indexes(urls: impl IntoIterator<Item = Index>) -> Self {
         let mut index_urls = Self::new();
         for url in urls {
