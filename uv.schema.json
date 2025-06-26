@@ -2062,7 +2062,7 @@
           "const": "i686-pc-windows-msvc"
         },
         {
-          "description": "An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.",
+          "description": "An x86 Linux target. Equivalent to `x86_64-manylinux_2_28`.",
           "type": "string",
           "const": "x86_64-unknown-linux-gnu"
         },
@@ -2077,7 +2077,7 @@
           "const": "x86_64-apple-darwin"
         },
         {
-          "description": "An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_17`.",
+          "description": "An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_28`.",
           "type": "string",
           "const": "aarch64-unknown-linux-gnu"
         },

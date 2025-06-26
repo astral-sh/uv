@@ -14823,7 +14823,7 @@ fn invalid_platform() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--python-platform")
-        .arg("linux")
+        .arg("x86_64-manylinux_2_17")
         .arg("requirements.in"), @r"
     success: false
     exit_code: 1
