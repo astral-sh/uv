@@ -45,6 +45,7 @@ jobs:
     name: plan
     runs-on: ubuntu-latest
     outputs:
+      login: ${{ steps.plan.outputs.login }}
       push: ${{ steps.plan.outputs.push }}
       tag: ${{ steps.plan.outputs.tag }}
       action: ${{ steps.plan.outputs.action }}
@@ -53,13 +54,16 @@ jobs:
         env:
           DRY_RUN: ${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
           TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag }}
+          IS_LOCAL_PR: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         id: plan
         run: |
           if [ "${{ env.DRY_RUN }}" == "false" ]; then
+            echo "login=true" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"
             echo "tag=${{ env.TAG }}" >> "$GITHUB_OUTPUT"
             echo "action=build and publish" >> "$GITHUB_OUTPUT"
           else
+            echo "login=${{ env.IS_LOCAL_PR }}" >> "$GITHUB_OUTPUT"
             echo "push=false" >> "$GITHUB_OUTPUT"
             echo "tag=dry-run" >> "$GITHUB_OUTPUT"
             echo "action=build" >> "$GITHUB_OUTPUT"
@@ -90,6 +94,7 @@ jobs:
 
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
@@ -195,6 +200,7 @@ jobs:
     steps:
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
