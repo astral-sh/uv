@@ -14,7 +14,7 @@ pub fn flag(yes: bool, no: bool) -> Option<bool> {
         (true, false) => Some(true),
         (false, true) => Some(false),
         (false, false) => None,
-        (..) => unreachable!("Clap should make this impossible"),
+        (true, true) => None,
     }
 }
 
