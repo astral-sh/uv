@@ -56,7 +56,8 @@ DEFAULT_TIMEOUT = 30
 DEFAULT_PKG_NAME = "astral-registries-test-pkg"
 
 KNOWN_REGISTRIES = [
-    "artifactory",
+    # TODO(john): Restore this when subscription starts up again
+    # "artifactory",
     "azure",
     "aws",
     "cloudsmith",
