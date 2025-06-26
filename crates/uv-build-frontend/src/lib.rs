@@ -334,6 +334,7 @@ impl SourceBuild {
                 uv_virtualenv::Prompt::None,
                 false,
                 false,
+                true,
                 false,
                 false,
                 false,

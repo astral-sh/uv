@@ -9595,6 +9595,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     context
         .venv()
         .arg(context.venv.as_os_str())
+        .arg("--clear")
         .arg("--python")
         .arg("3.12")
         .assert()
