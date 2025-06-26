@@ -8173,6 +8173,8 @@ fn sync_dry_run() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    // TMP: Attempt to catch this flake with verbose output
+    // See https://github.com/astral-sh/uv/issues/13744
     let output = context.sync().arg("--dry-run").arg("-vv").output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -8180,6 +8182,19 @@ fn sync_dry_run() -> Result<()> {
         "{}",
         stderr
     );
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Audited 1 package in [TIME]
+    Would make no changes
+    ");
 
     Ok(())
 }
