@@ -384,7 +384,7 @@ fn show_editable() -> Result<()> {
     context
         .pip_install()
         .arg("-e")
-        .arg("../../scripts/packages/poetry_editable")
+        .arg("../../scripts/packages/flit_editable")
         .current_dir(current_dir()?)
         .env(
             EnvVars::CARGO_TARGET_DIR,
@@ -394,19 +394,19 @@ fn show_editable() -> Result<()> {
         .success();
 
     uv_snapshot!(context.filters(), context.pip_show()
-        .arg("poetry-editable"), @r###"
+        .arg("flit-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Name: poetry-editable
+    Name: flit-editable
     Version: 0.1.0
     Location: [SITE_PACKAGES]/
-    Editable project location: [WORKSPACE]/scripts/packages/poetry_editable
-    Requires: anyio
+    Editable project location: [WORKSPACE]/scripts/packages/flit_editable
+    Requires:
     Required-by:
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
