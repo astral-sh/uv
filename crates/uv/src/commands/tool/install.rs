@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -48,7 +48,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
-    mut with_executables_from: BTreeSet<PackageName>,
+    mut with_executables_from: Vec<PackageName>,
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
@@ -601,7 +601,7 @@ pub(crate) async fn install(
         }
     };
 
-    with_executables_from.insert(package_name.clone());
+    with_executables_from.push(package_name.clone());
 
     finalize_tool_install(
         &environment,

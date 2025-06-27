@@ -1,7 +1,7 @@
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 use tracing::debug;
@@ -376,12 +376,12 @@ async fn upgrade_tool(
         // existing executables.
         remove_entrypoints(&existing_tool_receipt);
 
-        let mut entrypoints: BTreeSet<_> = existing_tool_receipt
+        let mut entrypoints: Vec<_> = existing_tool_receipt
             .entrypoints()
             .iter()
             .filter_map(|entry| PackageName::from_str(entry.from.as_ref()?).ok())
             .collect();
-        entrypoints.insert(name.clone());
+        entrypoints.push(name.clone());
 
         // If we modified the target tool, reinstall the entrypoints.
         finalize_tool_install(
