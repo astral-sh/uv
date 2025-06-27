@@ -146,6 +146,7 @@ pub(crate) async fn publish(
         info!("Upload succeeded");
 
         if uploaded {
+            write!(printer.stderr(), "\x1b[1A\x1b[2K")?;
             writeln!(
                 printer.stderr(),
                 "{} {filename} {}",
