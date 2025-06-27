@@ -1213,6 +1213,69 @@ impl SentinelRange<'_> {
     }
 }
 
+/// A prefix match, e.g., `==2.4.*`, which is desugared to a range like `>=2.4.dev0,<2.5.dev0`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PrefixMatch<'a> {
+    version: &'a Version,
+}
+
+impl<'a> PrefixMatch<'a> {
+    /// Determine whether a given range is equivalent to a prefix match (e.g., `==2.4.*`).
+    ///
+    /// Prefix matches are desugared to (e.g.) `>=2.4.dev0,<2.5.dev0`, but we want to render them
+    /// as `==2.4.*` in error messages.
+    pub(crate) fn from_range(lower: &'a Bound<Version>, upper: &'a Bound<Version>) -> Option<Self> {
+        let Bound::Included(lower) = lower else {
+            return None;
+        };
+        let Bound::Excluded(upper) = upper else {
+            return None;
+        };
+        if lower.is_pre() || lower.is_post() || lower.is_local() {
+            return None;
+        }
+        if upper.is_pre() || upper.is_post() || upper.is_local() {
+            return None;
+        }
+        if lower.dev() != Some(0) {
+            return None;
+        }
+        if upper.dev() != Some(0) {
+            return None;
+        }
+        if lower.release().len() != upper.release().len() {
+            return None;
+        }
+
+        // All segments should be the same, except the last one, which should be incremented.
+        let num_segments = lower.release().len();
+        for (i, (lower, upper)) in lower
+            .release()
+            .iter()
+            .zip(upper.release().iter())
+            .enumerate()
+        {
+            if i == num_segments - 1 {
+                if lower + 1 != *upper {
+                    return None;
+                }
+            } else {
+                if lower != upper {
+                    return None;
+                }
+            }
+        }
+
+        Some(PrefixMatch { version: lower })
+    }
+}
+
+impl std::fmt::Display for PrefixMatch<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "=={}.*", self.version.only_release())
+    }
+}
+
 #[derive(Debug)]
 pub struct NoSolutionHeader {
     /// The [`ResolverEnvironment`] that caused the failure.
