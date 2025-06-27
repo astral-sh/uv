@@ -967,6 +967,31 @@ impl InterpreterInfo {
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
+        // Provide a better error message if the link is broken or the file does not exist. Since
+        // `canonicalize_executable` does not resolve the file on Windows, we must re-use this logic
+        // for the subsequent metadata read as we may not have actually resolved the path.
+        let handle_io_error = |err: io::Error| -> Error {
+            if err.kind() == io::ErrorKind::NotFound {
+                // Check if it looks like a venv interpreter where the underlying Python
+                // installation was removed.
+                if absolute
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.is_symlink())
+                {
+                    Error::BrokenSymlink(BrokenSymlink {
+                        path: executable.to_path_buf(),
+                        venv: uv_fs::is_virtualenv_executable(executable),
+                    })
+                } else {
+                    Error::NotFound(executable.to_path_buf())
+                }
+            } else {
+                err.into()
+            }
+        };
+
+        let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -977,33 +1002,17 @@ impl InterpreterInfo {
                 sys_info::os_release().unwrap_or_default(),
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
-            // paths. But we don't to query the executable with symbolic links resolved.
-            format!("{}.msgpack", cache_digest(&absolute)),
+            // paths. But we don't to query the executable with symbolic links resolved. We include
+            // the canonical path in the cache entry as well, otherwise we can have cache collisions
+            // if an absolute path refers to different interpreters with matching ctimes, e.g., if
+            // you have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+            // modified at the same time.
+            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
-        let modified = canonicalize_executable(&absolute)
-            .and_then(Timestamp::from_path)
-            .map_err(|err| {
-                if err.kind() == io::ErrorKind::NotFound {
-                    // Check if it looks like a venv interpreter where the underlying Python
-                    // installation was removed.
-                    if absolute
-                        .symlink_metadata()
-                        .is_ok_and(|metadata| metadata.is_symlink())
-                    {
-                        Error::BrokenSymlink(BrokenSymlink {
-                            path: executable.to_path_buf(),
-                            venv: uv_fs::is_virtualenv_executable(executable),
-                        })
-                    } else {
-                        Error::NotFound(executable.to_path_buf())
-                    }
-                } else {
-                    err.into()
-                }
-            })?;
+        let modified = Timestamp::from_path(canonical).map_err(handle_io_error)?;
 
         // Read from the cache.
         if cache
