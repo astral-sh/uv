@@ -166,7 +166,7 @@ impl UrlString {
     pub fn without_fragment(&self) -> Cow<'_, Self> {
         self.as_ref()
             .split_once('#')
-            .map(|(path, _)| url_string_cow_from_str(path))
+            .map(|(path, _)| Cow::Owned(UrlString(SmallString::from(path))))
             .unwrap_or(Cow::Borrowed(self))
     }
 
@@ -175,7 +175,7 @@ impl UrlString {
     pub fn without_trailing_slash(&self) -> Cow<'_, Self> {
         self.as_ref()
             .strip_suffix('/')
-            .map(url_string_cow_from_str)
+            .map(|path| Cow::Owned(UrlString(SmallString::from(path))))
             .unwrap_or(Cow::Borrowed(self))
     }
 }
@@ -202,10 +202,6 @@ impl Display for UrlString {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
     }
-}
-
-fn url_string_cow_from_str(path: &str) -> Cow<'_, UrlString> {
-    Cow::Owned(UrlString(SmallString::from(path)))
 }
 
 /// An error that occurs when a [`FileLocation`] is not a valid URL.
