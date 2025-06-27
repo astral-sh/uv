@@ -264,6 +264,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 concurrency,
                 cache,
+                &workspace_cache,
                 printer,
                 preview,
             )
@@ -309,6 +310,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 installer_metadata,
                 concurrency,
                 cache,
+                workspace_cache.clone(),
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -407,7 +409,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     concurrency,
                     cache,
-                    workspace_cache,
+                    workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -465,7 +467,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     };
 
     // Discover and sync the base environment.
-    let workspace_cache = WorkspaceCache::default();
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -721,6 +722,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     concurrency,
                     cache,
+                    &workspace_cache,
                     printer,
                     preview,
                 )
@@ -807,6 +809,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     concurrency,
                     cache,
+                    workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
                     preview,

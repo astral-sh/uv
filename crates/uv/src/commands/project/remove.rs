@@ -302,6 +302,7 @@ pub(crate) async fn remove(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -357,6 +358,7 @@ pub(crate) async fn remove(
         installer_metadata,
         concurrency,
         cache,
+        WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,

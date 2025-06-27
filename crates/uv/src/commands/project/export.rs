@@ -193,6 +193,7 @@ pub(crate) async fn export(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )

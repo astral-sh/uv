@@ -853,6 +853,7 @@ async fn lock_and_sync(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -974,6 +975,7 @@ async fn lock_and_sync(
                 Box::new(SummaryResolveLogger),
                 concurrency,
                 cache,
+                &WorkspaceCache::default(),
                 printer,
                 preview,
             )
@@ -1021,6 +1023,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
+        WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,

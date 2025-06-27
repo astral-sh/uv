@@ -146,6 +146,7 @@ pub(crate) async fn tree(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
