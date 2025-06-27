@@ -1490,7 +1490,11 @@ impl Lock {
                                 .version
                                 .as_ref()
                                 .expect("version for registry source");
-                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
+                            return Ok(SatisfiesResult::MissingRemoteIndex(
+                                name,
+                                version,
+                                url.into_owned(),
+                            ));
                         }
                     }
                     RegistrySource::Path(path) => {
@@ -4692,7 +4696,7 @@ impl From<Hash> for Hashes {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.without_fragment()),
+        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.without_fragment().into_owned()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }
