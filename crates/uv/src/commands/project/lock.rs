@@ -199,6 +199,7 @@ pub(crate) async fn lock(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -263,6 +264,7 @@ pub(super) struct LockOperation<'env> {
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
     cache: &'env Cache,
+    workspace_cache: &'env WorkspaceCache,
     printer: Printer,
     preview: PreviewMode,
 }
@@ -277,6 +279,7 @@ impl<'env> LockOperation<'env> {
         logger: Box<dyn ResolveLogger>,
         concurrency: Concurrency,
         cache: &'env Cache,
+        workspace_cache: &'env WorkspaceCache,
         printer: Printer,
         preview: PreviewMode,
     ) -> Self {
@@ -289,6 +292,7 @@ impl<'env> LockOperation<'env> {
             logger,
             concurrency,
             cache,
+            workspace_cache,
             printer,
             preview,
         }
@@ -334,6 +338,7 @@ impl<'env> LockOperation<'env> {
                     self.logger,
                     self.concurrency,
                     self.cache,
+                    self.workspace_cache,
                     self.printer,
                     self.preview,
                 )
@@ -372,6 +377,7 @@ impl<'env> LockOperation<'env> {
                     self.logger,
                     self.concurrency,
                     self.cache,
+                    self.workspace_cache,
                     self.printer,
                     self.preview,
                 )
@@ -402,6 +408,7 @@ async fn do_lock(
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<LockResult, ProjectError> {
@@ -654,8 +661,6 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
-    let workspace_cache = WorkspaceCache::default();
-
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -674,7 +679,7 @@ async fn do_lock(
         &build_hasher,
         *exclude_newer,
         *sources,
-        workspace_cache,
+        workspace_cache.clone(),
         concurrency,
         preview,
     );

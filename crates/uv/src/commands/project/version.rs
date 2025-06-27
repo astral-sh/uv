@@ -315,6 +315,7 @@ async fn print_frozen_version(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -443,6 +444,7 @@ async fn lock_and_sync(
 
     // Initialize any shared state.
     let state = UniversalState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     // Lock and sync the environment, if necessary.
     let lock = match project::lock::LockOperation::new(
@@ -453,6 +455,7 @@ async fn lock_and_sync(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -510,6 +513,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
+        workspace_cache,
         DryRun::Disabled,
         printer,
         preview,
