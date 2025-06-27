@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
@@ -160,27 +161,22 @@ impl UrlString {
             .unwrap_or(self.as_ref())
     }
 
-    /// Return the [`UrlString`] with any fragments removed.
+    /// Return the [`UrlString`] (as a [`Cow`]) with any fragments removed.
     #[must_use]
-    pub fn without_fragment(&self) -> Self {
-        Self(
-            self.as_ref()
-                .split_once('#')
-                .map(|(path, _)| path)
-                .map(SmallString::from)
-                .unwrap_or_else(|| self.0.clone()),
-        )
+    pub fn without_fragment(&self) -> Cow<'_, Self> {
+        self.as_ref()
+            .split_once('#')
+            .map(|(path, _)| url_string_cow_from_str(path))
+            .unwrap_or(Cow::Borrowed(self))
     }
 
-    /// Return the [`UrlString`] with trailing slash removed.
+    /// Return the [`UrlString`] (as a [`Cow`]) with trailing slash removed.
     #[must_use]
-    pub fn without_trailing_slash(&self) -> Self {
-        Self(
-            self.as_ref()
-                .strip_suffix('/')
-                .map(SmallString::from)
-                .unwrap_or_else(|| self.0.clone()),
-        )
+    pub fn without_trailing_slash(&self) -> Cow<'_, Self> {
+        self.as_ref()
+            .strip_suffix('/')
+            .map(url_string_cow_from_str)
+            .unwrap_or(Cow::Borrowed(self))
     }
 }
 
@@ -206,6 +202,10 @@ impl Display for UrlString {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
     }
+}
+
+fn url_string_cow_from_str(path: &str) -> Cow<'_, UrlString> {
+    Cow::Owned(UrlString(SmallString::from(path)))
 }
 
 /// An error that occurs when a [`FileLocation`] is not a valid URL.
@@ -263,16 +263,29 @@ mod tests {
 
     #[test]
     fn without_fragment() {
+        // Borrows a URL without a fragment
+        let url = UrlString("https://example.com/path".into());
+        assert_eq!(url.without_fragment(), Cow::Borrowed(&url));
+
+        // Removes the fragment if present on the URL
         let url = UrlString("https://example.com/path?query#fragment".into());
         assert_eq!(
             url.without_fragment(),
-            UrlString("https://example.com/path?query".into())
+            Cow::Owned(UrlString("https://example.com/path?query".into()))
         );
+    }
 
-        let url = UrlString("https://example.com/path#fragment".into());
-        assert_eq!(url.base_str(), "https://example.com/path");
-
+    #[test]
+    fn without_trailing_slash() {
+        // Borrows a URL without a slash
         let url = UrlString("https://example.com/path".into());
-        assert_eq!(url.base_str(), "https://example.com/path");
+        assert_eq!(url.without_trailing_slash(), Cow::Borrowed(&url));
+
+        // Removes the trailing slash if present on the URL
+        let url = UrlString("https://example.com/path/".into());
+        assert_eq!(
+            url.without_trailing_slash(),
+            Cow::Owned(UrlString("https://example.com/path".into()))
+        );
     }
 }
