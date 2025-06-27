@@ -19,7 +19,7 @@ existing project, add it to the `[build-system]` section in your `pyproject.toml
 
 ```toml
 [build-system]
-requires = ["uv_build>=0.7.15,<0.8.0"]
+requires = ["uv_build>=0.7.16,<0.8.0"]
 build-backend = "uv_build"
 ```
 
