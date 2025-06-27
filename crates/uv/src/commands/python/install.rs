@@ -451,7 +451,7 @@ pub(crate) async fn install(
             .expect("We should have a bin directory with preview enabled")
             .as_path();
 
-        let upgradeable = preview.is_enabled() && is_default_install
+        let upgradeable = (default || is_default_install)
             || requested_minor_versions.contains(&installation.key().version().python_version());
 
         create_bin_links(
