@@ -12,12 +12,11 @@ use std::borrow::Cow;
 use std::ops::Bound;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::Arc;
 
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
-use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
@@ -56,9 +55,6 @@ use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
-
-/// An arena of build directories, used to enforce a drop on program exit.
-static BUILD_DIRECTORIES: LazyLock<Mutex<Vec<TempDir>>> = LazyLock::new(Mutex::default);
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
@@ -2301,7 +2297,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
         } else {
-            let build = self
+            let builder = self
                 .build_context
                 .setup_build(
                     source_root,
@@ -2322,12 +2318,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(|err| Error::Build(err.into()))?;
 
             // Build the wheel.
-            let wheel = build.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+            let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
 
             // Store a reference to the build context.
-            if let Ok(mut build_directories) = BUILD_DIRECTORIES.lock() {
-                build_directories.push(build.into_build_dir());
-            }
+            self.build_context
+                .build_arena()
+                .push(builder.into_build_dir());
 
             wheel
         };
@@ -2412,9 +2408,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // Store a reference to the build context.
-        if let Ok(mut build_directories) = BUILD_DIRECTORIES.lock() {
-            build_directories.push(builder.into_build_dir());
-        }
+        self.build_context
+            .build_arena()
+            .push(builder.into_build_dir());
 
         // Read the metadata from disk.
         debug!("Prepared metadata for: {source}");

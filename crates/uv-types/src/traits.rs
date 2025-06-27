@@ -7,6 +7,7 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 use tempfile::TempDir;
 
+use crate::BuildArena;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution_filename::DistFilename;
@@ -67,6 +68,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return a reference to the build arena.
+    fn build_arena(&self) -> &BuildArena;
 
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;

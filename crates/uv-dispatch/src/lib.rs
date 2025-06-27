@@ -2,13 +2,12 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
-use std::ffi::{OsStr, OsString};
-use std::path::Path;
-
 use anyhow::{Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
+use std::ffi::{OsStr, OsString};
+use std::path::Path;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 
@@ -36,8 +35,8 @@ use uv_resolver::{
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
-    InFlight,
+    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
+    HashStrategy, InFlight,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -178,6 +177,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn git(&self) -> &GitResolver {
         &self.shared_state.git
+    }
+
+    fn build_arena(&self) -> &BuildArena {
+        &self.shared_state.build_arena
     }
 
     fn capabilities(&self) -> &IndexCapabilities {
@@ -522,6 +525,8 @@ pub struct SharedState {
     index: InMemoryIndex,
     /// The downloaded distributions.
     in_flight: InFlight,
+    /// Build directories for any PEP 517 builds executed during resolution or installation.
+    build_arena: BuildArena,
 }
 
 impl SharedState {
@@ -534,6 +539,7 @@ impl SharedState {
         Self {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
+            build_arena: self.build_arena.clone(),
             ..Default::default()
         }
     }
@@ -556,5 +562,10 @@ impl SharedState {
     /// Return the [`IndexCapabilities`] used by the [`SharedState`].
     pub fn capabilities(&self) -> &IndexCapabilities {
         &self.capabilities
+    }
+
+    /// Return the [`BuildArena`] used by the [`SharedState`].
+    pub fn build_arena(&self) -> &BuildArena {
+        &self.build_arena
     }
 }
