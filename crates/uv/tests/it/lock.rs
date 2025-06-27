@@ -28452,3 +28452,31 @@ fn lock_with_index_trailing_slashes_in_lockfile() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn lock_prefix_match() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==5.4.*"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only anyio<=4.3.0 is available and your project depends on anyio==5.4.*, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
