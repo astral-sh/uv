@@ -1,5 +1,9 @@
+use std::path::Path;
 use std::sync::Arc;
-use tempfile::TempDir;
+
+use dashmap::{DashMap, Entry};
+
+use uv_configuration::{BuildKind, SourceStrategy};
 use uv_pep508::PackageName;
 use uv_python::PythonEnvironment;
 
@@ -40,13 +44,41 @@ impl BuildIsolation<'_> {
     }
 }
 
-/// An arena of temporary directories used for builds.
-#[derive(Default, Debug, Clone)]
-pub struct BuildArena(Arc<boxcar::Vec<TempDir>>);
+/// A key for the build cache, which includes the interpreter, source root, subdirectory, source
+/// strategy, and build kind.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BuildKey {
+    pub base_python: Box<Path>,
+    pub source_root: Box<Path>,
+    pub subdirectory: Option<Box<Path>>,
+    pub source_strategy: SourceStrategy,
+    pub build_kind: BuildKind,
+}
 
-impl BuildArena {
-    /// Push a new temporary directory into the arena.
-    pub fn push(&self, temp_dir: TempDir) {
-        self.0.push(temp_dir);
+/// An arena of in-process builds.
+#[derive(Debug)]
+pub struct BuildArena<T>(Arc<DashMap<BuildKey, T>>);
+
+impl<T> Default for BuildArena<T> {
+    fn default() -> Self {
+        Self(Arc::new(DashMap::new()))
+    }
+}
+
+impl<T> Clone for BuildArena<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T> BuildArena<T> {
+    /// Insert a build entry into the arena.
+    pub fn insert(&self, key: BuildKey, value: T) {
+        self.0.insert(key, value);
+    }
+
+    /// Get a build entry from the arena.
+    pub fn entry(&self, key: BuildKey) -> Entry<BuildKey, T> {
+        self.0.entry(key)
     }
 }

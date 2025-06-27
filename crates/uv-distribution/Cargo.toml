@@ -38,6 +38,7 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+dashmap = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }

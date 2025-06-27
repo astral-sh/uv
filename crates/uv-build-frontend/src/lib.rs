@@ -259,8 +259,6 @@ pub struct SourceBuild {
     environment_variables: FxHashMap<OsString, OsString>,
     /// Runner for Python scripts.
     runner: PythonRunner,
-    /// A file lock representing the source tree, currently only used with setuptools.
-    _source_tree_lock: Option<LockedFile>,
 }
 
 impl SourceBuild {
@@ -394,23 +392,6 @@ impl SourceBuild {
             OsString::from(venv.scripts())
         };
 
-        // Depending on the command, setuptools puts `*.egg-info`, `build/`, and `dist/` in the
-        // source tree, and concurrent invocations of setuptools using the same source dir can
-        // stomp on each other. We need to lock something to fix that, but we don't want to dump a
-        // `.lock` file into the source tree that the user will need to .gitignore. Take a global
-        // proxy lock instead.
-        let mut source_tree_lock = None;
-        if pep517_backend.is_setuptools() {
-            debug!("Locking the source tree for setuptools");
-            let canonical_source_path = source_tree.canonicalize()?;
-            let lock_path = std::env::temp_dir().join(format!(
-                "uv-setuptools-{}.lock",
-                cache_digest(&canonical_source_path)
-            ));
-            source_tree_lock =
-                Some(LockedFile::acquire(lock_path, source_tree.to_string_lossy()).await?);
-        }
-
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
         let runner = PythonRunner::new(concurrent_builds, level);
@@ -457,8 +438,28 @@ impl SourceBuild {
             environment_variables,
             modified_path,
             runner,
-            _source_tree_lock: source_tree_lock,
         })
+    }
+
+    /// Acquire a lock on the source tree, if necessary.
+    async fn acquire_lock(&self) -> Result<Option<LockedFile>, Error> {
+        // Depending on the command, setuptools puts `*.egg-info`, `build/`, and `dist/` in the
+        // source tree, and concurrent invocations of setuptools using the same source dir can
+        // stomp on each other. We need to lock something to fix that, but we don't want to dump a
+        // `.lock` file into the source tree that the user will need to .gitignore. Take a global
+        // proxy lock instead.
+        let mut source_tree_lock = None;
+        if self.pep517_backend.is_setuptools() {
+            debug!("Locking the source tree for setuptools");
+            let canonical_source_path = self.source_tree.canonicalize()?;
+            let lock_path = env::temp_dir().join(format!(
+                "uv-setuptools-{}.lock",
+                cache_digest(&canonical_source_path)
+            ));
+            source_tree_lock =
+                Some(LockedFile::acquire(lock_path, self.source_tree.to_string_lossy()).await?);
+        }
+        Ok(source_tree_lock)
     }
 
     async fn get_resolved_requirements(
@@ -631,6 +632,9 @@ impl SourceBuild {
             return Ok(Some(metadata_dir.clone()));
         }
 
+        // Lock the source tree, if necessary.
+        let _lock = self.acquire_lock().await?;
+
         // Hatch allows for highly dynamic customization of metadata via hooks. In such cases, Hatch
         // can't uphold the PEP 517 contract, in that the metadata Hatch would return by
         // `prepare_metadata_for_build_wheel` isn't guaranteed to match that of the built wheel.
@@ -749,6 +753,9 @@ impl SourceBuild {
 
     /// Perform a PEP 517 build for a wheel or source distribution (sdist).
     async fn pep517_build(&self, output_dir: &Path) -> Result<String, Error> {
+        // Lock the source tree, if necessary.
+        let _lock = self.acquire_lock().await?;
+
         // Write the hook output to a file so that we can read it back reliably.
         let outfile = self
             .temp_dir
@@ -862,10 +869,6 @@ impl SourceBuild {
 }
 
 impl SourceBuildTrait for SourceBuild {
-    fn into_build_dir(self) -> TempDir {
-        self.temp_dir
-    }
-
     async fn metadata(&mut self) -> Result<Option<PathBuf>, AnyErrorBuild> {
         Ok(self.get_metadata_without_build().await?)
     }

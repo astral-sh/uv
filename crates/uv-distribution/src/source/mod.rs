@@ -43,7 +43,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
-use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
+use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
@@ -2297,35 +2297,73 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
         } else {
-            let builder = self
-                .build_context
-                .setup_build(
-                    source_root,
-                    subdirectory,
-                    source_root,
-                    Some(&source.to_string()),
-                    source.as_dist(),
-                    source_strategy,
-                    if source.is_editable() {
-                        BuildKind::Editable
-                    } else {
-                        BuildKind::Wheel
-                    },
-                    BuildOutput::Debug,
-                    self.build_stack.cloned().unwrap_or_default(),
-                )
-                .await
-                .map_err(|err| Error::Build(err.into()))?;
+            // Identify the base Python interpreter to use in the cache key.
+            let base_python = if cfg!(unix) {
+                self.build_context
+                    .interpreter()
+                    .find_base_python()
+                    .map_err(Error::BaseInterpreter)?
+            } else {
+                self.build_context
+                    .interpreter()
+                    .to_base_python()
+                    .map_err(Error::BaseInterpreter)?
+            };
 
-            // Build the wheel.
-            let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+            let build_kind = if source.is_editable() {
+                BuildKind::Editable
+            } else {
+                BuildKind::Wheel
+            };
 
-            // Store a reference to the build context.
-            self.build_context
-                .build_arena()
-                .push(builder.into_build_dir());
+            let build_key = BuildKey {
+                base_python: base_python.into_boxed_path(),
+                source_root: source_root.to_path_buf().into_boxed_path(),
+                subdirectory: subdirectory
+                    .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
+                source_strategy,
+                build_kind,
+            };
 
-            wheel
+            match self.build_context.build_arena().entry(build_key) {
+                dashmap::Entry::Occupied(entry) => {
+                    debug!("Reusing existing build environment for: {source}");
+
+                    let builder = entry.into_ref();
+                    builder.wheel(temp_dir.path()).await.map_err(Error::Build)?
+                }
+                dashmap::Entry::Vacant(entry) => {
+                    debug!("Creating build environment for: {source}");
+
+                    let builder = self
+                        .build_context
+                        .setup_build(
+                            source_root,
+                            subdirectory,
+                            source_root,
+                            Some(&source.to_string()),
+                            source.as_dist(),
+                            source_strategy,
+                            if source.is_editable() {
+                                BuildKind::Editable
+                            } else {
+                                BuildKind::Wheel
+                            },
+                            BuildOutput::Debug,
+                            self.build_stack.cloned().unwrap_or_default(),
+                        )
+                        .await
+                        .map_err(|err| Error::Build(err.into()))?;
+
+                    // Build the wheel.
+                    let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+
+                    // Store the build context.
+                    entry.insert(builder);
+
+                    wheel
+                }
+            }
         };
 
         // Read the metadata from the wheel.
@@ -2380,6 +2418,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Identify the base Python interpreter to use in the cache key.
+        let base_python = if cfg!(unix) {
+            self.build_context
+                .interpreter()
+                .find_base_python()
+                .map_err(Error::BaseInterpreter)?
+        } else {
+            self.build_context
+                .interpreter()
+                .to_base_python()
+                .map_err(Error::BaseInterpreter)?
+        };
+
+        // Determine whether this is an editable or non-editable build.
+        let build_kind = if source.is_editable() {
+            BuildKind::Editable
+        } else {
+            BuildKind::Wheel
+        };
+
         // Set up the builder.
         let mut builder = self
             .build_context
@@ -2390,11 +2448,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&source.to_string()),
                 source.as_dist(),
                 source_strategy,
-                if source.is_editable() {
-                    BuildKind::Editable
-                } else {
-                    BuildKind::Wheel
-                },
+                build_kind,
                 BuildOutput::Debug,
                 self.build_stack.cloned().unwrap_or_default(),
             )
@@ -2403,14 +2457,24 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Build the metadata.
         let dist_info = builder.metadata().await.map_err(Error::Build)?;
+
+        // Store the build context.
+        self.build_context.build_arena().insert(
+            BuildKey {
+                base_python: base_python.into_boxed_path(),
+                source_root: source_root.to_path_buf().into_boxed_path(),
+                subdirectory: subdirectory
+                    .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
+                source_strategy,
+                build_kind,
+            },
+            builder,
+        );
+
+        // Return the `.dist-info` directory, if it exists.
         let Some(dist_info) = dist_info else {
             return Ok(None);
         };
-
-        // Store a reference to the build context.
-        self.build_context
-            .build_arena()
-            .push(builder.into_build_dir());
 
         // Read the metadata from disk.
         debug!("Prepared metadata for: {source}");
