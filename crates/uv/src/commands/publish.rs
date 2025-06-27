@@ -144,7 +144,15 @@ pub(crate) async fn publish(
         )
         .await?; // Filename and/or URL are already attached, if applicable.
         info!("Upload succeeded");
-        if !uploaded {
+
+        if uploaded {
+            writeln!(
+                printer.stderr(),
+                "{} {filename} {}",
+                "Uploaded".bold().green(),
+                format!("({bytes:.1}{unit})").dimmed()
+            )?;
+        } else {
             writeln!(
                 printer.stderr(),
                 "{}",
