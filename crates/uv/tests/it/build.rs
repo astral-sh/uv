@@ -1981,3 +1981,60 @@ fn build_with_nonnormalized_name() -> Result<()> {
 
     Ok(())
 }
+
+/// Check that `--force-pep517` is respected.
+///
+/// The error messages for a broken project are different for direct builds vs. PEP 517.
+#[test]
+fn force_pep517() -> Result<()> {
+    // We need to use a real `uv_build` package.
+    let context = TestContext::new("3.12").with_exclude_newer("2025-05-27T00:00:00Z");
+
+    context
+        .init()
+        .arg("--build-backend")
+        .arg("uv")
+        .assert()
+        .success();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+
+        [tool.uv.build-backend]
+        module-name = "does_not_exist"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().env("RUST_BACKTRACE", "0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Error: Missing module directory for `does_not_exist` in `src`. Found: `temp`
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    Ok(())
+}
