@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use rustc_hash::FxHashSet;
+use tempfile::TempDir;
 
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
@@ -148,6 +149,9 @@ pub trait BuildContext {
 /// You can either call only `wheel()` to build the wheel directly, call only `metadata()` to get
 /// the metadata without performing the actual or first call `metadata()` and then `wheel()`.
 pub trait SourceBuildTrait {
+    /// Return the temporary build directory.
+    fn into_build_dir(self) -> TempDir;
+
     /// A wrapper for `uv_build::SourceBuild::get_metadata_without_build`.
     ///
     /// For PEP 517 builds, this calls `prepare_metadata_for_build_wheel`

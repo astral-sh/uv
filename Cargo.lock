@@ -5905,6 +5905,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "rustc-hash",
+ "tempfile",
  "thiserror 2.0.12",
  "uv-cache",
  "uv-configuration",
