@@ -521,7 +521,7 @@ if __name__ == "__main__":
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "This test will spawn a GUI and wait until you close the window."]
     fn gui_launcher() -> Result<()> {
         // Create Temp Dirs
         let temp_dir = assert_fs::TempDir::new()?;

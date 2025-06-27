@@ -2344,7 +2344,7 @@ fn install_git_private_https_pat_at_ref() {
 /// See: <https://github.com/astral-sh/uv/issues/1980>.
 #[test]
 #[cfg(feature = "git")]
-#[ignore]
+#[ignore = "Modifies the user's keyring"]
 fn install_git_private_https_pat_and_username() {
     let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
