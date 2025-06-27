@@ -33,7 +33,7 @@ pub enum TargetTriple {
     #[serde(rename = "i686-pc-windows-msvc")]
     I686PcWindowsMsvc,
 
-    /// An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.
+    /// An x86 Linux target. Equivalent to `x86_64-manylinux_2_28`.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-gnu"))]
     #[serde(rename = "x86_64-unknown-linux-gnu")]
     #[serde(alias = "x8664-unknown-linux-gnu")]
@@ -56,7 +56,7 @@ pub enum TargetTriple {
     #[serde(alias = "x8664-apple-darwin")]
     X8664AppleDarwin,
 
-    /// An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_17`.
+    /// An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_28`.
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-gnu"))]
     #[serde(rename = "aarch64-unknown-linux-gnu")]
     Aarch64UnknownLinuxGnu,
@@ -240,7 +240,7 @@ impl TargetTriple {
             Self::Linux | Self::X8664UnknownLinuxGnu => Platform::new(
                 Os::Manylinux {
                     major: 2,
-                    minor: 17,
+                    minor: 28,
                 },
                 Arch::X86_64,
             ),
@@ -262,7 +262,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => Platform::new(
                 Os::Manylinux {
                     major: 2,
-                    minor: 17,
+                    minor: 28,
                 },
                 Arch::Aarch64,
             ),
