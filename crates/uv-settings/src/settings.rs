@@ -103,7 +103,7 @@ pub struct Options {
             cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
         "#
     )]
-    cache_keys: Option<Vec<CacheKey>>,
+    pub cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
