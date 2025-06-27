@@ -25,6 +25,7 @@ use tracing::{debug, trace};
 use url::ParseError;
 use url::Url;
 
+use uv_auth::Credentials;
 use uv_auth::{AuthMiddleware, Indexes};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
@@ -722,6 +723,16 @@ fn request_into_redirect(
     } else if headers.contains_key(REFERER) {
         if let Some(referer) = make_referer(&redirect_url, &original_req_url) {
             headers.insert(REFERER, referer);
+        }
+    }
+
+    // Check if there are credentials on the redirect location itself.
+    // If so, move them to Authorization header.
+    if !redirect_url.username().is_empty() {
+        if let Some(credentials) = Credentials::from_url(&redirect_url) {
+            let _ = redirect_url.set_username("");
+            let _ = redirect_url.set_password(None);
+            headers.insert(AUTHORIZATION, credentials.to_header_value());
         }
     }
 
