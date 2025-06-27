@@ -769,7 +769,7 @@ pub(crate) enum EnvironmentIncompatibilityError {
     RequiresPython(EnvironmentKind, RequiresPython),
 
     #[error(
-        "The interpreter in the {0} environment has different version ({1}) than it was created with ({2})"
+        "The interpreter in the {0} environment has a different version ({1}) than it was created with ({2})"
     )]
     PyenvVersionConflict(EnvironmentKind, Version, Version),
 }
@@ -785,8 +785,8 @@ fn environment_is_usable(
     if let Some((cfg_version, int_version)) = environment.get_pyvenv_version_conflict() {
         return Err(EnvironmentIncompatibilityError::PyenvVersionConflict(
             kind,
-            cfg_version,
             int_version,
+            cfg_version,
         ));
     }
 
