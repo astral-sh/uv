@@ -38,13 +38,22 @@ impl IndexUrl {
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
+    ///
+    /// Normalizes non-file URLs by removing trailing slashes for consistency.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
         let url = match split_scheme(path) {
             Some((scheme, ..)) => {
                 match Scheme::parse(scheme) {
-                    Some(_) => {
-                        // Ex) `https://pypi.org/simple`
-                        VerbatimUrl::parse_url(path)?
+                    Some(scheme) => {
+                        if scheme.is_file() {
+                            // Ex) `file:///path/to/something/`
+                            VerbatimUrl::parse_url(path)?
+                        } else {
+                            // Ex) `https://pypi.org/simple/`
+                            // Remove a trailing slash if it exists.
+                            let normalized_path = path.strip_suffix('/').unwrap_or(path);
+                            VerbatimUrl::parse_url(normalized_path)?
+                        }
                     }
                     None => {
                         // Ex) `C:\Users\user\index`
