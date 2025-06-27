@@ -188,15 +188,6 @@ async fn build_impl(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<BuildResult> {
-    if list && preview.is_disabled() {
-        // We need the direct build for list and that is preview only.
-        writeln!(
-            printer.stderr(),
-            "The `--list` option is only available in preview mode; add the `--preview` flag to use `--list`"
-        )?;
-        return Ok(BuildResult::Failure);
-    }
-
     // Extract the resolver settings.
     let ResolverSettings {
         index_locations,
@@ -615,10 +606,7 @@ async fn build_package(
         }
 
         BuildAction::List
-    } else if preview.is_enabled()
-        && !force_pep517
-        && check_direct_build(source.path(), source.path().user_display())
-    {
+    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display()) {
         BuildAction::DirectBuild
     } else {
         BuildAction::Pep517
