@@ -214,6 +214,8 @@ jobs:
         run: rustup show
 
       - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+        with:
+          enable-cache: true
       - name: "Install required Python versions"
         run: uv python install
 
@@ -246,6 +248,8 @@ jobs:
         run: rustup show
 
       - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+        with:
+          enable-cache: true
       - name: "Install required Python versions"
         run: uv python install
 
