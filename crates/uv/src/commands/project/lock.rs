@@ -1,5 +1,6 @@
 #![allow(clippy::single_match_else)]
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
@@ -685,7 +686,7 @@ async fn do_lock(
     let existing_lock = if let Some(existing_lock) = existing_lock {
         match ValidatedLock::validate(
             existing_lock,
-            target.install_path(),
+            target,
             packages,
             &members,
             &requirements,
@@ -898,7 +899,7 @@ impl ValidatedLock {
     /// Validate a [`Lock`] against the workspace requirements.
     async fn validate<Context: BuildContext>(
         lock: Lock,
-        install_path: &Path,
+        target: LockTarget<'_>,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
         requirements: &[Requirement],
@@ -1100,16 +1101,32 @@ impl ValidatedLock {
         // However, if _no_ indexes were provided, we assume that the user wants to reuse the existing
         // distributions, even though a failure to reuse the lockfile will result in re-resolving
         // against PyPI by default.
-        let indexes = if index_locations.is_none() {
+        let validation_indexes = if index_locations.is_none() {
             None
         } else {
-            Some(index_locations)
+            // If indexes were defined as sources in path dependencies, add them to the
+            // index locations to use for validation.
+            if let LockTarget::Workspace(workspace) = target {
+                let path_dependency_source_indexes =
+                    workspace.collect_path_dependency_source_indexes();
+                if path_dependency_source_indexes.is_empty() {
+                    Some(Cow::Borrowed(index_locations))
+                } else {
+                    Some(Cow::Owned(index_locations.clone().combine(
+                        path_dependency_source_indexes,
+                        Vec::new(),
+                        false,
+                    )))
+                }
+            } else {
+                Some(Cow::Borrowed(index_locations))
+            }
         };
 
         // Determine whether the lockfile satisfies the workspace requirements.
         match lock
             .satisfies(
-                install_path,
+                target.install_path(),
                 packages,
                 members,
                 requirements,
@@ -1118,7 +1135,7 @@ impl ValidatedLock {
                 build_constraints,
                 dependency_groups,
                 dependency_metadata,
-                indexes,
+                validation_indexes,
                 interpreter.tags()?,
                 hasher,
                 index,
