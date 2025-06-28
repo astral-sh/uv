@@ -1,0 +1,83 @@
+---
+description: Use uv instead of pip, poetry, conda, or other Python package managers.
+globs: "*.py, *.pyi, pyproject.toml, requirements.txt, setup.py, setup.cfg, uv.lock"
+alwaysApply: false
+---
+# Use uv instead of pip, poetry, conda, or other Python package managers
+
+Default to using **uv** for Python package and project management.
+
+## Package Management
+- Use `uv add <package>` instead of `pip install <package>` or `poetry add <package>`
+- Use `uv remove <package>` instead of `pip uninstall <package>` or `poetry remove <package>`
+- Use `uv sync` instead of `pip install -r requirements.txt` or `poetry install`
+- Use `uv lock` instead of `pip freeze > requirements.txt` or `poetry lock`
+- Use `uv tree` instead of `pip show` or `poetry show --tree`
+
+## Project Initialization
+- Use `uv init` instead of `poetry new` or manual `pyproject.toml` creation
+- Use `uv init --lib` for library projects instead of `poetry new --name <name>`
+
+## Python Version Management
+- Use `uv python install 3.12` instead of `pyenv install 3.12` or `conda install python=3.12`
+- Use `uv python list` instead of `pyenv versions` or `conda env list`
+- Use `uv python pin 3.12` instead of `pyenv local 3.12` or manual `.python-version` creation
+
+## Virtual Environment Management
+- Use `uv venv` instead of `python -m venv` or `virtualenv` or `conda create`
+- uv automatically manages virtual environments in projects (`.venv` directory)
+
+## Running Scripts and Commands
+- Use `uv run <script.py>` instead of `python <script.py>` (automatically manages dependencies)
+- Use `uv run <command>` instead of activating virtual environment first
+- Use `uv run --with <package> <command>` for one-off dependencies
+
+## Tool Installation
+- Use `uv tool install <tool>` instead of `pip install <tool>` or `pipx install <tool>`
+- Use `uv tool run <tool>` instead of `npx` equivalent for Python tools
+
+## Requirements and Dependencies
+- Prefer `pyproject.toml` over `requirements.txt` or `poetry.lock` files
+- Use `uv add --dev <package>` for development dependencies
+- Use `uv export --format requirements-txt` if `requirements.txt` is needed
+
+## Performance Benefits
+- uv is 10-100x faster than pip and poetry
+- uv has better dependency resolution
+- uv includes built-in Python version management
+- uv supports universal lockfiles across platforms
+
+## Migration from other tools:
+
+### From pip:
+```bash
+# Instead of: pip install -r requirements.txt
+uv add $(cat requirements.txt)
+
+# Instead of: pip install -e .
+uv sync
+```
+
+### From poetry:
+```bash
+# uv can read poetry's pyproject.toml directly
+uv sync  # equivalent to poetry install
+```
+
+### From conda:
+```bash
+# Instead of: conda env create -f environment.yml
+uv venv && uv sync
+
+# Instead of: conda install <package>
+uv add <package>
+```
+
+## When NOT to suggest uv:
+- When the project explicitly requires conda for system-level packages (rare)
+- When working with legacy projects that cannot be migrated
+- When the user explicitly asks for a different tool for learning purposes
+
+Always prefer uv's modern, fast, and reliable approach to Python package management.
+
+For more information, visit https://github.com/astral-sh/uv
