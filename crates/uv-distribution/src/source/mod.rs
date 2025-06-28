@@ -2325,44 +2325,44 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 build_kind,
             };
 
-            match self.build_context.build_arena().entry(build_key) {
-                dashmap::Entry::Occupied(entry) => {
-                    debug!("Reusing existing build environment for: {source}");
+            if let Some(builder) = self.build_context.build_arena().remove(&build_key) {
+                debug!("Creating build environment for: {source}");
+                let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
 
-                    let builder = entry.into_ref();
-                    builder.wheel(temp_dir.path()).await.map_err(Error::Build)?
-                }
-                dashmap::Entry::Vacant(entry) => {
-                    debug!("Creating build environment for: {source}");
+                // Store the build context.
+                self.build_context.build_arena().insert(build_key, builder);
 
-                    let builder = self
-                        .build_context
-                        .setup_build(
-                            source_root,
-                            subdirectory,
-                            source_root,
-                            Some(&source.to_string()),
-                            source.as_dist(),
-                            source_strategy,
-                            if source.is_editable() {
-                                BuildKind::Editable
-                            } else {
-                                BuildKind::Wheel
-                            },
-                            BuildOutput::Debug,
-                            self.build_stack.cloned().unwrap_or_default(),
-                        )
-                        .await
-                        .map_err(|err| Error::Build(err.into()))?;
+                wheel
+            } else {
+                debug!("Reusing existing build environment for: {source}");
 
-                    // Build the wheel.
-                    let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+                let builder = self
+                    .build_context
+                    .setup_build(
+                        source_root,
+                        subdirectory,
+                        source_root,
+                        Some(&source.to_string()),
+                        source.as_dist(),
+                        source_strategy,
+                        if source.is_editable() {
+                            BuildKind::Editable
+                        } else {
+                            BuildKind::Wheel
+                        },
+                        BuildOutput::Debug,
+                        self.build_stack.cloned().unwrap_or_default(),
+                    )
+                    .await
+                    .map_err(|err| Error::Build(err.into()))?;
 
-                    // Store the build context.
-                    entry.insert(builder);
+                // Build the wheel.
+                let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
 
-                    wheel
-                }
+                // Store the build context.
+                self.build_context.build_arena().insert(build_key, builder);
+
+                wheel
             }
         };
 

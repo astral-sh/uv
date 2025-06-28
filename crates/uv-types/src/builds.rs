@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use dashmap::{DashMap, Entry};
+use dashmap::DashMap;
 
 use uv_configuration::{BuildKind, SourceStrategy};
 use uv_pep508::PackageName;
@@ -77,8 +77,8 @@ impl<T> BuildArena<T> {
         self.0.insert(key, value);
     }
 
-    /// Get a build entry from the arena.
-    pub fn entry(&self, key: BuildKey) -> Entry<BuildKey, T> {
-        self.0.entry(key)
+    /// Remove a build entry from the arena.
+    pub fn remove(&self, key: &BuildKey) -> Option<T> {
+        self.0.remove(key).map(|entry| entry.1)
     }
 }
