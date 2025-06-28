@@ -563,3 +563,54 @@ fn tool_list_show_extras() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn tool_list_output_format_json() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` without extras
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Install `flask` with extras and additional requirements
+    context
+        .tool_install()
+        .arg("flask[async,dotenv]")
+        .arg("--with")
+        .arg("requests")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.tool_list().arg("--output-format=json")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+            [{"name":"black","version":"24.2.0","version_specifiers":["==24.2.0"],"extra_requirements":[],"with_requirements":[],"directory":"[TEMP_DIR]/tools/black","environment":{"python":"[TEMP_DIR]/tools/black/Scripts/python","version":"3.12.[X]"},"entrypoints":[{"name":"black","path":"[TEMP_DIR]/bin/black"},{"name":"blackd","path":"[TEMP_DIR]/bin/blackd"}]},{"name":"flask","version":"3.0.2","version_specifiers":[],"extra_requirements":["async","dotenv"],"with_requirements":["requests"],"directory":"[TEMP_DIR]/tools/flask","environment":{"python":"[TEMP_DIR]/tools/flask/Scripts/python","version":"3.12.[X]"},"entrypoints":[{"name":"flask","path":"[TEMP_DIR]/bin/flask"}]}]
+
+            ----- stderr -----
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), context.tool_list().arg("--output-format=json")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+            [{"name":"black","version":"24.2.0","version_specifiers":["==24.2.0"],"extra_requirements":[],"with_requirements":[],"directory":"[TEMP_DIR]/tools/black","environment":{"python":"[TEMP_DIR]/tools/black/bin/python3","version":"3.12.[X]"},"entrypoints":[{"name":"black","path":"[TEMP_DIR]/bin/black"},{"name":"blackd","path":"[TEMP_DIR]/bin/blackd"}]},{"name":"flask","version":"3.0.2","version_specifiers":[],"extra_requirements":["async","dotenv"],"with_requirements":["requests"],"directory":"[TEMP_DIR]/tools/flask","environment":{"python":"[TEMP_DIR]/tools/flask/bin/python3","version":"3.12.[X]"},"entrypoints":[{"name":"flask","path":"[TEMP_DIR]/bin/flask"}]}]
+
+            ----- stderr -----
+        "###);
+    }
+}
