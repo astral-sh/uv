@@ -37,7 +37,7 @@ dependencies = ["httpx>=0.27.2"]
 ```
 
 The [`--dev`](#development-dependencies), [`--group`](#dependency-groups), or
-[`--optional`](#optional-dependencies) flags can be used to add a dependencies to an alternative
+[`--optional`](#optional-dependencies) flags can be used to add dependencies to an alternative
 field.
 
 The dependency will include a constraint, e.g., `>=0.27.2`, for the most recent, compatible version
