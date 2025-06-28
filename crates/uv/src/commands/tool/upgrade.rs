@@ -298,6 +298,7 @@ async fn upgrade_tool(
         let resolution = resolve_environment(
             spec.into(),
             interpreter,
+            build_constraints.clone(),
             &settings.resolver,
             network_settings,
             &state,

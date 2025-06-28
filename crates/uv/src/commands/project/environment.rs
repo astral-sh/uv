@@ -51,6 +51,7 @@ impl CachedEnvironment {
             resolve_environment(
                 spec,
                 &interpreter,
+                build_constraints.clone(),
                 &settings.resolver,
                 network_settings,
                 state,

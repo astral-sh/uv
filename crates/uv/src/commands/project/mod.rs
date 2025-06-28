@@ -1746,6 +1746,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
 pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
+    build_constraints: Constraints,
     settings: &ResolverSettings,
     network_settings: &NetworkSettings,
     state: &PlatformState,
@@ -1842,7 +1843,6 @@ pub(crate) async fn resolve_environment(
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
     let hasher = HashStrategy::default();
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls and

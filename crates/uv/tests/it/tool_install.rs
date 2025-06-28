@@ -420,7 +420,6 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
