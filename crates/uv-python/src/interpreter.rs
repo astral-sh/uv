@@ -977,7 +977,8 @@ impl InterpreterInfo {
                 sys_info::os_release().unwrap_or_default(),
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
-            // paths. But we don't to query the executable with symbolic links resolved.
+            // paths. But we don't want to query the executable with symbolic links resolved because
+            // that can change reported values, e.g., `sys.executable`.
             format!("{}.msgpack", cache_digest(&absolute)),
         );
 
