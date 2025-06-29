@@ -4,8 +4,8 @@ use version_ranges::Ranges;
 
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{
-    LowerBound, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
-    release_specifier_to_range, release_specifiers_to_ranges,
+    LowerBound, TildeMinorVersionSpecifier, UpperBound, Version, VersionSpecifier,
+    VersionSpecifiers, release_specifiers_to_ranges,
 };
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::{AbiTag, LanguageTag};
@@ -70,20 +70,14 @@ impl RequiresPython {
             .map(|specs| {
                 // Warn if there’s exactly one `~=` specifier without a patch.
                 if let [spec] = &specs[..] {
-                    if spec.is_tilde_without_patch() {
-                        if let Some((lo_b, hi_b)) = release_specifier_to_range(spec.clone())
-                            .bounding_range()
-                            .map(|(l, u)| (l.cloned(), u.cloned()))
-                        {
-                            let lo_spec = LowerBound::new(lo_b).specifier().unwrap();
-                            let hi_spec = UpperBound::new(hi_b).specifier().unwrap();
-                            warn_user_once!(
-                                "The release specifier (`{spec}`) contains a compatible release \
-                                match without a patch version. This will be interpreted as \
-                                `{lo_spec}, {hi_spec}`. Did you mean `{spec}.0` to freeze the minor \
-                                version?"
-                            );
-                        }
+                    if let Some(spec) = TildeMinorVersionSpecifier::from_specifier(spec) {
+                        let (lower, upper) = spec.bounding_specifiers();
+                        warn_user_once!(
+                            "The release specifier (`{spec}`) contains a compatible release \
+                            match without a patch version. This will be interpreted as \
+                            `{lower}, {upper}`. Did you mean `{spec}.0` to freeze the minor \
+                            version?"
+                        );
                     }
                 }
                 release_specifiers_to_ranges(specs.clone())

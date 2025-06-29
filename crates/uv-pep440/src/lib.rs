@@ -34,8 +34,8 @@ pub use {
         VersionPatternParseError,
     },
     version_specifier::{
-        VersionSpecifier, VersionSpecifierBuildError, VersionSpecifiers,
-        VersionSpecifiersParseError,
+        TildeMinorVersionSpecifier, VersionSpecifier, VersionSpecifierBuildError,
+        VersionSpecifiers, VersionSpecifiersParseError,
     },
 };
 

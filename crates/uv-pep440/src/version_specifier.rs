@@ -615,11 +615,6 @@ impl VersionSpecifier {
             | Operator::NotEqual => false,
         }
     }
-
-    /// Returns true if this is a `~=` specifier without a patch version (e.g. `~=3.11`).
-    pub fn is_tilde_without_patch(&self) -> bool {
-        self.operator == Operator::TildeEqual && self.version.release().len() == 2
-    }
 }
 
 impl FromStr for VersionSpecifier {
@@ -841,6 +836,54 @@ pub(crate) fn parse_version_specifiers(
         start += separator.len();
     }
     Ok(version_ranges)
+}
+
+/// A `~=` version specifier with a minor version, but no patch version (e.g. `~=3.11`).
+#[derive(Clone, Debug)]
+pub struct TildeMinorVersionSpecifier<'a> {
+    inner: &'a VersionSpecifier,
+}
+
+impl<'a> TildeMinorVersionSpecifier<'a> {
+    /// Create a new [`TildeMinorVersionSpecifier`] from a [`VersionSpecifier`].
+    ///
+    /// If a [`Operator::TildeEqual`] is not used, or the version includes more than a minor
+    /// segment, this will return [`None`].
+    pub fn from_specifier(
+        specifier: &'a VersionSpecifier,
+    ) -> Option<TildeMinorVersionSpecifier<'a>> {
+        if specifier.operator != Operator::TildeEqual {
+            return None;
+        }
+        if specifier.version().release().len() != 2 {
+            return None;
+        }
+        if specifier.version().any_prerelease()
+            || specifier.version().is_local()
+            || specifier.version().is_post()
+        {
+            return None;
+        }
+        Some(Self { inner: specifier })
+    }
+
+    /// Construct the lower and upper bounding version specifiers for this tilde version specifier,
+    /// e.g., for `~=3.13` this would return `>=3.13` and `<4`.
+    pub fn bounding_specifiers(&self) -> (VersionSpecifier, VersionSpecifier) {
+        let release = self.inner.version().release();
+        let lower = self.inner.version.clone();
+        let upper = Version::new([release[0] + 1]);
+        (
+            VersionSpecifier::greater_than_equal_version(lower),
+            VersionSpecifier::less_than_version(upper),
+        )
+    }
+}
+
+impl std::fmt::Display for TildeMinorVersionSpecifier<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
 }
 
 #[cfg(test)]
