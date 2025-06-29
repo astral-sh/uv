@@ -11811,6 +11811,100 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
     Ok(())
 }
 
+/// Checks the output of `uv lock --check` when there isn't a lock
+#[test]
+fn check_no_lock() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["sortedcollections"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    ");
+    Ok(())
+}
+
+/// Checks the output of `uv lock --check` when the lock is outdated
+#[test]
+fn check_outdated_lock() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["sortedcollections"]
+        "#,
+    )?;
+
+    // Generate the lock
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Check the --check returns fine
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Edit dependencies so the lock is invalid
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Added iniconfig v2.0.0
+    Removed myproject v0.1.0
+    Added project v0.1.0
+    Removed sortedcollections v2.1.0
+    Removed sortedcontainers v2.4.0
+    The lockfile is outdated; run `uv lock` to update it
+    ");
+    Ok(())
+}
+
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.
