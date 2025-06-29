@@ -4,7 +4,7 @@ use uv_pep508::PackageName;
 
 use crate::{PackageNameSpecifier, PackageNameSpecifiers};
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum BuildKind {
     /// A PEP 517 wheel build.
     #[default]
