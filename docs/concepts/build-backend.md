@@ -2,9 +2,8 @@
 
 !!! note
 
-    The uv build backend is currently in preview and may change without warning.
-
-    When preview mode is not enabled, uv uses [hatchling](https://pypi.org/project/hatchling/) as the default build backend.
+    Currently, the default build backend for `uv init` is
+    [hatchling](https://pypi.org/project/hatchling/). This will change to `uv` in a future version.
 
 A build backend transforms a source tree (i.e., a directory) into a source distribution or a wheel.
 While uv supports all build backends (as specified by PEP 517), it includes a `uv_build` backend

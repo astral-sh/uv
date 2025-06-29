@@ -396,10 +396,6 @@ pydantic = { path = "/path/to/pydantic", editable = true }
 
 Settings for the uv build backend (`uv_build`).
 
-!!! note
-
-    The uv build backend is currently in preview and may change in any future release.
-
 Note that those settings only apply when using the `uv_build` backend, other build backends
 (such as hatchling) have their own configuration.
 
