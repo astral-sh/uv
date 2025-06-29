@@ -10,9 +10,16 @@ A build backend transforms a source tree (i.e., a directory) into a source distr
 While uv supports all build backends (as specified by PEP 517), it includes a `uv_build` backend
 that integrates tightly with uv to improve performance and user experience.
 
+## Choosing a build backend
+
 The uv build backend currently only supports Python code. An alternative backend is required if you
 want to create a
 [library with extension modules](../concepts/projects/init.md#projects-with-extension-modules).
+While it supports a number of options for configuring your project structure, when build scripts or
+a more flexible project layout are required, consider using the
+[hatchling](https://hatch.pypa.io/latest/config/build/#build-system) build backend.
+
+## Get started
 
 To use the uv build backend as [build system](../concepts/projects/config.md#build-systems) in an
 existing project, add it to the `[build-system]` section in your `pyproject.toml`:
