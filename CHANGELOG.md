@@ -2,6 +2,14 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.7.17
+
+### Bug fixes
+
+- Apply build constraints when resolving `--with` dependencies ([#14340](https://github.com/astral-sh/uv/pull/14340))
+- Drop trailing slashes when converting index URL from URL ([#14346](https://github.com/astral-sh/uv/pull/14346))
+- Ignore `UV_PYTHON_CACHE_DIR` when empty ([#14336](https://github.com/astral-sh/uv/pull/14336))
+- Fix error message ordering for `pyvenv.cfg` version conflict ([#14329](https://github.com/astral-sh/uv/pull/14329))
 
 ## 0.7.16
 
