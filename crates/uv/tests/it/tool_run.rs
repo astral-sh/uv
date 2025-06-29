@@ -2050,6 +2050,33 @@ fn tool_run_python_at_version() {
 }
 
 #[test]
+fn tool_run_python_from_global_version_file() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+}
+
+#[test]
 fn tool_run_python_from() {
     let context = TestContext::new_with_versions(&["3.12", "3.11"])
         .with_filtered_counts()
