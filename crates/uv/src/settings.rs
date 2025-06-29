@@ -587,6 +587,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
+    pub(crate) with_executables_from: Vec<PackageName>,
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
@@ -611,6 +612,7 @@ impl ToolInstallSettings {
             with,
             with_editable,
             with_requirements,
+            with_executables_from,
             constraints,
             overrides,
             build_constraints,
@@ -651,6 +653,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            with_executables_from: with_executables_from.into_iter().collect(),
             constraints: constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)

@@ -1229,21 +1229,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
-            let mut requirements = Vec::with_capacity(
-                args.with.len() + args.with_editable.len() + args.with_requirements.len(),
-            );
-            for package in args.with {
-                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
+            let mut requirements = Vec::new();
+            for pkg in args.with {
+                requirements.push(RequirementsSource::from_with_package_argument(&pkg)?);
             }
-            for package in args.with_editable {
-                requirements.push(RequirementsSource::from_editable(&package)?);
+            for pkg in &args.with_executables_from {
+                requirements.push(RequirementsSource::from_package_name(pkg)?);
             }
-            requirements.extend(
-                args.with_requirements
-                    .into_iter()
-                    .map(RequirementsSource::from_requirements_file)
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
+            for pkg in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&pkg)?);
+            }
+            for path in args.with_requirements {
+                requirements.push(RequirementsSource::from_requirements_file(path)?);
+            }
 
             let constraints = args
                 .constraints
@@ -1266,6 +1264,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 args.from,
                 &requirements,
+                args.with_executables_from,
                 &constraints,
                 &overrides,
                 &build_constraints,

@@ -3165,6 +3165,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         from: None,
         with: [],
         with_requirements: [],
+        with_executables_from: [],
         with_editable: [],
         constraints: [],
         overrides: [],

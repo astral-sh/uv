@@ -4335,6 +4335,12 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
+    /// Install executables from an additional package.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub with_executables_from: Vec<PackageName>,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
