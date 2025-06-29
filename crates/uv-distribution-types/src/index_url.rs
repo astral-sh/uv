@@ -265,13 +265,19 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
 }
 
 impl From<VerbatimUrl> for IndexUrl {
-    fn from(url: VerbatimUrl) -> Self {
+    fn from(mut url: VerbatimUrl) -> Self {
         if url.scheme() == "file" {
             Self::Path(Arc::new(url))
-        } else if *url.raw() == *PYPI_URL {
-            Self::Pypi(Arc::new(url))
         } else {
-            Self::Url(Arc::new(url))
+            // Remove trailing slashes for consistency.
+            if let Ok(mut path_segments) = url.raw_mut().path_segments_mut() {
+                path_segments.pop_if_empty();
+            }
+            if *url.raw() == *PYPI_URL {
+                Self::Pypi(Arc::new(url))
+            } else {
+                Self::Url(Arc::new(url))
+            }
         }
     }
 }
