@@ -1432,9 +1432,11 @@ impl Lock {
                 .allowed_indexes()
                 .into_iter()
                 .filter_map(|index| match index.url() {
-                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().without_credentials().as_ref()))
-                    }
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => Some(
+                        UrlString::from(index.url().without_credentials().as_ref())
+                            .without_trailing_slash()
+                            .into_owned(),
+                    ),
                     IndexUrl::Path(_) => None,
                 })
                 .collect::<BTreeSet<_>>()
