@@ -31,7 +31,9 @@ uv-redacted = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+boxcar = { workspace = true }
 rustc-hash = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 
 [features]

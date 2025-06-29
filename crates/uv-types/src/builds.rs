@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use tempfile::TempDir;
 use uv_pep508::PackageName;
 use uv_python::PythonEnvironment;
 
@@ -35,5 +37,16 @@ impl BuildIsolation<'_> {
                 }
             }
         }
+    }
+}
+
+/// An arena of temporary directories used for builds.
+#[derive(Default, Debug, Clone)]
+pub struct BuildArena(Arc<boxcar::Vec<TempDir>>);
+
+impl BuildArena {
+    /// Push a new temporary directory into the arena.
+    pub fn push(&self, temp_dir: TempDir) {
+        self.0.push(temp_dir);
     }
 }

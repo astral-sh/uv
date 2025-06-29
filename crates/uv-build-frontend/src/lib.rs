@@ -862,6 +862,10 @@ impl SourceBuild {
 }
 
 impl SourceBuildTrait for SourceBuild {
+    fn into_build_dir(self) -> TempDir {
+        self.temp_dir
+    }
+
     async fn metadata(&mut self) -> Result<Option<PathBuf>, AnyErrorBuild> {
         Ok(self.get_metadata_without_build().await?)
     }

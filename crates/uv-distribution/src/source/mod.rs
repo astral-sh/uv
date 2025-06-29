@@ -2276,6 +2276,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs::create_dir_all(&cache_shard)
             .await
             .map_err(Error::CacheWrite)?;
+
         // Try a direct build if that isn't disabled and the uv build backend is used.
         let disk_filename = if let Some(name) = self
             .build_context
@@ -2296,7 +2297,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
         } else {
-            self.build_context
+            let builder = self
+                .build_context
                 .setup_build(
                     source_root,
                     subdirectory,
@@ -2313,10 +2315,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_stack.cloned().unwrap_or_default(),
                 )
                 .await
-                .map_err(|err| Error::Build(err.into()))?
-                .wheel(temp_dir.path())
-                .await
-                .map_err(Error::Build)?
+                .map_err(|err| Error::Build(err.into()))?;
+
+            // Build the wheel.
+            let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+
+            // Store a reference to the build context.
+            self.build_context
+                .build_arena()
+                .push(builder.into_build_dir());
+
+            wheel
         };
 
         // Read the metadata from the wheel.
@@ -2397,6 +2406,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let Some(dist_info) = dist_info else {
             return Ok(None);
         };
+
+        // Store a reference to the build context.
+        self.build_context
+            .build_arena()
+            .push(builder.into_build_dir());
 
         // Read the metadata from disk.
         debug!("Prepared metadata for: {source}");
