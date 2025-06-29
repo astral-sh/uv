@@ -1553,7 +1553,7 @@ impl RemoveSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct VersionSettings {
     pub(crate) value: Option<String>,
-    pub(crate) bump: Option<VersionBump>,
+    pub(crate) bump: Vec<VersionBump>,
     pub(crate) short: bool,
     pub(crate) output_format: VersionFormat,
     pub(crate) dry_run: bool,
