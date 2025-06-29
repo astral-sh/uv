@@ -2562,16 +2562,23 @@ pub struct VenvArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_SEED)]
     pub seed: bool,
 
+    /// Remove any existing files or directories at the target path.
+    ///
+    /// By default, `uv venv` will exit with an error if the given path is non-empty. The
+    /// `--clear` option will instead clear a non-empty path before creating a new virtual
+    /// environment.
+    #[clap(long, short, conflicts_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
+    pub clear: bool,
+
     /// Preserve any existing files or directories at the target path.
     ///
-    /// By default, `uv venv` will remove an existing virtual environment at the given path, and
-    /// exit with an error if the path is non-empty but _not_ a virtual environment. The
+    /// By default, `uv venv` will exit with an error if the given path is non-empty. The
     /// `--allow-existing` option will instead write to the given path, regardless of its contents,
     /// and without clearing it beforehand.
     ///
     /// WARNING: This option can lead to unexpected behavior if the existing virtual environment and
     /// the newly-created virtual environment are linked to different Python interpreters.
-    #[clap(long)]
+    #[clap(long, conflicts_with = "clear")]
     pub allow_existing: bool,
 
     /// The path to the virtual environment to create.

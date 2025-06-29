@@ -981,7 +981,7 @@ jobs:
 
       - name: "Create a virtual environment (uv)"
         run: |
-          ./uv venv -p 3.13t --managed-python
+          ./uv venv -c -p 3.13t --managed-python
 
       - name: "Check version (uv)"
         run: |
@@ -1607,14 +1607,14 @@ jobs:
           ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
 
           # Test both `build_wheel` and `build_sdist` through uv
-          ./uv venv -v
+          ./uv venv -c -v
           ./uv build -v --force-pep517 scripts/packages/built-by-uv --find-links crates/uv-build/dist --offline
           ./uv pip install -v scripts/packages/built-by-uv/dist/*.tar.gz --find-links crates/uv-build/dist --offline --no-deps
           ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
 
           # Test both `build_wheel` and `build_sdist` through the official `build`
           rm -rf scripts/packages/built-by-uv/dist/
-          ./uv venv -v
+          ./uv venv -c -v
           ./uv pip install build
           # Add the uv binary to PATH for `build` to find
           PATH="$(pwd):$PATH" UV_OFFLINE=1 UV_FIND_LINKS=crates/uv-build/dist ./uv run --no-project python -m build -v --installer uv scripts/packages/built-by-uv

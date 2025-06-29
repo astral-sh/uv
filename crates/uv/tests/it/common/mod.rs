@@ -1390,6 +1390,7 @@ pub fn create_venv_from_executable<P: AsRef<Path>>(path: P, cache_dir: &ChildPat
     assert_cmd::Command::new(get_bin())
         .arg("venv")
         .arg(path.as_ref().as_os_str())
+        .arg("--clear")
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--python")

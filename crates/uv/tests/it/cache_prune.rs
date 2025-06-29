@@ -227,7 +227,7 @@ fn prune_unzipped() -> Result<()> {
     Removed [N] files ([SIZE])
     "###);
 
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // Reinstalling the source distribution should not require re-downloading the source
     // distribution.

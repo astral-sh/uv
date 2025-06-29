@@ -1043,6 +1043,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.system_site_packages,
                 args.seed,
                 args.allow_existing,
+                args.clear,
                 args.settings.exclude_newer,
                 globals.concurrency,
                 cli.top_level.no_config,
