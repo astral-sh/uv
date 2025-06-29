@@ -1016,7 +1016,7 @@ impl InterpreterInfo {
                     Ok(cached) => {
                         if cached.timestamp == modified {
                             trace!(
-                                "Cached interpreter info for Python {}, skipping probing: {}",
+                                "Found cached interpreter info for Python {}, skipping query of: {}",
                                 cached.data.markers.python_full_version(),
                                 executable.user_display()
                             );
