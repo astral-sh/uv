@@ -3395,6 +3395,31 @@ pub struct SyncArgs {
     )]
     pub python: Option<Maybe<String>>,
 
+    /// The minimum Python version that should be supported by the requirements (e.g., `3.7` or
+    /// `3.7.9`).
+    ///
+    /// If a patch version is omitted, the minimum patch version is assumed. For example, `3.7` is
+    /// mapped to `3.7.0`.
+    #[arg(long)]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
+
     /// Check if the Python environment is synchronized with the project.
     ///
     /// If the environment is not up to date, uv will exit with an error.
