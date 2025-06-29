@@ -66,7 +66,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"uv\.exe", "uv"),
     // uv version display
     (
-        r"uv(-.*)? \d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
+        r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
@@ -254,7 +254,7 @@ impl TestContext {
         let added_filters = [
             (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
             (
-                r"uv = \d+\.\d+\.\d+".to_string(),
+                r"uv = \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?".to_string(),
                 "uv = [UV_VERSION]".to_string(),
             ),
             (
