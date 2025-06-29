@@ -905,7 +905,7 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
         .filters()
         .into_iter()
         .chain([(
-            r"\d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
+            r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?( \(.*\))?",
             r"[VERSION] ([COMMIT] DATE)",
         )])
         .collect::<Vec<_>>();
@@ -972,7 +972,10 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r#"version": "\d+.\d+.\d+""#, r#"version": "[VERSION]""#),
+            (
+                r#"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
+                r#"version": "[VERSION]""#,
+            ),
             (
                 r#"short_commit_hash": ".*""#,
                 r#"short_commit_hash": "[HASH]""#,
@@ -1175,7 +1178,7 @@ fn self_version_short() -> Result<()> {
         .filters()
         .into_iter()
         .chain([(
-            r"\d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
+            r"\d+\.\d+\.\d+(-alpha\.\d+)?(\+\d+)?( \(.*\))?",
             r"[VERSION] ([COMMIT] DATE)",
         )])
         .collect::<Vec<_>>();
@@ -1220,7 +1223,10 @@ fn self_version_json() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r#"version": "\d+.\d+.\d+""#, r#"version": "[VERSION]""#),
+            (
+                r#"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
+                r#"version": "[VERSION]""#,
+            ),
             (
                 r#"short_commit_hash": ".*""#,
                 r#"short_commit_hash": "[HASH]""#,
