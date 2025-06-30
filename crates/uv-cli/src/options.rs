@@ -2,6 +2,7 @@ use uv_cache::Refresh;
 use uv_configuration::ConfigSettings;
 use uv_resolver::PrereleaseMode;
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
+use uv_warnings::warn_user_once;
 
 use crate::{
     BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
@@ -14,7 +15,13 @@ pub fn flag(yes: bool, no: bool) -> Option<bool> {
         (true, false) => Some(true),
         (false, true) => Some(false),
         (false, false) => None,
-        (..) => unreachable!("Clap should make this impossible"),
+        (..) => {
+            warn_user_once!(
+                "Boolean flags on different levels are not correctly supported \
+                (https://github.com/clap-rs/clap/issues/6049)"
+            );
+            Some(true)
+        }
     }
 }
 
