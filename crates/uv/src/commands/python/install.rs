@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -15,7 +16,9 @@ use tracing::{debug, trace};
 
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
-use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
+use uv_python::downloads::{
+    self, ArchRequest, DownloadResult, ManagedPythonDownload, PythonDownloadRequest,
+};
 use uv_python::managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
     create_link_to_executable, python_executable_dir,
@@ -401,6 +404,7 @@ pub(crate) async fn install(
 
     let mut errors = vec![];
     let mut downloaded = Vec::with_capacity(downloads.len());
+    let mut requests_by_new_installation = BTreeMap::new();
     while let Some((download, result)) = tasks.next().await {
         match result {
             Ok(download_result) => {
@@ -412,10 +416,19 @@ pub(crate) async fn install(
 
                 let installation = ManagedPythonInstallation::new(path, download);
                 changelog.installed.insert(installation.key().clone());
+                for request in &requests {
+                    // Take note of which installations satisfied which requests
+                    if request.matches_installation(&installation) {
+                        requests_by_new_installation
+                            .entry(installation.key().clone())
+                            .or_insert(Vec::new())
+                            .push(request);
+                    }
+                }
                 if changelog.existing.contains(installation.key()) {
                     changelog.uninstalled.insert(installation.key().clone());
                 }
-                downloaded.push(installation);
+                downloaded.push(installation.clone());
             }
             Err(err) => {
                 errors.push((download.key().clone(), anyhow::Error::new(err)));
@@ -529,6 +542,42 @@ pub(crate) async fn install(
     }
 
     if !changelog.installed.is_empty() {
+        for install_key in &changelog.installed {
+            // Make a note if the selected python is non-native for the architecture,
+            // if none of the matching user requests were explicit
+            let native_arch = Arch::from_env();
+            if install_key.arch().family() != native_arch.family() {
+                let not_explicit =
+                    requests_by_new_installation
+                        .get(install_key)
+                        .and_then(|requests| {
+                            let all_non_explicit = requests.iter().all(|request| {
+                                if let PythonRequest::Key(key) = &request.request {
+                                    !matches!(key.arch(), Some(ArchRequest::Explicit(_)))
+                                } else {
+                                    true
+                                }
+                            });
+                            if all_non_explicit {
+                                requests.iter().next()
+                            } else {
+                                None
+                            }
+                        });
+                if let Some(not_explicit) = not_explicit {
+                    let native_request =
+                        not_explicit.download_request.clone().with_arch(native_arch);
+                    writeln!(
+                        printer.stderr(),
+                        "{} uv selected a Python distribution with an emulated architecture ({}) for your platform because support for the native architecture ({}) is not yet mature; to override this behaviour, request the native architecture explicitly with: {}",
+                        "note:".bold(),
+                        install_key.arch(),
+                        native_arch,
+                        native_request
+                    )?;
+                }
+            }
+        }
         if changelog.installed.len() == 1 {
             let installed = changelog.installed.iter().next().unwrap();
             // Ex) "Installed Python 3.9.7 in 1.68s"
