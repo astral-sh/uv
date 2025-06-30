@@ -1,7 +1,7 @@
 use arcstr::ArcStr;
 use std::str::FromStr;
 use uv_normalize::ExtraName;
-use uv_pep440::{Version, VersionPattern, VersionSpecifier};
+use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
 use crate::marker::MarkerValueExtra;
@@ -265,12 +265,25 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     parse_inverted_version_expr(&l_string, operator, key, reporter)
                 }
                 // '...' == <env key>
-                MarkerValue::MarkerEnvString(key) => Some(MarkerExpression::String {
-                    key,
+                MarkerValue::MarkerEnvString(key) => {
                     // Invert the operator to normalize the expression order.
-                    operator: operator.invert(),
-                    value: l_string,
-                }),
+                    if let Some(operator) = operator.invert() {
+                        Some(MarkerExpression::String {
+                            key,
+                            operator,
+                            value: l_string,
+                        })
+                    } else {
+                        reporter.report(
+                            MarkerWarningKind::StringStringComparison,
+                            format!(
+                                "Comparing a string with `~=` doesn't make sense:
+                                '{l_string}' {operator} {r_value}, will be ignored"
+                            ),
+                        );
+                        None
+                    }
+                }
                 // `'...' == extra`
                 MarkerValue::Extra => parse_extra_expr(operator, &l_string, reporter),
                 // `'...' == '...'`, doesn't make much sense
@@ -422,9 +435,6 @@ fn parse_inverted_version_expr(
     key: MarkerValueVersion,
     reporter: &mut impl Reporter,
 ) -> Option<MarkerExpression> {
-    // Invert the operator to normalize the expression order.
-    let marker_operator = marker_operator.invert();
-
     // Not star allowed here, `'3.*' == python_version` is not a valid PEP 440 comparison.
     let version = match value.parse::<Version>() {
         Ok(version) => version,
@@ -439,6 +449,23 @@ fn parse_inverted_version_expr(
 
             return None;
         }
+    };
+
+    // Invert the operator to normalize the expression order.
+    let Some(marker_operator) = marker_operator.invert() else {
+        return Some(MarkerExpression::VersionInvertedTilde {
+            key,
+            specifier: match VersionSpecifier::from_version(Operator::TildeEqual, version) {
+                Ok(specifier) => specifier,
+                Err(err) => {
+                    reporter.report(
+                        MarkerWarningKind::Pep440Error,
+                        format!("Invalid operator/version combination: {err}"),
+                    );
+                    return None;
+                }
+            },
+        });
     };
 
     let Some(operator) = marker_operator.to_pep440_operator() else {
