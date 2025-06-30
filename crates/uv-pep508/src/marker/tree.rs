@@ -3398,7 +3398,7 @@ mod test {
 
     /// Case a: There is no version `3` (no trailing zero) in the interner yet.
     #[test]
-    fn maker_normalization_a() {
+    fn marker_normalization_a() {
         let left_tree = m("python_version == '3.0.*'");
         let left = left_tree.try_to_string().unwrap();
         let right = "python_full_version == '3.0.*'";
@@ -3407,12 +3407,20 @@ mod test {
 
     /// Case b: There is already a version `3` (no trailing zero) in the interner.
     #[test]
-    fn maker_normalization_b() {
+    fn marker_normalization_b() {
         m("python_version >= '3' and python_version <= '3.0'");
 
         let left_tree = m("python_version == '3.0.*'");
         let left = left_tree.try_to_string().unwrap();
         let right = "python_full_version == '3.0.*'";
+        assert_eq!(left, right, "{left} != {right}");
+    }
+
+    #[test]
+    fn marker_normalization_c() {
+        let left_tree = MarkerTree::from_str("python_version == '3.10.0.*'").unwrap();
+        let left = left_tree.try_to_string().unwrap();
+        let right = "python_full_version == '3.10.*'";
         assert_eq!(left, right, "{left} != {right}");
     }
 }

@@ -28725,3 +28725,34 @@ fn lock_prefix_match() -> Result<()> {
 
     Ok(())
 }
+
+/// Regression test for https://github.com/astral-sh/uv/issues/14231.
+#[test]
+fn test_tilde_equals_python_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "debug"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+          "anyio==4.2.0; python_full_version >= '3.11'",
+          "anyio==4.3.0; python_full_version ~= '3.10.0'",
+        ]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
