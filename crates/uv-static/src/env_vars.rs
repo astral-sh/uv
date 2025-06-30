@@ -162,6 +162,9 @@ impl EnvVars {
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
 
+    /// Timeout (in seconds) for bytecode compilation.
+    pub const UV_COMPILE_BYTECODE_TIMEOUT: &'static str = "UV_COMPILE_BYTECODE_TIMEOUT";
+
     /// Equivalent to the `--no-editable` command-line argument. If set, uv
     /// installs any editable dependencies, including the project and any workspace members, as
     /// non-editable
