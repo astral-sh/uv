@@ -1530,9 +1530,8 @@ impl Edges {
 ///
 /// Returns `Err` with a constant node if the equivalent comparison is always `true` or `false`.
 fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<VersionSpecifier, NodeId> {
-    // Unlike the operators (expect tilde equals), the "trailing" zeroes matter for
-    // (not-)equals-star. We don't have to handle tilde-equals as it is incidentally correct.
-    // This means that below this block, we can use the trimmed release as the release.
+    // Trailing zeroes matter only for (not-)equals-star and tilde-equals. This means that below
+    // the next two blocks, we can use the trimmed release as the release.
     if specifier.operator().is_star() {
         // Input          python_version  python_full_version
         // ==3.*          3.*             3.*
@@ -1554,6 +1553,28 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
                 Ok(VersionSpecifier::from_version(*specifier.operator(), python_version).unwrap())
             }
             // Ex) `3.9.1.*` or `3.9.0.1.*`
+            _ => Err(NodeId::FALSE),
+        };
+    }
+
+    if *specifier.operator() == Operator::TildeEqual {
+        // python_version  python_full_version
+        // ~=3             (not possible)
+        // ~= 3.0          >= 3.0, < 4.0
+        // ~= 3.9          >= 3.9, < 4.0
+        // ~= 3.9.0        == 3.9.*
+        // ~= 3.9.1        FALSE
+        // ~= 3.9.0.0      == 3.9.*
+        // ~= 3.9.0.1      FALSE
+        return match &*specifier.version().release() {
+            // Ex) `3.0`, `3.7`
+            [_major, _minor] => Ok(specifier),
+            // Ex) `3.9`, `3.9.0`, or `3.9.0.0`
+            [major, minor, rest @ ..] if rest.iter().all(|x| *x == 0) => {
+                let python_version = Version::new([major, minor]);
+                Ok(VersionSpecifier::equals_star_version(python_version))
+            }
+            // Ex) `3.9.1` or `3.9.0.1`
             _ => Err(NodeId::FALSE),
         };
     }
@@ -1598,21 +1619,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
                 VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
             }
 
-            // `~=3.7` already represent the equivalent `python_full_version` comparison, and a
-            // tilde has at least two segments (`~=3` is not possible).
-            Operator::TildeEqual => {
-                // python_version  python_full_version
-                // ~= 3.0          >= 3.0, < 4.0
-                // ~= 3.7          >= 3.7, < 4.0
-                // ~= 3.7.0        == 3.7.*
-                // ~= 3.7.0.0      == 3.7.*
-                if specifier.version().release().len() > 2 {
-                    VersionSpecifier::equals_star_version(version)
-                } else {
-                    specifier
-                }
-            }
-            Operator::EqualStar | Operator::NotEqualStar => {
+            Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => {
                 // Handled above.
                 unreachable!()
             }
@@ -1625,7 +1632,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
         Ok(match specifier.operator() {
             // `python_version` cannot have more than two release segments, and we know
             // that the following release segments aren't purely zeroes so equality is impossible.
-            Operator::Equal | Operator::ExactEqual | Operator::TildeEqual => {
+            Operator::Equal | Operator::ExactEqual => {
                 return Err(NodeId::FALSE);
             }
 
@@ -1642,7 +1649,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
                 VersionSpecifier::greater_than_equal_version(Version::new([major, minor + 1]))
             }
 
-            Operator::EqualStar | Operator::NotEqualStar => {
+            Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => {
                 // Handled above.
                 unreachable!()
             }

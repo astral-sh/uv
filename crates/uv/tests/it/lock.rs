@@ -28726,7 +28726,7 @@ fn lock_prefix_match() -> Result<()> {
     Ok(())
 }
 
-/// Regression test for https://github.com/astral-sh/uv/issues/14231.
+/// Regression test for <https://github.com/astral-sh/uv/issues/14231>.
 #[test]
 fn test_tilde_equals_python_version() -> Result<()> {
     let context = TestContext::new("3.12");

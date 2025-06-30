@@ -350,7 +350,7 @@ impl VersionSpecifier {
 
     /// Remove all non-release parts of the version.
     ///
-    /// The marker decision diagram rely on the assumption that the negation of a marker tree is
+    /// The marker decision diagram relies on the assumption that the negation of a marker tree is
     /// the complement of the marker space. However, pre-release versions violate this assumption.
     ///
     /// For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
@@ -364,6 +364,9 @@ impl VersionSpecifier {
     /// for `python_version` to fully simplify any ranges, such as
     /// `python_version > '3.9' or python_version <= '3.9'`, which is always `true` for
     /// `python_version`. For `python_full_version` however, this decision is a semantic change.
+    ///
+    /// For Python versions, the major.minor is considered the API version, so unlike the rules
+    /// for package versions in PEP 440, we Python `3.9.0a0` is acceptable for `>= "3.9"`.
     #[must_use]
     pub fn only_release(self) -> Self {
         Self {
@@ -464,16 +467,6 @@ impl VersionSpecifier {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some(VersionSpecifier::equals_version(v1.clone())), None)
-            }
-            // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
-            (Bound::Included(v1), Bound::Excluded(v2))
-                if v1.release().len() == 2
-                    && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
-            {
-                (
-                    Some(VersionSpecifier::equals_star_version(v1.clone())),
-                    None,
-                )
             }
             // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
             (Bound::Included(v1), Bound::Excluded(v2)) => {
