@@ -5013,14 +5013,14 @@ fn lock_requires_python_not_equal() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -27522,7 +27522,7 @@ fn windows_arm() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 2
-        requires-python = ">=3.12.[X], <3.13"
+        requires-python = "==3.12.*"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
             "platform_machine == 'AMD64' and sys_platform == 'win32'",
@@ -27599,7 +27599,7 @@ fn windows_amd64_required() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 2
-        requires-python = ">=3.12.[X], <3.13"
+        requires-python = "==3.12.*"
         required-markers = [
             "platform_machine == 'x86' and sys_platform == 'win32'",
             "platform_machine == 'AMD64' and sys_platform == 'win32'",

@@ -80,24 +80,38 @@ impl VersionSpecifiers {
 
         // Add specifiers for the holes between the bounds.
         for (lower, upper) in bounds {
-            match (next, lower) {
+            let specifier = match (next, lower) {
                 // Ex) [3.7, 3.8.5), (3.8.5, 3.9] -> >=3.7,!=3.8.5,<=3.9
                 (Bound::Excluded(prev), Bound::Excluded(lower)) if prev == lower => {
-                    specifiers.push(VersionSpecifier::not_equals_version(prev.clone()));
+                    Some(VersionSpecifier::not_equals_version(prev.clone()))
                 }
                 // Ex) [3.7, 3.8), (3.8, 3.9] -> >=3.7,!=3.8.*,<=3.9
-                (Bound::Excluded(prev), Bound::Included(lower))
-                    if prev.release().len() == 2
-                        && *lower.release() == [prev.release()[0], prev.release()[1] + 1] =>
-                {
-                    specifiers.push(VersionSpecifier::not_equals_star_version(prev.clone()));
+                (Bound::Excluded(prev), Bound::Included(lower)) => {
+                    match *prev.only_release_trimmed().release() {
+                        [major] if *lower.only_release_trimmed().release() == [major, 1] => {
+                            Some(VersionSpecifier::not_equals_star_version(Version::new([
+                                major, 0,
+                            ])))
+                        }
+                        [major, minor]
+                            if *lower.only_release_trimmed().release() == [major, minor + 1] =>
+                        {
+                            Some(VersionSpecifier::not_equals_star_version(Version::new([
+                                major, minor,
+                            ])))
+                        }
+                        _ => None,
+                    }
                 }
-                _ => {
-                    #[cfg(feature = "tracing")]
-                    warn!(
-                        "Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}"
-                    );
-                }
+                _ => None,
+            };
+            if let Some(specifier) = specifier {
+                specifiers.push(specifier);
+            } else {
+                #[cfg(feature = "tracing")]
+                warn!(
+                    "Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}"
+                );
             }
             next = upper;
         }
@@ -471,16 +485,16 @@ impl VersionSpecifier {
             // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
             (Bound::Included(v1), Bound::Excluded(v2)) => {
                 match *v1.only_release_trimmed().release() {
-                    [major] if *v2.release() == [major, 1] => (
-                        Some(VersionSpecifier::equals_star_version(Version::new([
-                            major, 0,
-                        ]))),
-                        None,
-                    ),
-                    [major, minor] if *v2.release() == [major, minor + 1] => (
-                        Some(VersionSpecifier::equals_star_version(v1.clone())),
-                        None,
-                    ),
+                    [major] if *v2.only_release_trimmed().release() == [major, 1] => {
+                        let version = Version::new([major, 0]);
+                        (Some(VersionSpecifier::equals_star_version(version)), None)
+                    }
+                    [major, minor]
+                        if *v2.only_release_trimmed().release() == [major, minor + 1] =>
+                    {
+                        let version = Version::new([major, minor]);
+                        (Some(VersionSpecifier::equals_star_version(version)), None)
+                    }
                     _ => (
                         VersionSpecifier::from_lower_bound(&Bound::Included(v1.clone())),
                         VersionSpecifier::from_upper_bound(&Bound::Excluded(v2.clone())),
