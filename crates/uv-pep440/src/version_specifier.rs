@@ -475,6 +475,25 @@ impl VersionSpecifier {
                     None,
                 )
             }
+            // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
+            (Bound::Included(v1), Bound::Excluded(v2)) => {
+                match *v1.only_release_trimmed().release() {
+                    [major] if *v2.release() == [major, 1] => (
+                        Some(VersionSpecifier::equals_star_version(Version::new([
+                            major, 0,
+                        ]))),
+                        None,
+                    ),
+                    [major, minor] if *v2.release() == [major, minor + 1] => (
+                        Some(VersionSpecifier::equals_star_version(v1.clone())),
+                        None,
+                    ),
+                    _ => (
+                        VersionSpecifier::from_lower_bound(&Bound::Included(v1.clone())),
+                        VersionSpecifier::from_upper_bound(&Bound::Excluded(v2.clone())),
+                    ),
+                }
+            }
             (lower, upper) => (
                 VersionSpecifier::from_lower_bound(lower),
                 VersionSpecifier::from_upper_bound(upper),

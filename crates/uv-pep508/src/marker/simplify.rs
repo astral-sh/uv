@@ -345,56 +345,32 @@ where
 
 /// Returns `Some` if the version range can be simplified as a star specifier.
 ///
-/// For positive ranges like `python_full_version >= '3' and python_full_version < '3.1'`,
-/// returns `== '3.0.*'`.
+/// Only for the two bounds case not covered by [`VersionSpecifier::from_release_only_bounds`].
 ///
 /// For negative ranges like `python_full_version < '3.8' or python_full_version >= '3.9'`,
 /// returns `!= '3.8.*'`.
 fn star_range_specifier(range: &Ranges<Version>) -> Option<VersionSpecifier> {
-    match range.iter().count() {
-        // Check for positive star range: single segment (Included(v1), Excluded(v2))
-        1 => {
-            let bounds = range.iter().next()?;
-            if let (Bound::Included(v1), Bound::Excluded(v2)) = bounds {
-                match *v1.only_release_trimmed().release() {
-                    [major] if *v2.release() == [major, 1] => {
-                        Some(VersionSpecifier::equals_star_version(Version::new([
-                            major, 0,
-                        ])))
-                    }
-                    [major, minor] if *v2.release() == [major, minor + 1] => {
-                        Some(VersionSpecifier::equals_star_version(v1.clone()))
-                    }
-                    _ => None,
-                }
-            } else {
-                None
+    if range.iter().count() != 2 {
+        return None;
+    }
+    // Check for negative star range: two segments [(Unbounded, Excluded(v1)), (Included(v2), Unbounded)]
+    let (b1, b2) = range.iter().collect_tuple()?;
+    if let ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded)) =
+        (b1, b2)
+    {
+        match *v1.only_release_trimmed().release() {
+            [major] if *v2.release() == [major, 1] => {
+                Some(VersionSpecifier::not_equals_star_version(Version::new([
+                    major, 0,
+                ])))
             }
-        }
-        // Check for negative star range: two segments [(Unbounded, Excluded(v1)), (Included(v2), Unbounded)]
-        2 => {
-            let (b1, b2) = range.iter().collect_tuple()?;
-            if let (
-                (Bound::Unbounded, Bound::Excluded(v1)),
-                (Bound::Included(v2), Bound::Unbounded),
-            ) = (b1, b2)
-            {
-                match *v1.only_release_trimmed().release() {
-                    [major] if *v2.release() == [major, 1] => {
-                        Some(VersionSpecifier::not_equals_star_version(Version::new([
-                            major, 0,
-                        ])))
-                    }
-                    [major, minor] if *v2.release() == [major, minor + 1] => {
-                        Some(VersionSpecifier::not_equals_star_version(v1.clone()))
-                    }
-                    _ => None,
-                }
-            } else {
-                None
+            [major, minor] if *v2.release() == [major, minor + 1] => {
+                Some(VersionSpecifier::not_equals_star_version(v1.clone()))
             }
+            _ => None,
         }
-        _ => None,
+    } else {
+        None
     }
 }
 
