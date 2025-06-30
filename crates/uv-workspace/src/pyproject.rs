@@ -24,6 +24,7 @@ use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{
@@ -610,7 +611,7 @@ pub struct ToolUv {
     /// Note that those settings only apply when using the `uv_build` backend, other build backends
     /// (such as hatchling) have their own configuration.
     #[option_group]
-    pub build_backend: Option<BuildBackendSettings>,
+    pub build_backend: Option<BuildBackendSettingsSchema>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -1683,4 +1684,45 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct BuildBackendSettingsSchema;
+
+impl<'de> Deserialize<'de> for BuildBackendSettingsSchema {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(BuildBackendSettingsSchema)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for BuildBackendSettingsSchema {
+    fn schema_name() -> Cow<'static, str> {
+        BuildBackendSettings::schema_name()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        BuildBackendSettings::json_schema(generator)
+    }
+}
+
+impl OptionsMetadata for BuildBackendSettingsSchema {
+    fn record(visit: &mut dyn Visit) {
+        BuildBackendSettings::record(visit);
+    }
+
+    fn documentation() -> Option<&'static str> {
+        BuildBackendSettings::documentation()
+    }
+
+    fn metadata() -> OptionSet
+    where
+        Self: Sized + 'static,
+    {
+        BuildBackendSettings::metadata()
+    }
 }
