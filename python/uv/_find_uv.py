@@ -22,10 +22,10 @@ def find_uv_bin() -> str:
         sysconfig.get_path("scripts", scheme=_user_scheme()),
         # Above the package root, e.g., from `pip install --prefix`
         # with module path `<prefix>/lib/python3.13/site-packages/uv`
-        _join(_parents(_module_path(), 4), "bin"),
+        _join(_matching_parents(_module_path(), "lib/python*/site-packages/uv"), "bin"),
         # Adjacent to the package root, e.g., from `pip install --target`
         # with module path `<target>/uv`
-        _join(_parents(_module_path(), 1), "bin"),
+        _join(_matching_parents(_module_path(), "uv"), "bin"),
     ]
 
     seen = []
@@ -50,13 +50,32 @@ def _module_path() -> str | None:
     return path
 
 
-def _parents(path: str | None, n: int) -> str | None:
+def _matching_parents(path: str | None, match: str) -> str | None:
+    """
+    Return the parent directory of `path` after trimming a `match` from the end.
+    The match is expected to contain `/` as a path separator, while the `path`
+    is expected to use the platform's path separator (e.g., `os.sep`). The path
+    components are compared case-insensitively and a `*` wildcard can be used
+    in the `match`.
+    """
+    from fnmatch import fnmatch
+
     if not path:
         return None
     parts = path.split(os.sep)
-    if len(parts) < n:
+    match_parts = match.split("/")
+    if len(parts) < len(match_parts):
         return None
-    return os.sep.join(parts[:-n])
+
+    if not all(
+        fnmatch(part, match_part)
+        for part, match_part in zip(
+            reversed(parts), reversed(match_parts), strict=False
+        )
+    ):
+        return None
+
+    return os.sep.join(parts[: -len(match_parts)])
 
 
 def _join(path: str | None, *parts: str) -> str | None:
