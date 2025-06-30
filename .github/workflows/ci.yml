@@ -1004,7 +1004,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-windows-aarch64
     name: "integration test | aarch64 windows implicit"
-    runs-on: windows-latest
+    runs-on: github-windows-11-aarch64-4
 
     steps:
       - name: "Download binary"
@@ -1049,7 +1049,7 @@ jobs:
     timeout-minutes: 10
     needs: build-binary-windows-aarch64
     name: "integration test | aarch64 windows explicit"
-    runs-on: windows-latest
+    runs-on: github-windows-11-aarch64-4
 
     steps:
       - name: "Download binary"
