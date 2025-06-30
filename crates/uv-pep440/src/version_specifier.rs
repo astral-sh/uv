@@ -348,6 +348,30 @@ impl VersionSpecifier {
         Ok(Self { operator, version })
     }
 
+    /// Remove all non-release parts of the version.
+    ///
+    /// The marker decision diagram rely on the assumption that the negation of a marker tree is
+    /// the complement of the marker space. However, pre-release versions violate this assumption.
+    ///
+    /// For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
+    /// does not match `python_full_version == 3.9.0a0` and so cannot simplify to `true`. However,
+    /// its negation, `python_full_version > '3.9' and python_full_version <= '3.9'`, also does not
+    /// match `3.9.0a0` and simplifies to `false`, which violates the algebra decision diagrams
+    /// rely on. For this reason we ignore pre-release versions entirely when evaluating markers.
+    ///
+    /// Note that `python_version` cannot take on pre-release values as it is truncated to just the
+    /// major and minor version segments. Thus using release-only specifiers is definitely necessary
+    /// for `python_version` to fully simplify any ranges, such as
+    /// `python_version > '3.9' or python_version <= '3.9'`, which is always `true` for
+    /// `python_version`. For `python_full_version` however, this decision is a semantic change.
+    #[must_use]
+    pub fn only_release(self) -> Self {
+        Self {
+            operator: self.operator,
+            version: self.version.only_release(),
+        }
+    }
+
     /// `==<version>`
     pub fn equals_version(version: Version) -> Self {
         Self {
