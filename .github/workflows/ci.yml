@@ -1000,6 +1000,96 @@ jobs:
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
 
+  integration-test-windows-aarch64-implicit:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "integration test | aarch64 windows implicit"
+    runs-on: windows-latest
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
+
+      - name: "Install Python via uv (implicitly select x64)"
+        run: |
+          ./uv python install -v 3.13
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          & (./uv python find 3.13) -m venv .venv
+
+      - name: "Check version (stdlib)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -p 3.13 --managed-python
+
+      - name: "Check version (uv)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Check is x64"
+        run: |
+          .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' not in sys.version else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13 python -c ""
+
+  integration-test-windows-aarch64-explicit:
+    timeout-minutes: 10
+    needs: build-binary-windows-aarch64
+    name: "integration test | aarch64 windows explicit"
+    runs-on: windows-latest
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
+
+      - name: "Install Python via uv (explicitly select aarch64)"
+        run: |
+          ./uv python install -v cpython-3.13-windows-aarch64-none
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          & (./uv python find 3.13) -m venv .venv
+
+      - name: "Check version (stdlib)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -p 3.13 --managed-python
+
+      - name: "Check version (uv)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Check is NOT x64"
+        run: |
+          .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' in sys.version else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13 python -c ""
+
   integration-test-pypy-linux:
     timeout-minutes: 10
     needs: build-binary-linux-libc
