@@ -894,15 +894,6 @@
     "Index": {
       "type": "object",
       "properties": {
-        "format": {
-          "description": "The format used by the index.\n\nIndexes can either be PEP 503-compliant (i.e., a PyPI-style registry implementing the Simple\nAPI) or structured as a flat list of distributions (e.g., `--find-links`). In both cases,\nindexes can point to either local or remote resources.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/IndexFormat"
-            }
-          ],
-          "default": "simple"
-        },
         "authenticate": {
           "description": "When uv should use authentication for requests to the index.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nauthenticate = \"always\"\n```",
           "allOf": [
@@ -921,6 +912,15 @@
           "description": "Mark the index as explicit.\n\nExplicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]`\ndefinition, as in:\n\n```toml\n[[tool.uv.index]]\nname = \"pytorch\"\nurl = \"https://download.pytorch.org/whl/cu121\"\nexplicit = true\n\n[tool.uv.sources]\ntorch = { index = \"pytorch\" }\n```",
           "type": "boolean",
           "default": false
+        },
+        "format": {
+          "description": "The format used by the index.\n\nIndexes can either be PEP 503-compliant (i.e., a PyPI-style registry implementing the Simple\nAPI) or structured as a flat list of distributions (e.g., `--find-links`). In both cases,\nindexes can point to either local or remote resources.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexFormat"
+            }
+          ],
+          "default": "simple"
         },
         "ignore-error-codes": {
           "description": "Status codes that uv should ignore when deciding whether\nto continue searching in the next index after a failure.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
