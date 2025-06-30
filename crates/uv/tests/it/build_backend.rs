@@ -858,3 +858,40 @@ fn symlinked_file() -> Result<()> {
 
     Ok(())
 }
+
+/// Ignore invalid build backend settings when not building.
+///
+/// They may be from another `uv_build` version that has a different schema.
+#[test]
+fn invalid_build_backend_settings_are_ignored() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "built-by-uv"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        # Error: `source-include` must be a list
+        source-include = "data/build-script.py"
+
+        [build-system]
+        requires = ["uv_build>=10000,<10001"]
+        build-backend = "uv_build"
+    "#})?;
+
+    // Since we are not building, this must pass without complaining about the error in
+    // `tool.uv.build-backend`.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
