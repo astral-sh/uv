@@ -117,6 +117,18 @@ impl IndexUrl {
         }
     }
 
+    /// Return the raw URL for the index with a trailing slash.
+    pub fn url_with_trailing_slash(&self) -> Cow<'_, DisplaySafeUrl> {
+        let path = self.url().path();
+        if path.ends_with('/') {
+            Cow::Borrowed(self.url())
+        } else {
+            let mut url = self.url().clone();
+            url.set_path(&format!("{path}/"));
+            Cow::Owned(url)
+        }
+    }
+
     /// Convert the index URL into a [`DisplaySafeUrl`].
     pub fn into_url(self) -> DisplaySafeUrl {
         match self {
@@ -725,5 +737,24 @@ mod tests {
         assert!(is_disambiguated_path(
             "git+https://github.com/example/repo.git"
         ));
+    }
+
+    #[test]
+    fn test_index_url_with_trailing_slash() {
+        let url_with_trailing_slash = DisplaySafeUrl::parse("https://example.com/path/").unwrap();
+
+        let index_url_with_given_slash =
+            IndexUrl::parse("https://example.com/path/", None).unwrap();
+        assert_eq!(
+            &*index_url_with_given_slash.url_with_trailing_slash(),
+            &url_with_trailing_slash
+        );
+
+        let index_url_without_given_slash =
+            IndexUrl::parse("https://example.com/path", None).unwrap();
+        assert_eq!(
+            &*index_url_without_given_slash.url_with_trailing_slash(),
+            &url_with_trailing_slash
+        );
     }
 }

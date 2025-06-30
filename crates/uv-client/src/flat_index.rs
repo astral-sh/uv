@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use futures::{FutureExt, StreamExt};
@@ -149,10 +150,20 @@ impl<'a> FlatIndexClient<'a> {
                 Self::read_from_directory(&path, index)
                     .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))
             }
-            IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
-                .read_from_url(url, index)
-                .await
-                .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err)),
+            IndexUrl::Pypi(url) | IndexUrl::Url(url) => {
+                // If the URL was originally provided with a slash, we restore that slash
+                // before making a request.
+                let url_with_original_slash =
+                    if url.given().is_some_and(|given| given.ends_with('/')) {
+                        index.url_with_trailing_slash()
+                    } else {
+                        Cow::Borrowed(index.url())
+                    };
+
+                self.read_from_url(&url_with_original_slash, index)
+                    .await
+                    .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err))
+            }
         }
     }
 
