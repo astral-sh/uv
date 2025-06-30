@@ -162,6 +162,14 @@ impl<'a> FlatIndexClient<'a> {
         url: &DisplaySafeUrl,
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, Error> {
+        let mut url = url.clone();
+        url.path_segments_mut()
+            .map_err(|()| ErrorKind::CannotBeABase(flat_index.url().clone()))?
+            .pop_if_empty()
+            // Add a trailing slash to avoid redirect, which is not supported
+            // by some private registries.
+            .push("");
+
         let cache_entry = self.cache.entry(
             CacheBucket::FlatIndex,
             "html",
@@ -179,7 +187,7 @@ impl<'a> FlatIndexClient<'a> {
         let flat_index_request = self
             .client
             .uncached()
-            .for_host(url)
+            .for_host(&url)
             .get(Url::from(url.clone()))
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
