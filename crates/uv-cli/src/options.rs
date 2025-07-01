@@ -28,7 +28,10 @@ pub fn flag(yes: bool, no: bool, name: &str) -> Option<bool> {
                 format!("--no-{name}").green(),
             );
             // No error forwarding since should eventually be solved on the clap side.
-            std::process::exit(2);
+            #[allow(clippy::exit)]
+            {
+                std::process::exit(2);
+            }
         }
     }
 }
