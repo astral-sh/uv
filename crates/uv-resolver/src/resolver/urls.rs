@@ -4,7 +4,6 @@ use same_file::is_same_file;
 use tracing::debug;
 
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::Verbatim;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, VerbatimUrl};
@@ -170,8 +169,8 @@ impl Urls {
         let [allowed_url] = matching_urls.as_slice() else {
             let mut conflicting_urls: Vec<_> = matching_urls
                 .into_iter()
-                .map(|parsed_url| parsed_url.verbatim.verbatim().to_string())
-                .chain(std::iter::once(verbatim_url.verbatim().to_string()))
+                .map(|parsed_url| parsed_url.parsed_url.clone())
+                .chain(std::iter::once(parsed_url.clone()))
                 .collect();
             conflicting_urls.sort();
             return Err(ResolveError::ConflictingUrls {

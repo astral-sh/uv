@@ -2,7 +2,6 @@ use std::collections::hash_map::Entry;
 
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::Verbatim;
 use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 
@@ -34,10 +33,8 @@ impl ForkUrls {
         match self.0.entry(package_name.clone()) {
             Entry::Occupied(previous) => {
                 if previous.get() != url {
-                    let mut conflicting_url = vec![
-                        previous.get().verbatim.verbatim().to_string(),
-                        url.verbatim.verbatim().to_string(),
-                    ];
+                    let mut conflicting_url =
+                        vec![previous.get().parsed_url.clone(), url.parsed_url.clone()];
                     conflicting_url.sort();
                     return Err(ResolveError::ConflictingUrls {
                         package_name: package_name.clone(),

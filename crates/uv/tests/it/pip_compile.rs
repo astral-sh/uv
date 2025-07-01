@@ -2909,16 +2909,16 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
-    - git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
     - git+https://github.com/astral-test/uv-public-pypackage@test-branch
-    "###
+    - git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+    "
     );
 
     Ok(())
