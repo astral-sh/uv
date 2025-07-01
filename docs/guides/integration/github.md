@@ -375,3 +375,39 @@ steps:
   https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
 [repository secret]:
   https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository
+
+## Build and Publish
+
+To build and publish your package to PyPI from GitHub Actions:
+
+1. Add a [trusted publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) to your PyPI project.
+2. Create a workflow (e.g., `.github/workflows/publish.yml`) with the following steps:
+
+   ```yaml
+   name: "Publish"
+   on:
+     release:
+       types: ["published"]
+   permissions:
+     id-token: write
+     contents: read
+   jobs:
+     run:
+       runs-on: ubuntu-latest
+       environment: pypi
+       steps:
+         - uses: actions/checkout@v4
+         - name: Install uv
+           uses: astral-sh/setup-uv@v5
+           with:
+             enable-cache: true
+             cache-dependency-glob: uv.lock
+         - name: Set up Python
+           run: uv python install 3.13
+         - name: Build
+           run: uv build
+         - name: Publish
+           run: uv publish
+   ```
+
+This workflow builds and publishes your package to PyPI automatically when a GitHub Release is published. No PyPI credentials are needed if using a trusted publisher.
