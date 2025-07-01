@@ -29,6 +29,7 @@ use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_virtualenv::VenvCreationPolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
@@ -60,8 +61,7 @@ pub(crate) async fn venv(
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     seed: bool,
-    allow_existing: bool,
-    clear: bool,
+    venv_creation_policy: VenvCreationPolicy,
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
     no_config: bool,
@@ -87,8 +87,7 @@ pub(crate) async fn venv(
         seed,
         python_preference,
         python_downloads,
-        allow_existing,
-        clear,
+        venv_creation_policy,
         exclude_newer,
         concurrency,
         no_config,
@@ -145,8 +144,7 @@ async fn venv_impl(
     seed: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    allow_existing: bool,
-    clear: bool,
+    venv_creation_policy: VenvCreationPolicy,
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
     no_config: bool,
@@ -291,8 +289,7 @@ async fn venv_impl(
         interpreter,
         prompt,
         system_site_packages,
-        allow_existing,
-        clear,
+        venv_creation_policy,
         relocatable,
         seed,
         upgradeable,

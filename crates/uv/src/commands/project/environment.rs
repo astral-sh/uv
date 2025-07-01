@@ -8,6 +8,7 @@ use uv_configuration::{Concurrency, Constraints, PreviewMode};
 use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
+use uv_virtualenv::VenvCreationPolicy;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -96,8 +97,7 @@ impl CachedEnvironment {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
-            false,
-            true,
+            VenvCreationPolicy::RemoveDirectory,
             true,
             false,
             false,
