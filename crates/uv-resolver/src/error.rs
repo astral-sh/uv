@@ -17,6 +17,8 @@ use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 use uv_pep440::{LocalVersionSlice, LowerBound, Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::Tags;
+use uv_pypi_types::ParsedUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
@@ -56,11 +58,14 @@ pub enum ResolveError {
         } else {
             format!(" in {env}")
         },
-        urls.join("\n- "),
+        urls.iter()
+            .map(|url| format!("{}{}", DisplaySafeUrl::from(url.clone()), if url.is_editable() { " (editable)" } else { "" }))
+            .collect::<Vec<_>>()
+            .join("\n- ")
     )]
     ConflictingUrls {
         package_name: PackageName,
-        urls: Vec<String>,
+        urls: Vec<ParsedUrl>,
         env: ResolverEnvironment,
     },
 
@@ -71,11 +76,14 @@ pub enum ResolveError {
         } else {
             format!(" in {env}")
         },
-        indexes.join("\n- "),
+        indexes.iter()
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n- ")
     )]
     ConflictingIndexesForEnvironment {
         package_name: PackageName,
-        indexes: Vec<String>,
+        indexes: Vec<IndexUrl>,
         env: ResolverEnvironment,
     },
 
