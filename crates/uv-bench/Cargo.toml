@@ -42,7 +42,7 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-codspeed-criterion-compat = { version = "3.0.1", default-features = false, optional = true }
+codspeed-criterion-compat = { version = "3.0.2", default-features = false, optional = true }
 criterion = { version = "0.6.0", default-features = false, features = [
   "async_tokio",
 ] }
