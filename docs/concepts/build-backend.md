@@ -55,8 +55,7 @@ package will be used. Other build frontends, such as `python -m build`, will alw
 ## Modules
 
 Python packages are expected to contain one or more Python modules, which are directories containing
-an `__init__.py`. By the default, a single root module is expected at
-`src/<package_name>/__init__.py`.
+an `__init__.py`. By default, a single root module is expected at `src/<package_name>/__init__.py`.
 
 For example, the structure for a project named `foo` would be:
 
@@ -146,8 +145,8 @@ a `__init__.pyi` file. For example, the project structure would be:
 ```text
 pyproject.toml
 src
-├── foo-stubs
-│   └── __init__.pyi
+└── foo-stubs
+    └── __init__.pyi
 ```
 
 Type stub modules are also supported for [namespace packages](#namespace-packages).
@@ -184,7 +183,7 @@ When building a wheel, the following files and directories are included:
 - The files referenced by `project.license-files`, which are copied into the `.dist-info` directory.
 - The `project.readme`, which is copied into the project metadata.
 - All directories under [`tool.uv.build-backend.data`](../reference/settings.md#build-backend_data),
-  which are copied into the `.data` directory
+  which are copied into the `.data` directory.
 
 From these,
 [`tool.uv.build-backend.source-exclude`](../reference/settings.md#build-backend_source-exclude),
@@ -209,7 +208,7 @@ all `sample.csv` files in `<root>/assets` or any of its children.
     For performance and reproducibility, avoid patterns without an anchor such as `**/sample.csv`.
 
 Excludes are not anchored, which means that `__pycache__` excludes all directories named
-`__pycache__` regardless of its parent directory. All children of a exclusion are excluded as well.
+`__pycache__` regardless of its parent directory. All children of an exclusion are excluded as well.
 To anchor a directory, use a `/` prefix, e.g., `/dist` will exclude only `<root>/dist`.
 
 All fields accepting patterns use the reduced portable glob syntax from
