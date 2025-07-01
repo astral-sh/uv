@@ -2,12 +2,13 @@
 //! [installer][`uv_installer`] and [build][`uv_build`] through [`BuildDispatch`]
 //! implementing [`BuildContext`].
 
+use std::ffi::{OsStr, OsString};
+use std::path::Path;
+
 use anyhow::{Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use std::ffi::{OsStr, OsString};
-use std::path::Path;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 
@@ -179,7 +180,7 @@ impl BuildContext for BuildDispatch<'_> {
         &self.shared_state.git
     }
 
-    fn build_arena(&self) -> &BuildArena {
+    fn build_arena(&self) -> &BuildArena<SourceBuild> {
         &self.shared_state.build_arena
     }
 
@@ -526,7 +527,7 @@ pub struct SharedState {
     /// The downloaded distributions.
     in_flight: InFlight,
     /// Build directories for any PEP 517 builds executed during resolution or installation.
-    build_arena: BuildArena,
+    build_arena: BuildArena<SourceBuild>,
 }
 
 impl SharedState {
@@ -565,7 +566,7 @@ impl SharedState {
     }
 
     /// Return the [`BuildArena`] used by the [`SharedState`].
-    pub fn build_arena(&self) -> &BuildArena {
+    pub fn build_arena(&self) -> &BuildArena<SourceBuild> {
         &self.build_arena
     }
 }

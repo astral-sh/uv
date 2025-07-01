@@ -5,9 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use rustc_hash::FxHashSet;
-use tempfile::TempDir;
 
-use crate::BuildArena;
 use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution_filename::DistFilename;
@@ -19,6 +17,8 @@ use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
+
+use crate::BuildArena;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -70,7 +70,7 @@ pub trait BuildContext {
     fn git(&self) -> &GitResolver;
 
     /// Return a reference to the build arena.
-    fn build_arena(&self) -> &BuildArena;
+    fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
 
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
@@ -153,9 +153,6 @@ pub trait BuildContext {
 /// You can either call only `wheel()` to build the wheel directly, call only `metadata()` to get
 /// the metadata without performing the actual or first call `metadata()` and then `wheel()`.
 pub trait SourceBuildTrait {
-    /// Return the temporary build directory.
-    fn into_build_dir(self) -> TempDir;
-
     /// A wrapper for `uv_build::SourceBuild::get_metadata_without_build`.
     ///
     /// For PEP 517 builds, this calls `prepare_metadata_for_build_wheel`
@@ -188,12 +185,12 @@ pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
 pub struct EmptyInstalledPackages;
 
 impl InstalledPackagesProvider for EmptyInstalledPackages {
-    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
-        Vec::new()
-    }
-
     fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         std::iter::empty()
+    }
+
+    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
+        Vec::new()
     }
 }
 
