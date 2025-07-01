@@ -443,7 +443,7 @@ jobs:
 
       - name: "Build docs (insiders)"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.insiders.yml
+        run: uvx --with-requirements docs/requirements-insiders.txt mkdocs build --strict -f mkdocs.insiders.yml
 
   build-binary-linux-libc:
     timeout-minutes: 10
