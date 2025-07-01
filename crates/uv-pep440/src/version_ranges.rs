@@ -130,10 +130,11 @@ impl From<VersionSpecifier> for Ranges<Version> {
 ///
 /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
 pub fn release_specifiers_to_ranges(specifiers: VersionSpecifiers) -> Ranges<Version> {
-    specifiers
-        .into_iter()
-        .map(release_specifier_to_range)
-        .fold(Ranges::full(), |acc, range| acc.intersection(&range))
+    let mut range = Ranges::full();
+    for specifier in specifiers {
+        range = range.intersection(&release_specifier_to_range(specifier, false));
+    }
+    range
 }
 
 /// Convert the [`VersionSpecifier`] to a PubGrub-compatible version range, using release-only
@@ -147,67 +148,57 @@ pub fn release_specifiers_to_ranges(specifiers: VersionSpecifiers) -> Ranges<Ver
 /// is allowed for projects that declare `requires-python = ">3.13"`.
 ///
 /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
-pub fn release_specifier_to_range(specifier: VersionSpecifier) -> Ranges<Version> {
+pub fn release_specifier_to_range(specifier: VersionSpecifier, trim: bool) -> Ranges<Version> {
     let VersionSpecifier { operator, version } = specifier;
+    // Note(konsti): We switched strategies to trimmed for the markers, but we don't want to cause
+    // churn in lockfile requires-python, so we only trim for markers.
+    let version_trimmed = if trim {
+        version.only_release_trimmed()
+    } else {
+        version.only_release()
+    };
     match operator {
-        Operator::Equal => {
-            let version = version.only_release();
-            Ranges::singleton(version)
-        }
-        Operator::ExactEqual => {
-            let version = version.only_release();
-            Ranges::singleton(version)
-        }
-        Operator::NotEqual => {
-            let version = version.only_release();
-            Ranges::singleton(version).complement()
-        }
+        // Trailing zeroes are not semantically relevant.
+        Operator::Equal => Ranges::singleton(version_trimmed),
+        Operator::ExactEqual => Ranges::singleton(version_trimmed),
+        Operator::NotEqual => Ranges::singleton(version_trimmed).complement(),
+        Operator::LessThan => Ranges::strictly_lower_than(version_trimmed),
+        Operator::LessThanEqual => Ranges::lower_than(version_trimmed),
+        Operator::GreaterThan => Ranges::strictly_higher_than(version_trimmed),
+        Operator::GreaterThanEqual => Ranges::higher_than(version_trimmed),
+
+        // Trailing zeroes are semantically relevant.
         Operator::TildeEqual => {
             let release = version.release();
             let [rest @ .., last, _] = &*release else {
                 unreachable!("~= must have at least two segments");
             };
             let upper = Version::new(rest.iter().chain([&(last + 1)]));
-            let version = version.only_release();
-            Ranges::from_range_bounds(version..upper)
-        }
-        Operator::LessThan => {
-            let version = version.only_release();
-            Ranges::strictly_lower_than(version)
-        }
-        Operator::LessThanEqual => {
-            let version = version.only_release();
-            Ranges::lower_than(version)
-        }
-        Operator::GreaterThan => {
-            let version = version.only_release();
-            Ranges::strictly_higher_than(version)
-        }
-        Operator::GreaterThanEqual => {
-            let version = version.only_release();
-            Ranges::higher_than(version)
+            Ranges::from_range_bounds(version_trimmed..upper)
         }
         Operator::EqualStar => {
-            let low = version.only_release();
+            // For (not-)equal-star, trailing zeroes are still before the star.
+            let low_full = version.only_release();
             let high = {
-                let mut high = low.clone();
+                let mut high = low_full.clone();
                 let mut release = high.release().to_vec();
                 *release.last_mut().unwrap() += 1;
                 high = high.with_release(release);
                 high
             };
-            Ranges::from_range_bounds(low..high)
+            Ranges::from_range_bounds(version..high)
         }
         Operator::NotEqualStar => {
-            let low = version.only_release();
+            // For (not-)equal-star, trailing zeroes are still before the star.
+            let low_full = version.only_release();
             let high = {
-                let mut high = low.clone();
+                let mut high = low_full.clone();
                 let mut release = high.release().to_vec();
                 *release.last_mut().unwrap() += 1;
                 high = high.with_release(release);
                 high
             };
-            Ranges::from_range_bounds(low..high).complement()
+            Ranges::from_range_bounds(version..high).complement()
         }
     }
 }
@@ -222,8 +213,8 @@ impl LowerBound {
     /// These bounds use release-only semantics when comparing versions.
     pub fn new(bound: Bound<Version>) -> Self {
         Self(match bound {
-            Bound::Included(version) => Bound::Included(version.only_release()),
-            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Included(version) => Bound::Included(version.only_release_trimmed()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release_trimmed()),
             Bound::Unbounded => Bound::Unbounded,
         })
     }
@@ -357,8 +348,8 @@ impl UpperBound {
     /// These bounds use release-only semantics when comparing versions.
     pub fn new(bound: Bound<Version>) -> Self {
         Self(match bound {
-            Bound::Included(version) => Bound::Included(version.only_release()),
-            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Included(version) => Bound::Included(version.only_release_trimmed()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release_trimmed()),
             Bound::Unbounded => Bound::Unbounded,
         })
     }

@@ -71,7 +71,7 @@ impl RequiresPython {
                 // Warn if there’s exactly one `~=` specifier without a patch.
                 if let [spec] = &specs[..] {
                     if spec.is_tilde_without_patch() {
-                        if let Some((lo_b, hi_b)) = release_specifier_to_range(spec.clone())
+                        if let Some((lo_b, hi_b)) = release_specifier_to_range(spec.clone(), false)
                             .bounding_range()
                             .map(|(l, u)| (l.cloned(), u.cloned()))
                         {
@@ -80,8 +80,8 @@ impl RequiresPython {
                             warn_user_once!(
                                 "The release specifier (`{spec}`) contains a compatible release \
                                 match without a patch version. This will be interpreted as \
-                                `{lo_spec}, {hi_spec}`. Did you mean `{spec}.0` to freeze the minor \
-                                version?"
+                                `{lo_spec}, {hi_spec}`. Did you mean `{spec}.0` to freeze the \
+                                minor version?"
                             );
                         }
                     }

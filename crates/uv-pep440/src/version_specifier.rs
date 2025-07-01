@@ -80,24 +80,38 @@ impl VersionSpecifiers {
 
         // Add specifiers for the holes between the bounds.
         for (lower, upper) in bounds {
-            match (next, lower) {
+            let specifier = match (next, lower) {
                 // Ex) [3.7, 3.8.5), (3.8.5, 3.9] -> >=3.7,!=3.8.5,<=3.9
                 (Bound::Excluded(prev), Bound::Excluded(lower)) if prev == lower => {
-                    specifiers.push(VersionSpecifier::not_equals_version(prev.clone()));
+                    Some(VersionSpecifier::not_equals_version(prev.clone()))
                 }
                 // Ex) [3.7, 3.8), (3.8, 3.9] -> >=3.7,!=3.8.*,<=3.9
-                (Bound::Excluded(prev), Bound::Included(lower))
-                    if prev.release().len() == 2
-                        && *lower.release() == [prev.release()[0], prev.release()[1] + 1] =>
-                {
-                    specifiers.push(VersionSpecifier::not_equals_star_version(prev.clone()));
+                (Bound::Excluded(prev), Bound::Included(lower)) => {
+                    match *prev.only_release_trimmed().release() {
+                        [major] if *lower.only_release_trimmed().release() == [major, 1] => {
+                            Some(VersionSpecifier::not_equals_star_version(Version::new([
+                                major, 0,
+                            ])))
+                        }
+                        [major, minor]
+                            if *lower.only_release_trimmed().release() == [major, minor + 1] =>
+                        {
+                            Some(VersionSpecifier::not_equals_star_version(Version::new([
+                                major, minor,
+                            ])))
+                        }
+                        _ => None,
+                    }
                 }
-                _ => {
-                    #[cfg(feature = "tracing")]
-                    warn!(
-                        "Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}"
-                    );
-                }
+                _ => None,
+            };
+            if let Some(specifier) = specifier {
+                specifiers.push(specifier);
+            } else {
+                #[cfg(feature = "tracing")]
+                warn!(
+                    "Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}"
+                );
             }
             next = upper;
         }
@@ -348,6 +362,33 @@ impl VersionSpecifier {
         Ok(Self { operator, version })
     }
 
+    /// Remove all non-release parts of the version.
+    ///
+    /// The marker decision diagram relies on the assumption that the negation of a marker tree is
+    /// the complement of the marker space. However, pre-release versions violate this assumption.
+    ///
+    /// For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
+    /// does not match `python_full_version == 3.9.0a0` and so cannot simplify to `true`. However,
+    /// its negation, `python_full_version > '3.9' and python_full_version <= '3.9'`, also does not
+    /// match `3.9.0a0` and simplifies to `false`, which violates the algebra decision diagrams
+    /// rely on. For this reason we ignore pre-release versions entirely when evaluating markers.
+    ///
+    /// Note that `python_version` cannot take on pre-release values as it is truncated to just the
+    /// major and minor version segments. Thus using release-only specifiers is definitely necessary
+    /// for `python_version` to fully simplify any ranges, such as
+    /// `python_version > '3.9' or python_version <= '3.9'`, which is always `true` for
+    /// `python_version`. For `python_full_version` however, this decision is a semantic change.
+    ///
+    /// For Python versions, the major.minor is considered the API version, so unlike the rules
+    /// for package versions in PEP 440, we Python `3.9.0a0` is acceptable for `>= "3.9"`.
+    #[must_use]
+    pub fn only_release(self) -> Self {
+        Self {
+            operator: self.operator,
+            version: self.version.only_release(),
+        }
+    }
+
     /// `==<version>`
     pub fn equals_version(version: Version) -> Self {
         Self {
@@ -442,14 +483,23 @@ impl VersionSpecifier {
                 (Some(VersionSpecifier::equals_version(v1.clone())), None)
             }
             // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
-            (Bound::Included(v1), Bound::Excluded(v2))
-                if v1.release().len() == 2
-                    && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
-            {
-                (
-                    Some(VersionSpecifier::equals_star_version(v1.clone())),
-                    None,
-                )
+            (Bound::Included(v1), Bound::Excluded(v2)) => {
+                match *v1.only_release_trimmed().release() {
+                    [major] if *v2.only_release_trimmed().release() == [major, 1] => {
+                        let version = Version::new([major, 0]);
+                        (Some(VersionSpecifier::equals_star_version(version)), None)
+                    }
+                    [major, minor]
+                        if *v2.only_release_trimmed().release() == [major, minor + 1] =>
+                    {
+                        let version = Version::new([major, minor]);
+                        (Some(VersionSpecifier::equals_star_version(version)), None)
+                    }
+                    _ => (
+                        VersionSpecifier::from_lower_bound(&Bound::Included(v1.clone())),
+                        VersionSpecifier::from_upper_bound(&Bound::Excluded(v2.clone())),
+                    ),
+                }
             }
             (lower, upper) => (
                 VersionSpecifier::from_lower_bound(lower),

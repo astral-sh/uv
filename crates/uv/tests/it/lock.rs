@@ -5013,14 +5013,14 @@ fn lock_requires_python_not_equal() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -27522,7 +27522,7 @@ fn windows_arm() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 2
-        requires-python = ">=3.12.[X], <3.13"
+        requires-python = "==3.12.*"
         resolution-markers = [
             "platform_machine == 'x86_64' and sys_platform == 'linux'",
             "platform_machine == 'AMD64' and sys_platform == 'win32'",
@@ -27599,7 +27599,7 @@ fn windows_amd64_required() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 2
-        requires-python = ">=3.12.[X], <3.13"
+        requires-python = "==3.12.*"
         required-markers = [
             "platform_machine == 'x86' and sys_platform == 'win32'",
             "platform_machine == 'AMD64' and sys_platform == 'win32'",
@@ -28721,6 +28721,37 @@ fn lock_prefix_match() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only anyio<=4.3.0 is available and your project depends on anyio==5.4.*, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/14231>.
+#[test]
+fn test_tilde_equals_python_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "debug"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+          "anyio==4.2.0; python_full_version >= '3.11'",
+          "anyio==4.3.0; python_full_version ~= '3.10.0'",
+        ]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
     ");
 
     Ok(())
