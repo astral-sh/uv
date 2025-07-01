@@ -11490,7 +11490,7 @@ fn pep_751_dependency() -> Result<()> {
 /// Test that we show an error instead of panicking for conflicting arguments in different levels,
 /// which are not caught by clap.
 #[test]
-fn conflicting_flags_clap_bug() -> Result<()> {
+fn conflicting_flags_clap_bug() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.command()
@@ -11507,6 +11507,4 @@ fn conflicting_flags_clap_bug() -> Result<()> {
     error: `--offline` and `--no-offline` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)
     "
     );
-
-    Ok(())
 }
