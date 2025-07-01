@@ -273,6 +273,7 @@ mod tests {
         // Borrows a URL without a fragment
         let url = UrlString("https://example.com/path".into());
         assert_eq!(&*url.without_fragment(), &url);
+        assert!(matches!(url.without_fragment(), Cow::Borrowed(_)));
 
         // Removes the fragment if present on the URL
         let url = UrlString("https://example.com/path?query#fragment".into());
@@ -280,6 +281,7 @@ mod tests {
             &*url.without_fragment(),
             &UrlString("https://example.com/path?query".into())
         );
+        assert!(matches!(url.without_fragment(), Cow::Owned(_)));
     }
 
     #[test]
@@ -287,6 +289,7 @@ mod tests {
         // Borrows a URL without a slash
         let url = UrlString("https://example.com/path".into());
         assert_eq!(&*url.without_trailing_slash(), &url);
+        assert!(matches!(url.without_trailing_slash(), Cow::Borrowed(_)));
 
         // Removes the trailing slash if present on the URL
         let url = UrlString("https://example.com/path/".into());
@@ -294,14 +297,17 @@ mod tests {
             &*url.without_trailing_slash(),
             &UrlString("https://example.com/path".into())
         );
+        assert!(matches!(url.without_trailing_slash(), Cow::Owned(_)));
 
         // Does not remove a trailing slash if it's the only path segment
         let url = UrlString("https://example.com/".into());
         assert_eq!(&*url.without_trailing_slash(), &url);
+        assert!(matches!(url.without_trailing_slash(), Cow::Borrowed(_)));
 
         // Does not remove a trailing slash if it's the only path segment with a missing scheme
         let url = UrlString("example.com/".into());
         assert_eq!(&*url.without_trailing_slash(), &url);
+        assert!(matches!(url.without_trailing_slash(), Cow::Borrowed(_)));
 
         // Removes the trailing slash when the scheme is missing
         let url = UrlString("example.com/path/".into());
@@ -309,5 +315,6 @@ mod tests {
             &*url.without_trailing_slash(),
             &UrlString("example.com/path".into())
         );
+        assert!(matches!(url.without_trailing_slash(), Cow::Owned(_)));
     }
 }
