@@ -54,8 +54,7 @@ pub(crate) fn create(
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    allow_existing: bool,
-    clear: bool,
+    venv_creation_policy: VenvCreationPolicy,
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
@@ -86,13 +85,15 @@ pub(crate) fn create(
                     format!("File exists at `{}`", location.user_display()),
                 )));
             } else if metadata.is_dir() {
-                let confirmation_required = !clear && !allow_existing;
-                let confirmed_clear = confirmation_required && confirm_clear(location)?;
+                let confirmed_clear = venv_creation_policy == VenvCreationPolicy::FailIfNotEmpty
+                    && confirm_clear(location)?;
 
-                if allow_existing {
+                if venv_creation_policy == VenvCreationPolicy::OverwriteFiles {
                     debug!("Allowing existing directory due to `--allow-existing`");
-                } else if clear || confirmed_clear {
-                    if clear {
+                } else if venv_creation_policy == VenvCreationPolicy::RemoveDirectory
+                    || confirmed_clear
+                {
+                    if venv_creation_policy == VenvCreationPolicy::RemoveDirectory {
                         debug!("Removing existing directory due to `--clear`");
                     } else {
                         debug!("Removing existing directory");
@@ -489,6 +490,17 @@ fn confirm_clear(location: &Path) -> Result<bool, io::Error> {
     } else {
         Ok(false)
     }
+}
+
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub enum VenvCreationPolicy {
+    /// Do not create a virtual environment if a non-empty directory exists.
+    #[default]
+    FailIfNotEmpty,
+    /// Overwrite existing virtual environment files.
+    OverwriteFiles,
+    /// Remove existing directory.
+    RemoveDirectory,
 }
 
 #[derive(Debug, Copy, Clone)]

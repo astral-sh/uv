@@ -41,6 +41,7 @@ use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
+use uv_virtualenv::VenvCreationPolicy;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -1029,6 +1030,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let python_request: Option<PythonRequest> =
                 args.settings.python.as_deref().map(PythonRequest::parse);
 
+            let venv_creation_policy = if args.allow_existing {
+                VenvCreationPolicy::OverwriteFiles
+            } else if args.clear {
+                VenvCreationPolicy::RemoveDirectory
+            } else {
+                VenvCreationPolicy::default()
+            };
+
             commands::venv(
                 &project_dir,
                 args.path,
@@ -1045,8 +1054,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 args.seed,
-                args.allow_existing,
-                args.clear,
+                venv_creation_policy,
                 args.settings.exclude_newer,
                 globals.concurrency,
                 cli.top_level.no_config,

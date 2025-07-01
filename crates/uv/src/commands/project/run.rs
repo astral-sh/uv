@@ -37,6 +37,7 @@ use uv_scripts::Pep723Item;
 use uv_settings::PythonInstallMirrors;
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
+use uv_virtualenv::VenvCreationPolicy;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -465,8 +466,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
-                    true,
+                    VenvCreationPolicy::RemoveDirectory,
                     false,
                     false,
                     false,
@@ -671,8 +671,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
-                    true,
+                    VenvCreationPolicy::RemoveDirectory,
                     false,
                     false,
                     false,
@@ -909,8 +908,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
-                    true,
+                    VenvCreationPolicy::RemoveDirectory,
                     false,
                     false,
                     false,

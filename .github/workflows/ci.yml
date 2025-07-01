@@ -1087,7 +1087,7 @@ jobs:
 
       - name: "Create a virtual environment (uv)"
         run: |
-          ./uv venv -p 3.13 --managed-python
+          ./uv venv -c -p 3.13 --managed-python
 
       - name: "Check version (uv)"
         run: |
@@ -1132,7 +1132,7 @@ jobs:
 
       - name: "Create a virtual environment (uv)"
         run: |
-          ./uv venv -p 3.13 --managed-python
+          ./uv venv -c -p 3.13 --managed-python
 
       - name: "Check version (uv)"
         run: |

@@ -40,6 +40,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
+use uv_virtualenv::VenvCreationPolicy;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -331,8 +332,7 @@ impl SourceBuild {
                 interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                false,
-                true,
+                VenvCreationPolicy::RemoveDirectory,
                 false,
                 false,
                 false,
