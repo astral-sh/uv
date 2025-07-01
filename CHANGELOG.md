@@ -2,6 +2,40 @@
 
 <!-- prettier-ignore-start -->
 
+
+## 0.7.18
+
+### Python
+
+- Added arm64 Windows Python 3.11, 3.12, 3.13, and 3.14
+
+  These are not downloaded by default, since x86-64 Python has broader ecosystem support on Windows.
+  However, they can be requested with `cpython-<version>-windows-aarch64`.
+
+### Enhancements
+
+- Keep track of retries in `ManagedPythonDownload::fetch_with_retry` ([#14378](https://github.com/astral-sh/uv/pull/14378))
+- Reuse build (virtual) environments across resolution and installation ([#14338](https://github.com/astral-sh/uv/pull/14338))
+- Improve trace message for cached Python interpreter query ([#14328](https://github.com/astral-sh/uv/pull/14328))
+- Use parsed URLs for conflicting URL error message ([#14380](https://github.com/astral-sh/uv/pull/14380))
+
+### Preview features
+
+- Ignore invalid build backend settings when not building ([#14372](https://github.com/astral-sh/uv/pull/14372))
+
+### Bug fixes
+
+- Fix equals-star and tilde-equals with `python_version` and `python_full_version` ([#14271](https://github.com/astral-sh/uv/pull/14271))
+- Include the canonical path in the interpreter query cache key ([#14331](https://github.com/astral-sh/uv/pull/14331))
+- Only drop build directories on program exit ([#14304](https://github.com/astral-sh/uv/pull/14304))
+- Error instead of panic on conflict between global and subcommand flags ([#14368](https://github.com/astral-sh/uv/pull/14368))
+- Consistently normalize trailing slashes on URLs with no path segments ([#14349](https://github.com/astral-sh/uv/pull/14349))
+
+### Documentation
+
+- Add instructions for publishing to JFrog's Artifactory ([#14253](https://github.com/astral-sh/uv/pull/14253))
+- Edits to the build backend documentation ([#14376](https://github.com/astral-sh/uv/pull/14376))
+
 ## 0.7.17
 
 ### Bug fixes
