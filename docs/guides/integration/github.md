@@ -380,7 +380,8 @@ steps:
 
 To build and publish your package to PyPI from GitHub Actions:
 
-1. Add a [trusted publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) to your PyPI project.
+1. Add a [trusted publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) to your
+   PyPI project.
 2. Create a workflow (e.g., `.github/workflows/publish.yml`) with the following steps:
 
    ```yaml
@@ -410,4 +411,5 @@ To build and publish your package to PyPI from GitHub Actions:
            run: uv publish
    ```
 
-This workflow builds and publishes your package to PyPI automatically when a GitHub Release is published. No PyPI credentials are needed if using a trusted publisher.
+This workflow builds and publishes your package to PyPI automatically when a GitHub Release is
+published. No PyPI credentials are needed if using a trusted publisher.
