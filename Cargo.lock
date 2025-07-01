@@ -5906,6 +5906,7 @@ dependencies = [
  "clap",
  "either",
  "fs-err 3.1.1",
+ "regex",
  "schemars",
  "serde",
  "thiserror 2.0.12",
@@ -5916,6 +5917,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-static",
+ "walkdir",
 ]
 
 [[package]]

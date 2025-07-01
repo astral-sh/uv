@@ -1,6 +1,9 @@
+use std::path::Path;
 use std::str::FromStr;
 
+use regex::Regex;
 use tracing::debug;
+use walkdir::WalkDir;
 
 use uv_pep440::Version;
 use uv_static::EnvVars;
@@ -13,6 +16,10 @@ pub enum AcceleratorError {
     Version(#[from] uv_pep440::VersionParseError),
     #[error(transparent)]
     Utf8(#[from] std::string::FromUtf8Error),
+    #[error(transparent)]
+    ParseInt(#[from] std::num::ParseIntError),
+    #[error(transparent)]
+    WalkDir(#[from] walkdir::Error),
     #[error("Unknown AMD GPU architecture: {0}")]
     UnknownAmdGpuArchitecture(String),
 }
@@ -30,6 +37,10 @@ pub enum Accelerator {
     Amd {
         gpu_architecture: AmdGpuArchitecture,
     },
+    /// The Intel GPU (XPU).
+    ///
+    /// Currently, Intel GPUs do not depend on a driver/toolkit version at this level.
+    Xpu,
 }
 
 impl std::fmt::Display for Accelerator {
@@ -37,21 +48,29 @@ impl std::fmt::Display for Accelerator {
         match self {
             Self::Cuda { driver_version } => write!(f, "CUDA {driver_version}"),
             Self::Amd { gpu_architecture } => write!(f, "AMD {gpu_architecture}"),
+            Self::Xpu => write!(f, "Intel GPU (XPU) detected"),
         }
     }
 }
 
 impl Accelerator {
-    /// Detect the CUDA driver version from the system.
+    /// Detect the GPU driver/architecture version from the system.
     ///
     /// Query, in order:
     /// 1. The `UV_CUDA_DRIVER_VERSION` environment variable.
     /// 2. The `UV_AMD_GPU_ARCHITECTURE` environment variable.
-    /// 2. `/sys/module/nvidia/version`, which contains the driver version (e.g., `550.144.03`).
-    /// 3. `/proc/driver/nvidia/version`, which contains the driver version among other information.
-    /// 4. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
-    /// 5. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
+    /// 3. `/sys/module/nvidia/version`, which contains the driver version (e.g., `550.144.03`).
+    /// 4. `/proc/driver/nvidia/version`, which contains the driver version among other information.
+    /// 5. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
+    /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
+    /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
+    /// 8. `powershell` command querying `Win32_VideoController` to detect Intel GPU.
     pub fn detect() -> Result<Option<Self>, AcceleratorError> {
+        // Constants used for PCI device detection
+        const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
+        const PCI_BASE_CLASS_DISPLAY: u32 = 0x0003_0000;
+        const PCI_VENDOR_ID_INTEL: u32 = 0x8086;
+
         // Read from `UV_CUDA_DRIVER_VERSION`.
         if let Ok(driver_version) = std::env::var(EnvVars::UV_CUDA_DRIVER_VERSION) {
             let driver_version = Version::from_str(&driver_version)?;
@@ -150,6 +169,66 @@ impl Accelerator {
             }
         }
 
+        // Read from `/sys/bus/pci/devices` to filter for Intel GPU via PCI.
+        match WalkDir::new("/sys/bus/pci/devices")
+            .min_depth(1)
+            .max_depth(1)
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(entries) => {
+                for entry in entries {
+                    match parse_pci_device_ids(entry.path()) {
+                        Ok((class, vendor)) => {
+                            if (class & PCI_BASE_CLASS_MASK) == PCI_BASE_CLASS_DISPLAY
+                                && vendor == PCI_VENDOR_ID_INTEL
+                            {
+                                debug!("Detected Intel GPU from PCI: vendor=0x{:04x}", vendor);
+                                return Ok(Some(Self::Xpu));
+                            }
+                        }
+                        Err(e) => {
+                            debug!("Failed to parse PCI device IDs: {e}");
+                        }
+                    }
+                }
+            }
+            Err(e)
+                if e.io_error()
+                    .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) => {}
+            Err(e) => {
+                debug!("Failed to read PCI device directory with WalkDir: {e}");
+                return Err(e.into());
+            }
+        }
+
+        // Query Intel GPU by `powershell` command via `Win32_VideoController`.
+        //
+        // See: https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-videocontroller
+        if let Ok(output) = std::process::Command::new("powershell")
+            .arg("-Command")
+            .arg("Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty PNPDeviceID")
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8(output.stdout)?;
+                let re = Regex::new(r"VEN_([0-9A-Fa-f]{4})").unwrap();
+                for caps in re.captures_iter(&stdout) {
+                    let vendor = u32::from_str_radix(&caps[1], 16)?;
+                    if vendor == PCI_VENDOR_ID_INTEL {
+                        debug!("Detected Intel GPU from PCI, vendor=0x{:04x}", vendor);
+                        return Ok(Some(Self::Xpu));
+                    }
+                }
+            } else {
+                debug!(
+                    "Failed to query Intel GPU with powershell with status `{}`: {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
+
         debug!("Failed to detect GPU driver version");
 
         Ok(None)
@@ -178,6 +257,22 @@ fn parse_proc_driver_nvidia_version(content: &str) -> Result<Option<Version>, Ac
     };
     let driver_version = Version::from_str(version.trim())?;
     Ok(Some(driver_version))
+}
+
+/// Reads and parses the PCI class and vendor ID from a given device path under `/sys/bus/pci/devices`.
+fn parse_pci_device_ids(device_path: &Path) -> Result<(u32, u32), AcceleratorError> {
+    // Parse, e.g.:
+    // ```text
+    // - `class`: a hexadecimal string such as `0x030000`
+    // - `vendor`: a hexadecimal string such as `0x8086`
+    // ```
+    let class_content = fs_err::read_to_string(device_path.join("class"))?;
+    let pci_class = u32::from_str_radix(class_content.trim().trim_start_matches("0x"), 16)?;
+
+    let vendor_content = fs_err::read_to_string(device_path.join("vendor"))?;
+    let pci_vendor = u32::from_str_radix(vendor_content.trim().trim_start_matches("0x"), 16)?;
+
+    Ok((pci_class, pci_vendor))
 }
 
 /// A GPU architecture for AMD GPUs.
