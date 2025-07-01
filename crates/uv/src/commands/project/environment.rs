@@ -44,13 +44,13 @@ impl CachedEnvironment {
         printer: Printer,
         preview: PreviewMode,
     ) -> Result<Self, ProjectError> {
-        let interpreter = Self::base_interpreter(interpreter, cache)?;
+        let base_interpreter = Self::base_interpreter(interpreter, cache)?;
 
         // Resolve the requirements with the interpreter.
         let resolution = Resolution::from(
             resolve_environment(
                 spec,
-                &interpreter,
+                &base_interpreter,
                 build_constraints.clone(),
                 &settings.resolver,
                 network_settings,
@@ -73,13 +73,15 @@ impl CachedEnvironment {
             hash_digest(&distributions)
         };
 
-        // Hash the interpreter based on its path.
-        // TODO(charlie): Come up with a robust hash for the interpreter.
+        // Concatenate the hashes of the interpreter path and the sys prefix. We don't want to
+        // share ephemeral environments between two different project venvs, for example.
         let interpreter_hash =
-            cache_digest(&canonicalize_executable(interpreter.sys_executable())?);
+            cache_digest(&canonicalize_executable(base_interpreter.sys_executable())?);
+        let base_venv_hash = cache_digest(&interpreter.sys_prefix().canonicalize()?);
+        let cache_dir_name = interpreter_hash + &base_venv_hash;
 
         // Search in the content-addressed cache.
-        let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
+        let cache_entry = cache.entry(CacheBucket::Environments, cache_dir_name, resolution_hash);
 
         if cache.refresh().is_none() {
             if let Ok(root) = cache.resolve_link(cache_entry.path()) {
@@ -93,7 +95,7 @@ impl CachedEnvironment {
         let temp_dir = cache.venv_dir()?;
         let venv = uv_virtualenv::create_venv(
             temp_dir.path(),
-            interpreter,
+            base_interpreter,
             uv_virtualenv::Prompt::None,
             false,
             false,
