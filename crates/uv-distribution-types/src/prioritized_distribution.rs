@@ -13,7 +13,7 @@ use uv_variants::VariantPriority;
 
 use crate::{
     File, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    ResolvedDistRef,
+    ResolvedDistRef, VariantJson,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -30,6 +30,8 @@ struct PrioritizedDistInner {
     best_wheel_index: Option<usize>,
     /// The set of all wheels associated with this distribution.
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
+    /// The `variants.json` file associated with the package version.
+    variants_json: Option<VariantJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// The set of supported platforms for the distribution, described in terms of their markers.
@@ -42,6 +44,7 @@ impl Default for PrioritizedDistInner {
             source: None,
             best_wheel_index: None,
             wheels: Vec::new(),
+            variants_json: None,
             hashes: Vec::new(),
             markers: MarkerTree::FALSE,
         }
@@ -350,6 +353,7 @@ impl PrioritizedDist {
             markers: implied_markers(&dist.filename),
             best_wheel_index: Some(0),
             wheels: vec![(dist, compatibility)],
+            variants_json: None,
             source: None,
             hashes,
         }))
@@ -366,7 +370,20 @@ impl PrioritizedDist {
             best_wheel_index: None,
             wheels: vec![],
             source: Some((dist, compatibility)),
+            variants_json: None,
             hashes,
+        }))
+    }
+
+    /// Create a new [`PrioritizedDist`] from the `variant.json`.
+    pub fn from_variant_json(variant_json: VariantJson) -> Self {
+        Self(Box::new(PrioritizedDistInner {
+            markers: MarkerTree::TRUE,
+            best_wheel_index: None,
+            wheels: vec![],
+            source: None,
+            variants_json: Some(variant_json),
+            hashes: vec![],
         }))
     }
 
@@ -421,6 +438,14 @@ impl PrioritizedDist {
         } else {
             self.0.source = Some((dist, compatibility));
         }
+    }
+
+    pub fn insert_variant_json(&mut self, variant_json: VariantJson) {
+        debug_assert!(
+            self.0.variants_json.is_none(),
+            "The variant.json filename is unique"
+        );
+        self.0.variants_json = Some(variant_json);
     }
 
     /// Return the highest-priority distribution for the package version, if any.
