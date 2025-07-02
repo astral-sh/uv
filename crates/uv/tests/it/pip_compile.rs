@@ -16345,7 +16345,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16394,7 +16394,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "source-distribution"
@@ -16478,7 +16478,7 @@ fn pep_751_compile_directory() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16549,7 +16549,7 @@ fn pep_751_compile_git() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "uv-public-pypackage"
@@ -16599,7 +16599,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16663,7 +16663,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16732,7 +16732,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16770,7 +16770,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16811,7 +16811,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16850,7 +16850,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16887,7 +16887,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16928,7 +16928,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16968,7 +16968,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17007,7 +17007,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17055,7 +17055,7 @@ fn pep_751_compile_warn() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --emit-index-url
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -17268,7 +17268,7 @@ fn pep_751_compile_no_emit_package() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --no-emit-package idna
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17559,6 +17559,50 @@ fn git_path_transitive_dependency() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Ensure that `--emit-index-annotation` plays nicely with `--annotation-style=line`.
+#[test]
+fn omit_python_patch_universal() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("redis")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    redis==5.0.3
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
+    async-timeout==4.0.3 ; python_full_version < '3.11.[X]'
+        # via redis
+    redis==5.0.3
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
 
     Ok(())
 }
