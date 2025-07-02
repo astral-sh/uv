@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use sha3::{
-    digest::{ExtendableOutput, Update},
     Shake128,
+    digest::{ExtendableOutput, Update},
 };
 
 #[derive(
