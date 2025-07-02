@@ -328,6 +328,17 @@ ENV UV_COMPILE_BYTECODE=1
 
 ### Caching
 
+If you run containers with uv commands, your caching strategy might differ, depending on whether you
+can reuse the cache between the builds and whether you are only using caching for building
+containers, or also to run `uv` inside the containers. Also it depends on whether the host machine
+that keeps your container engine is persistent or ephemeral (e.g., in CI).
+
+#### Reusing the uv cache for builds
+
+This makes sense when your container engine is persistent and you expect to run a number of builds
+with the same container engine. This is not practically useful in CI systems, where the container
+engine is usually ephemeral and when you run a single build of a container image.
+
 A [cache mount](https://docs.docker.com/build/guide/mounts/#add-a-cache-mount) can be used to
 improve performance across builds:
 
@@ -354,6 +365,31 @@ setting `UV_NO_CACHE`.
     ```dockerfile title="Dockerfile"
     ENV UV_CACHE_DIR=/opt/uv-cache/
     ```
+
+#### Sharing the cache between running containers
+
+While using cache-mount is useful when you expect many builds to be run on the same host engine and
+when the machine persistently stores the build cache, there is another case where container cache
+might be shared between running containers, when you run uv commands inside running containers (for
+example running `uv sync`).
+
+uv supports using the same cache between multiple processes by default and this also works between
+different containers running on the same machine - either in parallel or when they are run
+one-after-another sequentially by mounting the same uv cache directory in all the running
+containers.
+
+To do it, you should mount the same folder from the machine to the `~/.cache/uv` directory in all
+the running containers as read/write volumes.
+
+```bash
+docker run --rm -it \
+    --mount type=volume,source=/opt/uv-cache,target=/root/.cache/uv \
+    ghcr.io/astral-sh/uv:debian uv sync
+```
+
+Again, this might not be practical in CI systems, where the container engine is ephemeral and you
+run a single uv command in a single container, but is useful when you run multiple commands in
+several containers - either in parallel or sequentially.
 
 ### Intermediate layers
 
