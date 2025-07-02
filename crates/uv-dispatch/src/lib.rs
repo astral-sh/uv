@@ -453,12 +453,6 @@ impl BuildContext for BuildDispatch<'_> {
         build_kind: BuildKind,
         version_id: Option<&'data str>,
     ) -> Result<Option<DistFilename>, BuildDispatchError> {
-        // Direct builds are a preview feature with the uv build backend.
-        if self.preview.is_disabled() {
-            trace!("Preview is disabled, not checking for direct build");
-            return Ok(None);
-        }
-
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
         } else {

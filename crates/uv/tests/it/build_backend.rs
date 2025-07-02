@@ -224,7 +224,6 @@ fn preserve_executable_bit() -> Result<()> {
         .init()
         .arg("--build-backend")
         .arg("uv")
-        .arg("--preview")
         .arg(&project_dir)
         .assert()
         .success();
@@ -316,8 +315,7 @@ fn rename_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -391,8 +389,7 @@ fn rename_module_editable_build() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-editable")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -568,8 +565,7 @@ fn build_sdist_with_long_path() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -602,8 +598,7 @@ fn sdist_error_without_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r"
+        .arg(temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -617,8 +612,7 @@ fn sdist_error_without_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r"
+        .arg(temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -682,7 +676,6 @@ fn complex_namespace_packages() -> Result<()> {
 
         context
             .build()
-            .arg("--preview")
             .arg(project.path())
             .arg("--out-dir")
             .arg(dist.path())
@@ -731,7 +724,6 @@ fn complex_namespace_packages() -> Result<()> {
         context.filters(),
         context
             .pip_install()
-            .arg("--preview")
             .arg("-e")
             .arg("complex-project-part_a")
             .arg("-e")
@@ -778,7 +770,6 @@ fn symlinked_file() -> Result<()> {
     let project = context.temp_dir.child("project");
     context
         .init()
-        .arg("--preview")
         .arg("--build-backend")
         .arg("uv")
         .arg(project.path())

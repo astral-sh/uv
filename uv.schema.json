@@ -644,7 +644,7 @@
       ]
     },
     "BuildBackendSettings": {
-      "description": "Settings for the uv build backend (`uv_build`).\n\n!!! note\n\n    The uv build backend is currently in preview and may change in any future release.\n\nNote that those settings only apply when using the `uv_build` backend, other build backends\n(such as hatchling) have their own configuration.\n\nAll options that accept globs use the portable glob patterns from\n[PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).",
+      "description": "Settings for the uv build backend (`uv_build`).\n\nNote that those settings only apply when using the `uv_build` backend, other build backends\n(such as hatchling) have their own configuration.\n\nAll options that accept globs use the portable glob patterns from\n[PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).",
       "type": "object",
       "properties": {
         "data": {
