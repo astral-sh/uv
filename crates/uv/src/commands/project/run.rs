@@ -240,7 +240,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .await?
             .into_environment()?;
 
-            let _lock = environment.lock().await?;
+            let _lock = environment
+                .lock()
+                .await
+                .inspect_err(|err| {
+                    warn!("Failed to acquire environment lock: {err}");
+                })
+                .ok();
 
             // Determine the lock mode.
             let mode = if frozen {
@@ -386,7 +392,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         )
                     });
 
-                let _lock = environment.lock().await?;
+                let _lock = environment
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
 
                 match update_environment(
                     environment,
@@ -699,7 +711,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
-                let _lock = venv.lock().await?;
+                let _lock = venv
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
 
                 // Determine the lock mode.
                 let mode = if frozen {

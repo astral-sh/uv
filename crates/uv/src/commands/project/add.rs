@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 
 use uv_cache::Cache;
@@ -319,7 +319,13 @@ pub(crate) async fn add(
         }
     };
 
-    let _lock = target.acquire_lock().await?;
+    let _lock = target
+        .acquire_lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)

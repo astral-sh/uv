@@ -1244,7 +1244,12 @@ impl ProjectEnvironment {
         preview: PreviewMode,
     ) -> Result<Self, ProjectError> {
         // Lock the project environment to avoid synchronization issues.
-        let _lock = ProjectInterpreter::lock(workspace).await?;
+        let _lock = ProjectInterpreter::lock(workspace)
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire project environment lock: {err}");
+            })
+            .ok();
 
         let upgradeable = preview.is_enabled()
             && python
@@ -1462,7 +1467,13 @@ impl ScriptEnvironment {
         preview: PreviewMode,
     ) -> Result<Self, ProjectError> {
         // Lock the script environment to avoid synchronization issues.
-        let _lock = ScriptInterpreter::lock(script).await?;
+        let _lock = ScriptInterpreter::lock(script)
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire script environment lock: {err}");
+            })
+            .ok();
+
         let upgradeable = python_request
             .as_ref()
             .is_none_or(|request| !request.includes_patch());
