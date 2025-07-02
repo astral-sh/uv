@@ -396,8 +396,8 @@ To build and publish your package to PyPI from GitHub Actions:
      run:
        runs-on: ubuntu-latest
        environment:
-        name: pypi
-        url: https://pypi.org/p/<package-name>  # Replace <package-name> with your PyPI project name
+         name: pypi
+         url: https://pypi.org/p/<package-name> # Replace <package-name> with your PyPI project name
        steps:
          - uses: actions/checkout@v4
          - name: Install uv
