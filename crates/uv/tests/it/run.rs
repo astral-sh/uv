@@ -4983,7 +4983,7 @@ fn run_without_overlay() -> Result<()> {
     "###);
 
     // Import `iniconfig` in the context of a `tool run` command, which should fail. Note that
-    // typing-exensions gets installed again, because the venv is not shared.
+    // typing-extensions gets installed again, because the venv is not shared.
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
