@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{Level, debug, enabled};
+use tracing::{Level, debug, enabled, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -236,7 +236,13 @@ pub(crate) async fn pip_install(
         }
     }
 
-    let _lock = environment.lock().await?;
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Determine the markers to use for the resolution.
     let interpreter = environment.interpreter();
