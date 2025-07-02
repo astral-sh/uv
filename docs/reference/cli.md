@@ -1129,7 +1129,53 @@ used.</p>
 synced to the given environment. The interpreter will be used to create a virtual
 environment in the project.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
-<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-sync--quiet"><a href="#uv-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-sync--python-platform"><a href="#uv-sync--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
+<p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-manylinux2014</code>:  An ARM64 target for the <code>manylinux2014</code> platform. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+</ul></dd><dt id="uv-sync--python-version"><a href="#uv-sync--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The minimum Python version that should be supported by the requirements (e.g., <code>3.7</code> or <code>3.7.9</code>).</p>
+<p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.7</code> is mapped to <code>3.7.0</code>.</p>
+</dd><dt id="uv-sync--quiet"><a href="#uv-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-sync--refresh"><a href="#uv-sync--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="uv-sync--refresh-package"><a href="#uv-sync--refresh-package"><code>--refresh-package</code></a> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
