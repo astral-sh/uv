@@ -3,6 +3,43 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.19
+
+The **[uv build backend](https://docs.astral.sh/uv/concepts/build-backend/) is now stable**, and considered ready for production use.
+
+The uv build backend is a great choice for pure Python projects. It has reasonable defaults, with the goal of requiring zero configuration for most users, but provides flexible configuration to accommodate most Python project structures. It integrates tightly with uv, to improve messaging and user experience. It validates project metadata and structures, preventing common mistakes. And, finally, it's very fast — `uv sync` on a new project (from `uv init`) is 10-30x faster than with other build backends.
+
+To use uv as a build backend in an existing project, add `uv_build` to the `[build-system]` section in your `pyproject.toml`:
+
+```toml
+[build-system]
+requires = ["uv_build>=0.7.19,<0.8.0"]
+build-backend = "uv_build"
+```
+
+In a future release, it will replace `hatchling` as the default in `uv init`. As before, uv will remain compatible with all standards-compliant build backends.
+
+### Python
+
+- Add PGO distributions of Python for aarch64 Linux, which are more optimized for better performance
+
+See the [python-build-standalone release](https://github.com/astral-sh/python-build-standalone/releases/tag/20250702) for more details.
+
+### Enhancements
+
+- Ignore Python patch version for `--universal` pip compile ([#14405](https://github.com/astral-sh/uv/pull/14405))
+- Update the tilde version specifier warning to include more context ([#14335](https://github.com/astral-sh/uv/pull/14335))
+- Clarify behavior and hint on tool install when no executables are available ([#14423](https://github.com/astral-sh/uv/pull/14423))
+
+### Bug fixes
+
+- Make project and interpreter lock acquisition non-fatal ([#14404](https://github.com/astral-sh/uv/pull/14404))
+- Includes `sys.prefix` in cached environment keys to avoid `--with` collisions across projects ([#14403](https://github.com/astral-sh/uv/pull/14403))
+
+### Documentation
+
+- Add a migration guide from pip to uv projects ([#12382](https://github.com/astral-sh/uv/pull/12382))
+
 ## 0.7.18
 
 ### Python
@@ -11,6 +48,8 @@
 
   These are not downloaded by default, since x86-64 Python has broader ecosystem support on Windows.
   However, they can be requested with `cpython-<version>-windows-aarch64`.
+
+See the [python-build-standalone release](https://github.com/astral-sh/python-build-standalone/releases/tag/20250630) for more details.
 
 ### Enhancements
 
