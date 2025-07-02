@@ -14,16 +14,21 @@ performance and user experience.
 
 ## Choosing a build backend
 
-!!! important
+The uv build backend is a good choice for most Python projects that are using uv. It has reasonable
+defaults, with the goal of requiring zero configuration for most users, but provides flexible
+configuration that allows most Python project structures. It integrates tightly with uv, to improve
+messaging and user experience. It validates project metadata and structures, preventing common
+mistakes. And, finally, it's very fast.
 
-    The uv build backend currently **only supports pure Python code**. An alternative backend is to
-    build a [library with extension modules](../concepts/projects/init.md#projects-with-extension-modules).
+The uv build backend currently **only supports pure Python code**. An alternative backend is
+required to build a
+[library with extension modules](../concepts/projects/init.md#projects-with-extension-modules).
 
-The uv build backend comes with good defaults (no extra configuration to get started), it integrates
-tightly with uv, prevents mistakes and finally, it is extremely fast. While it supports a number of
-options for configuring your project structure, when build scripts or a more flexible project layout
-are required, consider using the
-[hatchling](https://hatch.pypa.io/latest/config/build/#build-system) build backend.
+!!! tip
+
+    While the backend supports a number of options for configuring your project structure, when build scripts or
+    a more flexible project layout are required, consider using the
+    [hatchling](https://hatch.pypa.io/latest/config/build/#build-system) build backend instead.
 
 ## Using the uv build backend
 
