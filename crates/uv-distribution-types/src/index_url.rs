@@ -462,6 +462,19 @@ impl<'a> IndexLocations {
             indexes
         }
     }
+
+    /// Add all authenticated sources to the cache.
+    pub fn cache_index_credentials(&self) {
+        for index in self.allowed_indexes() {
+            if let Some(credentials) = index.credentials() {
+                let credentials = Arc::new(credentials);
+                uv_auth::store_credentials(index.raw_url(), credentials.clone());
+                if let Some(root_url) = index.root_url() {
+                    uv_auth::store_credentials(&root_url, credentials.clone());
+                }
+            }
+        }
+    }
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {

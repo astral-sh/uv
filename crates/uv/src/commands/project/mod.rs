@@ -1626,16 +1626,7 @@ pub(crate) async fn resolve_names(
         .keyring(*keyring_provider)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -1797,16 +1788,7 @@ pub(crate) async fn resolve_environment(
     let marker_env = interpreter.resolver_marker_environment();
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -1978,16 +1960,7 @@ pub(crate) async fn sync_environment(
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -2193,16 +2166,7 @@ pub(crate) async fn update_environment(
         }
     }
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
