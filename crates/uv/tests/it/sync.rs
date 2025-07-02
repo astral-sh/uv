@@ -5943,6 +5943,91 @@ fn sync_override_package() -> Result<()> {
      ~ project==0.0.0 (from file://[TEMP_DIR]/)
     ");
 
+    // Update the source `tool.uv` to `package = true`
+    let pyproject_toml = context.temp_dir.child("core").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "core"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        package = true
+        "#,
+    )?;
+
+    // Mark the source as `package = false`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["core"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        core = { path = "./core", package = false }
+        "#,
+    )?;
+
+    // Syncing the project should _not_ install `core`.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Remove the `package = false` mark.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["core"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        core = { path = "./core" }
+        "#,
+    )?;
+
+    // Syncing the project _should_ install `core`.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + core==0.1.0 (from file://[TEMP_DIR]/core)
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+    ");
+
     Ok(())
 }
 
