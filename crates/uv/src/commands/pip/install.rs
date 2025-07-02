@@ -37,7 +37,7 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_variants::{get_combinations, VariantSet};
+use uv_variants::{VariantSet, get_combinations};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
@@ -464,7 +464,6 @@ pub(crate) async fn pip_install(
             VariantSet::new(&combinations)?
         };
 
-
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
             .prerelease_mode(prerelease_mode)
@@ -492,9 +491,9 @@ pub(crate) async fn pip_install(
             &upgrade,
             Some(&tags),
             Some(&variants),
-        ResolverEnvironment::specific(marker_env.clone()),
-        python_requirement,
-        interpreter.markers(),
+            ResolverEnvironment::specific(marker_env.clone()),
+            python_requirement,
+            interpreter.markers(),
             Conflicts::empty(),
             &client,
             &flat_index,
