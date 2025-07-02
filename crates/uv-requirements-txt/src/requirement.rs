@@ -90,7 +90,7 @@ impl RequirementsTxtRequirement {
                     version_or_url: Some(uv_pep508::VersionOrUrl::Url(VerbatimParsedUrl {
                         verbatim: url.verbatim,
                         parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                            editable: true,
+                            editable: Some(true),
                             ..parsed_url
                         }),
                     })),
@@ -115,7 +115,7 @@ impl RequirementsTxtRequirement {
                     url: VerbatimParsedUrl {
                         verbatim: requirement.url.verbatim,
                         parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl {
-                            editable: true,
+                            editable: Some(true),
                             ..parsed_url
                         }),
                     },
