@@ -4676,6 +4676,7 @@ dependencies = [
  "uv-git-types",
  "uv-install-wheel",
  "uv-installer",
+ "uv-lock",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -4835,6 +4836,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-types",
  "uv-fs",
+ "uv-lock",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
@@ -4864,6 +4866,7 @@ dependencies = [
  "uv-dirs",
  "uv-distribution-types",
  "uv-fs",
+ "uv-lock",
  "uv-normalize",
  "uv-pypi-types",
  "uv-redacted",
@@ -5282,6 +5285,7 @@ dependencies = [
  "uv-cache-key",
  "uv-fs",
  "uv-git-types",
+ "uv-lock",
  "uv-redacted",
  "uv-static",
  "uv-version",
@@ -5390,6 +5394,20 @@ dependencies = [
  "uv-types",
  "uv-warnings",
  "walkdir",
+]
+
+[[package]]
+name = "uv-lock"
+version = "0.0.1"
+dependencies = [
+ "fs-err 3.1.1",
+ "fs2",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uv-fs",
+ "uv-state",
+ "uv-static",
 ]
 
 [[package]]
@@ -5625,6 +5643,7 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-install-wheel",
+ "uv-lock",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
@@ -5889,6 +5908,7 @@ dependencies = [
  "uv-fs",
  "uv-install-wheel",
  "uv-installer",
+ "uv-lock",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",

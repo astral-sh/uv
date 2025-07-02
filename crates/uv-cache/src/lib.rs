@@ -11,7 +11,8 @@ use tracing::debug;
 
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
-use uv_fs::{LockedFile, cachedir, directories};
+use uv_fs::{cachedir, directories};
+use uv_lock::LockedFile;
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 

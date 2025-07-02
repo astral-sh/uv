@@ -16,7 +16,8 @@ use uv_configuration::PreviewMode;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
-use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
+use uv_fs::{Simplified, replace_symlink, symlink_or_copy_file};
+use uv_lock::LockedFile;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, windows_python_launcher};

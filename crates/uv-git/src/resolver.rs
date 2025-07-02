@@ -10,8 +10,8 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
 use uv_cache_key::{RepositoryUrl, cache_digest};
-use uv_fs::LockedFile;
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
+use uv_lock::LockedFile;
 use uv_static::EnvVars;
 use uv_version::version;
 
