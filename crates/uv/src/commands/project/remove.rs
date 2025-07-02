@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use uv_cache::Cache;
 use uv_configuration::{
@@ -285,7 +285,7 @@ pub(crate) async fn remove(
         .acquire_lock()
         .await
         .inspect_err(|err| {
-            warn!("Failed to acquire environment lock: {err}");
+            warn_user_once!("Failed to acquire environment lock: {err}");
         })
         .ok();
 

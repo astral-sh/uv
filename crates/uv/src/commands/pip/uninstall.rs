@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::Result;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -17,6 +17,7 @@ use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_warnings::warn_user_once;
 
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::{ExitStatus, elapsed};
@@ -104,7 +105,7 @@ pub(crate) async fn pip_uninstall(
         .lock()
         .await
         .inspect_err(|err| {
-            warn!("Failed to acquire environment lock: {err}");
+            warn_user_once!("Failed to acquire environment lock: {err}");
         })
         .ok();
 

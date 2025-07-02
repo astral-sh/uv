@@ -1247,7 +1247,7 @@ impl ProjectEnvironment {
         let _lock = ProjectInterpreter::lock(workspace)
             .await
             .inspect_err(|err| {
-                warn!("Failed to acquire project environment lock: {err}");
+                warn_user_once!("Failed to acquire project environment lock: {err}");
             })
             .ok();
 
@@ -1470,7 +1470,7 @@ impl ScriptEnvironment {
         let _lock = ScriptInterpreter::lock(script)
             .await
             .inspect_err(|err| {
-                warn!("Failed to acquire script environment lock: {err}");
+                warn_user_once!("Failed to acquire script environment lock: {err}");
             })
             .ok();
 

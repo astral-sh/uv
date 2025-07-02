@@ -37,7 +37,7 @@ use uv_scripts::Pep723Item;
 use uv_settings::PythonInstallMirrors;
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::pip::loggers::{
@@ -244,7 +244,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .lock()
                 .await
                 .inspect_err(|err| {
-                    warn!("Failed to acquire environment lock: {err}");
+                    warn_user_once!("Failed to acquire environment lock: {err}");
                 })
                 .ok();
 
@@ -396,7 +396,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .lock()
                     .await
                     .inspect_err(|err| {
-                        warn!("Failed to acquire environment lock: {err}");
+                        warn_user_once!("Failed to acquire environment lock: {err}");
                     })
                     .ok();
 
@@ -715,7 +715,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .lock()
                     .await
                     .inspect_err(|err| {
-                        warn!("Failed to acquire environment lock: {err}");
+                        warn_user_once!("Failed to acquire environment lock: {err}");
                     })
                     .ok();
 

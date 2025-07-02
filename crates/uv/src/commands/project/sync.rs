@@ -6,7 +6,6 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -29,7 +28,7 @@ use uv_resolver::{FlatIndex, Installable, Lock};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -174,7 +173,7 @@ pub(crate) async fn sync(
         .lock()
         .await
         .inspect_err(|err| {
-            warn!("Failed to acquire environment lock: {err}");
+            warn_user_once!("Failed to acquire environment lock: {err}");
         })
         .ok();
 

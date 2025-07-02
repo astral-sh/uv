@@ -25,7 +25,7 @@ use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{Instrument, debug, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument};
 
 use uv_cache_key::cache_digest;
 use uv_configuration::PreviewMode;
@@ -459,7 +459,7 @@ impl SourceBuild {
             source_tree_lock = LockedFile::acquire(lock_path, self.source_tree.to_string_lossy())
                 .await
                 .inspect_err(|err| {
-                    warn!("Failed to acquire build lock: {err}");
+                    warn_user_once!("Failed to acquire build lock: {err}");
                 })
                 .ok();
         }

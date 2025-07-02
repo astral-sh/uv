@@ -3,7 +3,7 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -30,7 +30,7 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
@@ -215,7 +215,7 @@ pub(crate) async fn pip_sync(
         .lock()
         .await
         .inspect_err(|err| {
-            warn!("Failed to acquire environment lock: {err}");
+            warn_user_once!("Failed to acquire environment lock: {err}");
         })
         .ok();
 

@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
-use tracing::{debug, warn};
+use tracing::debug;
 use url::Url;
 
 use uv_cache::Cache;
@@ -323,7 +323,7 @@ pub(crate) async fn add(
         .acquire_lock()
         .await
         .inspect_err(|err| {
-            warn!("Failed to acquire environment lock: {err}");
+            warn_user_once!("Failed to acquire environment lock: {err}");
         })
         .ok();
 

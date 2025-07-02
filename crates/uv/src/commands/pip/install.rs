@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{Level, debug, enabled, warn};
+use tracing::{Level, debug, enabled};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -36,7 +36,7 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -240,7 +240,7 @@ pub(crate) async fn pip_install(
         .lock()
         .await
         .inspect_err(|err| {
-            warn!("Failed to acquire environment lock: {err}");
+            warn_user_once!("Failed to acquire environment lock: {err}");
         })
         .ok();
 
