@@ -35,8 +35,8 @@ use uv_variants::VariantTag;
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
-    variant: Option<VariantTag>,
     tags: WheelTag,
+    variant: Option<VariantTag>,
 }
 
 impl FromStr for WheelFilename {
@@ -58,11 +58,11 @@ impl Display for WheelFilename {
         if let Some(variant) = &self.variant {
             write!(
                 f,
-                "{}-{}-~{}~-{}.whl",
+                "{}-{}-{}-{}.whl",
                 self.name.as_dist_info_name(),
                 self.version,
-                variant,
                 self.tags
+                variant,
             )
         } else {
             write!(
