@@ -44,13 +44,15 @@ impl CachedEnvironment {
         printer: Printer,
         preview: PreviewMode,
     ) -> Result<Self, ProjectError> {
-        let interpreter = Self::base_interpreter(interpreter, cache)?;
+        // Resolve the "base" interpreter, which resolves to an underlying parent interpreter if the
+        // given interpreter is a virtual environment.
+        let base_interpreter = Self::base_interpreter(interpreter, cache)?;
 
         // Resolve the requirements with the interpreter.
         let resolution = Resolution::from(
             resolve_environment(
                 spec,
-                &interpreter,
+                &base_interpreter,
                 build_constraints.clone(),
                 &settings.resolver,
                 network_settings,
@@ -73,13 +75,34 @@ impl CachedEnvironment {
             hash_digest(&distributions)
         };
 
-        // Hash the interpreter based on its path.
-        // TODO(charlie): Come up with a robust hash for the interpreter.
-        let interpreter_hash =
-            cache_digest(&canonicalize_executable(interpreter.sys_executable())?);
+        // Construct a hash for the environment.
+        //
+        // Use the canonicalized base interpreter path since that's the interpreter we performed the
+        // resolution with and the interpreter the environment will be created with.
+        //
+        // We also include the canonicalized `sys.prefix` of the non-base interpreter, that is, the
+        // virtual environment's path. Originally, we shared cached environments independent of the
+        // environment they'd be layered on top of. However, this causes collisions as the overlay
+        // `.pth` file can be overridden by another instance of uv. Including this element in the key
+        // avoids this problem at the cost of creating separate cached environments for identical
+        // `--with` invocations across projects. We use `sys.prefix` rather than `sys.executable` so
+        // we can canonicalize it without invalidating the purpose of the element — it'd probably be
+        // safe to just use the absolute `sys.executable` as well.
+        //
+        // TODO(zanieb): Since we're not sharing these environmments across projects, we should move
+        // [`CachedEvnvironment::set_overlay`] etc. here since the values there should be constant
+        // now.
+        //
+        // TODO(zanieb): We should include the version of the base interpreter in the hash, so if
+        // the interpreter at the canonicalized path changes versions we construct a new
+        // environment.
+        let environment_hash = cache_digest(&(
+            &canonicalize_executable(base_interpreter.sys_executable())?,
+            &interpreter.sys_prefix().canonicalize()?,
+        ));
 
         // Search in the content-addressed cache.
-        let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
+        let cache_entry = cache.entry(CacheBucket::Environments, environment_hash, resolution_hash);
 
         if cache.refresh().is_none() {
             if let Ok(root) = cache.resolve_link(cache_entry.path()) {
@@ -93,7 +116,7 @@ impl CachedEnvironment {
         let temp_dir = cache.venv_dir()?;
         let venv = uv_virtualenv::create_venv(
             temp_dir.path(),
-            interpreter,
+            base_interpreter,
             uv_virtualenv::Prompt::None,
             false,
             false,
