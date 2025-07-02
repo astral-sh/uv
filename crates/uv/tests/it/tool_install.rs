@@ -448,13 +448,13 @@ fn tool_install_suggest_other_packages_with_executable() {
     uv_snapshot!(filters, context.tool_install()
         .arg("fastapi==0.111.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by `fastapi`
-    However, an executable with the name `fastapi` is available via dependency `fastapi-cli`.
-    Did you mean `uv tool install fastapi-cli`?
+    No executables are provided by package `fastapi`; removing tool
+    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
+          Did you mean `uv tool install fastapi-cli`?
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -494,7 +494,7 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    "###);
+    ");
 }
 
 /// Test installing a tool at a version
@@ -821,11 +821,11 @@ fn tool_install_remove_on_empty() -> Result<()> {
         .arg(black.path())
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by `black`
+    No executables are provided by package `black`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -839,7 +839,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
-    "###);
+    ");
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1649,18 +1649,18 @@ fn tool_install_no_entrypoints() {
         .arg("iniconfig")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by `iniconfig`
+    No executables are provided by package `iniconfig`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure the tool environment is not created.
     tool_dir
