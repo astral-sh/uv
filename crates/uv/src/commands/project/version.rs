@@ -19,7 +19,6 @@ use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
-use uv_warnings::warn_user;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
     DiscoveryOptions, WorkspaceCache,
@@ -58,7 +57,6 @@ pub(crate) async fn project_version(
     bump: Option<VersionBump>,
     short: bool,
     output_format: VersionFormat,
-    strict: bool,
     project_dir: &Path,
     package: Option<PackageName>,
     dry_run: bool,
@@ -80,21 +78,7 @@ pub(crate) async fn project_version(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Read the metadata
-    let project = match find_target(project_dir, package.as_ref()).await {
-        Ok(target) => target,
-        Err(err) => {
-            // If strict, hard bail on failing to find the pyproject.toml
-            if strict {
-                return Err(err)?;
-            }
-            // Otherwise, warn and provide fallback to the old `uv version` from before 0.7.0
-            warn_user!(
-                "Failed to read project metadata ({err}). Running `{}` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.",
-                "uv self version".green()
-            );
-            return self_version(short, output_format, printer);
-        }
-    };
+    let project = find_target(project_dir, package.as_ref()).await?;
 
     let pyproject_path = project.root().join("pyproject.toml");
     let Some(name) = project.project_name().cloned() else {
