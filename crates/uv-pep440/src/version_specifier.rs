@@ -665,11 +665,6 @@ impl VersionSpecifier {
             | Operator::NotEqual => false,
         }
     }
-
-    /// Returns true if this is a `~=` specifier without a patch version (e.g. `~=3.11`).
-    pub fn is_tilde_without_patch(&self) -> bool {
-        self.operator == Operator::TildeEqual && self.version.release().len() == 2
-    }
 }
 
 impl FromStr for VersionSpecifier {
@@ -891,6 +886,90 @@ pub(crate) fn parse_version_specifiers(
         start += separator.len();
     }
     Ok(version_ranges)
+}
+
+/// A simple `~=` version specifier with a major, minor and (optional) patch version, e.g., `~=3.13`
+/// or `~=3.13.0`.
+#[derive(Clone, Debug)]
+pub struct TildeVersionSpecifier<'a> {
+    inner: Cow<'a, VersionSpecifier>,
+}
+
+impl<'a> TildeVersionSpecifier<'a> {
+    /// Create a new [`TildeVersionSpecifier`] from a [`VersionSpecifier`] value.
+    ///
+    /// If a [`Operator::TildeEqual`] is not used, or the version includes more than minor and patch
+    /// segments, this will return [`None`].
+    pub fn from_specifier(specifier: VersionSpecifier) -> Option<TildeVersionSpecifier<'a>> {
+        TildeVersionSpecifier::new(Cow::Owned(specifier))
+    }
+
+    /// Create a new [`TildeVersionSpecifier`] from a [`VersionSpecifier`] reference.
+    ///
+    /// See [`TildeVersionSpecifier::from_specifier`].
+    pub fn from_specifier_ref(
+        specifier: &'a VersionSpecifier,
+    ) -> Option<TildeVersionSpecifier<'a>> {
+        TildeVersionSpecifier::new(Cow::Borrowed(specifier))
+    }
+
+    fn new(specifier: Cow<'a, VersionSpecifier>) -> Option<Self> {
+        if specifier.operator != Operator::TildeEqual {
+            return None;
+        }
+        if specifier.version().release().len() < 2 || specifier.version().release().len() > 3 {
+            return None;
+        }
+        if specifier.version().any_prerelease()
+            || specifier.version().is_local()
+            || specifier.version().is_post()
+        {
+            return None;
+        }
+        Some(Self { inner: specifier })
+    }
+
+    /// Whether a patch version is present in this tilde version specifier.
+    pub fn has_patch(&self) -> bool {
+        self.inner.version.release().len() == 3
+    }
+
+    /// Construct the lower and upper bounding version specifiers for this tilde version specifier,
+    /// e.g., for `~=3.13` this would return `>=3.13` and `<4` and for `~=3.13.0` it would
+    /// return `>=3.13.0` and `<3.14`.
+    pub fn bounding_specifiers(&self) -> (VersionSpecifier, VersionSpecifier) {
+        let release = self.inner.version().release();
+        let lower = self.inner.version.clone();
+        let upper = if self.has_patch() {
+            Version::new([release[0], release[1] + 1])
+        } else {
+            Version::new([release[0] + 1])
+        };
+        (
+            VersionSpecifier::greater_than_equal_version(lower),
+            VersionSpecifier::less_than_version(upper),
+        )
+    }
+
+    /// Construct a new tilde `VersionSpecifier` with the given patch version appended.
+    pub fn with_patch_version(&self, patch: u64) -> TildeVersionSpecifier {
+        let mut release = self.inner.version.release().to_vec();
+        if self.has_patch() {
+            release.pop();
+        }
+        release.push(patch);
+        TildeVersionSpecifier::from_specifier(
+            VersionSpecifier::from_version(Operator::TildeEqual, Version::new(release))
+                .expect("We should always derive a valid new version specifier"),
+        )
+        .expect("We should always derive a new tilde version specifier")
+    }
+}
+
+impl std::fmt::Display for TildeVersionSpecifier<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
 }
 
 #[cfg(test)]

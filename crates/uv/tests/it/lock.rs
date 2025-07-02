@@ -4551,15 +4551,15 @@ fn lock_requires_python_compatible_specifier() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The release specifier (`~=3.13`) contains a compatible release match without a patch version. This will be interpreted as `>=3.13, <4`. Did you mean `~=3.13.0` to freeze the minor version?
+    warning: The `requires-python` specifier (`~=3.13`) in `warehouse` uses the tilde specifier (`~=`) without a patch version. This will be interpreted as `>=3.13, <4`. Did you mean `~=3.13.0` to constrain the version as `>=3.13.0, <3.14`? We recommend only using the tilde specifier with a patch version to avoid ambiguity.
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     pyproject_toml.write_str(
         r#"
