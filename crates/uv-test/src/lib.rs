@@ -1312,6 +1312,7 @@ impl TestContext {
 
     /// Only the environment variables of [`TestContext::add_shared_options`].
     pub fn add_shared_env(&self, command: &mut Command, activate_venv: bool) {
+        command.env(EnvVars::UV_LOCK_DIR, self.temp_dir.join("locks"));
         // Push the test context bin to the front of the PATH
         let path = env::join_paths(std::iter::once(self.bin_dir.to_path_buf()).chain(
             env::split_paths(&env::var(EnvVars::PATH).unwrap_or_default()),

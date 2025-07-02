@@ -6712,6 +6712,8 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "uv-cache-key",
+ "uv-state",
  "uv-static",
  "uv-warnings",
  "uv-windows",

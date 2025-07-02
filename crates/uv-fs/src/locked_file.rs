@@ -17,6 +17,25 @@ use crate::Simplified;
 #[cfg(feature = "tokio")]
 use crate::is_known_already_locked_error;
 
+/// Resolve the logical lock key to a file in the shared lock directory.
+#[cfg(feature = "tokio")]
+fn shared_lock_path(key: &Path) -> io::Result<PathBuf> {
+    use std::io::Write;
+    use uv_state::{StateBucket, StateStore};
+
+    let root = match env::var_os(EnvVars::UV_LOCK_DIR).filter(|path| !path.is_empty()) {
+        Some(path) => std::path::absolute(path)?,
+        None => std::path::absolute(StateStore::from_settings(None)?.bucket(StateBucket::Locks))?,
+    };
+    fs_err::create_dir_all(&root)?;
+    match fs_err::OpenOptions::new().write(true).create_new(true).open(root.join(".gitignore")) {
+        Ok(mut file) => file.write_all(b"*\n")?,
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(err) => return Err(err),
+    }
+    Ok(root.join(uv_cache_key::cache_digest(&std::path::absolute(key)?)))
+}
+
 /// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
 #[cfg(feature = "tokio")]
 static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
@@ -269,18 +288,19 @@ impl LockedFile {
         }
     }
 
-    /// Acquire a cross-process lock for a resource using a file at the provided path.
+    /// Acquire a cross-process lock for the resource identified by the provided path.
     pub async fn acquire(
         path: impl AsRef<Path>,
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Result<Self, LockedFileError> {
-        let file = Self::create(&path)?;
+        let path = shared_lock_path(path.as_ref())?;
+        let file = Self::create(path)?;
         let resource = resource.to_string();
         Self::lock_file(file, mode, &resource).await
     }
 
-    /// Acquire a cross-process lock for a resource using a file at the provided path
+    /// Acquire a cross-process lock for the resource identified by the provided path
     ///
     /// Unlike [`LockedFile::acquire`] this function will not wait for the lock to become available.
     ///
@@ -290,6 +310,7 @@ impl LockedFile {
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Option<Self> {
+        let path = shared_lock_path(path.as_ref()).ok()?;
         let file = Self::create(path).ok()?;
         let resource = resource.to_string();
         Self::lock_file_no_wait(file, mode, &resource)

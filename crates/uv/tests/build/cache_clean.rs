@@ -49,7 +49,7 @@ fn clean_all() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
-    assert!(context.cache_dir.child(".lock").is_file());
+    assert!(!context.cache_dir.child(".lock").exists());
 
     Ok(())
 }
@@ -340,7 +340,7 @@ async fn clean_force() -> Result<()> {
     Removed [N] files ([SIZE])
     ");
 
-    assert!(context.cache_dir.child(".lock").is_file());
+    assert!(!context.cache_dir.child(".lock").exists());
 
     Ok(())
 }

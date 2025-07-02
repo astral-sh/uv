@@ -1577,6 +1577,10 @@ impl EnvVars {
     #[attr_added_in("0.9.15")]
     pub const UV_HIDE_BUILD_OUTPUT: &'static str = "UV_HIDE_BUILD_OUTPUT";
 
+    /// Directory for filesystem locks used to coordinate concurrent uv processes.
+    #[attr_added_in("next release")]
+    pub const UV_LOCK_DIR: &'static str = "UV_LOCK_DIR";
+
     /// The time in seconds uv waits for a file lock to become available.
     ///
     /// Defaults to 300s (5 min).
