@@ -61,8 +61,8 @@ impl Display for WheelFilename {
                 "{}-{}-{}-{}.whl",
                 self.name.as_dist_info_name(),
                 self.version,
-                self.tags
-                variant,
+                self.tags,
+                variant
             )
         } else {
             write!(
@@ -364,8 +364,8 @@ impl WheelFilename {
         Ok(Self {
             name,
             version,
-            variant,
             tags,
+            variant,
         })
     }
 }
