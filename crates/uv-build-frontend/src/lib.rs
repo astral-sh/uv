@@ -27,7 +27,6 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
 
-use uv_cache_key::cache_digest;
 use uv_configuration::PreviewMode;
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
@@ -451,12 +450,7 @@ impl SourceBuild {
         let mut source_tree_lock = None;
         if self.pep517_backend.is_setuptools() {
             debug!("Locking the source tree for setuptools");
-            let canonical_source_path = self.source_tree.canonicalize()?;
-            let lock_path = env::temp_dir().join(format!(
-                "uv-setuptools-{}.lock",
-                cache_digest(&canonical_source_path)
-            ));
-            source_tree_lock = LockedFile::acquire(lock_path, self.source_tree.to_string_lossy())
+            source_tree_lock = uv_lock::acquire_path(&self.source_tree)
                 .await
                 .inspect_err(|err| {
                     warn!("Failed to acquire build lock: {err}");

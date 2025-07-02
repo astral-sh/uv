@@ -145,7 +145,7 @@ impl InstalledTools {
 
     /// Grab a file lock for the tools directory to prevent concurrent access across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(uv_lock::acquire_path(&self.root).await?)
     }
 
     /// Add a receipt for a tool.

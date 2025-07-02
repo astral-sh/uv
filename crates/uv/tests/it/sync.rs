@@ -9997,6 +9997,7 @@ fn read_only() -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     let context = TestContext::new("3.12");
+    let lock_dir = context.temp_dir.child("locks");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10009,7 +10010,7 @@ fn read_only() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_LOCK_DIR, lock_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10024,12 +10025,13 @@ fn read_only() -> Result<()> {
     assert!(context.temp_dir.child("uv.lock").exists());
 
     // Remove the flock.
-    fs_err::remove_file(context.venv.child(".lock"))?;
+    fs_err::remove_dir_all(&lock_dir)?;
+    fs_err::create_dir_all(&lock_dir)?;
 
-    // Make the virtual environment read and execute (but not write).
-    fs_err::set_permissions(&context.venv, std::fs::Permissions::from_mode(0o555))?;
+    // Make the lock directory read and execute (but not write).
+    fs_err::set_permissions(&lock_dir, std::fs::Permissions::from_mode(0o555))?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_LOCK_DIR, lock_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----

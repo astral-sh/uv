@@ -125,7 +125,7 @@ impl ManagedPythonInstallations {
     /// Grab a file lock for the managed Python distribution directory to prevent concurrent access
     /// across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(uv_lock::acquire_path(&self.root).await?)
     }
 
     /// Prefer, in order:

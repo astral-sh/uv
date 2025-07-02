@@ -1,60 +1,76 @@
-use fs_err as fs;
 use std::fmt::Display;
 use std::io::Write;
-
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
+use fs_err as fs;
 use fs2::FileExt;
-use tempfile::NamedTempFile;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace};
 
+use uv_cache_key::{CacheKey, cache_digest};
 use uv_fs::Simplified;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
+/// Acquire a cross-process lock for files at the provided path.
+#[cfg(feature = "tokio")]
+pub async fn acquire_path(path: impl AsRef<Path>) -> Result<LockedFile, std::io::Error> {
+    let locks = get_or_init_locks()?;
+    let path = path.as_ref();
+    LockedFile::acquire(locks.join(cache_digest(&path)), path.display()).await
+}
+
+/// Acquire a cross-process lock for an arbitrary hashable resource (like a URL).
+#[cfg(feature = "tokio")]
+pub async fn acquire_resource<T: CacheKey + Display>(
+    resource: T,
+) -> Result<LockedFile, std::io::Error> {
+    let locks = get_or_init_locks()?;
+    LockedFile::acquire(locks.join(cache_digest(&resource)), resource).await
+}
+
+/// Get or initialize the global filesystem locks.
+fn get_or_init_locks() -> std::io::Result<&'static FilesystemLocks> {
+    static FILESYSTEM_LOCKS: OnceLock<FilesystemLocks> = OnceLock::new();
+
+    // Return the existing filesystem locks, if they are already initialized.
+    if let Some(locks) = FILESYSTEM_LOCKS.get() {
+        return Ok(locks);
+    }
+
+    // Initialize the filesystem locks.
+    let locks = FilesystemLocks::init()?;
+    _ = FILESYSTEM_LOCKS.set(locks);
+
+    Ok(FILESYSTEM_LOCKS.get().unwrap())
+}
+
 /// Filesystem locks used to synchronize access to shared resources across processes.
 #[derive(Debug, Clone)]
-pub struct FilesystemLocks {
+struct FilesystemLocks {
     /// The path to the top-level directory of the filesystem locks.
     root: PathBuf,
 }
 
 impl FilesystemLocks {
-    /// A directory for filesystem locks at `root`.
-    fn from_path(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
-    }
-
-    /// Create a new [`FilesystemLocks`] from settings.
+    /// Create a new [`FilesystemLocks`].
     ///
     /// Prefer, in order:
     ///
     /// 1. The specific tool directory specified by the user, i.e., `UV_LOCK_DIR`
-    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/tools`
-    /// 3. A directory in the local data directory, e.g., `./.uv/tools`
-    pub fn from_settings() -> Result<Self, std::io::Error> {
-        if let Some(lock_dir) = std::env::var_os(EnvVars::UV_LOCK_DIR).filter(|s| !s.is_empty()) {
-            Ok(Self::from_path(std::path::absolute(lock_dir)?))
+    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/locks`
+    /// 3. A directory in the local data directory, e.g., `./.uv/locks`
+    fn init() -> Result<Self, std::io::Error> {
+        let root = if let Some(lock_dir) =
+            std::env::var_os(EnvVars::UV_LOCK_DIR).filter(|s| !s.is_empty())
+        {
+            std::path::absolute(lock_dir)?
         } else {
-            Ok(Self::from_path(
-                StateStore::from_settings(None)?.bucket(StateBucket::Locks),
-            ))
-        }
-    }
+            StateStore::from_settings(None)?.bucket(StateBucket::Locks)
+        };
 
-    /// Create a temporary directory.
-    pub fn temp() -> Result<Self, std::io::Error> {
-        Ok(Self::from_path(
-            StateStore::temp()?.bucket(StateBucket::Locks),
-        ))
-    }
-
-    /// Initialize the directory.
-    pub fn init(self) -> Result<Self, std::io::Error> {
-        let root = &self.root;
-
-        // Create the tools directory, if it doesn't exist.
-        fs::create_dir_all(root)?;
+        // Create the directory, if it doesn't exist.
+        fs::create_dir_all(&root)?;
 
         // Add a .gitignore.
         match fs::OpenOptions::new()
@@ -67,12 +83,12 @@ impl FilesystemLocks {
             Err(err) => return Err(err),
         }
 
-        Ok(self)
+        Ok(Self { root })
     }
 
-    /// Return the path of the directory.
-    pub fn root(&self) -> &Path {
-        &self.root
+    /// Join a path to the root of the locks directory.
+    fn join(&self, path: impl AsRef<Path>) -> PathBuf {
+        self.root.join(path)
     }
 }
 
@@ -120,7 +136,8 @@ impl LockedFile {
     /// The same as [`LockedFile::acquire`], but for synchronous contexts. Do not use from an async
     /// context, as this can block the runtime while waiting for another process to release the
     /// lock.
-    pub fn acquire_blocking(
+    #[allow(dead_code)]
+    fn acquire_blocking(
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
@@ -131,7 +148,7 @@ impl LockedFile {
 
     /// Acquire a cross-process lock for a resource using a file at the provided path.
     #[cfg(feature = "tokio")]
-    pub async fn acquire(
+    async fn acquire(
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
@@ -143,6 +160,8 @@ impl LockedFile {
     #[cfg(unix)]
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
         use std::os::unix::fs::PermissionsExt;
+        use tempfile::NamedTempFile;
+        use tracing::warn;
 
         // If path already exists, return it.
         if let Ok(file) = fs_err::OpenOptions::new()

@@ -745,27 +745,9 @@ impl ScriptInterpreter {
     /// Grab a file lock for the script to prevent concurrent writes across processes.
     pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, std::io::Error> {
         match script {
-            Pep723ItemRef::Script(script) => {
-                LockedFile::acquire(
-                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
-                    script.path.simplified_display(),
-                )
-                .await
-            }
-            Pep723ItemRef::Remote(.., url) => {
-                LockedFile::acquire(
-                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
-                    url.to_string(),
-                )
-                .await
-            }
-            Pep723ItemRef::Stdin(metadata) => {
-                LockedFile::acquire(
-                    std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
-                    "stdin".to_string(),
-                )
-                .await
-            }
+            Pep723ItemRef::Script(script) => uv_lock::acquire_path(&script.path).await,
+            Pep723ItemRef::Remote(.., url) => uv_lock::acquire_resource(&url).await,
+            Pep723ItemRef::Stdin(..) => uv_lock::acquire_resource("stdin").await,
         }
     }
 }
@@ -1013,14 +995,7 @@ impl ProjectInterpreter {
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
     pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, std::io::Error> {
-        LockedFile::acquire(
-            std::env::temp_dir().join(format!(
-                "uv-{}.lock",
-                cache_digest(workspace.install_path())
-            )),
-            workspace.install_path().simplified_display(),
-        )
-        .await
+        uv_lock::acquire_path(workspace.install_path()).await
     }
 }
 
