@@ -20,6 +20,19 @@ use crate::is_known_already_locked_error;
 /// Resolve the logical lock key to a file in the shared lock directory.
 #[cfg(feature = "tokio")]
 fn shared_lock_path(key: &Path) -> io::Result<PathBuf> {
+    static ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+    let root = if let Some(root) = ROOT.get() {
+        root
+    } else {
+        let candidate = init_lock_directory()?;
+        ROOT.get_or_init(|| candidate)
+    };
+    Ok(root.join(uv_cache_key::cache_digest(&std::path::absolute(key)?)))
+}
+
+#[cfg(feature = "tokio")]
+fn init_lock_directory() -> io::Result<PathBuf> {
     use std::io::Write;
     use uv_state::{StateBucket, StateStore};
 
@@ -33,7 +46,7 @@ fn shared_lock_path(key: &Path) -> io::Result<PathBuf> {
         Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
         Err(err) => return Err(err),
     }
-    Ok(root.join(uv_cache_key::cache_digest(&std::path::absolute(key)?)))
+    Ok(root)
 }
 
 /// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
