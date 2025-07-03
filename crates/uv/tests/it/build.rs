@@ -133,7 +133,7 @@ fn build_sdist() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"exit code: ", "exit status: "), (r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -2025,7 +2025,7 @@ fn force_pep517() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"exit code: 1", "exit status: 1")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
