@@ -2022,7 +2022,13 @@ fn force_pep517() -> Result<()> {
       ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
     ");
 
-    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
