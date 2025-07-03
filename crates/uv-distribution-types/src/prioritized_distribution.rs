@@ -13,7 +13,7 @@ use uv_variants::VariantPriority;
 
 use crate::{
     File, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    ResolvedDistRef, VariantsJson,
+    RegistryVariantsJson, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -31,7 +31,7 @@ struct PrioritizedDistInner {
     /// The set of all wheels associated with this distribution.
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// The `variants.json` file associated with the package version.
-    variants_json: Option<VariantsJson>,
+    variants_json: Option<RegistryVariantsJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// The set of supported platforms for the distribution, described in terms of their markers.
@@ -376,7 +376,7 @@ impl PrioritizedDist {
     }
 
     /// Create a new [`PrioritizedDist`] from the `variants.json`.
-    pub fn from_variant_json(variant_json: VariantsJson) -> Self {
+    pub fn from_variant_json(variant_json: RegistryVariantsJson) -> Self {
         Self(Box::new(PrioritizedDistInner {
             markers: MarkerTree::TRUE,
             best_wheel_index: None,
@@ -440,12 +440,16 @@ impl PrioritizedDist {
         }
     }
 
-    pub fn insert_variant_json(&mut self, variant_json: VariantsJson) {
+    pub fn insert_variant_json(&mut self, variant_json: RegistryVariantsJson) {
         debug_assert!(
             self.0.variants_json.is_none(),
             "The variants.json filename is unique"
         );
         self.0.variants_json = Some(variant_json);
+    }
+
+    pub fn variants_json(&self) -> Option<&RegistryVariantsJson> {
+        self.0.variants_json.as_ref()
     }
 
     /// Return the highest-priority distribution for the package version, if any.
