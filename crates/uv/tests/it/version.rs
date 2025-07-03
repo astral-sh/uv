@@ -1958,3 +1958,41 @@ fn version_set_evil_constraints() -> Result<()> {
 
     Ok(())
 }
+
+/// Bump the version with conflicting extras, to ensure we're activating the correct subset of
+/// extras during the resolve.
+#[test]
+fn version_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "1.10.31"
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+foo = ["requests"]
+bar = ["httpx"]
+baz = ["flask"]
+
+[tool.uv]
+conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("patch"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    error: Extras `bar` and `foo` are incompatible with the declared conflicts: {`myproject[bar]`, `myproject[foo]`}
+    ");
+
+    Ok(())
+}
