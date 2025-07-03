@@ -8,8 +8,8 @@ use uv_client::{FlatIndexEntries, FlatIndexEntry};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
-    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
+    File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexEntryFilename,
+    IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
     WheelCompatibility,
 };
 use uv_normalize::PackageName;
@@ -17,6 +17,7 @@ use uv_pep440::Version;
 use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
+use uv_variants::{VariantCompatibility, VariantSet};
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
@@ -35,6 +36,7 @@ impl FlatIndex {
     pub fn from_entries(
         entries: FlatIndexEntries,
         tags: Option<&Tags>,
+        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -46,6 +48,7 @@ impl FlatIndex {
                 entry.file,
                 entry.filename,
                 tags,
+                variants,
                 hasher,
                 build_options,
                 entry.index,
@@ -81,6 +84,7 @@ impl FlatDistributions {
     pub fn from_entries(
         entries: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
+        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -90,6 +94,7 @@ impl FlatDistributions {
                 entry.file,
                 entry.filename,
                 tags,
+                variants,
                 hasher,
                 build_options,
                 entry.index,
@@ -112,8 +117,9 @@ impl FlatDistributions {
     fn add_file(
         &mut self,
         file: File,
-        filename: DistFilename,
+        filename: IndexEntryFilename,
         tags: Option<&Tags>,
+        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
@@ -121,13 +127,14 @@ impl FlatDistributions {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
         match filename {
-            DistFilename::WheelFilename(filename) => {
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(filename)) => {
                 let version = filename.version.clone();
 
                 let compatibility = Self::wheel_compatibility(
                     &filename,
                     file.hashes.as_slice(),
                     tags,
+                    variants,
                     hasher,
                     build_options,
                 );
@@ -145,7 +152,7 @@ impl FlatDistributions {
                     }
                 }
             }
-            DistFilename::SourceDistFilename(filename) => {
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(filename)) => {
                 let compatibility = Self::source_dist_compatibility(
                     &filename,
                     file.hashes.as_slice(),
@@ -166,6 +173,16 @@ impl FlatDistributions {
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(PrioritizedDist::from_source(dist, vec![], compatibility));
+                    }
+                }
+            }
+            IndexEntryFilename::VariantJson(variant_json) => {
+                match self.0.entry(variant_json.version.clone()) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().insert_variant_json(variant_json);
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(PrioritizedDist::from_variant_json(variant_json));
                     }
                 }
             }
@@ -205,6 +222,7 @@ impl FlatDistributions {
         filename: &WheelFilename,
         hashes: &[HashDigest],
         tags: Option<&Tags>,
+        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
@@ -214,7 +232,7 @@ impl FlatDistributions {
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match tags {
+        let tag_priority = match tags {
             Some(tags) => match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
@@ -222,6 +240,22 @@ impl FlatDistributions {
                 TagCompatibility::Compatible(priority) => Some(priority),
             },
             None => None,
+        };
+
+        // Determine a priority for the wheel based on variants.
+        let variant_priority = if let Some(variants) = variants {
+            if let Some(variant) = filename.variant() {
+                match variants.compatibility(variant) {
+                    VariantCompatibility::Incompatible => {
+                        return WheelCompatibility::Incompatible(IncompatibleWheel::Variant);
+                    }
+                    VariantCompatibility::Compatible(priority) => Some(priority),
+                }
+            } else {
+                None
+            }
+        } else {
+            None
         };
 
         // Check if hashes line up.
@@ -242,7 +276,7 @@ impl FlatDistributions {
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::Compatible(hash, tag_priority, variant_priority, build_tag)
     }
 }
 

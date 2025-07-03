@@ -2078,6 +2078,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "keccak"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecc2af9a1119c51f12a14607e783cb977bde58bc069ff0c3da1095e635d70654"
+dependencies = [
+ "cpufeatures",
+]
+
+[[package]]
 name = "kurbo"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3624,6 +3633,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha3"
+version = "0.10.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
+dependencies = [
+ "digest",
+ "keccak",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4696,6 +4715,7 @@ dependencies = [
  "uv-torch",
  "uv-trampoline-builder",
  "uv-types",
+ "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",
@@ -5106,6 +5126,7 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-types",
+ "uv-variant-frontend",
  "uv-version",
  "uv-workspace",
 ]
@@ -5173,6 +5194,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-small-str",
+ "uv-variants",
 ]
 
 [[package]]
@@ -5210,6 +5232,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
+ "uv-variants",
  "uv-warnings",
  "version-ranges",
 ]
@@ -5551,6 +5574,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.15.4",
  "indexmap",
+ "indoc",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -5771,6 +5795,7 @@ dependencies = [
  "uv-static",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -5953,6 +5978,43 @@ dependencies = [
  "uv-python",
  "uv-redacted",
  "uv-workspace",
+]
+
+[[package]]
+name = "uv-variant-frontend"
+version = "0.1.0"
+dependencies = [
+ "anstream",
+ "fs-err 3.1.1",
+ "indoc",
+ "owo-colors",
+ "rustc-hash",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-static",
+ "uv-types",
+ "uv-variants",
+ "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-variants"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "itertools 0.14.0",
+ "rkyv",
+ "serde",
+ "sha3",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

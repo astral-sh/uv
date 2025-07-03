@@ -722,13 +722,16 @@ pub(super) async fn do_sync(
     // Extract the hashes from the lockfile.
     let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
+    // TODO(charlie): Compute available variants.
+    let variants = None;
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), variants, &hasher, build_options)
     };
 
     // Create a build dispatch.
