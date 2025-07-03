@@ -1958,3 +1958,134 @@ fn version_set_evil_constraints() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn virtual_empty() -> Result<()> {
+    // testing how `uv version` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})?;
+
+    // Get version (doesn't make sense)
+    uv_snapshot!(context.filters(), context.version()
+        .arg("sortedcontainers"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Missing `project.name` field in: pyproject.toml
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+        "#
+        );
+    });
+
+    // Set version (can make sense, but we should still refuse?)
+    uv_snapshot!(context.filters(), context.version()
+        .arg("1.0.0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Missing `project.name` field in: pyproject.toml
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_virtual_dependency_group() -> Result<()> {
+    // testing basic `uv version` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`)
+    // But at least has some dependency-group tables (shouldn't matter to this command)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    // Get the version (doesn't make sense)
+    uv_snapshot!(context.filters(), context.version(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Missing `project.name` field in: pyproject.toml
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#
+        );
+    });
+
+    // Set the version (can make sense, we should refuse?)
+    uv_snapshot!(context.filters(), context.version()
+        .arg("1.0.0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Missing `project.name` field in: pyproject.toml
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#
+        );
+    });
+
+    Ok(())
+}
