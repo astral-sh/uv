@@ -1,27 +1,52 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
-use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_normalize::{InvalidNameError, PackageName};
+use uv_pep440::{Version, VersionParseError};
+
+#[derive(Debug, thiserror::Error)]
+pub enum VariantsJsonError {
+    #[error("Invalid variants.json filename")]
+    InvalidFilename,
+    #[error("Invalid variants.json package name: {0}")]
+    InvalidName(#[from] InvalidNameError),
+    #[error("Invalid variants.json version: {0}")]
+    InvalidVersion(#[from] VersionParseError),
+}
 
 /// A `<name>-<version>-variants.json` file.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub struct VariantsJson {
     pub name: PackageName,
     pub version: Version,
 }
 
-impl VariantsJson {
+impl FromStr for VariantsJson {
+    type Err = VariantsJsonError;
+
     /// Parse a `<name>-<version>-variants.json` filename.
     ///
     /// name and version must be normalized, i.e., they don't contain dashes.
-    pub fn try_from_normalized_filename(filename: &str) -> Option<Self> {
-        let stem = filename.strip_suffix("-variants.json")?;
+    fn from_str(filename: &str) -> Result<Self, Self::Err> {
+        let stem = filename
+            .strip_suffix("-variants.json")
+            .ok_or(VariantsJsonError::InvalidFilename)?;
 
-        let (name, version) = stem.split_once('-')?;
-        let name = PackageName::from_str(name).ok()?;
-        let version = Version::from_str(version).ok()?;
+        let (name, version) = stem
+            .split_once('-')
+            .ok_or(VariantsJsonError::InvalidFilename)?;
+        let name = PackageName::from_str(name)?;
+        let version = Version::from_str(version)?;
 
-        Some(VariantsJson { name, version })
+        Ok(VariantsJson { name, version })
+    }
+}
+
+impl Display for VariantsJson {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}-variants.json", self.name, self.version)
     }
 }
 
@@ -31,8 +56,7 @@ mod tests {
 
     #[test]
     fn variants_json_parsing() {
-        let variant =
-            VariantsJson::try_from_normalized_filename("numpy-1.21.0-variants.json").unwrap();
+        let variant = VariantsJson::from_str("numpy-1.21.0-variants.json").unwrap();
         assert_eq!(variant.name.as_str(), "numpy");
         assert_eq!(variant.version.to_string(), "1.21.0");
     }
