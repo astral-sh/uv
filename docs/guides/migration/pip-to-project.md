@@ -324,7 +324,7 @@ so multiple files are not needed to lock development dependencies.
 The uv lockfile is always [universal](../../concepts/resolution.md#universal-resolution), so
 multiple files are not needed to
 [lock dependencies for each platform](#platform-specific-dependencies). This ensures that all
-developers
+developers are using consistent, locked versions of dependencies regardless of their machine.
 
 The uv lockfile also supports concepts like
 [pinning packages to specific indexes](../../concepts/indexes.md#pinning-a-package-to-an-index),
