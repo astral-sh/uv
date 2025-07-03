@@ -1073,18 +1073,21 @@ impl VersionFiles {
     fn push(&mut self, filename: IndexEntryFilename, file: File) {
         match filename {
             IndexEntryFilename::DistFilename(DistFilename::WheelFilename(name)) => {
-                self.wheels.push(VersionWheel { name, file })
+                self.wheels.push(VersionWheel { name, file });
             }
             IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(name)) => {
                 self.source_dists.push(VersionSourceDist { name, file });
             }
             IndexEntryFilename::VariantJson(variants_json) => {
-                self.variant_jsons.push(VersionVariantJson { name: variants_json, file });
+                self.variant_jsons.push(VersionVariantJson {
+                    name: variants_json,
+                    file,
+                });
             }
         }
     }
 
-    pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
+    pub fn dists(self) -> impl Iterator<Item = (DistFilename, File)> {
         self.source_dists
             .into_iter()
             .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
@@ -1092,6 +1095,30 @@ impl VersionFiles {
                 self.wheels
                     .into_iter()
                     .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file)),
+            )
+    }
+
+    pub fn all(self) -> impl Iterator<Item = (IndexEntryFilename, File)> {
+        self.source_dists
+            .into_iter()
+            .map(|VersionSourceDist { name, file }| {
+                (
+                    IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(name)),
+                    file,
+                )
+            })
+            .chain(self.wheels.into_iter().map(|VersionWheel { name, file }| {
+                (
+                    IndexEntryFilename::DistFilename(DistFilename::WheelFilename(name)),
+                    file,
+                )
+            }))
+            .chain(
+                self.variant_jsons
+                    .into_iter()
+                    .map(|VersionVariantJson { name, file }| {
+                        (IndexEntryFilename::VariantJson(name), file)
+                    }),
             )
     }
 }
@@ -1141,7 +1168,8 @@ impl SimpleMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            let Some(filename) = IndexEntryFilename::try_from_filename(&file.filename, package_name)
+            let Some(filename) =
+                IndexEntryFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;

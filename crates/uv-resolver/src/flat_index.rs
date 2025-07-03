@@ -9,8 +9,8 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexEntryFilename,
-    IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
-    WheelCompatibility,
+    IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RegistryVariantsJson,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -176,13 +176,19 @@ impl FlatDistributions {
                     }
                 }
             }
-            IndexEntryFilename::VariantJson(variant_json) => {
-                match self.0.entry(variant_json.version.clone()) {
+            IndexEntryFilename::VariantJson(variants_json) => {
+                let version = variants_json.version.clone();
+                let registry_variants_json = RegistryVariantsJson {
+                    filename: variants_json,
+                    file: Box::new(file),
+                    index,
+                };
+                match self.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_variant_json(variant_json);
+                        entry.get_mut().insert_variant_json(registry_variants_json);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_variant_json(variant_json));
+                        entry.insert(PrioritizedDist::from_variant_json(registry_variants_json));
                     }
                 }
             }

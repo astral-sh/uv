@@ -15,7 +15,16 @@ pub enum VariantsJsonError {
 
 /// A `<name>-<version>-variants.json` file.
 #[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+    Debug,
+    Clone,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
 pub struct VariantsJson {
