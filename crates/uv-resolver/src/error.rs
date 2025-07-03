@@ -156,7 +156,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
     }
 }
 
-pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
+pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
 
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 pub struct NoSolutionError {
@@ -365,6 +365,11 @@ impl NoSolutionError {
     /// Initialize a [`NoSolutionHeader`] for this error.
     pub fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.env.clone())
+    }
+
+    /// Get the conflict derivation tree for external analysis
+    pub fn derivation_tree(&self) -> &ErrorTree {
+        &self.error
     }
 
     /// Hint at limiting the resolver environment if universal resolution failed for a target
