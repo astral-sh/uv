@@ -410,6 +410,30 @@ $ uv add ~/projects/bar/
 
 ### Path dependency installation
 
+By default, a path dependency project is installed in the environment as a package, unless it is
+explicitly marked as a [non-package](./config.md#build-systems). This is true even if it lacks a
+[`[build-system] table`](./config.md#build-systems). If you'd like to override this behavior and
+ensure the path dependency is not installed as a package, set `package = false` on the source:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
+
+[tool.uv.sources]
+bar = { path = "../projects/bar", package = false }
+```
+
+If the path dependency project is marked as a non-package, but you'd like to install it as a
+package, set `package = true` on the source:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
+
+[tool.uv.sources]
+bar = { path = "../projects/bar", package = true }
+```
+
 An [editable installation](#editable-dependencies) is not used for path dependencies by default. An
 editable installation may be requested for project directories:
 
@@ -426,32 +450,6 @@ dependencies = ["bar"]
 [tool.uv.sources]
 bar = { path = "../projects/bar", editable = true }
 ```
-
-Similarly, if a project is marked as a [non-package](./config.md#build-systems), but you'd like to
-install it in the environment as a package, set `package = true` on the source:
-
-```toml title="pyproject.toml"
-[project]
-dependencies = ["bar"]
-
-[tool.uv.sources]
-bar = { path = "../projects/bar", package = true }
-```
-
-If the dependency project is not marked as a non-package and no value is set for `package` on the
-source, the default behavior is to install it as a package, even if it lacks a
-[[build-system] table](./config.md#build-systems). If you'd like to avoid installing it, set
-`package = false` on the source:
-
-```toml title="pyproject.toml"
-[project]
-dependencies = ["bar"]
-
-[tool.uv.sources]
-bar = { path = "../projects/bar", package = false }
-```
-
-This will override the default behavior and the path dependency's own `tool.uv.package` value.
 
 For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better fit.
 
