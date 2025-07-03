@@ -6,6 +6,7 @@
 //!
 //! Then lowers them into a dependency specification.
 
+#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;

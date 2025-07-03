@@ -1,4 +1,6 @@
-use std::{borrow::Cow, ops::Deref};
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
+use std::ops::Deref;
 
 use http::StatusCode;
 use rustc_hash::FxHashSet;
