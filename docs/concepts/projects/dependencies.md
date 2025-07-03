@@ -408,53 +408,52 @@ Or, a path to a project directory:
 $ uv add ~/projects/bar/
 ```
 
-!!! important
+### Path dependency installation
 
-    An [editable installation](#editable-dependencies) is not used for path dependencies by
-    default. An editable installation may be requested for project directories:
+An [editable installation](#editable-dependencies) is not used for path dependencies by default. An
+editable installation may be requested for project directories:
 
-    ```console
-    $ uv add --editable ../projects/bar/
-    ```
+```console
+$ uv add --editable ../projects/bar/
+```
 
-    Which will result in a `pyproject.toml` with:
+Which will result in a `pyproject.toml` with:
 
-    ```toml title="pyproject.toml"
-    [project]
-    dependencies = ["bar"]
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
 
-    [tool.uv.sources]
-    bar = { path = "../projects/bar", editable = true }
-    ```
+[tool.uv.sources]
+bar = { path = "../projects/bar", editable = true }
+```
 
-    Similarly, if a project is marked as a [non-package](./config.md#build-systems), but you'd
-    like to install it in the environment as a package, set `package = true` on the source:
+Similarly, if a project is marked as a [non-package](./config.md#build-systems), but you'd like to
+install it in the environment as a package, set `package = true` on the source:
 
-    ```toml title="pyproject.toml"
-    [project]
-    dependencies = ["bar"]
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
 
-    [tool.uv.sources]
-    bar = { path = "../projects/bar", package = true }
-    ```
+[tool.uv.sources]
+bar = { path = "../projects/bar", package = true }
+```
 
-    If the project is not marked as a non-package and no value is set for `package` on the source, the default behavior is to install it as a package, even if it lacks a [build
-    specification](./config.md#build-systems). If you'd like to avoid installing it, set
-    `package = false` on the source:
+If the dependency project is not marked as a non-package and no value is set for `package` on the
+source, the default behavior is to install it as a package, even if it lacks a
+[[build-system] table](./config.md#build-systems). If you'd like to avoid installing it, set
+`package = false` on the source:
 
-    ```toml title="pyproject.toml"
-    [project]
-    dependencies = ["bar"]
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
 
-    [tool.uv.sources]
-    bar = { path = "../projects/bar", package = false }
-    ```
+[tool.uv.sources]
+bar = { path = "../projects/bar", package = false }
+```
 
-    This will override the default behavior and the path dependency's own `tool.uv.package`
-    value.
+This will override the default behavior and the path dependency's own `tool.uv.package` value.
 
-    For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better
-    fit.
+For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better fit.
 
 ### Workspace member
 
