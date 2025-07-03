@@ -947,7 +947,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             None
         }
         Some(spec) => {
-            debug!("Creating ephemeral environment");
+            debug!("Syncing `--with` requirements to cached environment");
+
             // Read the build constraints from the lock file.
             let build_constraints = base_lock
                 .as_ref()
@@ -1022,6 +1023,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let ephemeral_env = ephemeral_dir
         .as_ref()
         .map(|dir| {
+            debug!(
+                "Creating ephemeral environment at: `{}`",
+                dir.path().simplified_display()
+            );
+
             uv_virtualenv::create_venv(
                 dir.path(),
                 base_interpreter.clone(),
