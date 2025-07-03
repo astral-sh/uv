@@ -1985,13 +1985,29 @@ conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("patch"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    myproject 1.10.31 => 1.10.32
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    error: Extras `bar` and `foo` are incompatible with the declared conflicts: {`myproject[bar]`, `myproject[foo]`}
+    Audited in [TIME]
+    ");
+
+    // Sync an extra, we should not remove it.
+    context.sync().arg("--extra").arg("foo").assert().success();
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("patch"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 1.10.32 => 1.10.33
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    Audited in [TIME]
     ");
 
     Ok(())
