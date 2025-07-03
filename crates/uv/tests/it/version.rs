@@ -1958,3 +1958,57 @@ fn version_set_evil_constraints() -> Result<()> {
 
     Ok(())
 }
+
+/// Bump the version with conflicting extras, to ensure we're activating the correct subset of
+/// extras during the resolve.
+#[test]
+fn version_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "1.10.31"
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+foo = ["requests"]
+bar = ["httpx"]
+baz = ["flask"]
+
+[tool.uv]
+conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("patch"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 1.10.31 => 1.10.32
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    // Sync an extra, we should not remove it.
+    context.sync().arg("--extra").arg("foo").assert().success();
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("patch"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 1.10.32 => 1.10.33
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    Ok(())
+}
