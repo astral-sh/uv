@@ -8,7 +8,7 @@ use uv_client::{FlatIndexEntries, FlatIndexEntry};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    DistOrVariantFilename, File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel,
+    File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexEntryFilename,
     IndexUrl, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
     WheelCompatibility,
 };
@@ -46,7 +46,7 @@ impl FlatIndex {
             let distributions = index.entry(entry.filename.name().clone()).or_default();
             distributions.add_file(
                 entry.file,
-                DistOrVariantFilename::DistFilename(entry.filename),
+                entry.filename,
                 tags,
                 variants,
                 hasher,
@@ -92,7 +92,7 @@ impl FlatDistributions {
         for entry in entries {
             distributions.add_file(
                 entry.file,
-                DistOrVariantFilename::DistFilename(entry.filename),
+                entry.filename,
                 tags,
                 variants,
                 hasher,
@@ -117,7 +117,7 @@ impl FlatDistributions {
     fn add_file(
         &mut self,
         file: File,
-        filename: DistOrVariantFilename,
+        filename: IndexEntryFilename,
         tags: Option<&Tags>,
         variants: Option<&VariantSet>,
         hasher: &HashStrategy,
@@ -127,7 +127,7 @@ impl FlatDistributions {
         // No `requires-python` here: for source distributions, we don't have that information;
         // for wheels, we read it lazily only when selected.
         match filename {
-            DistOrVariantFilename::DistFilename(DistFilename::WheelFilename(filename)) => {
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(filename)) => {
                 let version = filename.version.clone();
 
                 let compatibility = Self::wheel_compatibility(
@@ -152,7 +152,7 @@ impl FlatDistributions {
                     }
                 }
             }
-            DistOrVariantFilename::DistFilename(DistFilename::SourceDistFilename(filename)) => {
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(filename)) => {
                 let compatibility = Self::source_dist_compatibility(
                     &filename,
                     file.hashes.as_slice(),
@@ -176,7 +176,7 @@ impl FlatDistributions {
                     }
                 }
             }
-            DistOrVariantFilename::VariantJson(variant_json) => {
+            IndexEntryFilename::VariantJson(variant_json) => {
                 match self.0.entry(variant_json.version.clone()) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_variant_json(variant_json);
