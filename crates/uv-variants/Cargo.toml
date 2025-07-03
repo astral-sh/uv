@@ -10,12 +10,17 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+uv-pep508 = { workspace = true }
+
 hex = { workspace = true }
 itertools = { workspace = true }
 rkyv = { workspace = true }
 serde = { workspace = true }
 sha3 = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
 
 [lints]
 workspace = true
