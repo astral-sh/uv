@@ -517,6 +517,8 @@ impl TestContext {
         if cfg!(windows) {
             filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
             filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
+            // Unix uses "exit status", Windows uses "exit code"
+            filters.push((r"exit code: ".to_string(), "exit status: ".to_string()));
         }
 
         filters.extend(

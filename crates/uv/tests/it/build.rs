@@ -15,7 +15,7 @@ fn build_basic() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -133,7 +133,7 @@ fn build_sdist() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: ", "exit status: "), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -189,7 +189,7 @@ fn build_wheel() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -245,7 +245,7 @@ fn build_sdist_wheel() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -303,7 +303,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -412,7 +412,7 @@ fn build_fail() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -488,7 +488,6 @@ fn build_workspace() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member\]", "[PKG]"),
@@ -694,7 +693,6 @@ fn build_all_with_failure() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member-\w+\]", "[PKG]"),
@@ -840,7 +838,7 @@ fn build_constraints() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -901,7 +899,7 @@ fn build_sha() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -1187,7 +1185,7 @@ fn build_tool_uv_sources() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let build = context.temp_dir.child("backend");
@@ -1337,7 +1335,6 @@ fn build_non_package() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member\]", "[PKG]"),
@@ -1930,7 +1927,7 @@ fn build_with_nonnormalized_name() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -2022,13 +2019,7 @@ fn force_pep517() -> Result<()> {
       ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
     ");
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1")])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----

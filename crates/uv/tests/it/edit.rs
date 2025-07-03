@@ -7246,10 +7246,7 @@ fn fail_to_add_revert_project() -> Result<()> {
         .child("setup.py")
         .write_str("1/0")?;
 
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add().arg("./child"), @r#"
+    uv_snapshot!(context.filters(), context.add().arg("./child"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7351,10 +7348,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
         .child("setup.py")
         .write_str("1/0")?;
 
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add().arg("./child"), @r#"
+    uv_snapshot!(context.filters(), context.add().arg("./child"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
