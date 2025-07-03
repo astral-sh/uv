@@ -9,6 +9,8 @@ pub enum KeyringProviderType {
     /// Do not use keyring for credential lookup.
     #[default]
     Disabled,
+    /// Use the system keyring for credential lookup.
+    Native,
     /// Use the `keyring` command for credential lookup.
     Subprocess,
     // /// Not yet implemented
@@ -22,6 +24,7 @@ impl KeyringProviderType {
     pub fn to_provider(&self) -> Option<KeyringProvider> {
         match self {
             Self::Disabled => None,
+            Self::Native => Some(KeyringProvider::native()),
             Self::Subprocess => Some(KeyringProvider::subprocess()),
         }
     }
