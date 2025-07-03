@@ -81,11 +81,15 @@ impl VariantBuild {
         let resolved_requirements = build_context
             .resolve(&requirements, &BuildStack::empty())
             .await
-            .map_err(|err| Error::RequirementsResolve("`build-system.requires`", err.into()))?;
+            .map_err(|err| {
+                Error::RequirementsResolve("`variant.providers.TODO(konsti).requires`", err.into())
+            })?;
         build_context
             .install(&resolved_requirements, &venv, &BuildStack::empty())
             .await
-            .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err.into()))?;
+            .map_err(|err| {
+                Error::RequirementsInstall("`variant.providers.TODO(konsti).requires`", err.into())
+            })?;
 
         // Figure out what the modified path should be, and remove the PATH variable from the
         // environment variables if it's there.
