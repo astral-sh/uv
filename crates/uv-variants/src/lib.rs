@@ -1,3 +1,5 @@
+pub mod variants_json;
+
 use std::cmp;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
