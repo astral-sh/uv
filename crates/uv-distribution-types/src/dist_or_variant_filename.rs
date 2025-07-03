@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use uv_distribution_filename::DistFilename;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
 use crate::VariantsJson;
 
@@ -18,12 +21,29 @@ impl IndexEntryFilename {
         }
     }
 
+    pub fn version(&self) -> &Version {
+        match self {
+            Self::DistFilename(filename) => filename.version(),
+            Self::VariantJson(variant_json) => &variant_json.version,
+        }
+    }
+
     /// Parse a filename as either a distribution filename or a `variants.json` filename.
-    #[allow(clippy::manual_map)]
     pub fn try_from_normalized_filename(filename: &str) -> Option<Self> {
         if let Some(dist_filename) = DistFilename::try_from_normalized_filename(filename) {
             Some(Self::DistFilename(dist_filename))
-        } else if let Some(variant_json) = VariantsJson::try_from_normalized_filename(filename) {
+        } else if let Ok(variant_json) = VariantsJson::from_str(filename) {
+            Some(Self::VariantJson(variant_json))
+        } else {
+            None
+        }
+    }
+
+    /// Parse a filename as either a distribution filename or a `variants.json` filename.
+    pub fn try_from_filename(filename: &str, package_name: &PackageName) -> Option<Self> {
+        if let Some(dist_filename) = DistFilename::try_from_filename(filename, package_name) {
+            Some(Self::DistFilename(dist_filename))
+        } else if let Ok(variant_json) = VariantsJson::from_str(filename) {
             Some(Self::VariantJson(variant_json))
         } else {
             None
