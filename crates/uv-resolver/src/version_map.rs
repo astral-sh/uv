@@ -10,9 +10,9 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
-    WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexEntryFilename, IndexUrl,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RegistryVariantsJson, RequiresPython,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -448,7 +448,7 @@ impl VersionMapLazy {
                 let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
                 match filename {
-                    DistFilename::WheelFilename(filename) => {
+                    IndexEntryFilename::DistFilename(DistFilename::WheelFilename(filename)) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
                             &filename.name,
@@ -465,7 +465,9 @@ impl VersionMapLazy {
                         };
                         priority_dist.insert_built(dist, hashes, compatibility);
                     }
-                    DistFilename::SourceDistFilename(filename) => {
+                    IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(
+                        filename,
+                    )) => {
                         let compatibility = self.source_dist_compatibility(
                             &filename.name,
                             &filename.version,
@@ -483,6 +485,14 @@ impl VersionMapLazy {
                             wheels: vec![],
                         };
                         priority_dist.insert_source(dist, hashes, compatibility);
+                    }
+                    IndexEntryFilename::VariantJson(filename) => {
+                        let variant_json = RegistryVariantsJson {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                        };
+                        priority_dist.insert_variant_json(variant_json);
                     }
                 }
             }
