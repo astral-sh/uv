@@ -57,10 +57,7 @@ impl File {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: match split_scheme(&file.url) {
-                Some(..) => FileLocation::AbsoluteUrl(UrlString::new(file.url)),
-                None => FileLocation::RelativeUrl(base.clone(), file.url),
-            },
+            url: FileLocation::new(file.url, base),
             yanked: file.yanked,
         })
     }
@@ -77,6 +74,17 @@ pub enum FileLocation {
 }
 
 impl FileLocation {
+    /// Parse a relative or absolute URL on a page with a base URL.
+    ///
+    /// This follows the HTML semantics where a link on a page is resolved relative to the URL of
+    /// that page.
+    pub fn new(url: SmallString, base: &SmallString) -> Self {
+        match split_scheme(&url) {
+            Some(..) => FileLocation::AbsoluteUrl(UrlString::new(url)),
+            None => FileLocation::RelativeUrl(base.clone(), url),
+        }
+    }
+
     /// Convert this location to a URL.
     ///
     /// A relative URL has its base joined to the path. An absolute URL is
