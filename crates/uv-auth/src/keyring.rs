@@ -1,10 +1,20 @@
-use std::{io::Write, process::Stdio};
+use rustc_hash::FxHashSet;
+use std::{
+    io::Write,
+    process::Stdio,
+    sync::{LazyLock, RwLock},
+};
 use tokio::process::Command;
-use tracing::{instrument, trace, warn};
+use tracing::{debug, instrument, trace, warn};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user_once;
 
 use crate::credentials::Credentials;
+
+/// Keyring credentials that have been stored during an invocation of uv.
+static STORED_KEYRING_URLS: LazyLock<StoredKeyringUrls> = LazyLock::new(StoredKeyringUrls::new);
+/// Service name prefix for storing credentials in a keyring.
+static UV_SERVICE_PREFIX: &str = "uv-credentials-";
 
 /// A backend for retrieving credentials from a keyring.
 ///
@@ -17,17 +27,81 @@ pub struct KeyringProvider {
 
 #[derive(Debug)]
 pub(crate) enum KeyringProviderBackend {
-    /// Use the `keyring` command to fetch credentials.
+    /// Use system keyring integration to fetch credentials.
+    Native,
+    /// Use the external `keyring` command to fetch credentials.
     Subprocess,
     #[cfg(test)]
     Dummy(Vec<(String, &'static str, &'static str)>),
 }
 
 impl KeyringProvider {
+    /// Create a new [`KeyringProvider::Native`].
+    pub fn native() -> Self {
+        Self {
+            backend: KeyringProviderBackend::Native,
+        }
+    }
+
     /// Create a new [`KeyringProvider::Subprocess`].
     pub fn subprocess() -> Self {
         Self {
             backend: KeyringProviderBackend::Subprocess,
+        }
+    }
+
+    /// Store credentials for the given [`Url`] to the keyring if the
+    /// keyring provider backend is `Native`.
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
+    pub fn store_if_native(&self, url: &DisplaySafeUrl, credentials: &Credentials) {
+        let Some(username) = credentials.username() else {
+            trace!("Unable to store credentials in keyring for {url} due to missing username");
+            return;
+        };
+        let Some(password) = credentials.password() else {
+            trace!("Unable to store credentials in keyring for {url} due to missing password");
+            return;
+        };
+
+        match &self.backend {
+            KeyringProviderBackend::Native => {
+                // Only store credentials if not already stored during this uv invocation.
+                if !STORED_KEYRING_URLS.contains(url) {
+                    self.store_native(url.as_str(), username, password);
+                    STORED_KEYRING_URLS.insert(url.clone());
+                }
+            }
+            KeyringProviderBackend::Subprocess => {
+                trace!("Storing credentials is not supported for `subprocess` keyring");
+            }
+            #[cfg(test)]
+            KeyringProviderBackend::Dummy(_) => {}
+        }
+    }
+
+    /// Store credentials to the system keyring for the given `service_name`/`username`
+    /// pair.
+    #[instrument(skip(self))]
+    fn store_native(&self, service: &str, username: &str, password: &str) {
+        let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
+        let entry = match keyring::Entry::new(&prefixed_service, username) {
+            Ok(entry) => entry,
+            Err(err) => {
+                warn_user_once!(
+                    "Unable to store credentials for {service} in the system keyring: {err}"
+                );
+                return;
+            }
+        };
+        match entry.set_password(password) {
+            Ok(()) => {
+                debug!("Storing credentials for {service} in system keyring");
+            }
+            Err(err) => {
+                warn_user_once!(
+                    "Unable to store credentials for {service} in the system keyring: {err}"
+                );
+            }
         }
     }
 
@@ -55,6 +129,7 @@ impl KeyringProvider {
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
         trace!("Checking keyring for URL {url}");
         let mut credentials = match self.backend {
+            KeyringProviderBackend::Native => self.fetch_native(url.as_str(), username),
             KeyringProviderBackend::Subprocess => {
                 self.fetch_subprocess(url.as_str(), username).await
             }
@@ -72,6 +147,7 @@ impl KeyringProvider {
             };
             trace!("Checking keyring for host {host}");
             credentials = match self.backend {
+                KeyringProviderBackend::Native => self.fetch_native(&host, username),
                 KeyringProviderBackend::Subprocess => self.fetch_subprocess(&host, username).await,
                 #[cfg(test)]
                 KeyringProviderBackend::Dummy(ref store) => {
@@ -175,6 +251,27 @@ impl KeyringProvider {
         }
     }
 
+    #[instrument(skip(self))]
+    fn fetch_native(&self, service: &str, username: Option<&str>) -> Option<(String, String)> {
+        let prefixed_service = format!("{UV_SERVICE_PREFIX}{service}");
+        let username = username?;
+        if let Ok(entry) = keyring::Entry::new(&prefixed_service, username) {
+            match entry.get_password() {
+                Ok(password) => return Some((username.to_string(), password)),
+                Err(keyring::Error::NoEntry) => {
+                    debug!("No entry found in system keyring for {service}");
+                }
+                Err(err) => {
+                    warn_user_once!(
+                        "Unable to fetch credentials for {service} from system keyring: {}",
+                        err
+                    );
+                }
+            }
+        }
+        None
+    }
+
     #[cfg(test)]
     fn fetch_dummy(
         store: &Vec<(String, &'static str, &'static str)>,
@@ -210,6 +307,23 @@ impl KeyringProvider {
         Self {
             backend: KeyringProviderBackend::Dummy(Vec::new()),
         }
+    }
+}
+
+/// Keyring credentials that have been stored during an invocation of uv.
+struct StoredKeyringUrls(RwLock<FxHashSet<DisplaySafeUrl>>);
+
+impl StoredKeyringUrls {
+    pub(crate) fn new() -> Self {
+        Self(RwLock::new(FxHashSet::default()))
+    }
+
+    pub(crate) fn contains(&self, url: &DisplaySafeUrl) -> bool {
+        self.0.read().unwrap().contains(url)
+    }
+
+    pub(crate) fn insert(&self, url: DisplaySafeUrl) -> bool {
+        self.0.write().unwrap().insert(url)
     }
 }
 
