@@ -5625,7 +5625,7 @@ fn sync_seed() -> Result<()> {
     );
 
     // Re-create the environment with seed packages.
-    uv_snapshot!(context.filters(), context.venv()
+    uv_snapshot!(context.filters(), context.venv().arg("--clear")
         .arg("--seed"), @r"
     success: true
     exit_code: 0

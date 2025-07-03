@@ -2776,7 +2776,7 @@ fn install_no_binary_cache() {
     );
 
     // Re-create the virtual environment.
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // Re-install. The distribution should be installed from the cache.
     uv_snapshot!(
@@ -2794,7 +2794,7 @@ fn install_no_binary_cache() {
     );
 
     // Re-create the virtual environment.
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // Install with `--no-binary`. The distribution should be built from source, despite a binary
     // distribution being available in the cache.
@@ -3005,7 +3005,7 @@ fn cache_priority() {
     );
 
     // Re-create the virtual environment.
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // Install `idna` without a version specifier.
     uv_snapshot!(
@@ -8175,6 +8175,7 @@ fn install_relocatable() -> Result<()> {
     context
         .venv()
         .arg(context.venv.as_os_str())
+        .arg("--clear")
         .arg("--python")
         .arg("3.12")
         .arg("--relocatable")
