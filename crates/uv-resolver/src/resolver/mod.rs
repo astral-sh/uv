@@ -1257,6 +1257,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
 
+        // If there is no `PrioritizedDist`, our candidate is an installed package.
+        if let Some(variants_json) = candidate
+            .prioritized()
+            .and_then(|prioritized_dist| prioritized_dist.variants_json())
+        {
+            &variants_json.file;
+        }
+
         let dist = match candidate.dist() {
             CandidateDist::Compatible(dist) => dist,
             CandidateDist::Incompatible(incompatibility) => {
