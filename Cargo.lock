@@ -6047,8 +6047,10 @@ dependencies = [
  "itertools 0.14.0",
  "rkyv",
  "serde",
+ "serde_json",
  "sha3",
  "thiserror 2.0.12",
+ "uv-pep508",
 ]
 
 [[package]]
