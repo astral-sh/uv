@@ -1682,7 +1682,6 @@ fn tool_install_uninstallable() {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"bdist\.[^/\\\s]+(-[^/\\\s]+)?", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"#+", "#"),

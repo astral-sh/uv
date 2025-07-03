@@ -1122,10 +1122,7 @@ fn sync_build_isolation_package() -> Result<()> {
     )?;
 
     // Running `uv sync` should fail for iniconfig.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1215,10 +1212,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     )?;
 
     // Running `uv sync` should fail for the `compile` extra.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(&filters, context.sync().arg("--extra").arg("compile"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1239,7 +1233,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     "###);
 
     // Running `uv sync` with `--all-extras` should also fail.
-    uv_snapshot!(&filters, context.sync().arg("--all-extras"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6985,10 +6979,7 @@ fn sync_derivation_chain() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync(), @r###"
@@ -7051,10 +7042,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync().arg("--extra").arg("wsgi"), @r###"
@@ -7119,10 +7107,7 @@ fn sync_derivation_chain_group() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync().arg("--group").arg("wsgi"), @r###"
