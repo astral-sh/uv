@@ -438,6 +438,21 @@ $ uv add ~/projects/bar/
     bar = { path = "../projects/bar", package = true }
     ```
 
+    If the project is not marked as a non-package and no value is set for `package` on the source, the default behavior is to install it as a package, even if it lacks a [build
+    specification](./config.md#build-systems). If you'd like to avoid installing it, set
+    `package = false` on the source:
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = ["bar"]
+
+    [tool.uv.sources]
+    bar = { path = "../projects/bar", package = false }
+    ```
+
+    This will override the default behavior and the path dependency's own `tool.uv.package`
+    value.
+
     For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better
     fit.
 
