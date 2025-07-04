@@ -8,7 +8,8 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_configuration::PreviewMode;
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::Simplified;
+use uv_lock::LockedFile;
 use uv_pep440::Version;
 
 use crate::discovery::find_python_installation;
