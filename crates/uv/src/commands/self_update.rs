@@ -1,10 +1,13 @@
-use std::fmt::Write;
+use std::fmt::{Display, Write};
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
+use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest, UpdateResult, Version};
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use tracing::debug;
 
+use uv_cli::SelfUpdateFormat;
 use uv_client::WrappedReqwestError;
 use uv_fs::Simplified;
 
@@ -12,27 +15,179 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
+#[derive(Serialize)]
+#[serde(tag = "result", rename_all = "kebab-case")]
+enum SelfUpdateOutput {
+    Offline,
+    ExternallyInstalled,
+    MultipleInstallations {
+        current: AsRef<Path>,
+        other: AsRef<Path>,
+    },
+    GitHubRateLimitExceeded,
+    OnLatest {
+        version: String,
+        #[serde(skip_serializing)]
+        dry_run: bool,
+    },
+    WouldUpdate {
+        from: String,
+        to: String,
+    },
+    Updated {
+        from: Option<Version>,
+        to: Version,
+        tag: String,
+    },
+}
+
+impl SelfUpdateOutput {
+    fn exit_status(&self) -> ExitStatus {
+        match self {
+            Self::Offline => ExitStatus::Failure,
+            Self::ExternallyInstalled => ExitStatus::Error,
+            Self::MultipleInstallations { .. } => ExitStatus::Error,
+            Self::GitHubRateLimitExceeded => ExitStatus::Error,
+            Self::WouldUpdate { .. } => ExitStatus::Success,
+            Self::Updated { .. } => ExitStatus::Success,
+            Self::OnLatest { .. } => ExitStatus::Success,
+        }
+    }
+}
+
 /// Attempt to update the uv binary.
 pub(crate) async fn self_update(
     version: Option<String>,
     token: Option<String>,
     dry_run: bool,
+    output_format: SelfUpdateFormat,
     printer: Printer,
     network_settings: NetworkSettings,
 ) -> Result<ExitStatus> {
-    if network_settings.connectivity.is_offline() {
-        writeln!(
-            printer.stderr(),
-            "{}",
+    let output = self_update_impl(
+        version,
+        token,
+        dry_run,
+        output_format,
+        printer,
+        network_settings,
+    )
+    .await?;
+    let exit_status = output.exit_status();
+
+    if output_format == SelfUpdateFormat::Json {
+        writeln!(printer.stdout(), "{}", serde_json::to_string(&output)?)?;
+        return exit_status;
+    }
+
+    let args = match output {
+        SelfUpdateOutput::Offline => format_args!(
+            concat!(
+                "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)"
+            ),
+            "error".red().bold(),
+            ":".bold()
+        ),
+        SelfUpdateOutput::ExternallyInstalled => format_args!(
+            concat!(
+                "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
+                "\n",
+                "\n",
+                "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
+            ),
+            "error".red().bold(),
+            ":".bold()
+        ),
+        SelfUpdateOutput::MultipleInstallations { current, other } => format_args!(
+            concat!(
+                "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
+                "\n",
+                "\n",
+                "The current executable is at `{}` but the standalone installer was used to install uv to `{}`. Are multiple copies of uv installed?"
+            ),
+            "error".red().bold(),
+            ":".bold(),
+            current.simplified_display().bold().cyan(),
+            other.simplified_display().bold().cyan()
+        ),
+        SelfUpdateOutput::GitHubRateLimitExceeded => format_args!(
+            "{}{} GitHub API rate limit exceeded. Please provide a GitHub token via the {} option.",
+            "error".red().bold(),
+            ":".bold(),
+            "`--token`".green().bold()
+        ),
+
+        SelfUpdateOutput::OnLatest { version, dry_run } => {
+            if dry_run {
+                format_args!(
+                    "You're on the latest version of uv ({})",
+                    format!("v{}", version).bold().white()
+                )
+            } else {
+                format_args!(
+                    "{}{} You're on the latest version of uv ({})",
+                    "success".green().bold(),
+                    ":".bold(),
+                    format!("v{}", version).bold().cyan()
+                )
+            }
+        }
+
+        SelfUpdateOutput::WouldUpdate { from, to } => {
+            let to = if to == "latest" {
+                "the latest version"
+            } else {
+                format!("v{to}")
+            };
+
             format_args!(
-                concat!(
-                    "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)"
-                ),
-                "error".red().bold(),
-                ":".bold()
+                "Would update uv from {} to {}",
+                format!("v{from}").bold().white(),
+                to.bold().white(),
             )
-        )?;
-        return Ok(ExitStatus::Failure);
+        }
+
+        SelfUpdateOutput::Updated { from, to, tag } => {
+            let direction = if from.is_some_and(|from| from > to) {
+                "Downgraded"
+            } else {
+                "Upgraded"
+            };
+
+            let version_information = if let Some(from) = from {
+                format!(
+                    "from {} to {}",
+                    format!("v{from}").bold().cyan(),
+                    format!("v{to}").bold().cyan(),
+                )
+            } else {
+                format!("to {}", format!("v{to}").bold().cyan())
+            };
+
+            format_args!(
+                "{}{} {direction} uv {}! {}",
+                "success".green().bold(),
+                ":".bold(),
+                version_information,
+                format!("https://github.com/astral-sh/uv/releases/tag/{}", tag).cyan()
+            )
+        }
+    };
+
+    writeln!(printer.stderr(), "{}", args)?;
+    exit_status
+}
+
+async fn self_update_impl(
+    version: Option<String>,
+    token: Option<String>,
+    dry_run: bool,
+    output_format: SelfUpdateFormat,
+    printer: Printer,
+    network_settings: NetworkSettings,
+) -> Result<SelfUpdateOutput> {
+    if network_settings.connectivity.is_offline() {
+        return Ok(SelfUpdateOutput::Offline);
     }
 
     let mut updater = AxoUpdater::new_for("uv");
@@ -46,21 +201,7 @@ pub(crate) async fn self_update(
     // uv was likely installed via a package manager.
     let Ok(updater) = updater.load_receipt() else {
         debug!("No receipt found; assuming uv was installed via a package manager");
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format_args!(
-                concat!(
-                    "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
-                    "\n",
-                    "\n",
-                    "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
-                ),
-                "error".red().bold(),
-                ":".bold()
-            )
-        )?;
-        return Ok(ExitStatus::Error);
+        return Ok(SelfUpdateOutput::ExternallyInstalled);
     };
 
     // If we know what our version is, ignore whatever the receipt thinks it is!
@@ -78,34 +219,23 @@ pub(crate) async fn self_update(
         let current_exe = std::env::current_exe()?;
         let receipt_prefix = updater.install_prefix_root()?;
 
+        return Ok(SelfUpdateOutput::MultipleInstallations {
+            current: current_exe,
+            other: receipt_prefix,
+        });
+    }
+
+    if output_format == SelfUpdateFormat::Text {
         writeln!(
             printer.stderr(),
             "{}",
             format_args!(
-                concat!(
-                    "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
-                    "\n",
-                    "\n",
-                    "The current executable is at `{}` but the standalone installer was used to install uv to `{}`. Are multiple copies of uv installed?"
-                ),
-                "error".red().bold(),
-                ":".bold(),
-                current_exe.simplified_display().bold().cyan(),
-                receipt_prefix.simplified_display().bold().cyan()
+                "{}{} Checking for updates...",
+                "info".cyan().bold(),
+                ":".bold()
             )
         )?;
-        return Ok(ExitStatus::Error);
     }
-
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format_args!(
-            "{}{} Checking for updates...",
-            "info".cyan().bold(),
-            ":".bold()
-        )
-    )?;
 
     let update_request = if let Some(version) = version {
         UpdateRequest::SpecificTag(version)
@@ -118,108 +248,49 @@ pub(crate) async fn self_update(
     if dry_run {
         // TODO(charlie): `updater.fetch_release` isn't public, so we can't say what the latest
         // version is.
-        if updater.is_update_needed().await? {
+        return if updater.is_update_needed().await? {
             let version = match update_request {
                 UpdateRequest::Latest | UpdateRequest::LatestMaybePrerelease => {
-                    "the latest version".to_string()
+                    "latest".to_string()
                 }
                 UpdateRequest::SpecificTag(version) | UpdateRequest::SpecificVersion(version) => {
-                    format!("v{version}")
+                    version
                 }
             };
-            writeln!(
-                printer.stderr(),
-                "Would update uv from {} to {}",
-                format!("v{}", env!("CARGO_PKG_VERSION")).bold().white(),
-                version.bold().white(),
-            )?;
+
+            Ok(SelfUpdateOutput::WouldUpdate {
+                from: env!("CARGO_PKG_VERSION"),
+                to: version,
+            })
         } else {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format_args!(
-                    "You're on the latest version of uv ({})",
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
-                )
-            )?;
-        }
-        return Ok(ExitStatus::Success);
+            Ok(SelfUpdateOutput::OnLatest {
+                version: env!("CARGO_PKG_VERSION"),
+                dry_run: true,
+            })
+        };
     }
 
     // Run the updater. This involves a network request, since we need to determine the latest
     // available version of uv.
     match updater.run().await {
-        Ok(Some(result)) => {
-            let direction = if result
-                .old_version
-                .as_ref()
-                .is_some_and(|old_version| *old_version > result.new_version)
-            {
-                "Downgraded"
-            } else {
-                "Upgraded"
-            };
-
-            let version_information = if let Some(old_version) = result.old_version {
-                format!(
-                    "from {} to {}",
-                    format!("v{old_version}").bold().cyan(),
-                    format!("v{}", result.new_version).bold().cyan(),
-                )
-            } else {
-                format!("to {}", format!("v{}", result.new_version).bold().cyan())
-            };
-
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format_args!(
-                    "{}{} {direction} uv {}! {}",
-                    "success".green().bold(),
-                    ":".bold(),
-                    version_information,
-                    format!(
-                        "https://github.com/astral-sh/uv/releases/tag/{}",
-                        result.new_version_tag
-                    )
-                    .cyan()
-                )
-            )?;
-        }
-        Ok(None) => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format_args!(
-                    "{}{} You're on the latest version of uv ({})",
-                    "success".green().bold(),
-                    ":".bold(),
-                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().cyan()
-                )
-            )?;
-        }
-        Err(err) => {
-            return if let AxoupdateError::Reqwest(err) = err {
+        Ok(Some(result)) => Ok(SelfUpdateOutput::Updated {
+            from: result.old_version,
+            to: result.new_version,
+            tag: result.new_version_tag,
+        }),
+        Ok(None) => Ok(SelfUpdateOutput::OnLatest {
+            version: env!("CARGO_PKG_VERSION"),
+            dry_run: false,
+        }),
+        Err(err) => match err {
+            AxoupdateError::Reqwest(err) => {
                 if err.status() == Some(http::StatusCode::FORBIDDEN) && token.is_none() {
-                    writeln!(
-                        printer.stderr(),
-                        "{}",
-                        format_args!(
-                            "{}{} GitHub API rate limit exceeded. Please provide a GitHub token via the {} option.",
-                            "error".red().bold(),
-                            ":".bold(),
-                            "`--token`".green().bold()
-                        )
-                    )?;
-                    Ok(ExitStatus::Error)
+                    Ok(SelfUpdateOutput::GitHubRateLimitExceeded)
                 } else {
                     Err(WrappedReqwestError::from(err).into())
                 }
-            } else {
-                Err(err.into())
-            };
-        }
+            }
+            _ => Err(err.into()),
+        },
     }
-
-    Ok(ExitStatus::Success)
 }
