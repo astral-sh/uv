@@ -729,12 +729,14 @@ fn path_source(
             })
         } else {
             // Determine whether the project is a package or virtual.
+            // If the `package` option is unset, check if `tool.uv.package` is set
+            // on the path source (otherwise, default to `true`).
             let is_package = package.unwrap_or_else(|| {
                 let pyproject_path = install_path.join("pyproject.toml");
                 fs_err::read_to_string(&pyproject_path)
                     .ok()
                     .and_then(|contents| PyProjectToml::from_string(contents).ok())
-                    .map(|pyproject_toml| pyproject_toml.is_package())
+                    .and_then(|pyproject_toml| pyproject_toml.tool_uv_package())
                     .unwrap_or(true)
             });
 
