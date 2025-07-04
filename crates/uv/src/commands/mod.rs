@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
+pub(crate) use auth::configure::set as auth_set;
+pub(crate) use auth::configure::unset as auth_unset;
 pub(crate) use build_frontend::build_frontend;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
@@ -61,6 +63,7 @@ pub(crate) use venv::venv;
 
 use crate::printer::Printer;
 
+mod auth;
 pub(crate) mod build_backend;
 mod build_frontend;
 mod cache_clean;
