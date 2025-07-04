@@ -37,9 +37,8 @@ use tracing::instrument;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
-use uv_distribution_types::Requirement;
 use uv_distribution_types::{
-    IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
+    IndexUrl, NameRequirementSpecification, Requirement, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, Simplified};
@@ -152,7 +151,7 @@ impl RequirementsSpecification {
                     find_links: requirements_txt
                         .find_links
                         .into_iter()
-                        .map(IndexUrl::from)
+                        .map(IndexUrl::from_verbatim_url_preserving_trailing_slash)
                         .collect(),
                     no_binary: requirements_txt.no_binary,
                     no_build: requirements_txt.only_binary,
