@@ -399,6 +399,13 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
+    /// Configure credentials
+    #[command(
+        after_help = "Use `uv help auth` for more details.",
+        after_long_help = ""
+    )]
+    Auth(AuthNamespace),
+
     /// Manage Python projects.
     #[command(flatten)]
     Project(Box<ProjectCommand>),
@@ -4370,6 +4377,22 @@ pub struct FormatArgs {
 }
 
 #[derive(Args)]
+pub struct AuthNamespace {
+    #[command(subcommand)]
+    pub command: AuthCommand,
+}
+
+#[derive(Subcommand)]
+pub enum AuthCommand {
+    /// Log in to a repository or registry.
+    Login(AuthLoginArgs),
+    /// Log out of a repository or registry.
+    Logout(AuthLogoutArgs),
+    /// Show the credentials for a repository or registry.
+    Show(AuthShowArgs),
+}
+
+#[derive(Args)]
 pub struct ToolNamespace {
     #[command(subcommand)]
     pub command: ToolCommand,
@@ -5431,6 +5454,46 @@ pub struct PythonPinArgs {
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
+}
+
+#[derive(Args)]
+pub struct AuthLogoutArgs {
+    /// The authentication service to configure
+    pub service: Option<String>,
+
+    /// The username to set for the service
+    #[arg(long, short)]
+    pub username: Option<String>,
+}
+
+#[derive(Args)]
+pub struct AuthLoginArgs {
+    /// The service to log in to.
+    pub service: Option<String>,
+
+    /// The username to use for the service.
+    #[arg(long, short, conflicts_with = "token")]
+    pub username: Option<String>,
+
+    /// The password to use for the service.
+    #[arg(long, conflicts_with = "token")]
+    pub password: Option<String>,
+
+    /// The token to use for the service.
+    ///
+    /// The username will be set to `__token__`.
+    #[arg(long, short, conflicts_with = "username", conflicts_with = "password")]
+    pub token: Option<String>,
+}
+
+#[derive(Args)]
+pub struct AuthShowArgs {
+    /// The service to lookup.
+    pub service: Option<String>,
+
+    /// The username to lookup.
+    #[arg(long, short)]
+    pub username: Option<String>,
 }
 
 #[derive(Args)]

@@ -1,7 +1,4 @@
-use std::{
-    io::Write,
-    process::Stdio,
-};
+use std::{io::Write, process::Stdio};
 use tokio::process::Command;
 use tracing::{debug, instrument, trace, warn};
 use uv_redacted::DisplaySafeUrl;
@@ -97,6 +94,36 @@ impl KeyringProvider {
                 );
             }
         }
+    }
+
+    /// Remove credentials for the given [`Url`]/`username` pair from the keyring if the
+    /// keyring provider backend is [`KeyringProviderBackend::Native`].
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
+    pub async fn remove_if_native(
+        &self,
+        url: &DisplaySafeUrl,
+        username: &str,
+    ) -> Result<(), uv_keyring::Error> {
+        if let KeyringProviderBackend::Native = &self.backend {
+            self.remove_native(url.as_str(), username).await?;
+            STORED_KEYRING_URLS.remove(url);
+        }
+        Ok(())
+    }
+
+    /// Remove credentials from the system keyring for the given `service_name`/`username`
+    /// pair.
+    #[instrument(skip(self))]
+    async fn remove_native(
+        &self,
+        service_name: &str,
+        username: &str,
+    ) -> Result<(), uv_keyring::Error> {
+        let prefixed_service = format!("{UV_SERVICE_PREFIX}{service_name}");
+        let entry = uv_keyring::Entry::new(&prefixed_service, username)?;
+        entry.delete_credential().await?;
+        trace!("Removing credentials for {service_name}/{username} from system keyring");
+        Ok(())
     }
 
     /// Fetch credentials for the given [`Url`] from the keyring.
