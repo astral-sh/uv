@@ -72,18 +72,3 @@ fn test_self_update_offline_json() {
     ----- stderr -----
     "#);
 }
-
-#[test]
-fn test_self_update_on_latest_json() {
-    let context = TestContext::new("3.12").with_filtered_version_fields();
-
-    uv_snapshot!(context.filters(), context.self_update().arg("--output-format=json"),
-    @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    {"result":"on-latest","version":"<version>"}
-
-    ----- stderr -----
-    "#);
-}

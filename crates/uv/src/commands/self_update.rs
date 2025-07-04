@@ -1,10 +1,9 @@
 use std::fmt::{Display, Write};
-use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest, UpdateResult, Version};
+use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest, Version};
 use owo_colors::OwoColorize;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use tracing::debug;
 
 use uv_cli::SelfUpdateFormat;
@@ -15,15 +14,40 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+struct VersionWrapper(Version);
+
+impl Display for VersionWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.to_string())
+    }
+}
+
+impl From<Version> for VersionWrapper {
+    fn from(value: Version) -> VersionWrapper {
+        VersionWrapper(value)
+    }
+}
+
+impl Serialize for VersionWrapper {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0.to_string())
+    }
+}
+
 #[derive(Serialize)]
 #[serde(tag = "result", rename_all = "kebab-case")]
 enum SelfUpdateOutput {
     Offline,
     ExternallyInstalled,
     MultipleInstallations {
-        current: AsRef<Path>,
-        other: AsRef<Path>,
+        current: String,
+        other: String,
     },
+    #[serde(rename = "github-rate-limit-exceeded")]
     GitHubRateLimitExceeded,
     OnLatest {
         version: String,
@@ -35,8 +59,8 @@ enum SelfUpdateOutput {
         to: String,
     },
     Updated {
-        from: Option<Version>,
-        to: Version,
+        from: Option<VersionWrapper>,
+        to: VersionWrapper,
         tag: String,
     },
 }
@@ -75,20 +99,20 @@ pub(crate) async fn self_update(
     .await?;
     let exit_status = output.exit_status();
 
-    if output_format == SelfUpdateFormat::Json {
+    if matches!(output_format, SelfUpdateFormat::Json) {
         writeln!(printer.stdout(), "{}", serde_json::to_string(&output)?)?;
-        return exit_status;
+        return Ok(exit_status);
     }
 
-    let args = match output {
-        SelfUpdateOutput::Offline => format_args!(
+    let message = match output {
+        SelfUpdateOutput::Offline => format!(
             concat!(
                 "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)"
             ),
             "error".red().bold(),
             ":".bold()
         ),
-        SelfUpdateOutput::ExternallyInstalled => format_args!(
+        SelfUpdateOutput::ExternallyInstalled => format!(
             concat!(
                 "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
                 "\n",
@@ -98,7 +122,7 @@ pub(crate) async fn self_update(
             "error".red().bold(),
             ":".bold()
         ),
-        SelfUpdateOutput::MultipleInstallations { current, other } => format_args!(
+        SelfUpdateOutput::MultipleInstallations { current, other } => format!(
             concat!(
                 "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
                 "\n",
@@ -107,10 +131,10 @@ pub(crate) async fn self_update(
             ),
             "error".red().bold(),
             ":".bold(),
-            current.simplified_display().bold().cyan(),
-            other.simplified_display().bold().cyan()
+            current.bold().cyan(),
+            other.bold().cyan()
         ),
-        SelfUpdateOutput::GitHubRateLimitExceeded => format_args!(
+        SelfUpdateOutput::GitHubRateLimitExceeded => format!(
             "{}{} GitHub API rate limit exceeded. Please provide a GitHub token via the {} option.",
             "error".red().bold(),
             ":".bold(),
@@ -119,12 +143,12 @@ pub(crate) async fn self_update(
 
         SelfUpdateOutput::OnLatest { version, dry_run } => {
             if dry_run {
-                format_args!(
+                format!(
                     "You're on the latest version of uv ({})",
                     format!("v{}", version).bold().white()
                 )
             } else {
-                format_args!(
+                format!(
                     "{}{} You're on the latest version of uv ({})",
                     "success".green().bold(),
                     ":".bold(),
@@ -135,12 +159,12 @@ pub(crate) async fn self_update(
 
         SelfUpdateOutput::WouldUpdate { from, to } => {
             let to = if to == "latest" {
-                "the latest version"
+                "the latest version".to_string()
             } else {
                 format!("v{to}")
             };
 
-            format_args!(
+            format!(
                 "Would update uv from {} to {}",
                 format!("v{from}").bold().white(),
                 to.bold().white(),
@@ -148,7 +172,7 @@ pub(crate) async fn self_update(
         }
 
         SelfUpdateOutput::Updated { from, to, tag } => {
-            let direction = if from.is_some_and(|from| from > to) {
+            let direction = if from.as_ref().is_some_and(|from| *from > to) {
                 "Downgraded"
             } else {
                 "Upgraded"
@@ -164,7 +188,7 @@ pub(crate) async fn self_update(
                 format!("to {}", format!("v{to}").bold().cyan())
             };
 
-            format_args!(
+            format!(
                 "{}{} {direction} uv {}! {}",
                 "success".green().bold(),
                 ":".bold(),
@@ -174,8 +198,8 @@ pub(crate) async fn self_update(
         }
     };
 
-    writeln!(printer.stderr(), "{}", args)?;
-    exit_status
+    writeln!(printer.stderr(), "{}", message)?;
+    Ok(exit_status)
 }
 
 async fn self_update_impl(
@@ -220,12 +244,12 @@ async fn self_update_impl(
         let receipt_prefix = updater.install_prefix_root()?;
 
         return Ok(SelfUpdateOutput::MultipleInstallations {
-            current: current_exe,
-            other: receipt_prefix,
+            current: current_exe.simplified_display().to_string(),
+            other: receipt_prefix.simplified_display().to_string(),
         });
     }
 
-    if output_format == SelfUpdateFormat::Text {
+    if matches!(output_format, SelfUpdateFormat::Text) {
         writeln!(
             printer.stderr(),
             "{}",
@@ -259,12 +283,12 @@ async fn self_update_impl(
             };
 
             Ok(SelfUpdateOutput::WouldUpdate {
-                from: env!("CARGO_PKG_VERSION"),
+                from: env!("CARGO_PKG_VERSION").to_string(),
                 to: version,
             })
         } else {
             Ok(SelfUpdateOutput::OnLatest {
-                version: env!("CARGO_PKG_VERSION"),
+                version: env!("CARGO_PKG_VERSION").to_string(),
                 dry_run: true,
             })
         };
@@ -274,12 +298,12 @@ async fn self_update_impl(
     // available version of uv.
     match updater.run().await {
         Ok(Some(result)) => Ok(SelfUpdateOutput::Updated {
-            from: result.old_version,
-            to: result.new_version,
+            from: result.old_version.map(VersionWrapper),
+            to: result.new_version.into(),
             tag: result.new_version_tag,
         }),
         Ok(None) => Ok(SelfUpdateOutput::OnLatest {
-            version: env!("CARGO_PKG_VERSION"),
+            version: env!("CARGO_PKG_VERSION").to_string(),
             dry_run: false,
         }),
         Err(err) => match err {
