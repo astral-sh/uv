@@ -41,6 +41,30 @@ impl IndexUrl {
     ///
     /// Normalizes non-file URLs by removing trailing slashes for consistency.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
+        Self::parse_with_trailing_slash_policy(path, root_dir, TrailingSlashPolicy::Remove)
+    }
+
+    /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
+    ///
+    /// If no root directory is provided, relative paths are resolved against the current working
+    /// directory.
+    ///
+    /// Preserves trailing slash if present in `path`.
+    pub fn parse_preserving_trailing_slash(path: &str) -> Result<Self, IndexUrlError> {
+        Self::parse_with_trailing_slash_policy(path, None, TrailingSlashPolicy::Preserve)
+    }
+
+    /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
+    ///
+    /// If no root directory is provided, relative paths are resolved against the current working
+    /// directory.
+    ///
+    /// Applies trailing slash policy to non-file URLs.
+    fn parse_with_trailing_slash_policy(
+        path: &str,
+        root_dir: Option<&Path>,
+        slash_policy: TrailingSlashPolicy,
+    ) -> Result<Self, IndexUrlError> {
         let url = match split_scheme(path) {
             Some((scheme, ..)) => {
                 match Scheme::parse(scheme) {
@@ -67,7 +91,10 @@ impl IndexUrl {
                 }
             }
         };
-        Ok(Self::from(url.with_given(path)))
+        Ok(Self::from_verbatim_url_with_trailing_slash_policy(
+            url.with_given(path),
+            slash_policy,
+        ))
     }
 
     /// Return the root [`Url`] of the index, if applicable.
@@ -90,6 +117,34 @@ impl IndexUrl {
         let mut url = self.url().clone();
         url.path_segments_mut().ok()?.pop_if_empty().pop();
         Some(url)
+    }
+
+    /// Construct an [`IndexUrl`] from a [`VerbatimUrl`], preserving a trailing
+    /// slash if present.
+    pub fn from_verbatim_url_preserving_trailing_slash(url: VerbatimUrl) -> Self {
+        Self::from_verbatim_url_with_trailing_slash_policy(url, TrailingSlashPolicy::Preserve)
+    }
+
+    /// Construct an [`IndexUrl`] from a [`VerbatimUrl`], applying a [`TrailingSlashPolicy`]
+    /// to non-file URLs.
+    fn from_verbatim_url_with_trailing_slash_policy(
+        mut url: VerbatimUrl,
+        slash_policy: TrailingSlashPolicy,
+    ) -> Self {
+        if url.scheme() == "file" {
+            return Self::Path(Arc::new(url));
+        }
+
+        if slash_policy == TrailingSlashPolicy::Remove {
+            if let Ok(mut path_segments) = url.raw_mut().path_segments_mut() {
+                path_segments.pop_if_empty();
+            }
+        }
+        if *url.raw() == *PYPI_URL {
+            Self::Pypi(Arc::new(url))
+        } else {
+            Self::Url(Arc::new(url))
+        }
     }
 }
 
@@ -184,6 +239,16 @@ impl Verbatim for IndexUrl {
     }
 }
 
+/// Whether to preserve or remove a trailing slash from a non-file URL.
+#[derive(Default, Clone, Copy, Eq, PartialEq)]
+enum TrailingSlashPolicy {
+    /// Preserve trailing slash if present.
+    #[default]
+    Preserve,
+    /// Remove trailing slash if present.
+    Remove,
+}
+
 /// Checks if a path is disambiguated.
 ///
 /// Disambiguated paths are absolute paths, paths with valid schemes,
@@ -258,21 +323,10 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
 }
 
 impl From<VerbatimUrl> for IndexUrl {
-    fn from(mut url: VerbatimUrl) -> Self {
-        if url.scheme() == "file" {
-            Self::Path(Arc::new(url))
-        } else {
-            // Remove trailing slashes for consistency. They'll be re-added if necessary when
-            // querying the Simple API.
-            if let Ok(mut path_segments) = url.raw_mut().path_segments_mut() {
-                path_segments.pop_if_empty();
-            }
-            if *url.raw() == *PYPI_URL {
-                Self::Pypi(Arc::new(url))
-            } else {
-                Self::Url(Arc::new(url))
-            }
-        }
+    fn from(url: VerbatimUrl) -> Self {
+        // Remove trailing slashes for consistency. They'll be re-added if necessary when
+        // querying the Simple API.
+        Self::from_verbatim_url_with_trailing_slash_policy(url, TrailingSlashPolicy::Remove)
     }
 }
 
@@ -725,5 +779,43 @@ mod tests {
         assert!(is_disambiguated_path(
             "git+https://github.com/example/repo.git"
         ));
+    }
+
+    #[test]
+    fn test_index_url_trailing_slash_policies() {
+        let url_with_trailing_slash = DisplaySafeUrl::parse("https://example.com/path/").unwrap();
+        let url_without_trailing_slash = DisplaySafeUrl::parse("https://example.com/path").unwrap();
+        let verbatim_url_with_trailing_slash =
+            VerbatimUrl::from_url(url_with_trailing_slash.clone());
+        let verbatim_url_without_trailing_slash =
+            VerbatimUrl::from_url(url_without_trailing_slash.clone());
+
+        // Test `From<VerbatimUrl>` implementation.
+        // Trailing slash should be removed if present.
+        assert_eq!(
+            IndexUrl::from(verbatim_url_with_trailing_slash.clone()).url(),
+            &url_without_trailing_slash
+        );
+        assert_eq!(
+            IndexUrl::from(verbatim_url_without_trailing_slash.clone()).url(),
+            &url_without_trailing_slash
+        );
+
+        // Test `from_verbatim_url_preserving_trailing_slash`.
+        // Trailing slash should be preserved if present.
+        assert_eq!(
+            IndexUrl::from_verbatim_url_preserving_trailing_slash(
+                verbatim_url_with_trailing_slash.clone()
+            )
+            .url(),
+            &url_with_trailing_slash
+        );
+        assert_eq!(
+            IndexUrl::from_verbatim_url_preserving_trailing_slash(
+                verbatim_url_without_trailing_slash.clone()
+            )
+            .url(),
+            &url_without_trailing_slash
+        );
     }
 }
