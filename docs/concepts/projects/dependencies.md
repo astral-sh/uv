@@ -412,7 +412,7 @@ $ uv add ~/projects/bar/
 
 By default, a path dependency project is installed in the environment as a package, unless it is
 explicitly marked as a [non-package](./config.md#build-systems). This is true even if it lacks a
-[`[build-system] table`](./config.md#build-systems). If you'd like to override this behavior and
+[`[build-system]` table](./config.md#build-systems). If you'd like to override this behavior and
 ensure the path dependency is not installed as a package, set `package = false` on the source:
 
 ```toml title="pyproject.toml"
