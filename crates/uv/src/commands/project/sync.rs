@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -169,7 +170,13 @@ pub(crate) async fn sync(
         ),
     };
 
-    let _lock = environment.lock().await?;
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Notify the user of any environment changes.
     match &environment {
@@ -324,7 +331,7 @@ pub(crate) async fn sync(
                 installer_metadata,
                 concurrency,
                 cache,
-                workspace_cache,
+                workspace_cache.clone(),
                 dry_run,
                 printer,
                 preview,
@@ -371,6 +378,7 @@ pub(crate) async fn sync(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -452,6 +460,7 @@ pub(crate) async fn sync(
         installer_metadata,
         concurrency,
         cache,
+        workspace_cache,
         dry_run,
         printer,
         preview,
@@ -587,6 +596,7 @@ pub(super) async fn do_sync(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
@@ -679,16 +689,7 @@ pub(super) async fn do_sync(
     // If necessary, convert editable to non-editable distributions.
     let resolution = apply_editable_mode(resolution, editable);
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Populate credentials from the target.
     store_credentials_from_target(target);
@@ -748,7 +749,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer,
         sources,
-        WorkspaceCache::default(),
+        workspace_cache.clone(),
         concurrency,
         preview,
     );

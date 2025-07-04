@@ -13,7 +13,6 @@ use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
-use etcetera::BaseStrategy;
 use futures::StreamExt;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -67,7 +66,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"uv\.exe", "uv"),
     // uv version display
     (
-        r"uv(-.*)? \d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
+        r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
@@ -258,7 +257,7 @@ impl TestContext {
         let added_filters = [
             (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
             (
-                r"uv = \d+\.\d+\.\d+".to_string(),
+                r"uv = \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?".to_string(),
                 "uv = [UV_VERSION]".to_string(),
             ),
             (
@@ -410,25 +409,20 @@ impl TestContext {
         self
     }
 
-    /// Discover the path to the XDG state directory. We use this, rather than the OS-specific
-    /// temporary directory, because on macOS (and Windows on GitHub Actions), they involve
-    /// symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
-    /// `/private/var/...`.)
+    /// Default to the canonicalized path to the temp directory. We need to do this because on
+    /// macOS (and Windows on GitHub Actions) the standard temp dir is a symlink. (On macOS, the
+    /// temporary directory is, like `/var/...`, which resolves to `/private/var/...`.)
     ///
     /// It turns out that, at least on macOS, if we pass a symlink as `current_dir`, it gets
     /// _immediately_ resolved (such that if you call `current_dir` in the running `Command`, it
-    /// returns resolved symlink). This is problematic, as we _don't_ want to resolve symlinks
-    /// for user-provided paths.
+    /// returns resolved symlink). This breaks some snapshot tests, since we _don't_ want to
+    /// resolve symlinks for user-provided paths.
     pub fn test_bucket_dir() -> PathBuf {
-        env::var(EnvVars::UV_INTERNAL__TEST_DIR)
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                etcetera::base_strategy::choose_base_strategy()
-                    .expect("Failed to find base strategy")
-                    .data_dir()
-                    .join("uv")
-                    .join("tests")
-            })
+        std::env::temp_dir()
+            .simple_canonicalize()
+            .expect("failed to canonicalize temp dir")
+            .join("uv")
+            .join("tests")
     }
 
     /// Create a new test context with multiple Python versions.
@@ -526,6 +520,8 @@ impl TestContext {
         if cfg!(windows) {
             filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
             filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
+            // Unix uses "exit status", Windows uses "exit code"
+            filters.push((r"exit code: ".to_string(), "exit status: ".to_string()));
         }
 
         filters.extend(

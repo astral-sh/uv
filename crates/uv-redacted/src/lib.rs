@@ -177,7 +177,9 @@ impl FromStr for DisplaySafeUrl {
 }
 
 fn is_ssh_git_username(url: &Url) -> bool {
-    matches!(url.scheme(), "ssh" | "git+ssh") && url.username() == "git" && url.password().is_none()
+    matches!(url.scheme(), "ssh" | "git+ssh" | "git+https")
+        && url.username() == "git"
+        && url.password().is_none()
 }
 
 fn display_with_redacted_credentials(

@@ -218,7 +218,7 @@ pub(crate) fn finalize_tool_install(
     if target_entry_points.is_empty() {
         writeln!(
             printer.stdout(),
-            "No executables are provided by `{from}`",
+            "No executables are provided by package `{from}`; removing tool",
             from = name.cyan()
         )?;
 
@@ -354,7 +354,9 @@ fn hint_executable_from_dependency(
             let command = format!("uv tool install {}", package.name());
             writeln!(
                 printer.stdout(),
-                "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
+                "{}{} An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
+                "hint".bold().cyan(),
+                ":".bold(),
                 name.cyan(),
                 package.name().cyan(),
                 command.bold(),
@@ -363,7 +365,9 @@ fn hint_executable_from_dependency(
         packages => {
             writeln!(
                 printer.stdout(),
-                "However, an executable with the name `{}` is available via the following dependencies::",
+                "{}{} An executable with the name `{}` is available via the following dependencies::",
+                "hint".bold().cyan(),
+                ":".bold(),
                 name.cyan(),
             )?;
 
@@ -372,7 +376,7 @@ fn hint_executable_from_dependency(
             }
             writeln!(
                 printer.stdout(),
-                "Did you mean to install one of them instead?"
+                "      Did you mean to install one of them instead?"
             )?;
         }
     }

@@ -3,7 +3,6 @@ use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use itertools::Itertools;
@@ -338,13 +337,12 @@ pub(crate) async fn pip_compile(
 
     // Determine the Python requirement, if the user requested a specific version.
     let python_requirement = if universal {
-        let requires_python = RequiresPython::greater_than_equal_version(
-            if let Some(python_version) = python_version.as_ref() {
-                &python_version.version
-            } else {
-                interpreter.python_version()
-            },
-        );
+        let requires_python = if let Some(python_version) = python_version.as_ref() {
+            RequiresPython::greater_than_equal_version(&python_version.version)
+        } else {
+            let version = interpreter.python_minor_version();
+            RequiresPython::greater_than_equal_version(&version)
+        };
         PythonRequirement::from_requires_python(&interpreter, requires_python)
     } else if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(&interpreter, python_version)
@@ -388,16 +386,7 @@ pub(crate) async fn pip_compile(
         no_index,
     );
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Determine the PyTorch backend.
     let torch_backend = torch_backend

@@ -3,7 +3,9 @@
 //! flags set.
 
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{borrow::Cow, path::Path};
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
+use std::path::Path;
 
 use crate::{Index, IndexUrl};
 

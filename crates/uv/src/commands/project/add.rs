@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 
 use uv_cache::Cache;
@@ -319,7 +319,13 @@ pub(crate) async fn add(
         }
     };
 
-    let _lock = target.acquire_lock().await?;
+    let _lock = target
+        .acquire_lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
@@ -374,16 +380,7 @@ pub(crate) async fn add(
             let hasher = HashStrategy::default();
             let sources = SourceStrategy::Enabled;
 
-            // Add all authenticated sources to the cache.
-            for index in settings.resolver.index_locations.allowed_indexes() {
-                if let Some(credentials) = index.credentials() {
-                    let credentials = Arc::new(credentials);
-                    uv_auth::store_credentials(index.raw_url(), credentials.clone());
-                    if let Some(root_url) = index.root_url() {
-                        uv_auth::store_credentials(&root_url, credentials.clone());
-                    }
-                }
-            }
+            settings.resolver.index_locations.cache_index_credentials();
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::try_from(client_builder)?
@@ -853,6 +850,7 @@ async fn lock_and_sync(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -974,6 +972,7 @@ async fn lock_and_sync(
                 Box::new(SummaryResolveLogger),
                 concurrency,
                 cache,
+                &WorkspaceCache::default(),
                 printer,
                 preview,
             )
@@ -1021,6 +1020,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
+        WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,

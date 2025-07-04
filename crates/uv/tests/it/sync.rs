@@ -3,12 +3,13 @@ use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-
-use crate::common::{TestContext, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
+
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+
+use crate::common::{TestContext, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path};
 
 #[test]
 fn sync() -> Result<()> {
@@ -1121,10 +1122,7 @@ fn sync_build_isolation_package() -> Result<()> {
     )?;
 
     // Running `uv sync` should fail for iniconfig.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1214,10 +1212,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     )?;
 
     // Running `uv sync` should fail for the `compile` extra.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(&filters, context.sync().arg("--extra").arg("compile"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1238,7 +1233,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     "###);
 
     // Running `uv sync` with `--all-extras` should also fail.
-    uv_snapshot!(&filters, context.sync().arg("--all-extras"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6984,10 +6979,7 @@ fn sync_derivation_chain() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync(), @r###"
@@ -7050,10 +7042,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync().arg("--extra").arg("wsgi"), @r###"
@@ -7118,10 +7107,7 @@ fn sync_derivation_chain_group() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.sync().arg("--group").arg("wsgi"), @r###"
@@ -8173,6 +8159,8 @@ fn sync_dry_run() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    // TMP: Attempt to catch this flake with verbose output
+    // See https://github.com/astral-sh/uv/issues/13744
     let output = context.sync().arg("--dry-run").arg("-vv").output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -8180,6 +8168,19 @@ fn sync_dry_run() -> Result<()> {
         "{}",
         stderr
     );
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Audited 1 package in [TIME]
+    Would make no changes
+    ");
 
     Ok(())
 }
@@ -9938,7 +9939,7 @@ fn sync_required_environment_hint() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: Distribution `no-sdist-no-wheels-with-matching-platform-a==1.0.0 @ registry+https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/` can't be installed because it doesn't have a source distribution or wheel for the current platform
+    error: Distribution `no-sdist-no-wheels-with-matching-platform-a==1.0.0 @ registry+https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html` can't be installed because it doesn't have a source distribution or wheel for the current platform
 
     hint: You're on [PLATFORM] (`[TAG]`), but `no-sdist-no-wheels-with-matching-platform-a` (v1.0.0) only has wheels for the following platform: `macosx_10_0_ppc64`; consider adding your platform to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
     ");
@@ -9970,6 +9971,57 @@ fn sync_url_with_query_parameters() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar)
+    ");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn read_only() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    // Remove the flock.
+    fs_err::remove_file(context.venv.child(".lock"))?;
+
+    // Make the virtual environment read and execute (but not write).
+    fs_err::set_permissions(&context.venv, std::fs::Permissions::from_mode(0o555))?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
     ");
 
     Ok(())

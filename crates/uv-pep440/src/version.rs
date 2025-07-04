@@ -610,6 +610,24 @@ impl Version {
         Self::new(self.release().iter().copied())
     }
 
+    /// Return the version with any segments apart from the release removed, with trailing zeroes
+    /// trimmed.
+    #[inline]
+    #[must_use]
+    pub fn only_release_trimmed(&self) -> Self {
+        if let Some(last_non_zero) = self.release().iter().rposition(|segment| *segment != 0) {
+            if last_non_zero == self.release().len() {
+                // Already trimmed.
+                self.clone()
+            } else {
+                Self::new(self.release().iter().take(last_non_zero + 1).copied())
+            }
+        } else {
+            // `0` is a valid version.
+            Self::new([0])
+        }
+    }
+
     /// Return the version with trailing `.0` release segments removed.
     ///
     /// # Panics

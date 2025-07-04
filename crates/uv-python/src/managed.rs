@@ -362,11 +362,7 @@ impl ManagedPythonInstallation {
     /// If windowed is true, `pythonw.exe` is selected over `python.exe` on windows, with no changes
     /// on non-windows.
     pub fn executable(&self, windowed: bool) -> PathBuf {
-        let implementation = match self.implementation() {
-            ImplementationName::CPython => "python",
-            ImplementationName::PyPy => "pypy",
-            ImplementationName::GraalPy => "graalpy",
-        };
+        let implementation = self.implementation().executable_name();
 
         let version = match self.implementation() {
             ImplementationName::CPython => {

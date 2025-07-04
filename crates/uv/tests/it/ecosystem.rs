@@ -73,8 +73,8 @@ fn saleor() -> Result<()> {
 // Currently ignored because the project doesn't build with `uv` yet.
 //
 // Source: https://github.com/apache/airflow/blob/c55438d9b2eb9b6680641eefdd0cbc67a28d1d29/pyproject.toml
-#[ignore]
 #[test]
+#[ignore = "Airflow doesn't build with `uv` yet"]
 fn airflow() -> Result<()> {
     lock_ecosystem_package("3.12", "airflow")
 }

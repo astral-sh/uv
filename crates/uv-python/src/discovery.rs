@@ -1433,7 +1433,7 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
             0,
             buf.as_mut_ptr().cast(),
             buf.len() as u32 * 2,
-            &mut bytes_returned,
+            &raw mut bytes_returned,
             std::ptr::null_mut(),
         ) != 0
     };

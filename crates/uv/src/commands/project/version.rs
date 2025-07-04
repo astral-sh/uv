@@ -315,6 +315,7 @@ async fn print_frozen_version(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -384,7 +385,7 @@ async fn lock_and_sync(
     let default_groups = default_dependency_groups(project.pyproject_toml())?;
     let default_extras = DefaultExtras::default();
     let groups = DependencyGroups::default().with_defaults(default_groups);
-    let extras = ExtrasSpecification::from_all_extras().with_defaults(default_extras);
+    let extras = ExtrasSpecification::default().with_defaults(default_extras);
     let install_options = InstallOptions::default();
 
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
@@ -443,6 +444,7 @@ async fn lock_and_sync(
 
     // Initialize any shared state.
     let state = UniversalState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     // Lock and sync the environment, if necessary.
     let lock = match project::lock::LockOperation::new(
@@ -453,6 +455,7 @@ async fn lock_and_sync(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -510,6 +513,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
+        workspace_cache,
         DryRun::Disabled,
         printer,
         preview,

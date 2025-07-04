@@ -3,7 +3,6 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{fmt, io};
 
 use anyhow::{Context, Result};
@@ -188,15 +187,6 @@ async fn build_impl(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<BuildResult> {
-    if list && preview.is_disabled() {
-        // We need the direct build for list and that is preview only.
-        writeln!(
-            printer.stderr(),
-            "The `--list` option is only available in preview mode; add the `--preview` flag to use `--list`"
-        )?;
-        return Ok(BuildResult::Failure);
-    }
-
     // Extract the resolver settings.
     let ResolverSettings {
         index_locations,
@@ -504,16 +494,7 @@ async fn build_package(
     .await?
     .into_interpreter();
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Read build constraints.
     let build_constraints =
@@ -615,10 +596,7 @@ async fn build_package(
         }
 
         BuildAction::List
-    } else if preview.is_enabled()
-        && !force_pep517
-        && check_direct_build(source.path(), source.path().user_display())
-    {
+    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display()) {
         BuildAction::DirectBuild
     } else {
         BuildAction::Pep517

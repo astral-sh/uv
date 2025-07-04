@@ -477,6 +477,7 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings.resolver,
             &network_settings,
             &state,
@@ -530,6 +531,7 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
+                        Constraints::from_requirements(build_constraints.iter().cloned()),
                         &settings.resolver,
                         &network_settings,
                         &state,

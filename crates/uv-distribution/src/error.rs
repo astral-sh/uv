@@ -108,6 +108,8 @@ pub enum Error {
     CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]
     RequiresPython(VersionSpecifiers, Version),
+    #[error("Failed to identify base Python interpreter")]
+    BaseInterpreter(#[source] std::io::Error),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.

@@ -17,6 +17,8 @@ use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 use uv_pep440::{LocalVersionSlice, LowerBound, Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::Tags;
+use uv_pypi_types::ParsedUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
@@ -56,11 +58,14 @@ pub enum ResolveError {
         } else {
             format!(" in {env}")
         },
-        urls.join("\n- "),
+        urls.iter()
+            .map(|url| format!("{}{}", DisplaySafeUrl::from(url.clone()), if url.is_editable() { " (editable)" } else { "" }))
+            .collect::<Vec<_>>()
+            .join("\n- ")
     )]
     ConflictingUrls {
         package_name: PackageName,
-        urls: Vec<String>,
+        urls: Vec<ParsedUrl>,
         env: ResolverEnvironment,
     },
 
@@ -71,11 +76,14 @@ pub enum ResolveError {
         } else {
             format!(" in {env}")
         },
-        indexes.join("\n- "),
+        indexes.iter()
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n- ")
     )]
     ConflictingIndexesForEnvironment {
         package_name: PackageName,
-        indexes: Vec<String>,
+        indexes: Vec<IndexUrl>,
         env: ResolverEnvironment,
     },
 
@@ -148,7 +156,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
     }
 }
 
-pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
+pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
 
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 pub struct NoSolutionError {
@@ -357,6 +365,11 @@ impl NoSolutionError {
     /// Initialize a [`NoSolutionHeader`] for this error.
     pub fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.env.clone())
+    }
+
+    /// Get the conflict derivation tree for external analysis
+    pub fn derivation_tree(&self) -> &ErrorTree {
+        &self.error
     }
 
     /// Hint at limiting the resolver environment if universal resolution failed for a target
@@ -1210,6 +1223,69 @@ impl SentinelRange<'_> {
             }
         }
         (lower, upper)
+    }
+}
+
+/// A prefix match, e.g., `==2.4.*`, which is desugared to a range like `>=2.4.dev0,<2.5.dev0`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PrefixMatch<'a> {
+    version: &'a Version,
+}
+
+impl<'a> PrefixMatch<'a> {
+    /// Determine whether a given range is equivalent to a prefix match (e.g., `==2.4.*`).
+    ///
+    /// Prefix matches are desugared to (e.g.) `>=2.4.dev0,<2.5.dev0`, but we want to render them
+    /// as `==2.4.*` in error messages.
+    pub(crate) fn from_range(lower: &'a Bound<Version>, upper: &'a Bound<Version>) -> Option<Self> {
+        let Bound::Included(lower) = lower else {
+            return None;
+        };
+        let Bound::Excluded(upper) = upper else {
+            return None;
+        };
+        if lower.is_pre() || lower.is_post() || lower.is_local() {
+            return None;
+        }
+        if upper.is_pre() || upper.is_post() || upper.is_local() {
+            return None;
+        }
+        if lower.dev() != Some(0) {
+            return None;
+        }
+        if upper.dev() != Some(0) {
+            return None;
+        }
+        if lower.release().len() != upper.release().len() {
+            return None;
+        }
+
+        // All segments should be the same, except the last one, which should be incremented.
+        let num_segments = lower.release().len();
+        for (i, (lower, upper)) in lower
+            .release()
+            .iter()
+            .zip(upper.release().iter())
+            .enumerate()
+        {
+            if i == num_segments - 1 {
+                if lower + 1 != *upper {
+                    return None;
+                }
+            } else {
+                if lower != upper {
+                    return None;
+                }
+            }
+        }
+
+        Some(PrefixMatch { version: lower })
+    }
+}
+
+impl std::fmt::Display for PrefixMatch<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "=={}.*", self.version.only_release())
     }
 }
 

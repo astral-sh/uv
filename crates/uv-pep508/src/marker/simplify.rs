@@ -64,8 +64,8 @@ fn collect_dnf(
                     continue;
                 }
 
-                // Detect whether the range for this edge can be simplified as a star inequality.
-                if let Some(specifier) = star_range_inequality(&range) {
+                // Detect whether the range for this edge can be simplified as a star specifier.
+                if let Some(specifier) = star_range_specifier(&range) {
                     path.push(MarkerExpression::Version {
                         key: marker.key().into(),
                         specifier,
@@ -343,22 +343,34 @@ where
     Some(excluded)
 }
 
-/// Returns `Some` if the version expression can be simplified as a star inequality with the given
-/// specifier.
+/// Returns `Some` if the version range can be simplified as a star specifier.
 ///
-/// For example, `python_full_version < '3.8' or python_full_version >= '3.9'` can be simplified to
-/// `python_full_version != '3.8.*'`.
-fn star_range_inequality(range: &Ranges<Version>) -> Option<VersionSpecifier> {
+/// Only for the two bounds case not covered by [`VersionSpecifier::from_release_only_bounds`].
+///
+/// For negative ranges like `python_full_version < '3.8' or python_full_version >= '3.9'`,
+/// returns `!= '3.8.*'`.
+fn star_range_specifier(range: &Ranges<Version>) -> Option<VersionSpecifier> {
+    if range.iter().count() != 2 {
+        return None;
+    }
+    // Check for negative star range: two segments [(Unbounded, Excluded(v1)), (Included(v2), Unbounded)]
     let (b1, b2) = range.iter().collect_tuple()?;
-
-    match (b1, b2) {
-        ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded))
-            if v1.release().len() == 2
-                && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
-        {
-            Some(VersionSpecifier::not_equals_star_version(v1.clone()))
+    if let ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded)) =
+        (b1, b2)
+    {
+        match *v1.only_release_trimmed().release() {
+            [major] if *v2.release() == [major, 1] => {
+                Some(VersionSpecifier::not_equals_star_version(Version::new([
+                    major, 0,
+                ])))
+            }
+            [major, minor] if *v2.release() == [major, minor + 1] => {
+                Some(VersionSpecifier::not_equals_star_version(v1.clone()))
+            }
+            _ => None,
         }
-        _ => None,
+    } else {
+        None
     }
 }
 

@@ -356,27 +356,20 @@ fn python_install_preview() {
     bin_python.assert(predicate::path::is_symlink());
 
     // The link should be to a path containing a minor version symlink directory
-    #[cfg(unix)]
-    {
+    if cfg!(unix) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                &bin_python
-                    .read_link()
-                    .unwrap_or_else(|_| panic!("{} should be readable", bin_python.path().display()))
-                    .as_os_str().to_string_lossy(),
-                @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13"
             );
         });
-    }
-    #[cfg(windows)]
-    {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                launcher_path(&bin_python).display(), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/python"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/python"
             );
         });
     }
@@ -505,27 +498,20 @@ fn python_install_preview() {
         .child(format!("python3.11{}", std::env::consts::EXE_SUFFIX));
 
     // The link should be to a path containing a minor version symlink directory
-    #[cfg(unix)]
-    {
+    if cfg!(unix) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                &bin_python
-                    .read_link()
-                    .unwrap_or_else(|_| panic!("{} should be readable", bin_python.path().display()))
-                    .as_os_str().to_string_lossy(),
-                @"[TEMP_DIR]/managed/cpython-3.11-[PLATFORM]/bin/python3.11"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11-[PLATFORM]/bin/python3.11"
             );
         });
-    }
-    #[cfg(windows)]
-    {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                launcher_path(&bin_python).display(), @"[TEMP_DIR]/managed/cpython-3.11-[PLATFORM]/python"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11-[PLATFORM]/python"
             );
         });
     }
@@ -563,15 +549,15 @@ fn python_install_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/bin/python3.12"
             );
         });
-    } else {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.8-[PLATFORM]/python"
             );
         });
     }
@@ -600,27 +586,20 @@ fn python_install_preview_upgrade() {
     "###);
 
     // Installing with a patch version should cause the link to be to the patch installation.
-    #[cfg(unix)]
-    {
+    if cfg!(unix) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                &bin_python
-                    .read_link()
-                    .unwrap_or_else(|_| panic!("{} should be readable", bin_python.display()))
-                    .display(),
-                @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
             );
         });
-    }
-    #[cfg(windows)]
-    {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                launcher_path(&bin_python).display(), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
             );
         });
     }
@@ -641,15 +620,15 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
             );
         });
-    } else {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
             );
         });
     }
@@ -670,15 +649,15 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
             );
         });
-    } else {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
             );
         });
     }
@@ -699,15 +678,15 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.4-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.4-[PLATFORM]/bin/python3.12"
             );
         });
-    } else {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.4-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.4-[PLATFORM]/python"
             );
         });
     }
@@ -728,15 +707,15 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]/bin/python3.12"
             );
         });
-    } else {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]/python"
             );
         });
     }
@@ -933,7 +912,7 @@ fn python_install_default() {
     bin_python_default.assert(predicate::path::missing());
 
     // Install the latest version, i.e., a "default install"
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("--preview"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -947,6 +926,75 @@ fn python_install_default() {
     bin_python_minor_13.assert(predicate::path::exists());
     bin_python_major.assert(predicate::path::exists());
     bin_python_default.assert(predicate::path::exists());
+
+    // And 3.13 should be the default
+    if cfg!(unix) {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+            );
+        });
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+            );
+        });
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+            );
+        });
+    } else if cfg!(windows) {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/python"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
+            );
+        });
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/python"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
+            );
+        });
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/python"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
+            );
+        });
+    }
 
     // Uninstall again
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r"
@@ -1001,7 +1049,10 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -1009,7 +1060,10 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
+                read_link(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -1017,7 +1071,10 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -1025,7 +1082,10 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
             );
         });
 
@@ -1033,7 +1093,10 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+                read_link(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
             );
         });
 
@@ -1041,7 +1104,10 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
+            );
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
             );
         });
     }
@@ -1069,7 +1135,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
             );
         });
 
@@ -1077,7 +1143,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+                canonicalize_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
             );
         });
 
@@ -1085,7 +1151,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -1093,23 +1159,15 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
             );
         });
-    } else {
+    } else if cfg!(windows) {
         insta::with_settings!({
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
-            );
-        });
-
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
             );
         });
 
@@ -1117,7 +1175,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
             );
         });
 
@@ -1125,7 +1183,15 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/python"
+            );
+        });
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/python"
             );
         });
     }
@@ -1139,7 +1205,7 @@ fn launcher_path(path: &Path) -> PathBuf {
     launcher.python_path
 }
 
-fn read_link_path(path: &Path) -> String {
+fn canonicalize_link_path(path: &Path) -> String {
     #[cfg(unix)]
     let canonical_path = fs_err::canonicalize(path);
 
@@ -1150,6 +1216,17 @@ fn read_link_path(path: &Path) -> String {
         .unwrap_or_else(|_| panic!("{} should be readable", path.display()))
         .simplified_display()
         .to_string()
+}
+
+fn read_link(path: &Path) -> String {
+    #[cfg(unix)]
+    let linked_path =
+        fs_err::read_link(path).unwrap_or_else(|_| panic!("{} should be readable", path.display()));
+
+    #[cfg(windows)]
+    let linked_path = launcher_path(path);
+
+    linked_path.simplified_display().to_string()
 }
 
 #[test]
@@ -1212,7 +1289,7 @@ fn python_install_preview_broken_link() {
         filters => context.filters(),
     }, {
         insta::assert_snapshot!(
-            read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
+            canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/python3.13"
         );
     });
 }
@@ -1367,8 +1444,8 @@ fn python_install_314() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0b2 in [TIME]
-     + cpython-3.14.0b2-[PLATFORM]
+    Installed Python 3.14.0b3 in [TIME]
+     + cpython-3.14.0b3-[PLATFORM]
     ");
 
     // Install a specific pre-release
@@ -1388,7 +1465,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b3-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1398,7 +1475,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b3-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1407,7 +1484,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b2-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b3-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");

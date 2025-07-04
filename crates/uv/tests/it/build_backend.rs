@@ -224,7 +224,6 @@ fn preserve_executable_bit() -> Result<()> {
         .init()
         .arg("--build-backend")
         .arg("uv")
-        .arg("--preview")
         .arg(&project_dir)
         .assert()
         .success();
@@ -316,8 +315,7 @@ fn rename_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -391,8 +389,7 @@ fn rename_module_editable_build() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-editable")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -568,8 +565,7 @@ fn build_sdist_with_long_path() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -602,8 +598,7 @@ fn sdist_error_without_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r"
+        .arg(temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -617,8 +612,7 @@ fn sdist_error_without_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r"
+        .arg(temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -682,7 +676,6 @@ fn complex_namespace_packages() -> Result<()> {
 
         context
             .build()
-            .arg("--preview")
             .arg(project.path())
             .arg("--out-dir")
             .arg(dist.path())
@@ -731,7 +724,6 @@ fn complex_namespace_packages() -> Result<()> {
         context.filters(),
         context
             .pip_install()
-            .arg("--preview")
             .arg("-e")
             .arg("complex-project-part_a")
             .arg("-e")
@@ -778,7 +770,6 @@ fn symlinked_file() -> Result<()> {
     let project = context.temp_dir.child("project");
     context
         .init()
-        .arg("--preview")
         .arg("--build-backend")
         .arg("uv")
         .arg(project.path())
@@ -855,6 +846,43 @@ fn symlinked_file() -> Result<()> {
     );
     let license = fs_err::read_to_string(&installed_license)?;
     assert_eq!(license, license_text);
+
+    Ok(())
+}
+
+/// Ignore invalid build backend settings when not building.
+///
+/// They may be from another `uv_build` version that has a different schema.
+#[test]
+fn invalid_build_backend_settings_are_ignored() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "built-by-uv"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        # Error: `source-include` must be a list
+        source-include = "data/build-script.py"
+
+        [build-system]
+        requires = ["uv_build>=10000,<10001"]
+        build-backend = "uv_build"
+    "#})?;
+
+    // Since we are not building, this must pass without complaining about the error in
+    // `tool.uv.build-backend`.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
 
     Ok(())
 }

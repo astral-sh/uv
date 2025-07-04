@@ -1344,7 +1344,7 @@ fn run_with_build_constraints() -> Result<()> {
     })?;
 
     // Installing requests with incompatible build constraints should fail.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1358,12 +1358,11 @@ fn run_with_build_constraints() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    Resolved 1 package in [TIME]
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     // Change the build constraint to be compatible with `requests==1.2`.
     pyproject_toml.write_str(indoc! { r#"
@@ -4686,6 +4685,22 @@ fn run_groups_requires_python() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
+    // TMP: Attempt to catch this flake with verbose output
+    // See https://github.com/astral-sh/uv/issues/14160
+    let output = context
+        .run()
+        .arg("python")
+        .arg("-c")
+        .arg("import typing_extensions")
+        .arg("-vv")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Removed virtual environment"),
+        "{}",
+        stderr
+    );
+
     // Going back to just "dev" we shouldn't churn the venv needlessly
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("-c").arg("import typing_extensions"), @r"
@@ -4762,7 +4777,7 @@ fn run_groups_include_requires_python() -> Result<()> {
         bar = ["iniconfig"]
         baz = ["iniconfig"]
         dev = ["sniffio", {include-group = "foo"}, {include-group = "baz"}]
-        
+
 
         [tool.uv.dependency-groups]
         foo = {requires-python="<3.13"}
@@ -4861,7 +4876,7 @@ fn exit_status_signal() -> Result<()> {
 
 #[test]
 fn run_repeated() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.13"]);
+    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4908,22 +4923,25 @@ fn run_repeated() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    // Re-running as a tool shouldn't require reinstalling `typing-extensions`, since the environment is cached.
+    // Re-running as a tool does require reinstalling `typing-extensions`, since the base venv is
+    // different.
     uv_snapshot!(
         context.filters(),
-        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
         import typing_extensions; import iniconfig
                                   ^^^^^^^^^^^^^^^^
     ModuleNotFoundError: No module named 'iniconfig'
-    "###);
+    "#);
 
     Ok(())
 }
@@ -4964,22 +4982,25 @@ fn run_without_overlay() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    // Import `iniconfig` in the context of a `tool run` command, which should fail.
+    // Import `iniconfig` in the context of a `tool run` command, which should fail. Note that
+    // typing-extensions gets installed again, because the venv is not shared.
     uv_snapshot!(
         context.filters(),
-        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
         import typing_extensions; import iniconfig
                                   ^^^^^^^^^^^^^^^^
     ModuleNotFoundError: No module named 'iniconfig'
-    "###);
+    "#);
 
     // Re-running in the context of the project should reset the overlay.
     uv_snapshot!(
