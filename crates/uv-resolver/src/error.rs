@@ -409,6 +409,16 @@ impl NoSolutionError {
         }
         Ok(())
     }
+
+    /// Get the packages that are involved in this error.
+    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
+        self.error
+            .packages()
+            .into_iter()
+            .filter_map(|p| p.name())
+            .collect::<rustc_hash::FxHashSet<_>>()
+            .into_iter()
+    }
 }
 
 impl std::fmt::Debug for NoSolutionError {
