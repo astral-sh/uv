@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pubgrub::{
     DefaultStringReporter, DerivationTree, Derived, External, Range, Ranges, Reporter, Term,
@@ -416,8 +417,7 @@ impl NoSolutionError {
             .packages()
             .into_iter()
             .filter_map(|p| p.name())
-            .collect::<rustc_hash::FxHashSet<_>>()
-            .into_iter()
+            .unique()
     }
 }
 
