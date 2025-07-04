@@ -649,6 +649,7 @@ pub(crate) async fn install(
             .into_iter()
             .sorted_unstable_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b))
         {
+            debug!("Error trace: {err:?}");
             writeln!(
                 printer.stderr(),
                 "{}: Failed to install {}",
