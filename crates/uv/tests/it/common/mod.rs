@@ -400,6 +400,15 @@ impl TestContext {
         self
     }
 
+    /// Add a filter that filters out version fields in `self version`'s JSON output.
+    pub fn with_filtered_version_fields(mut self) -> Self {
+        self.filters.push((
+            r#""(version|from|to)":"[^"]+""#.to_string(),
+            r#""$1":"<version>""#.to_string(),
+        ));
+        self
+    }
+
     /// Clear filters on `TestContext`.
     pub fn clear_filters(mut self) -> Self {
         self.filters.clear();
