@@ -34,15 +34,19 @@ pub struct BuildBackendSettings {
     /// For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
     /// `foo-stubs.bar`.
     ///
+    /// For namespace packages with multiple modules, the path can be a list, e.g.,
+    /// `["foo", "bar"]`. We recommend using a single module per package, splitting multiple
+    /// packages into a workspace.
+    ///
     /// Note that using this option runs the risk of creating two packages with different names but
     /// the same module names. Installing such packages together leads to unspecified behavior,
     /// often with corrupted files or directory trees.
     #[option(
         default = r#"None"#,
-        value_type = "str",
+        value_type = "str | list[str]",
         example = r#"module-name = "sklearn""#
     )]
-    pub module_name: Option<String>,
+    pub module_name: Option<ModuleName>,
 
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
@@ -179,6 +183,17 @@ impl Default for BuildBackendSettings {
             data: WheelDataIncludes::default(),
         }
     }
+}
+
+/// Whether to include a single module or multiple modules.
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(untagged)]
+pub enum ModuleName {
+    /// A single module name.
+    Name(String),
+    /// Multiple module names, which are all included.
+    Names(Vec<String>),
 }
 
 /// Data includes for wheels.

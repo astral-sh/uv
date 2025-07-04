@@ -134,16 +134,37 @@ the project structure:
 pyproject.toml
 src
 ├── foo
-│   └── __init__.py
+│   └── __init__.py
 └── bar
     └── __init__.py
 ```
 
 While we do not recommend this structure (i.e., you should use a workspace with multiple packages
-instead), it is supported via the `namespace` option:
+instead), it is supported by passing a list to the `module-name` option:
 
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
+module-name = ["foo", "bar"]
+```
+
+The `namespace = true` option offers an opt-out to enumerating all modules for complex namespace
+packages. Declaring an explicit `module-name` should be preferred over `namespace = true`.
+
+```text
+pyproject.toml
+src
+└── foo
+    ├── bar
+    │   └── __init__.py
+    └── baz
+        └── __init__.py
+```
+
+And the configuration would be:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+module-name = "foo"
 namespace = true
 ```
 
