@@ -4,7 +4,7 @@ use owo_colors::{AnsiColors, OwoColorize};
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -157,6 +157,7 @@ pub(crate) async fn upgrade(
             .into_iter()
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
+            trace!("Error trace: {err:?}");
             write_error_chain(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
