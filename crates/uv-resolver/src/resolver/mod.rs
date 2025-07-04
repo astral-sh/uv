@@ -1262,7 +1262,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .prioritized()
             .and_then(|prioritized_dist| prioritized_dist.variants_json())
         {
-            &variants_json.file;
+            let url = variants_json.file.url.to_url().expect("TODO(konsti)");
         }
 
         let dist = match candidate.dist() {
