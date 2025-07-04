@@ -19,7 +19,7 @@ struct VersionWrapper(Version);
 
 impl Display for VersionWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.to_string())
+        write!(f, "{}", self.0)
     }
 }
 
@@ -145,14 +145,14 @@ pub(crate) async fn self_update(
             if dry_run {
                 format!(
                     "You're on the latest version of uv ({})",
-                    format!("v{}", version).bold().white()
+                    format!("v{version}").bold().white()
                 )
             } else {
                 format!(
                     "{}{} You're on the latest version of uv ({})",
                     "success".green().bold(),
                     ":".bold(),
-                    format!("v{}", version).bold().cyan()
+                    format!("v{version}").bold().cyan()
                 )
             }
         }
@@ -193,12 +193,12 @@ pub(crate) async fn self_update(
                 "success".green().bold(),
                 ":".bold(),
                 version_information,
-                format!("https://github.com/astral-sh/uv/releases/tag/{}", tag).cyan()
+                format!("https://github.com/astral-sh/uv/releases/tag/{tag}").cyan()
             )
         }
     };
 
-    writeln!(printer.stderr(), "{}", message)?;
+    writeln!(printer.stderr(), "{message}")?;
     Ok(exit_status)
 }
 
