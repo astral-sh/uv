@@ -50,6 +50,8 @@ pub struct PexLock {
     pub prefer_older_binary: bool,
     /// Direct requirements.
     pub requirements: Vec<String>,
+    /// Python version requirements.
+    pub requires_python: Vec<String>,
     /// The resolver version used.
     pub resolver_version: String,
     /// The style of resolution.
@@ -247,6 +249,7 @@ impl PexLock {
             pip_version: Self::DEFAULT_PIP_VERSION.to_string(),
             prefer_older_binary: false,
             requirements,
+            requires_python: vec![lock.requires_python().to_string()],
             resolver_version: "pip-2020-resolver".to_string(),
             style: "universal".to_string(),
             target_systems: vec!["linux".to_string(), "mac".to_string()],
@@ -294,6 +297,7 @@ mod tests {
             pip_version: PexLock::DEFAULT_PIP_VERSION.to_string(),
             prefer_older_binary: false,
             requirements: vec!["requests==2.31.0".to_string()],
+            requires_python: vec![">=3.8".to_string()],
             resolver_version: "pip-2020-resolver".to_string(),
             style: "universal".to_string(),
             target_systems: vec!["linux".to_string(), "mac".to_string()],
