@@ -158,10 +158,10 @@ impl PexLock {
 
             // Add source distributions
             if let Some(sdist) = &package.sdist {
-                let Some(sdist_url) = sdist.url().map(|u| u.to_string()) else {
+                let Some(sdist_url) = sdist.url().map(std::string::ToString::to_string) else {
                     continue;
                 };
-                let Some(sdist_filename) = sdist.filename().map(|f| f.to_string()) else {
+                let Some(sdist_filename) = sdist.filename().map(std::string::ToString::to_string) else {
                     continue;
                 };
 
@@ -193,7 +193,7 @@ impl PexLock {
         let locked_resolves = vec![PexLockedResolve {
             platform_tag: Self::UNIVERSAL_PLATFORM_TAG
                 .iter()
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
                 .collect(),
             locked_requirements,
         }];
@@ -225,8 +225,8 @@ impl PexLock {
 impl fmt::Display for PexLock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.to_json() {
-            Ok(json) => write!(f, "{}", json),
-            Err(err) => write!(f, "Error serializing PEX lock: {}", err),
+            Ok(json) => write!(f, "{json}"),
+            Err(err) => write!(f, "Error serializing PEX lock: {err}"),
         }
     }
 }
