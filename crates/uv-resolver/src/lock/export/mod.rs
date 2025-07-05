@@ -19,11 +19,13 @@ use crate::graph_ops::{Reachable, marker_reachability};
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
+pub use crate::lock::export::pex_lock::PexLock;
 use crate::universal_marker::resolve_conflicts;
 use crate::{Installable, Package};
 
 mod pylock_toml;
 mod requirements_txt;
+mod pex_lock;
 
 /// A flat requirement, with its associated marker.
 #[derive(Debug, Clone, PartialEq, Eq)]

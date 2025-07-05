@@ -422,6 +422,10 @@ pub(crate) async fn pip_compile(
                 ExportFormat::PylockToml => {
                     read_pylock_toml_requirements(output_file, &upgrade).await?
                 }
+                ExportFormat::PexLock => {
+                    // PEX lock files are not supported for reading locked requirements
+                    LockedRequirements::default()
+                }
             }
         } else {
             LockedRequirements::default()
@@ -691,6 +695,9 @@ pub(crate) async fn pip_compile(
             // Convert the resolution to a `pylock.toml` file.
             let export = PylockToml::from_resolution(&resolution, &no_emit_packages, install_path)?;
             write!(writer, "{}", export.to_toml()?)?;
+        }
+        ExportFormat::PexLock => {
+            return Err(anyhow::anyhow!("PEX lock format is not supported in pip compile"));
         }
     }
 
