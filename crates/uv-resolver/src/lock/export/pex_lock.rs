@@ -176,10 +176,10 @@ impl PexLock {
 
             // Add source distributions
             if let Some(sdist) = &package.sdist {
-                let Some(sdist_url) = sdist.url().map(std::string::ToString::to_string) else {
+                let Some(sdist_url) = sdist.url().map(|u| u.to_string()) else {
                     continue;
                 };
-                let Some(sdist_filename) = sdist.filename().map(std::string::ToString::to_string) else {
+                let Some(sdist_filename) = sdist.filename().map(|f| f.to_string()) else {
                     continue;
                 };
 
