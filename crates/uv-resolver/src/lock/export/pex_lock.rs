@@ -199,26 +199,29 @@ impl PexLock {
             }
 
             if let Some(version) = &package.id.version {
-                // Collect dependencies for this package
-                let mut requires_dists = Vec::new();
-                for dep in &package.dependencies {
-                    if let Some(dep_version) = lock
-                        .packages()
-                        .iter()
-                        .find(|pkg| pkg.id.name == dep.package_id.name)
-                        .and_then(|pkg| pkg.id.version.as_ref())
-                    {
-                        requires_dists.push(format!("{}=={}", dep.package_id.name, dep_version));
+                // Only include packages that have at least one artifact
+                if !artifacts.is_empty() {
+                    // Collect dependencies for this package
+                    let mut requires_dists = Vec::new();
+                    for dep in &package.dependencies {
+                        if let Some(dep_version) = lock
+                            .packages()
+                            .iter()
+                            .find(|pkg| pkg.id.name == dep.package_id.name)
+                            .and_then(|pkg| pkg.id.version.as_ref())
+                        {
+                            requires_dists.push(format!("{}=={}", dep.package_id.name, dep_version));
+                        }
                     }
-                }
 
-                locked_requirements.push(PexLockedRequirement {
-                    artifacts,
-                    project_name: package.id.name.to_string(),
-                    requires_dists,
-                    requires_python: lock.requires_python().to_string(),
-                    version: version.to_string(),
-                });
+                    locked_requirements.push(PexLockedRequirement {
+                        artifacts,
+                        project_name: package.id.name.to_string(),
+                        requires_dists,
+                        requires_python: lock.requires_python().to_string(),
+                        version: version.to_string(),
+                    });
+                }
             }
         }
 
