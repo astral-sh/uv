@@ -68,6 +68,8 @@ pub struct PexLockedRequirement {
     pub requirement: String,
     /// Artifacts (wheels/sdists) for this requirement.
     pub artifacts: Vec<PexArtifact>,
+    /// Dependencies of this requirement.
+    pub requires_dists: Vec<String>,
 }
 
 /// An artifact in a PEX lock file.
@@ -181,11 +183,25 @@ impl PexLock {
             }
 
             if let Some(version) = &package.id.version {
+                // Collect dependencies for this package
+                let mut requires_dists = Vec::new();
+                for dep in &package.dependencies {
+                    if let Some(dep_version) = lock
+                        .packages()
+                        .iter()
+                        .find(|pkg| pkg.id.name == dep.package_id.name)
+                        .and_then(|pkg| pkg.id.version.as_ref())
+                    {
+                        requires_dists.push(format!("{}=={}", dep.package_id.name, dep_version));
+                    }
+                }
+
                 locked_requirements.push(PexLockedRequirement {
                     project_name: package.id.name.to_string(),
                     version: version.to_string(),
                     requirement: format!("{}=={}", package.id.name, version),
                     artifacts,
+                    requires_dists,
                 });
             }
         }
