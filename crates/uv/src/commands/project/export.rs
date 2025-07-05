@@ -14,7 +14,7 @@ use uv_configuration::{
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
-use uv_resolver::{PexLock, PylockToml, RequirementsTxtExport, Installable};
+use uv_resolver::{Installable, PexLock, PylockToml, RequirementsTxtExport};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};

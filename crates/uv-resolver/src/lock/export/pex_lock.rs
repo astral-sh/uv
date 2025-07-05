@@ -88,10 +88,10 @@ pub struct PexArtifact {
 impl PexLock {
     /// Default PEX version for generated lock files.
     const DEFAULT_PEX_VERSION: &'static str = "2.44.0";
-    
+
     /// Default hash algorithm when none is specified.
     const DEFAULT_HASH_ALGORITHM: &'static str = "sha256";
-    
+
     /// Universal platform tag components: [interpreter, abi, platform].
     const UNIVERSAL_PLATFORM_TAG: [&'static str; 3] = ["py", "none", "any"];
 
@@ -102,7 +102,10 @@ impl PexLock {
             let hash_value = hash_str[colon_pos + 1..].to_string();
             (algorithm, hash_value)
         } else {
-            (Self::DEFAULT_HASH_ALGORITHM.to_string(), hash_str.to_string())
+            (
+                Self::DEFAULT_HASH_ALGORITHM.to_string(),
+                hash_str.to_string(),
+            )
         }
     }
 
@@ -110,11 +113,13 @@ impl PexLock {
     pub fn from_lock(lock: &Lock) -> Result<Self, LockError> {
         let mut requirements = Vec::new();
         let mut locked_requirements = Vec::new();
-        
+
         // Collect root requirements
         if let Some(root) = lock.root() {
             for dep in &root.dependencies {
-                if let Some(version) = lock.packages().iter()
+                if let Some(version) = lock
+                    .packages()
+                    .iter()
                     .find(|pkg| pkg.id.name == dep.package_id.name)
                     .and_then(|pkg| pkg.id.version.as_ref())
                 {
@@ -125,10 +130,9 @@ impl PexLock {
 
         // Process all packages for locked requirements
         for package in lock.packages() {
-            
             // Create locked requirement
             let mut artifacts = Vec::new();
-            
+
             // Add wheels
             for wheel in &package.wheels {
                 let wheel_url = match &wheel.url {
@@ -136,13 +140,13 @@ impl PexLock {
                     WheelWireSource::Path { path } => format!("file://{}", path.to_string_lossy()),
                     WheelWireSource::Filename { filename } => filename.to_string(),
                 };
-                
+
                 let (algorithm, hash) = if let Some(h) = wheel.hash.as_ref() {
                     Self::parse_hash(&h.to_string())
                 } else {
                     continue;
                 };
-                
+
                 artifacts.push(PexArtifact {
                     url: wheel_url,
                     filename: wheel.filename.to_string(),
@@ -151,7 +155,7 @@ impl PexLock {
                     is_wheel: true,
                 });
             }
-            
+
             // Add source distributions
             if let Some(sdist) = &package.sdist {
                 let Some(sdist_url) = sdist.url().map(|u| u.to_string()) else {
@@ -160,13 +164,13 @@ impl PexLock {
                 let Some(sdist_filename) = sdist.filename().map(|f| f.to_string()) else {
                     continue;
                 };
-                
+
                 let (algorithm, hash) = if let Some(h) = sdist.hash() {
                     Self::parse_hash(&h.to_string())
                 } else {
                     continue;
                 };
-                
+
                 artifacts.push(PexArtifact {
                     url: sdist_url,
                     filename: sdist_filename,
@@ -175,7 +179,7 @@ impl PexLock {
                     is_wheel: false,
                 });
             }
-            
+
             if let Some(version) = &package.id.version {
                 locked_requirements.push(PexLockedRequirement {
                     project_name: package.id.name.to_string(),
@@ -185,12 +189,15 @@ impl PexLock {
                 });
             }
         }
-        
+
         let locked_resolves = vec![PexLockedResolve {
-            platform_tag: Self::UNIVERSAL_PLATFORM_TAG.iter().map(|s| s.to_string()).collect(),
+            platform_tag: Self::UNIVERSAL_PLATFORM_TAG
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             locked_requirements,
         }];
-        
+
         Ok(PexLock {
             pex_version: Self::DEFAULT_PEX_VERSION.to_string(),
             allow_builds: true,
@@ -208,7 +215,7 @@ impl PexLock {
             locked_resolves,
         })
     }
-    
+
     /// Serialize the PEX lock to JSON.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
@@ -227,7 +234,7 @@ impl fmt::Display for PexLock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_pex_lock_serialization() {
         let pex_lock = PexLock {
@@ -246,7 +253,7 @@ mod tests {
             constraints: vec![],
             locked_resolves: vec![],
         };
-        
+
         let json = pex_lock.to_json().unwrap();
         assert!(json.contains("\"pex_version\": \"2.44.0\""));
         assert!(json.contains("\"allow_builds\": true"));

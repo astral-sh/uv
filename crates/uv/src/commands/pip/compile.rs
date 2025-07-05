@@ -697,7 +697,9 @@ pub(crate) async fn pip_compile(
             write!(writer, "{}", export.to_toml()?)?;
         }
         ExportFormat::PexLock => {
-            return Err(anyhow::anyhow!("PEX lock format is not supported in pip compile"));
+            return Err(anyhow::anyhow!(
+                "PEX lock format is not supported in pip compile"
+            ));
         }
     }
 
