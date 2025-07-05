@@ -42,6 +42,7 @@ use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -281,6 +282,7 @@ impl SourceBuild {
         workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
+        extra_build_dependencies: &ExtraBuildDependencies,
         build_stack: &BuildStack,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
@@ -297,7 +299,6 @@ impl SourceBuild {
         };
 
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
-
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
@@ -305,6 +306,7 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             source_strategy,
+            extra_build_dependencies,
             workspace_cache,
             &default_backend,
         )
@@ -506,6 +508,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        extra_build_dependencies: &ExtraBuildDependencies,
         workspace_cache: &WorkspaceCache,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
@@ -517,17 +520,24 @@ impl SourceBuild {
                 let pyproject_toml: PyProjectToml =
                     PyProjectToml::deserialize(pyproject_toml.into_deserializer())
                         .map_err(Error::InvalidPyprojectTomlSchema)?;
+                let name = pyproject_toml
+                    .project
+                    .as_ref()
+                    .map(|project| &project.name)
+                    .or(package_name);
+                let extra_build_dependencies = name
+                    .as_ref()
+                    .and_then(|name| extra_build_dependencies.get(name).cloned())
+                    .unwrap_or_default();
 
-                let backend = if let Some(build_system) = pyproject_toml.build_system {
+                let backend = if let Some(mut build_system) = pyproject_toml.build_system {
+                    // Apply extra-build-dependencies if there are any
+                    build_system.requires.extend(extra_build_dependencies);
+
                     // If necessary, lower the requirements.
                     let requirements = match source_strategy {
                         SourceStrategy::Enabled => {
-                            if let Some(name) = pyproject_toml
-                                .project
-                                .as_ref()
-                                .map(|project| &project.name)
-                                .or(package_name)
-                            {
+                            if let Some(name) = name {
                                 let build_requires = uv_pypi_types::BuildRequires {
                                     name: Some(name.clone()),
                                     requires_dist: build_system.requires,
@@ -606,7 +616,13 @@ impl SourceBuild {
                             );
                         }
                     }
-                    default_backend.clone()
+                    let mut backend = default_backend.clone();
+                    // Apply extra_build_dependencies
+                    // TODO(Gankra): should Sources/Indexes be applied on this path?
+                    backend
+                        .requirements
+                        .extend(extra_build_dependencies.into_iter().map(Requirement::from));
+                    backend
                 };
                 Ok((backend, pyproject_toml.project))
             }
@@ -617,12 +633,21 @@ impl SourceBuild {
                         source_tree.to_path_buf(),
                     )));
                 }
-
                 // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
                 // case,  but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                Ok((default_backend.clone(), None))
+                let mut backend = default_backend.clone();
+                // Apply extra_build_dependencies
+                // TODO(Gankra): should Sources/Indexes be applied on this path?
+                let extra_build_dependencies = package_name
+                    .as_ref()
+                    .and_then(|name| extra_build_dependencies.get(name).cloned())
+                    .unwrap_or_default();
+                backend
+                    .requirements
+                    .extend(extra_build_dependencies.into_iter().map(Requirement::from));
+                Ok((backend, None))
             }
             Err(err) => Err(Box::new(err.into())),
         }
