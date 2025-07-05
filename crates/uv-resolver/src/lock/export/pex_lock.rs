@@ -18,8 +18,6 @@ use crate::lock::{Lock, LockError, WheelWireSource};
 /// A PEX lock file representation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PexLock {
-    /// The PEX version used to generate this lock file.
-    pub pex_version: String,
     /// Whether to allow building from source.
     pub allow_builds: bool,
     /// Whether to allow prereleases.
@@ -28,48 +26,66 @@ pub struct PexLock {
     pub allow_wheels: bool,
     /// Whether to use build isolation.
     pub build_isolation: bool,
+    /// Constraints applied during resolution.
+    pub constraints: Vec<String>,
+    /// Whether to elide unused requires_dist.
+    pub elide_unused_requires_dist: bool,
+    /// Excluded packages.
+    pub excluded: Vec<String>,
+    /// Locked resolved dependencies.
+    pub locked_resolves: Vec<PexLockedResolve>,
+    /// Only build packages.
+    pub only_builds: Vec<String>,
+    /// Only wheel packages.
+    pub only_wheels: Vec<String>,
+    /// Overridden packages.
+    pub overridden: Vec<String>,
+    /// Path mappings.
+    pub path_mappings: serde_json::Map<String, serde_json::Value>,
+    /// The PEX version used to generate this lock file.
+    pub pex_version: String,
+    /// The pip version used.
+    pub pip_version: String,
     /// Whether to prefer older binary versions.
     pub prefer_older_binary: bool,
-    /// Whether to use PEP517 build backend.
-    pub use_pep517: Option<bool>,
+    /// Direct requirements.
+    pub requirements: Vec<String>,
     /// The resolver version used.
     pub resolver_version: String,
     /// The style of resolution.
     pub style: String,
+    /// Target systems.
+    pub target_systems: Vec<String>,
     /// Whether to include transitive dependencies.
     pub transitive: bool,
-    /// Python version requirements.
-    pub requires_python: Vec<String>,
-    /// Direct requirements.
-    pub requirements: Vec<String>,
-    /// Constraints applied during resolution.
-    pub constraints: Vec<String>,
-    /// Locked resolved dependencies.
-    pub locked_resolves: Vec<PexLockedResolve>,
+    /// Whether to use PEP517 build backend.
+    pub use_pep517: Option<bool>,
+    /// Whether to use system time.
+    pub use_system_time: bool,
 }
 
 /// A locked resolve entry in a PEX lock file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PexLockedResolve {
-    /// The platform tag this resolve applies to (3 components: [interpreter, abi, platform]).
-    pub platform_tag: Vec<String>,
     /// The locked requirements for this platform.
     pub locked_requirements: Vec<PexLockedRequirement>,
+    /// The platform tag this resolve applies to (null for universal).
+    pub platform_tag: Option<Vec<String>>,
 }
 
 /// A locked requirement in a PEX lock file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PexLockedRequirement {
-    /// The project name.
-    pub project_name: String,
-    /// The version.
-    pub version: String,
-    /// The requirement specifier.
-    pub requirement: String,
     /// Artifacts (wheels/sdists) for this requirement.
     pub artifacts: Vec<PexArtifact>,
+    /// The project name.
+    pub project_name: String,
     /// Dependencies of this requirement.
     pub requires_dists: Vec<String>,
+    /// Python version requirement.
+    pub requires_python: String,
+    /// The version.
+    pub version: String,
 }
 
 /// An artifact in a PEX lock file.
@@ -91,11 +107,11 @@ impl PexLock {
     /// Default PEX version for generated lock files.
     const DEFAULT_PEX_VERSION: &'static str = "2.44.0";
 
+    /// Default pip version.
+    const DEFAULT_PIP_VERSION: &'static str = "24.2";
+
     /// Default hash algorithm when none is specified.
     const DEFAULT_HASH_ALGORITHM: &'static str = "sha256";
-
-    /// Universal platform tag components: [interpreter, abi, platform].
-    const UNIVERSAL_PLATFORM_TAG: [&'static str; 3] = ["py", "none", "any"];
 
     /// Extract algorithm and hash from a hash string.
     fn parse_hash(hash_str: &str) -> (String, String) {
@@ -197,38 +213,43 @@ impl PexLock {
                 }
 
                 locked_requirements.push(PexLockedRequirement {
-                    project_name: package.id.name.to_string(),
-                    version: version.to_string(),
-                    requirement: format!("{}=={}", package.id.name, version),
                     artifacts,
+                    project_name: package.id.name.to_string(),
                     requires_dists,
+                    requires_python: lock.requires_python().to_string(),
+                    version: version.to_string(),
                 });
             }
         }
 
         let locked_resolves = vec![PexLockedResolve {
-            platform_tag: Self::UNIVERSAL_PLATFORM_TAG
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect(),
             locked_requirements,
+            platform_tag: None,
         }];
 
         Ok(PexLock {
-            pex_version: Self::DEFAULT_PEX_VERSION.to_string(),
             allow_builds: true,
             allow_prereleases: false,
             allow_wheels: true,
             build_isolation: true,
-            prefer_older_binary: false,
-            use_pep517: None,
-            resolver_version: Self::DEFAULT_PEX_VERSION.to_string(),
-            style: "universal".to_string(),
-            transitive: true,
-            requires_python: vec![lock.requires_python().to_string()],
-            requirements,
             constraints: Vec::new(),
+            elide_unused_requires_dist: false,
+            excluded: Vec::new(),
             locked_resolves,
+            only_builds: Vec::new(),
+            only_wheels: Vec::new(),
+            overridden: Vec::new(),
+            path_mappings: serde_json::Map::new(),
+            pex_version: Self::DEFAULT_PEX_VERSION.to_string(),
+            pip_version: Self::DEFAULT_PIP_VERSION.to_string(),
+            prefer_older_binary: false,
+            requirements,
+            resolver_version: "pip-2020-resolver".to_string(),
+            style: "universal".to_string(),
+            target_systems: vec!["linux".to_string(), "mac".to_string()],
+            transitive: true,
+            use_pep517: None,
+            use_system_time: false,
         })
     }
 
@@ -254,20 +275,28 @@ mod tests {
     #[test]
     fn test_pex_lock_serialization() {
         let pex_lock = PexLock {
-            pex_version: PexLock::DEFAULT_PEX_VERSION.to_string(),
             allow_builds: true,
             allow_prereleases: false,
             allow_wheels: true,
             build_isolation: true,
-            prefer_older_binary: false,
-            use_pep517: None,
-            resolver_version: PexLock::DEFAULT_PEX_VERSION.to_string(),
-            style: "universal".to_string(),
-            transitive: true,
-            requires_python: vec![">=3.8".to_string()],
-            requirements: vec!["requests==2.31.0".to_string()],
             constraints: vec![],
+            elide_unused_requires_dist: false,
+            excluded: vec![],
             locked_resolves: vec![],
+            only_builds: vec![],
+            only_wheels: vec![],
+            overridden: vec![],
+            path_mappings: serde_json::Map::new(),
+            pex_version: PexLock::DEFAULT_PEX_VERSION.to_string(),
+            pip_version: PexLock::DEFAULT_PIP_VERSION.to_string(),
+            prefer_older_binary: false,
+            requirements: vec!["requests==2.31.0".to_string()],
+            resolver_version: "pip-2020-resolver".to_string(),
+            style: "universal".to_string(),
+            target_systems: vec!["linux".to_string(), "mac".to_string()],
+            transitive: true,
+            use_pep517: None,
+            use_system_time: false,
         };
 
         let json = pex_lock.to_json().unwrap();
