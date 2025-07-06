@@ -12,6 +12,7 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
+use uv_platform_tags::PlatformTag;
 
 use crate::lock::{Lock, LockError, WheelWireSource};
 
@@ -153,8 +154,23 @@ impl PexLock {
             // Create locked requirement
             let mut artifacts = Vec::new();
 
-            // Add wheels
+            // Add wheels (excluding Windows-specific wheels for Linux/Mac targets)
             for wheel in &package.wheels {
+                // Filter out Windows-specific wheels when targeting linux/mac
+                let is_windows_wheel = wheel.filename.platform_tags().iter().any(|tag| {
+                    matches!(
+                        tag,
+                        PlatformTag::Win32
+                            | PlatformTag::WinAmd64
+                            | PlatformTag::WinArm64
+                            | PlatformTag::WinIa64
+                    )
+                });
+
+                if is_windows_wheel {
+                    continue;
+                }
+
                 let wheel_url = match &wheel.url {
                     WheelWireSource::Url { url } => url.to_string(),
                     WheelWireSource::Path { path } => format!("file://{}", path.to_string_lossy()),
@@ -212,7 +228,8 @@ impl PexLock {
                             .find(|pkg| pkg.id.name == dep.package_id.name)
                             .and_then(|pkg| pkg.id.version.as_ref())
                         {
-                            requires_dists.push(format!("{}=={}", dep.package_id.name, dep_version));
+                            requires_dists
+                                .push(format!("{}=={}", dep.package_id.name, dep_version));
                         }
                     }
 
