@@ -152,6 +152,9 @@ impl PexLock {
             }
         }
 
+        // Sort requirements for consistent output
+        requirements.sort();
+
         // Process all packages for locked requirements
         for package in lock.packages() {
             // Create locked requirement
@@ -344,6 +347,20 @@ impl PexLock {
                         }
                     }
 
+                    // Sort requires_dists for consistent output
+                    requires_dists.sort();
+
+                    // Sort artifacts to match Pants ordering: source distributions first, then wheels
+                    artifacts.sort_by(|a, b| {
+                        match (a.is_wheel, b.is_wheel) {
+                            // Source distributions (is_wheel: false) come first
+                            (Some(false), Some(true)) => std::cmp::Ordering::Less,
+                            (Some(true), Some(false)) => std::cmp::Ordering::Greater,
+                            // Within same type, sort by URL
+                            _ => a.url.cmp(&b.url),
+                        }
+                    });
+
                     locked_requirements.push(PexLockedRequirement {
                         artifacts,
                         project_name: package.id.name.to_string(),
@@ -354,6 +371,9 @@ impl PexLock {
                 }
             }
         }
+
+        // Sort locked_requirements by project_name for consistent output
+        locked_requirements.sort_by(|a, b| a.project_name.cmp(&b.project_name));
 
         let locked_resolves = vec![PexLockedResolve {
             locked_requirements,
@@ -387,9 +407,40 @@ impl PexLock {
         })
     }
 
-    /// Serialize the PEX lock to JSON.
+    /// Serialize the PEX lock to JSON with sorted keys for consistent output.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+        fn sort_json_object(value: &serde_json::Value) -> serde_json::Value {
+            match value {
+                serde_json::Value::Object(map) => {
+                    let mut sorted_map = serde_json::Map::new();
+                    let mut keys: Vec<_> = map.keys().collect();
+                    keys.sort();
+                    for key in keys {
+                        sorted_map.insert(key.clone(), sort_json_object(&map[key]));
+                    }
+                    serde_json::Value::Object(sorted_map)
+                }
+                serde_json::Value::Array(arr) => {
+                    serde_json::Value::Array(arr.iter().map(sort_json_object).collect())
+                }
+                other => other.clone(),
+            }
+        }
+
+        // First serialize to a Value to sort keys
+        let value = serde_json::to_value(self)?;
+
+        // Use a custom serializer with sorted map keys
+        let mut buf = Vec::new();
+        let formatter = serde_json::ser::PrettyFormatter::with_indent(b"  ");
+        let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
+
+        let sorted_value = sort_json_object(&value);
+        sorted_value.serialize(&mut ser)?;
+
+        String::from_utf8(buf).map_err(|e| {
+            serde_json::Error::io(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        })
     }
 }
 
