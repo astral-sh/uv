@@ -219,17 +219,34 @@ impl PexLock {
             if let Some(version) = &package.id.version {
                 // Only include packages that have at least one artifact
                 if !artifacts.is_empty() {
-                    // Collect dependencies for this package
+                    // Collect dependencies for this package (only those with compatible artifacts)
                     let mut requires_dists = Vec::new();
                     for dep in &package.dependencies {
-                        if let Some(dep_version) = lock
+                        if let Some(dep_package) = lock
                             .packages()
                             .iter()
                             .find(|pkg| pkg.id.name == dep.package_id.name)
-                            .and_then(|pkg| pkg.id.version.as_ref())
                         {
-                            requires_dists
-                                .push(format!("{}=={}", dep.package_id.name, dep_version));
+                            // Check if the dependency has any non-Windows artifacts
+                            let has_compatible_artifacts = dep_package.wheels.iter().any(|wheel| {
+                                !wheel.filename.platform_tags().iter().any(|tag| {
+                                    matches!(
+                                        tag,
+                                        PlatformTag::Win32
+                                            | PlatformTag::WinAmd64
+                                            | PlatformTag::WinArm64
+                                            | PlatformTag::WinIa64
+                                    )
+                                })
+                            }) || dep_package.sdist.is_some();
+
+                            // Only include dependencies that have compatible artifacts
+                            if has_compatible_artifacts {
+                                if let Some(dep_version) = dep_package.id.version.as_ref() {
+                                    requires_dists
+                                        .push(format!("{}=={}", dep.package_id.name, dep_version));
+                                }
+                            }
                         }
                     }
 
