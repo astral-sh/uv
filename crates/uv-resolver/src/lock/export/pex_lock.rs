@@ -30,7 +30,7 @@ pub struct PexLock {
     pub build_isolation: bool,
     /// Constraints applied during resolution.
     pub constraints: Vec<String>,
-    /// Whether to elide unused requires_dist.
+    /// Whether to elide unused `requires_dist`.
     pub elide_unused_requires_dist: bool,
     /// Excluded packages.
     pub excluded: Vec<String>,
@@ -250,7 +250,7 @@ impl PexLock {
 
             // Add source distributions
             if let Some(sdist) = &package.sdist {
-                let Some(sdist_url) = sdist.url().map(|u| u.to_string()) else {
+                let Some(sdist_url) = sdist.url().map(std::string::ToString::to_string) else {
                     continue;
                 };
 
@@ -266,7 +266,7 @@ impl PexLock {
                             .id
                             .version
                             .as_ref()
-                            .map(|v| v.to_string())
+                            .map(std::string::ToString::to_string)
                             .unwrap_or_else(|| "0.0.0".to_string())
                     )
                 } else {
@@ -284,7 +284,7 @@ impl PexLock {
                         .id
                         .version
                         .as_ref()
-                        .map(|v| v.to_string())
+                        .map(std::string::ToString::to_string)
                         .unwrap_or_else(|| "0.0.0".to_string())
                         .hash(&mut hasher);
                     (
@@ -520,7 +520,7 @@ mod tests {
 
         let package_name = "test-package";
         let version = "1.5.3";
-        let expected_filename = format!("{}-{}.tar.gz", package_name, version);
+        let expected_filename = format!("{package_name}-{version}.tar.gz");
         assert_eq!(expected_filename, "test-package-1.5.3.tar.gz");
     }
 
@@ -566,7 +566,7 @@ mod tests {
                     | PlatformTag::WinArm64
                     | PlatformTag::WinIa64
             );
-            assert!(is_windows, "Tag {:?} should be detected as Windows", tag);
+            assert!(is_windows, "Tag {tag:?} should be detected as Windows");
         }
 
         // Test non-Windows tags
@@ -585,11 +585,7 @@ mod tests {
                     | PlatformTag::WinArm64
                     | PlatformTag::WinIa64
             );
-            assert!(
-                !is_windows,
-                "Tag {:?} should not be detected as Windows",
-                tag
-            );
+            assert!(!is_windows, "Tag {tag:?} should not be detected as Windows");
         }
     }
 
@@ -655,9 +651,8 @@ mod tests {
 
         for field in required_fields {
             assert!(
-                json.contains(&format!("\"{}\"", field)),
-                "Missing required field: {}",
-                field
+                json.contains(&format!("\"{field}\"")),
+                "Missing required field: {field}"
             );
         }
     }
@@ -690,7 +685,7 @@ mod tests {
             use_system_time: false,
         };
 
-        let display_output = format!("{}", pex_lock);
+        let display_output = format!("{pex_lock}");
         assert!(display_output.contains("\"pex_version\": \"2.44.0\""));
         assert!(!display_output.is_empty());
     }
