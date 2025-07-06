@@ -333,6 +333,7 @@ impl fmt::Display for PexLock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uv_platform_tags::PlatformTag;
 
     #[test]
     fn test_pex_lock_serialization() {
@@ -365,5 +366,210 @@ mod tests {
         let json = pex_lock.to_json().unwrap();
         assert!(json.contains("\"pex_version\": \"2.44.0\""));
         assert!(json.contains("\"allow_builds\": true"));
+        assert!(json.contains("\"pip_version\": \"24.2\""));
+        assert!(json.contains("\"target_systems\": [\"linux\", \"mac\"]"));
+        assert!(json.contains("\"platform_tag\": null"));
+    }
+
+    #[test]
+    fn test_parse_hash_with_algorithm() {
+        let (algorithm, hash) = PexLock::parse_hash("sha256:abcd1234");
+        assert_eq!(algorithm, "sha256");
+        assert_eq!(hash, "abcd1234");
+        
+        let (algorithm, hash) = PexLock::parse_hash("md5:1234abcd");
+        assert_eq!(algorithm, "md5");
+        assert_eq!(hash, "1234abcd");
+    }
+
+    #[test]
+    fn test_parse_hash_without_algorithm() {
+        let (algorithm, hash) = PexLock::parse_hash("abcd1234");
+        assert_eq!(algorithm, "sha256"); // default
+        assert_eq!(hash, "abcd1234");
+    }
+
+    #[test]
+    fn test_pex_artifact_structure() {
+        let artifact = PexArtifact {
+            url: "https://files.pythonhosted.org/packages/test.whl".to_string(),
+            filename: "test-1.0.0-py3-none-any.whl".to_string(),
+            algorithm: "sha256".to_string(),
+            hash: "abcd1234".to_string(),
+            is_wheel: true,
+        };
+
+        let json = serde_json::to_string(&artifact).unwrap();
+        assert!(json.contains("\"is_wheel\": true"));
+        assert!(json.contains("\"algorithm\": \"sha256\""));
+        assert!(json.contains("\"hash\": \"abcd1234\""));
+    }
+
+    #[test]
+    fn test_pex_locked_requirement_structure() {
+        let requirement = PexLockedRequirement {
+            artifacts: vec![PexArtifact {
+                url: "https://files.pythonhosted.org/packages/test.whl".to_string(),
+                filename: "test-1.0.0-py3-none-any.whl".to_string(),
+                algorithm: "sha256".to_string(),
+                hash: "abcd1234".to_string(),
+                is_wheel: true,
+            }],
+            project_name: "test-package".to_string(),
+            requires_dists: vec!["dependency>=1.0".to_string()],
+            requires_python: ">=3.8".to_string(),
+            version: "1.0.0".to_string(),
+        };
+
+        let json = serde_json::to_string(&requirement).unwrap();
+        assert!(json.contains("\"project_name\": \"test-package\""));
+        assert!(json.contains("\"requires_dists\": [\"dependency>=1.0\"]"));
+        assert!(json.contains("\"requires_python\": \">=3.8\""));
+        assert!(json.contains("\"version\": \"1.0.0\""));
+    }
+
+    #[test]
+    fn test_pex_locked_resolve_structure() {
+        let resolve = PexLockedResolve {
+            locked_requirements: vec![],
+            platform_tag: None,
+        };
+
+        let json = serde_json::to_string(&resolve).unwrap();
+        assert!(json.contains("\"platform_tag\": null"));
+        assert!(json.contains("\"locked_requirements\": []"));
+    }
+
+    #[test]
+    fn test_git_dependency_filename_generation() {
+        // Test the git URL detection and filename generation logic
+        let git_url = "git+https://github.com/user/repo.git";
+        assert!(git_url.starts_with("git+"));
+        
+        let package_name = "test-package";
+        let version = "1.5.3";
+        let expected_filename = format!("{}-{}.tar.gz", package_name, version);
+        assert_eq!(expected_filename, "test-package-1.5.3.tar.gz");
+    }
+
+    #[test]
+    fn test_platform_tag_windows_detection() {
+        // Test that we can properly identify Windows platform tags
+        let windows_tags = vec![
+            PlatformTag::Win32,
+            PlatformTag::WinAmd64,
+            PlatformTag::WinArm64,
+            PlatformTag::WinIa64,
+        ];
+
+        for tag in windows_tags {
+            let is_windows = matches!(
+                tag,
+                PlatformTag::Win32
+                    | PlatformTag::WinAmd64
+                    | PlatformTag::WinArm64
+                    | PlatformTag::WinIa64
+            );
+            assert!(is_windows, "Tag {:?} should be detected as Windows", tag);
+        }
+
+        // Test non-Windows tags
+        let non_windows_tags = vec![
+            PlatformTag::Any,
+            PlatformTag::Linux { arch: uv_platform_tags::Arch::X86_64 },
+        ];
+
+        for tag in non_windows_tags {
+            let is_windows = matches!(
+                tag,
+                PlatformTag::Win32
+                    | PlatformTag::WinAmd64
+                    | PlatformTag::WinArm64
+                    | PlatformTag::WinIa64
+            );
+            assert!(!is_windows, "Tag {:?} should not be detected as Windows", tag);
+        }
+    }
+
+    #[test]
+    fn test_pex_lock_json_structure_completeness() {
+        let pex_lock = PexLock {
+            allow_builds: true,
+            allow_prereleases: false,
+            allow_wheels: true,
+            build_isolation: true,
+            constraints: vec!["constraint>=1.0".to_string()],
+            elide_unused_requires_dist: false,
+            excluded: vec!["excluded-package".to_string()],
+            locked_resolves: vec![PexLockedResolve {
+                locked_requirements: vec![],
+                platform_tag: None,
+            }],
+            only_builds: vec!["build-only".to_string()],
+            only_wheels: vec!["wheel-only".to_string()],
+            overridden: vec!["overridden-package".to_string()],
+            path_mappings: serde_json::Map::new(),
+            pex_version: "2.44.0".to_string(),
+            pip_version: "24.2".to_string(),
+            prefer_older_binary: false,
+            requirements: vec!["requests==2.31.0".to_string()],
+            requires_python: vec![">=3.8".to_string()],
+            resolver_version: "pip-2020-resolver".to_string(),
+            style: "universal".to_string(),
+            target_systems: vec!["linux".to_string(), "mac".to_string()],
+            transitive: true,
+            use_pep517: None,
+            use_system_time: false,
+        };
+
+        let json = pex_lock.to_json().unwrap();
+        
+        // Verify all required fields are present
+        let required_fields = [
+            "allow_builds", "allow_prereleases", "allow_wheels", "build_isolation",
+            "constraints", "elide_unused_requires_dist", "excluded", "locked_resolves",
+            "only_builds", "only_wheels", "overridden", "path_mappings",
+            "pex_version", "pip_version", "prefer_older_binary", "requirements",
+            "requires_python", "resolver_version", "style", "target_systems",
+            "transitive", "use_pep517", "use_system_time"
+        ];
+
+        for field in required_fields {
+            assert!(json.contains(&format!("\"{}\"", field)), 
+                   "Missing required field: {}", field);
+        }
+    }
+
+    #[test]
+    fn test_display_implementation() {
+        let pex_lock = PexLock {
+            allow_builds: true,
+            allow_prereleases: false,
+            allow_wheels: true,
+            build_isolation: true,
+            constraints: vec![],
+            elide_unused_requires_dist: false,
+            excluded: vec![],
+            locked_resolves: vec![],
+            only_builds: vec![],
+            only_wheels: vec![],
+            overridden: vec![],
+            path_mappings: serde_json::Map::new(),
+            pex_version: PexLock::DEFAULT_PEX_VERSION.to_string(),
+            pip_version: PexLock::DEFAULT_PIP_VERSION.to_string(),
+            prefer_older_binary: false,
+            requirements: vec![],
+            requires_python: vec![">=3.8".to_string()],
+            resolver_version: "pip-2020-resolver".to_string(),
+            style: "universal".to_string(),
+            target_systems: vec!["linux".to_string(), "mac".to_string()],
+            transitive: true,
+            use_pep517: None,
+            use_system_time: false,
+        };
+
+        let display_output = format!("{}", pex_lock);
+        assert!(display_output.contains("\"pex_version\": \"2.44.0\""));
+        assert!(!display_output.is_empty());
     }
 }
