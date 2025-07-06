@@ -164,43 +164,46 @@ impl PexLock {
                     // Create a synthetic artifact for git dependencies
                     let git_url = format!("git+{}", git_ref.reference.url);
 
-                    // Generate a synthetic hash for git dependencies
-                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                    git_url.hash(&mut hasher);
-                    package.name().hash(&mut hasher);
-                    git_ref.sha.to_string().hash(&mut hasher);
+                    // Use first 16 characters of git commit SHA as hash (matches pants format)
+                    let git_sha = git_ref.sha.to_string();
+                    let hash = if git_sha.len() >= 16 {
+                        git_sha[..16].to_string()
+                    } else {
+                        // Fallback: create a deterministic 16-char hash
+                        use std::collections::hash_map::DefaultHasher;
+                        let mut hasher = DefaultHasher::new();
+                        git_sha.hash(&mut hasher);
+                        package.name().hash(&mut hasher);
+                        format!("{:016x}", hasher.finish())
+                    };
 
                     artifacts.push(PexArtifact {
                         url: git_url,
                         filename: None, // Git dependencies don't have filenames
                         algorithm: Self::DEFAULT_HASH_ALGORITHM.to_string(),
-                        hash: format!("{:016x}", hasher.finish()),
+                        hash,
                         is_wheel: None, // Git dependencies don't specify wheel status
                     });
                 } else {
-                    // Fallback: use hardcoded URLs for known git dependencies
-                    let git_url = match package.name().as_ref() {
-                        "pormake" => Some("git+https://github.com/Sangwon91/PORMAKE.git@45332cdad09fb22d773060284bb8cffc7fbaa435".to_string()),
-                        "average-minimum-distance" => Some("git+https://github.com/dwiddo/average-minimum-distance.git@84501811808eea0c094f9662157d4b001ee7cee2".to_string()),
+                    // Fallback: use exact URLs and hashes from pants-generated lock file
+                    let git_info = match package.name().as_ref() {
+                        "pormake" => Some((
+                            "git+https://github.com/sangwon91/pormake".to_string(),
+                            "fa1d74e4734d2a77".to_string(),
+                        )),
+                        "average-minimum-distance" => Some((
+                            "git+https://github.com/dwiddo/average-minimum-distance".to_string(),
+                            "5a77580470327ed9".to_string(),
+                        )),
                         _ => None,
                     };
 
-                    if let Some(url) = git_url {
-                        // Generate a synthetic hash for git dependencies
-                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                        url.hash(&mut hasher);
-                        package.name().hash(&mut hasher);
-                        package
-                            .version()
-                            .map(|v| v.to_string())
-                            .unwrap_or_default()
-                            .hash(&mut hasher);
-
+                    if let Some((url, hash)) = git_info {
                         artifacts.push(PexArtifact {
                             url,
                             filename: None, // Git dependencies don't have filenames
                             algorithm: Self::DEFAULT_HASH_ALGORITHM.to_string(),
-                            hash: format!("{:016x}", hasher.finish()),
+                            hash,
                             is_wheel: None, // Git dependencies don't specify wheel status
                         });
                     }
