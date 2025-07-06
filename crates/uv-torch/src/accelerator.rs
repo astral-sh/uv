@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use regex::Regex;
 use tracing::debug;
 use walkdir::WalkDir;
 
@@ -64,7 +63,6 @@ impl Accelerator {
     /// 5. `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
-    /// 8. `powershell` command querying `Win32_VideoController` to detect Intel GPU.
     pub fn detect() -> Result<Option<Self>, AcceleratorError> {
         // Constants used for PCI device detection
         const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
@@ -199,33 +197,6 @@ impl Accelerator {
             Err(e) => {
                 debug!("Failed to read PCI device directory with WalkDir: {e}");
                 return Err(e.into());
-            }
-        }
-
-        // Query Intel GPU by `powershell` command via `Win32_VideoController`.
-        //
-        // See: https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-videocontroller
-        if let Ok(output) = std::process::Command::new("powershell")
-            .arg("-Command")
-            .arg("Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty PNPDeviceID")
-            .output()
-        {
-            if output.status.success() {
-                let stdout = String::from_utf8(output.stdout)?;
-                let re = Regex::new(r"VEN_([0-9A-Fa-f]{4})").unwrap();
-                for caps in re.captures_iter(&stdout) {
-                    let vendor = u32::from_str_radix(&caps[1], 16)?;
-                    if vendor == PCI_VENDOR_ID_INTEL {
-                        debug!("Detected Intel GPU from PCI, vendor=0x{:04x}", vendor);
-                        return Ok(Some(Self::Xpu));
-                    }
-                }
-            } else {
-                debug!(
-                    "Failed to query Intel GPU with powershell with status `{}`: {}",
-                    output.status,
-                    String::from_utf8_lossy(&output.stderr)
-                );
             }
         }
 
