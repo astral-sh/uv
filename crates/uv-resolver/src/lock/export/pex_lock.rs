@@ -197,14 +197,22 @@ impl PexLock {
                 let Some(sdist_url) = sdist.url().map(|u| u.to_string()) else {
                     continue;
                 };
-                
+
                 // Handle git dependencies that may not have traditional filenames
                 let sdist_filename = if let Some(filename) = sdist.filename() {
                     filename.to_string()
                 } else if sdist_url.starts_with("git+") {
                     // Generate a filename for git dependencies
-                    format!("{}-{}.tar.gz", package.id.name, 
-                           package.id.version.as_ref().map(|v| v.to_string()).unwrap_or_else(|| "0.0.0".to_string()))
+                    format!(
+                        "{}-{}.tar.gz",
+                        package.id.name,
+                        package
+                            .id
+                            .version
+                            .as_ref()
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| "0.0.0".to_string())
+                    )
                 } else {
                     continue;
                 };
