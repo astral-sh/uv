@@ -227,18 +227,24 @@ impl PexLock {
                             .iter()
                             .find(|pkg| pkg.id.name == dep.package_id.name)
                         {
-                            // Check if the dependency has any non-Windows artifacts
-                            let has_compatible_artifacts = dep_package.wheels.iter().any(|wheel| {
-                                !wheel.filename.platform_tags().iter().any(|tag| {
-                                    matches!(
-                                        tag,
-                                        PlatformTag::Win32
-                                            | PlatformTag::WinAmd64
-                                            | PlatformTag::WinArm64
-                                            | PlatformTag::WinIa64
-                                    )
-                                })
-                            }) || dep_package.sdist.is_some();
+                            // Only exclude dependencies that are TRULY Windows-only:
+                            // - Have ONLY Windows wheels AND no source distribution
+                            let only_windows_wheels = !dep_package.wheels.is_empty() &&
+                                dep_package.wheels.iter().all(|wheel| {
+                                    wheel.filename.platform_tags().iter().any(|tag| {
+                                        matches!(
+                                            tag,
+                                            PlatformTag::Win32
+                                                | PlatformTag::WinAmd64
+                                                | PlatformTag::WinArm64
+                                                | PlatformTag::WinIa64
+                                        )
+                                    })
+                                });
+                            let has_sdist = dep_package.sdist.is_some();
+                            
+                            // Include unless it's Windows-only (only Windows wheels and no sdist)
+                            let has_compatible_artifacts = !only_windows_wheels || has_sdist;
 
                             // Only include dependencies that have compatible artifacts
                             if has_compatible_artifacts {
