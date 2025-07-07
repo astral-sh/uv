@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -17,7 +16,6 @@ use uv_platform_tags::{
     AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, ParsePlatformTagError,
     PlatformTag, TagCompatibility, Tags,
 };
-use uv_variants::VariantTag;
 
 #[derive(
     Debug,
@@ -36,7 +34,7 @@ pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
     tags: WheelTag,
-    variant: Option<VariantTag>,
+    variant: Option<String>,
 }
 
 impl FromStr for WheelFilename {
@@ -166,8 +164,8 @@ impl WheelFilename {
     }
 
     /// Return the wheel's variant tag, if present.
-    pub fn variant(&self) -> Option<&VariantTag> {
-        self.variant.as_ref()
+    pub fn variant(&self) -> Option<&str> {
+        self.variant.as_deref()
     }
 
     /// Return the wheel's Python tags.
@@ -218,38 +216,6 @@ impl WheelFilename {
     ///
     /// The originating `filename` is used for high-fidelity error messages.
     fn parse(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
-        // Extract variant from filenames with the format, e.g., `dummy_project-0.0.1-~36266d4d~-py3-none-any.whl`.
-        // TODO(charlie): Integrate this into the filename parsing; it's just easier to do it upfront
-        // for now.
-        let mut variant: Option<VariantTag> = None;
-        let stem = if let Some(tilde_start) = stem.find("-~") {
-            if let Some(tilde_end) = stem[tilde_start + 1..].find("~-") {
-                // Skip the "-~".
-                let variant_start = tilde_start + 2;
-                // End before the "~-".
-                let variant_end = tilde_start + 1 + tilde_end;
-                // Validate that the variant is exactly 8 bytes.
-                let variant_str = &stem[variant_start..variant_end];
-                if variant_str.len() == 8 && variant_str.as_bytes().iter().all(|&b| b.is_ascii()) {
-                    variant = Some(VariantTag::new(variant_str.to_string()));
-                } else {
-                    return Err(WheelFilenameError::InvalidWheelFileName(
-                        filename.to_string(),
-                        format!("Variant must be exactly 8 ASCII characters, got: '{variant_str}'"),
-                    ));
-                }
-
-                // Create a new stem without the variant.
-                let before_variant = &stem[..tilde_start];
-                let after_variant = &stem[variant_end + 1..];
-                Cow::Owned(format!("{before_variant}{after_variant}"))
-            } else {
-                Cow::Borrowed(stem)
-            }
-        } else {
-            Cow::Borrowed(stem)
-        };
-
         // The wheel filename should contain either five or six entries. If six, then the third
         // entry is the build tag. If five, then the third entry is the Python tag.
         // https://www.python.org/dev/peps/pep-0427/#file-name-convention
@@ -283,24 +249,62 @@ impl WheelFilename {
             ));
         };
 
-        let (name, version, build_tag, python_tag, abi_tag, platform_tag, is_small) =
+        let (name, version, build_tag, python_tag, abi_tag, platform_tag, variant, is_small) =
             if let Some(platform_tag) = splitter.next() {
-                if splitter.next().is_some() {
-                    return Err(WheelFilenameError::InvalidWheelFileName(
-                        filename.to_string(),
-                        "Must have 5 or 6 components, but has more".to_string(),
-                    ));
+                // Extract variant from filenames with the format, e.g., `ml_project-0.0.1-py3-none-any-cu128.whl`.
+                // TODO(charlie): Integrate this into the filename parsing; it's just easier to do it upfront
+                // for now.
+                // 7 components: We have both a build tag and a variant_tag
+                if let Some(variant_tag) = splitter.next() {
+                    if splitter.next().is_some() {
+                        return Err(WheelFilenameError::InvalidWheelFileName(
+                            filename.to_string(),
+                            "Must have 5 to 7 components, but has more".to_string(),
+                        ));
+                    }
+                    (
+                        &stem[..version],
+                        &stem[version + 1..build_tag_or_python_tag],
+                        Some(&stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag]),
+                        &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
+                        &stem[abi_tag_or_platform_tag + 1..platform_tag],
+                        &stem[platform_tag + 1..variant_tag],
+                        Some(&stem[variant_tag + 1..]),
+                        // Always take the slow path if build or variant tag are present.
+                        false,
+                    )
+                } else {
+                    // 6 components: Check whether we have a build tag or variant tag
+                    if LanguageTag::from_str(
+                        &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
+                    )
+                    .is_ok()
+                    {
+                        (
+                            &stem[..version],
+                            &stem[version + 1..build_tag_or_python_tag],
+                            Some(&stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag]),
+                            &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
+                            &stem[abi_tag_or_platform_tag + 1..platform_tag],
+                            &stem[platform_tag + 1..],
+                            None,
+                            // Always take the slow path if a build tag is present.
+                            false,
+                        )
+                    } else {
+                        (
+                            &stem[..version],
+                            &stem[version + 1..build_tag_or_python_tag],
+                            None,
+                            &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
+                            &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
+                            &stem[abi_tag_or_platform_tag + 1..platform_tag],
+                            Some(&stem[platform_tag + 1..]),
+                            // Always take the slow path if a build tag is present.
+                            false,
+                        )
+                    }
                 }
-                (
-                    &stem[..version],
-                    &stem[version + 1..build_tag_or_python_tag],
-                    Some(&stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag]),
-                    &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
-                    &stem[abi_tag_or_platform_tag + 1..platform_tag],
-                    &stem[platform_tag + 1..],
-                    // Always take the slow path if a build tag is present.
-                    false,
-                )
             } else {
                 (
                     &stem[..version],
@@ -309,6 +313,7 @@ impl WheelFilename {
                     &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
                     &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
                     &stem[abi_tag_or_platform_tag + 1..],
+                    None,
                     // Determine whether any of the tag types contain a period, which would indicate
                     // that at least one of the tag types includes multiple tags (which in turn
                     // necessitates taking the slow path).
@@ -365,7 +370,7 @@ impl WheelFilename {
             name,
             version,
             tags,
-            variant,
+            variant: variant.map(ToString::to_string),
         })
     }
 }

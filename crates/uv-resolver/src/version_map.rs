@@ -19,7 +19,7 @@ use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 use uv_types::HashStrategy;
-use uv_variants::{VariantCompatibility, VariantSet};
+use uv_variants::{VariantCompatibility, VariantSet, VariantTag};
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
@@ -602,7 +602,7 @@ impl VersionMapLazy {
         // Determine a priority for the wheel based on variants.
         let variant_priority = if let Some(variants) = &self.variants {
             if let Some(variant) = filename.variant() {
-                match variants.compatibility(variant) {
+                match variants.compatibility(&VariantTag::new(variant.to_string())) {
                     VariantCompatibility::Incompatible => {
                         return WheelCompatibility::Incompatible(IncompatibleWheel::Variant);
                     }

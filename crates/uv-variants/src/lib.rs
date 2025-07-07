@@ -1,3 +1,4 @@
+pub mod resolved_variants;
 pub mod variants_json;
 
 use std::cmp;
