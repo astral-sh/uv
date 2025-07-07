@@ -222,7 +222,7 @@ impl Index {
     pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
         if let IndexUrl::Path(ref url) = self.url {
             if let Some(given) = url.given() {
-                self.url = IndexUrl::parse(given, Some(root_dir))?;
+                self.url = IndexUrl::parse_simple_api(given, Some(root_dir))?;
             }
         }
         Ok(self)

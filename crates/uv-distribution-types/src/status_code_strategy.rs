@@ -196,7 +196,8 @@ mod tests {
     fn test_decision_default_400() {
         let strategy = IndexStatusCodeStrategy::Default;
         let status_code = StatusCode::BAD_REQUEST;
-        let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
+        let index_url =
+            IndexUrl::parse_simple_api("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
         assert_eq!(
@@ -209,7 +210,8 @@ mod tests {
     fn test_decision_default_401() {
         let strategy = IndexStatusCodeStrategy::Default;
         let status_code = StatusCode::UNAUTHORIZED;
-        let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
+        let index_url =
+            IndexUrl::parse_simple_api("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
         assert_eq!(
@@ -224,7 +226,8 @@ mod tests {
     fn test_decision_default_403() {
         let strategy = IndexStatusCodeStrategy::Default;
         let status_code = StatusCode::FORBIDDEN;
-        let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
+        let index_url =
+            IndexUrl::parse_simple_api("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
         assert_eq!(
@@ -239,7 +242,8 @@ mod tests {
     fn test_decision_default_404() {
         let strategy = IndexStatusCodeStrategy::Default;
         let status_code = StatusCode::NOT_FOUND;
-        let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
+        let index_url =
+            IndexUrl::parse_simple_api("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
         assert_eq!(decision, IndexStatusCodeDecision::Ignore);
@@ -249,7 +253,8 @@ mod tests {
 
     #[test]
     fn test_decision_pytorch() {
-        let index_url = IndexUrl::parse("https://download.pytorch.org/whl/cu118", None).unwrap();
+        let index_url =
+            IndexUrl::parse_simple_api("https://download.pytorch.org/whl/cu118", None).unwrap();
         let strategy = IndexStatusCodeStrategy::from_index_url(&index_url);
         let capabilities = IndexCapabilities::default();
         // Test we continue on 403 for PyTorch registry.
@@ -275,7 +280,8 @@ mod tests {
         let strategy = IndexStatusCodeStrategy::IgnoreErrorCodes {
             status_codes: status_codes.iter().copied().collect::<FxHashSet<_>>(),
         };
-        let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
+        let index_url =
+            IndexUrl::parse_simple_api("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         // Test each ignored status code
         for status_code in status_codes {

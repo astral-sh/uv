@@ -34,24 +34,24 @@ pub enum IndexUrl {
 }
 
 impl IndexUrl {
-    /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
+    /// Parse a Simple API [`IndexUrl`] from a string, relative to an optional root directory.
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
     ///
     /// Normalizes non-file URLs by removing trailing slashes for consistency.
-    pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
-        Self::parse_with_trailing_slash_policy(path, root_dir, TrailingSlashPolicy::Remove)
+    pub fn parse_simple_api(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
+        Self::parse(path, root_dir, TrailingSlashPolicy::Remove)
     }
 
-    /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
+    /// Parse a find-links [`IndexUrl`] from a string, relative to an optional root directory.
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
     ///
     /// Preserves trailing slash if present in `path`.
-    pub fn parse_preserving_trailing_slash(path: &str) -> Result<Self, IndexUrlError> {
-        Self::parse_with_trailing_slash_policy(path, None, TrailingSlashPolicy::Preserve)
+    pub fn parse_find_links(path: &str) -> Result<Self, IndexUrlError> {
+        Self::parse(path, None, TrailingSlashPolicy::Preserve)
     }
 
     /// Parse an [`IndexUrl`] from a string, relative to an optional root directory.
@@ -60,7 +60,7 @@ impl IndexUrl {
     /// directory.
     ///
     /// Applies trailing slash policy to non-file URLs.
-    fn parse_with_trailing_slash_policy(
+    fn parse(
         path: &str,
         root_dir: Option<&Path>,
         slash_policy: TrailingSlashPolicy,
@@ -91,10 +91,7 @@ impl IndexUrl {
                 }
             }
         };
-        Ok(Self::from_verbatim_url_with_trailing_slash_policy(
-            url.with_given(path),
-            slash_policy,
-        ))
+        Ok(Self::from_verbatim_url(url.with_given(path), slash_policy))
     }
 
     /// Return the root [`Url`] of the index, if applicable.
@@ -119,18 +116,21 @@ impl IndexUrl {
         Some(url)
     }
 
-    /// Construct an [`IndexUrl`] from a [`VerbatimUrl`], preserving a trailing
+    /// Construct a Simple API [`IndexUrl`] from a [`VerbatimUrl`], removing a trailing
     /// slash if present.
-    pub fn from_verbatim_url_preserving_trailing_slash(url: VerbatimUrl) -> Self {
-        Self::from_verbatim_url_with_trailing_slash_policy(url, TrailingSlashPolicy::Preserve)
+    pub fn from_simple_api_url(url: VerbatimUrl) -> Self {
+        Self::from_verbatim_url(url, TrailingSlashPolicy::Remove)
+    }
+
+    /// Construct a find-links [`IndexUrl`] from a [`VerbatimUrl`], preserving a trailing
+    /// slash if present.
+    pub fn from_find_links_url(url: VerbatimUrl) -> Self {
+        Self::from_verbatim_url(url, TrailingSlashPolicy::Preserve)
     }
 
     /// Construct an [`IndexUrl`] from a [`VerbatimUrl`], applying a [`TrailingSlashPolicy`]
     /// to non-file URLs.
-    fn from_verbatim_url_with_trailing_slash_policy(
-        mut url: VerbatimUrl,
-        slash_policy: TrailingSlashPolicy,
-    ) -> Self {
+    fn from_verbatim_url(mut url: VerbatimUrl, slash_policy: TrailingSlashPolicy) -> Self {
         if url.scheme() == "file" {
             return Self::Path(Arc::new(url));
         }
@@ -286,7 +286,7 @@ impl FromStr for IndexUrl {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s, None)
+        Self::parse_simple_api(s, None)
     }
 }
 
@@ -319,14 +319,6 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
         }
 
         deserializer.deserialize_str(Visitor)
-    }
-}
-
-impl From<VerbatimUrl> for IndexUrl {
-    fn from(url: VerbatimUrl) -> Self {
-        // Remove trailing slashes for consistency. They'll be re-added if necessary when
-        // querying the Simple API.
-        Self::from_verbatim_url_with_trailing_slash_policy(url, TrailingSlashPolicy::Remove)
     }
 }
 
@@ -790,31 +782,25 @@ mod tests {
         let verbatim_url_without_trailing_slash =
             VerbatimUrl::from_url(url_without_trailing_slash.clone());
 
-        // Test `From<VerbatimUrl>` implementation.
+        // Test `from_verbatim_url_without_trailing_slash`.
         // Trailing slash should be removed if present.
         assert_eq!(
-            IndexUrl::from(verbatim_url_with_trailing_slash.clone()).url(),
+            IndexUrl::from_simple_api_url(verbatim_url_with_trailing_slash.clone()).url(),
             &url_without_trailing_slash
         );
         assert_eq!(
-            IndexUrl::from(verbatim_url_without_trailing_slash.clone()).url(),
+            IndexUrl::from_simple_api_url(verbatim_url_without_trailing_slash.clone()).url(),
             &url_without_trailing_slash
         );
 
         // Test `from_verbatim_url_preserving_trailing_slash`.
         // Trailing slash should be preserved if present.
         assert_eq!(
-            IndexUrl::from_verbatim_url_preserving_trailing_slash(
-                verbatim_url_with_trailing_slash.clone()
-            )
-            .url(),
+            IndexUrl::from_find_links_url(verbatim_url_with_trailing_slash.clone()).url(),
             &url_with_trailing_slash
         );
         assert_eq!(
-            IndexUrl::from_verbatim_url_preserving_trailing_slash(
-                verbatim_url_without_trailing_slash.clone()
-            )
-            .url(),
+            IndexUrl::from_find_links_url(verbatim_url_without_trailing_slash.clone()).url(),
             &url_without_trailing_slash
         );
     }

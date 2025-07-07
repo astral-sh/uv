@@ -141,17 +141,19 @@ impl RequirementsSpecification {
                         .map(Requirement::from)
                         .map(NameRequirementSpecification::from)
                         .collect(),
-                    index_url: requirements_txt.index_url.map(IndexUrl::from),
+                    index_url: requirements_txt
+                        .index_url
+                        .map(IndexUrl::from_simple_api_url),
                     extra_index_urls: requirements_txt
                         .extra_index_urls
                         .into_iter()
-                        .map(IndexUrl::from)
+                        .map(IndexUrl::from_simple_api_url)
                         .collect(),
                     no_index: requirements_txt.no_index,
                     find_links: requirements_txt
                         .find_links
                         .into_iter()
-                        .map(IndexUrl::from_verbatim_url_preserving_trailing_slash)
+                        .map(IndexUrl::from_find_links_url)
                         .collect(),
                     no_binary: requirements_txt.no_binary,
                     no_build: requirements_txt.only_binary,

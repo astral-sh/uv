@@ -111,7 +111,7 @@ impl Preference {
                 package
                     .index
                     .as_ref()
-                    .map(|index| IndexUrl::from(VerbatimUrl::from(index.clone()))),
+                    .map(|index| IndexUrl::from_simple_api_url(VerbatimUrl::from(index.clone()))),
             ),
             // `pylock.toml` doesn't have fork annotations.
             fork_markers: vec![],

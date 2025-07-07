@@ -990,7 +990,7 @@ fn parse_find_links(input: &str) -> Result<Maybe<PipFindLinks>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        IndexUrl::parse_preserving_trailing_slash(input)
+        IndexUrl::parse_find_links(input)
             .map(Index::from_find_links)
             .map(|index| Index {
                 origin: Some(Origin::Cli),

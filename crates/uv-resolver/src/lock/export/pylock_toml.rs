@@ -1346,7 +1346,7 @@ impl PylockTomlWheel {
         };
 
         let index = if let Some(index) = index {
-            IndexUrl::from(VerbatimUrl::from_url(index.clone()))
+            IndexUrl::from_simple_api_url(VerbatimUrl::from_url(index.clone()))
         } else {
             // Including the index is only a SHOULD in PEP 751. If it's omitted, we treat the
             // URL (less the filename) as the index. This isn't correct, but it's the best we can
@@ -1354,7 +1354,7 @@ impl PylockTomlWheel {
             // of this URL (since we cache under the hash of the index).
             let mut index = file_url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
             index.path_segments_mut().unwrap().pop();
-            IndexUrl::from(VerbatimUrl::from_url(index))
+            IndexUrl::from_simple_api_url(VerbatimUrl::from_url(index))
         };
 
         let file = Box::new(uv_distribution_types::File {
@@ -1502,7 +1502,7 @@ impl PylockTomlSdist {
         };
 
         let index = if let Some(index) = index {
-            IndexUrl::from(VerbatimUrl::from_url(index.clone()))
+            IndexUrl::from_simple_api_url(VerbatimUrl::from_url(index.clone()))
         } else {
             // Including the index is only a SHOULD in PEP 751. If it's omitted, we treat the
             // URL (less the filename) as the index. This isn't correct, but it's the best we can
@@ -1510,7 +1510,7 @@ impl PylockTomlSdist {
             // of this URL (since we cache under the hash of the index).
             let mut index = file_url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
             index.path_segments_mut().unwrap().pop();
-            IndexUrl::from(VerbatimUrl::from_url(index))
+            IndexUrl::from_simple_api_url(VerbatimUrl::from_url(index))
         };
 
         let file = Box::new(uv_distribution_types::File {

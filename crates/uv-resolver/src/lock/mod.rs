@@ -2521,7 +2521,7 @@ impl Package {
                     yanked: None,
                 });
 
-                let index = IndexUrl::from(VerbatimUrl::from_url(
+                let index = IndexUrl::from_simple_api_url(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                 ));
 
@@ -2595,7 +2595,7 @@ impl Package {
                     yanked: None,
                 });
 
-                let index = IndexUrl::from(
+                let index = IndexUrl::from_simple_api_url(
                     VerbatimUrl::from_absolute_path(workspace_root.join(path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
@@ -2808,13 +2808,13 @@ impl Package {
     pub fn index(&self, root: &Path) -> Result<Option<IndexUrl>, LockError> {
         match &self.id.source {
             Source::Registry(RegistrySource::Url(url)) => {
-                let index = IndexUrl::from(VerbatimUrl::from_url(
+                let index = IndexUrl::from_simple_api_url(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                 ));
                 Ok(Some(index))
             }
             Source::Registry(RegistrySource::Path(path)) => {
-                let index = IndexUrl::from(
+                let index = IndexUrl::from_simple_api_url(
                     VerbatimUrl::from_absolute_path(root.join(path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
@@ -4283,7 +4283,7 @@ impl Wheel {
                     url: file_location,
                     yanked: None,
                 });
-                let index = IndexUrl::from(VerbatimUrl::from_url(
+                let index = IndexUrl::from_simple_api_url(VerbatimUrl::from_url(
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                 ));
                 Ok(RegistryBuiltWheel {
@@ -4325,7 +4325,7 @@ impl Wheel {
                     url: file_location,
                     yanked: None,
                 });
-                let index = IndexUrl::from(
+                let index = IndexUrl::from_simple_api_url(
                     VerbatimUrl::from_absolute_path(root.join(index_path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
@@ -4825,7 +4825,9 @@ fn normalize_requirement(
                     index.remove_credentials();
                     index
                 })
-                .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
+                .map(|index| {
+                    IndexMetadata::from(IndexUrl::from_simple_api_url(VerbatimUrl::from_url(index)))
+                });
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,

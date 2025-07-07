@@ -821,8 +821,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             } => Ok(Self::Registry {
                 specifier,
-                index: index
-                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
+                index: index.map(|index| {
+                    IndexMetadata::from(IndexUrl::from_simple_api_url(VerbatimUrl::from_url(index)))
+                }),
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {
