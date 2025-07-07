@@ -983,6 +983,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_redirect_preserves_fragment() -> Result<()> {
+        for status in &[301, 302, 303, 307, 308] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .respond_with(
+                    ResponseTemplate::new(*status)
+                        .insert_header("location", format!("{}/redirect", server.uri())),
+                )
+                .mount(&server)
+                .await;
+
+            let request = Client::new()
+                .get(format!("{}#fragment", server.uri()))
+                .build()
+                .unwrap();
+
+            let response = Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap()
+                .execute(request.try_clone().unwrap())
+                .await
+                .unwrap();
+
+            let redirect_request =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .unwrap();
+            assert!(
+                redirect_request
+                    .url()
+                    .fragment()
+                    .is_some_and(|fragment| fragment == "fragment")
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_redirect_removes_authorization_header_on_cross_origin() -> Result<()> {
         for status in &[301, 302, 303, 307, 308] {
             let server = MockServer::start().await;
