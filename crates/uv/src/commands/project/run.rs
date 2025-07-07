@@ -49,7 +49,7 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceSource, ProjectEnvironment, ProjectError,
+    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
     ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_specification, update_environment,
     validate_project_requires_python,
@@ -958,10 +958,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let spec = EnvironmentSpecification::from(spec).with_preferences(
                 if let Some((lock, install_path)) = base_lock.as_ref() {
                     // If we have a lockfile, use the locked versions as preferences.
-                    PreferenceSource::Lock { lock, install_path }
+                    PreferenceLocation::Lock { lock, install_path }
                 } else {
                     // Otherwise, extract preferences from the base environment.
-                    PreferenceSource::Entries(
+                    PreferenceLocation::Entries(
                         base_site_packages
                             .iter()
                             .filter_map(Preference::from_installed)

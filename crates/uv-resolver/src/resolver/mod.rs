@@ -47,7 +47,7 @@ use crate::fork_strategy::ForkStrategy;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
 use crate::pins::FilePins;
-use crate::preferences::Preferences;
+use crate::preferences::{PreferenceSource, Preferences};
 use crate::pubgrub::{
     PubGrubDependency, PubGrubDistribution, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
     PubGrubPython,
@@ -438,15 +438,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 self.options.resolution_mode,
                                 ResolutionMode::Lowest | ResolutionMode::Highest
                             ) {
+                                let markers = resolution.env.try_universal_markers();
                                 for (package, version) in &resolution.nodes {
                                     preferences.insert(
                                         package.name.clone(),
                                         package.index.clone(),
-                                        resolution
-                                            .env
-                                            .try_universal_markers()
-                                            .unwrap_or(UniversalMarker::TRUE),
+                                        markers.unwrap_or(UniversalMarker::TRUE),
                                         version.clone(),
+                                        if markers.is_none() {
+                                            PreferenceSource::Resolve
+                                        } else {
+                                            PreferenceSource::Fork
+                                        },
                                     );
                                 }
                             }
