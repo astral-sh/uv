@@ -1,3 +1,5 @@
+use crate::shell_out;
+
 pub fn zsh() -> Result<(), anyhow::Error> {
     let shell = std::env::var("SHELL");
     if shell.is_err() || !shell.as_ref().unwrap().ends_with("zsh") {
@@ -5,7 +7,7 @@ pub fn zsh() -> Result<(), anyhow::Error> {
             "This script is intended for Zsh shell only."
         ));
     }
-    println!(
+    shell_out!(
         r#"function envy() {{
     while IFS= read -r line; do
         if [[ "$line" == \<ENVY\>\ * ]]; then

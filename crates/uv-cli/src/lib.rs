@@ -551,7 +551,7 @@ pub enum EnvyShell {
     Zsh,
     /// Initialize the fish shell.
     Fish,
-    /// Initialize the PowerShell shell.
+    /// Initialize the `PowerShell` shell.
     Powershell,
 }
 
