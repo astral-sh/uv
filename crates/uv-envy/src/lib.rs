@@ -8,12 +8,12 @@ use std::{
 };
 
 use anyhow::Error;
-use walkdir::WalkDir;
 use tracing::info;
+use walkdir::WalkDir;
 
 pub mod init;
 
-/// This function is intended to function same as println! without emmiting the Clippy warning for
+/// This function is intended to function same as println! without emitting the Clippy warning for
 /// using println! in library code. This is needed since the shell function expects stdout for
 /// command execution.
 #[macro_export]
@@ -24,7 +24,6 @@ macro_rules! shell_out {
         writeln!(stdout, $($arg)*).expect("Failed to write to stdout");
     }};
 }
-
 
 pub fn envy(jump: bool) -> Result<(), anyhow::Error> {
     // This function is the main entry point for the envy command.
@@ -117,6 +116,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
+    #[allow(clippy::disallowed_methods)]
     fn test_get_environments() -> Result<(), Box<dyn std::error::Error>> {
         // Create a temporary directory
         let temp_dir = tempdir()?;

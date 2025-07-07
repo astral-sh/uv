@@ -22,7 +22,6 @@ use tracing::{debug, instrument};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_cli::{EnvyInitSubcommand, EnvyShell};
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
@@ -30,7 +29,9 @@ use uv_cli::{
     ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
     ToolNamespace, TopLevelArgs, compat::CompatArgs,
 };
+use uv_cli::{EnvyInitSubcommand, EnvyShell};
 use uv_configuration::min_stack_size;
+use uv_envy::envy;
 use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
@@ -44,7 +45,6 @@ use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
-use uv_envy::envy;
 
 use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
@@ -432,30 +432,26 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 // Initialize the envy crate, which is used for environment variable management.
                 // This is a no-op in this context, but it can be useful for testing.
                 match init_arg {
-                    EnvyInitSubcommand::Init(shell) => {
-                        match shell.shell {
-                            EnvyShell::Bash => {
-                                uv_envy::init::bash()?;
-                            }
-                            EnvyShell::Zsh => {
-                                uv_envy::init::zsh()?;
-                            }
-                            EnvyShell::Fish => {
-                                uv_envy::init::fish()?;
-                            }
-                            EnvyShell::Powershell => {
-                                uv_envy::init::powershell()?;
-                            }
+                    EnvyInitSubcommand::Init(shell) => match shell.shell {
+                        EnvyShell::Bash => {
+                            uv_envy::init::bash()?;
                         }
-                    }
+                        EnvyShell::Zsh => {
+                            uv_envy::init::zsh()?;
+                        }
+                        EnvyShell::Fish => {
+                            uv_envy::init::fish()?;
+                        }
+                        EnvyShell::Powershell => {
+                            uv_envy::init::powershell()?;
+                        }
+                    },
                 }
                 return Ok(ExitStatus::Success);
             }
             match envy(args.jump) {
                 Ok(()) => Ok(ExitStatus::Success),
-                Err(err) => {
-                    Err(err)
-                }
+                Err(err) => Err(err),
             }
         }
         Commands::Help(args) => commands::help(

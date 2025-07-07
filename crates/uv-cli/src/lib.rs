@@ -525,7 +525,6 @@ pub struct EnvyArgs {
     /// Add the shell init subcommand
     #[command(subcommand)]
     pub init: Option<EnvyInitSubcommand>,
-
 }
 
 #[derive(Subcommand, Debug)]

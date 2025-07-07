@@ -52,6 +52,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(unsafe_code)]
     fn test_zsh_ok() {
         unsafe {
             std::env::set_var("SHELL", "/bin/zsh");
@@ -60,6 +61,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn test_zsh_fail() {
         unsafe {
             std::env::set_var("SHELL", "/bin/bash");
@@ -68,15 +70,17 @@ mod tests {
     }
 
     #[test]
+    #[allow(unsafe_code)]
     #[should_panic(expected = "not yet implemented")]
     fn test_bash_ok() {
         unsafe {
             std::env::set_var("SHELL", "/bin/bash");
         }
-        bash();
+        let _ = bash();
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn test_bash_fail() {
         unsafe {
             std::env::set_var("SHELL", "/bin/zsh");
@@ -85,15 +89,17 @@ mod tests {
     }
 
     #[test]
+    #[allow(unsafe_code)]
     #[should_panic(expected = "not yet implemented")]
     fn test_fish_ok() {
         unsafe {
             std::env::set_var("SHELL", "/bin/fish");
         }
-        fish();
+        let _ = fish();
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn test_fish_fail() {
         unsafe {
             std::env::set_var("SHELL", "/bin/bash");
@@ -105,6 +111,6 @@ mod tests {
     #[should_panic(expected = "not yet implemented")]
     fn test_powershell() {
         // Powershell is not implemented yet, so we just check that it compiles.
-        powershell();
+        let _ = powershell();
     }
 }
