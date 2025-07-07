@@ -185,6 +185,8 @@ By default, uv will resolve for all possible environments during a `uv lock` ope
 However, you can restrict the set of supported environments to improve performance and avoid
 unsatisfiable branches in the solution space.
 
+This follows [the grammar](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers) originally specified in PEP 508.
+
 These environments will also be respected when `uv pip compile` is invoked with the
 `--universal` flag.
 
@@ -197,7 +199,8 @@ These environments will also be respected when `uv pip compile` is invoked with 
 ```toml title="pyproject.toml"
 [tool.uv]
 # Resolve for macOS, but not for Linux or Windows.
-environments = ["sys_platform == 'darwin'"]
+# But only for CPython.
+environments = ["sys_platform == 'darwin' and platform_python_implementation == 'CPython'"]
 ```
 
 ---
