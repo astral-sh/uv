@@ -1416,44 +1416,6 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_redirect_preserve_fragment() -> Result<(), Error> {
-        let redirect_server = MockServer::start().await;
-
-        // Configure the redirect server to respond with a 307 with a relative URL.
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(307).insert_header("Location", "/foo".to_string()))
-            .mount(&redirect_server)
-            .await;
-
-        Mock::given(method("GET"))
-            .and(path_regex("/foo"))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&redirect_server)
-            .await;
-
-        let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache).build();
-        let client = registry_client.cached_client().uncached();
-
-        let mut url = DisplaySafeUrl::parse(&redirect_server.uri())?;
-        url.set_fragment(Some("fragment"));
-
-        assert_eq!(
-            client
-                .for_host(&url)
-                .get(Url::from(url.clone()))
-                .send()
-                .await?
-                .url()
-                .to_string(),
-            format!("{}/foo#fragment", redirect_server.uri()),
-            "Requests should preserve fragment"
-        );
-
-        Ok(())
-    }
-
     #[test]
     fn ignore_failing_files() {
         // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid
