@@ -67,6 +67,7 @@ pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
+    built_in_root_certs: bool,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -127,6 +128,7 @@ impl BaseClientBuilder<'_> {
             keyring: KeyringProviderType::default(),
             allow_insecure_host: vec![],
             native_tls: false,
+            built_in_root_certs: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -189,6 +191,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.native_tls = native_tls;
+        self
+    }
+
+    #[must_use]
+    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
+        self.built_in_root_certs = built_in_root_certs;
         self
     }
 
@@ -388,7 +396,7 @@ impl<'a> BaseClientBuilder<'a> {
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
             .read_timeout(timeout)
-            .tls_built_in_root_certs(false)
+            .tls_built_in_root_certs(self.built_in_root_certs)
             .redirect(redirect_policy.reqwest_policy());
 
         // If necessary, accept invalid certificates.
