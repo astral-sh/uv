@@ -49,7 +49,7 @@ pub(crate) async fn pip_list(
     network_settings: &NetworkSettings,
     concurrency: Concurrency,
     strict: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     python: Option<&str>,
     system: bool,
     cache: &Cache,

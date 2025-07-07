@@ -13,12 +13,12 @@ use uv_warnings::warn_user_once;
 ///
 /// The returned distribution is guaranteed to be compatible with the provided tags and Python
 /// requirement.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) exclude_newer: ExcludeNewer,
     pub(crate) tags: Option<&'env Tags>,
     pub(crate) requires_python: &'env RequiresPython,
 }
@@ -70,17 +70,22 @@ impl LatestClient<'_> {
 
                 for (filename, file) in files.all() {
                     // Skip distributions uploaded after the cutoff.
-                    if let Some(exclude_newer) = self.exclude_newer {
+                    if !self.exclude_newer.is_empty() {
                         match file.upload_time_utc_ms.as_ref() {
                             Some(&upload_time)
-                                if upload_time >= exclude_newer.timestamp_millis() =>
+                                if upload_time
+                                    >= self
+                                        .exclude_newer
+                                        .timestamp_millis(package)
+                                        .unwrap_or(0) =>
                             {
                                 continue;
                             }
                             None => {
                                 warn_user_once!(
-                                    "{} is missing an upload date, but user provided: {exclude_newer}",
+                                    "{} is missing an upload date, but user provided: {}",
                                     file.filename,
+                                    self.exclude_newer
                                 );
                             }
                             _ => {}
