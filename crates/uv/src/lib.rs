@@ -22,6 +22,7 @@ use tracing::{debug, instrument};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
+use uv_cli::{EnvyInitSubcommand, EnvyShell};
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
@@ -43,6 +44,7 @@ use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_envy::envy;
 
 use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
@@ -425,6 +427,37 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
     match *cli.command {
+        Commands::Envy(args) => {
+            if let Some(init_arg) = args.init {
+                // Initialize the envy crate, which is used for environment variable management.
+                // This is a no-op in this context, but it can be useful for testing.
+                match init_arg {
+                    EnvyInitSubcommand::Init(shell) => {
+                        match shell.shell {
+                            EnvyShell::Bash => {
+                                uv_envy::init::bash();
+                            }
+                            EnvyShell::Zsh => {
+                                uv_envy::init::zsh();
+                            }
+                            EnvyShell::Fish => {
+                                uv_envy::init::fish();
+                            }
+                            EnvyShell::Powershell => {
+                                uv_envy::init::powershell();
+                            }
+                        }
+                    }
+                }
+                return Ok(ExitStatus::Success);
+            } else {
+                println!("No init argument provided, skipping envy initialization.");
+            }
+            println!("Got to envy");
+            println!("Args: {:#?}", args);
+            envy().unwrap();
+            return Ok(ExitStatus::Success);
+        }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,
@@ -2239,6 +2272,12 @@ where
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip show".to_string()),
+                        );
+                    }
+                    "envy" => {
+                        err.insert(
+                            ContextKind::SuggestedSubcommand,
+                            ContextValue::String("uv pip envy".to_string()),
                         );
                     }
                     _ => {}
