@@ -7210,6 +7210,7 @@ fn remove_include_default_groups() -> Result<()> {
 
     Ok(())
 }
+
 /// Revert changes to the `pyproject.toml` and `uv.lock` when the `add` operation fails.
 #[test]
 fn fail_to_add_revert_project() -> Result<()> {
@@ -7397,6 +7398,256 @@ fn fail_to_edit_revert_project() -> Result<()> {
     // The lockfile should exist, but be unchanged.
     let after = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
     assert_eq!(before, after);
+
+    Ok(())
+}
+
+/// Revert changes to the root `pyproject.toml` and `uv.lock` when the `add` operation fails.
+#[test]
+fn fail_to_add_revert_workspace_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Add a dependency on a package that declares static metadata (so can always resolve), but
+    // can't be installed.
+    let pyproject_toml = context.temp_dir.child("child/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+    context
+        .temp_dir
+        .child("child")
+        .child("setup.py")
+        .write_str("1/0")?;
+
+    // Add a dependency on a package that declares static metadata (so can always resolve), but
+    // can't be installed.
+    let pyproject_toml = context.temp_dir.child("broken").child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "broken"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+    context
+        .temp_dir
+        .child("broken")
+        .child("setup.py")
+        .write_str("1/0")?;
+
+    uv_snapshot!(context.filters(), context.add().arg("--workspace").arg("./broken"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Added `broken` to workspace members
+    Resolved 3 packages in [TIME]
+      × Failed to build `broken @ file://[TEMP_DIR]/broken`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 448, in get_requires_for_build_editable
+              return self.get_requires_for_build_wheel(config_settings)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+          ZeroDivisionError: division by zero
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "#);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+
+    // The lockfile should not exist, even though resolution succeeded.
+    assert!(!context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Revert changes to the root `pyproject.toml` and `uv.lock` when the `add` operation fails.
+#[test]
+fn fail_to_add_revert_workspace_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+    "#})?;
+
+    // Add a workspace dependency.
+    let project = context.temp_dir.child("child");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    project
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add a dependency on a package that declares static metadata (so can always resolve), but
+    // can't be installed.
+    let pyproject_toml = context.temp_dir.child("broken/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "broken"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+    context
+        .temp_dir
+        .child("broken")
+        .child("setup.py")
+        .write_str("1/0")?;
+
+    uv_snapshot!(context.filters(), context.add().current_dir(&project).arg("--workspace").arg("../broken"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Added `broken` to workspace members
+    Resolved 4 packages in [TIME]
+      × Failed to build `broken @ file://[TEMP_DIR]/broken`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_editable` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 448, in get_requires_for_build_editable
+              return self.get_requires_for_build_wheel(config_settings)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+          ZeroDivisionError: division by zero
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "#);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#
+        );
+    });
+
+    let pyproject_toml =
+        fs_err::read_to_string(context.temp_dir.join("child").join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        );
+    });
+
+    // The lockfile should not exist, even though resolution succeeded.
+    assert!(!context.temp_dir.join("uv.lock").exists());
 
     Ok(())
 }
@@ -12624,6 +12875,166 @@ fn add_bounds_requirement_over_bounds_kind() -> Result<()> {
         "anyio==4.2",
         "idna>=3.6,<3.7",
     ]
+    "#
+    );
+
+    Ok(())
+}
+
+/// Add a path dependency with `--workspace` flag to add it to workspace members. The root already
+/// contains a workspace definition, so the package should be added to the workspace members.
+#[test]
+fn add_path_with_existing_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["project"]
+    "#})?;
+
+    // Create a project within the workspace.
+    let project_dir = context.temp_dir.child("project");
+    project_dir.create_dir_all()?;
+
+    let project_toml = project_dir.child("pyproject.toml");
+    project_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a dependency package outside the workspace members.
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+
+    let dep_toml = dep_dir.child("pyproject.toml");
+    dep_toml.write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Add the dependency with `--workspace` flag from the project directory.
+    uv_snapshot!(context.filters(), context
+        .add()
+        .current_dir(&project_dir)
+        .arg("../dep")
+        .arg("--workspace"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Added `dep` to workspace members
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "parent"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [tool.uv.workspace]
+    members = [
+        "project",
+     "dep",
+    ]
+    "#
+    );
+
+    let pyproject_toml = context.read("project/pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dep",
+    ]
+
+    [tool.uv.sources]
+    dep = { workspace = true }
+    "#
+    );
+
+    Ok(())
+}
+
+/// Add a path dependency with `--workspace` flag to add it to workspace members. The root doesn't
+/// contain a workspace definition, so `uv add` should create one.
+#[test]
+fn add_path_with_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    // Create a dependency package outside the workspace members.
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+
+    let dep_toml = dep_dir.child("pyproject.toml");
+    dep_toml.write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Add the dependency with `--workspace` flag from the project directory.
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./dep")
+        .arg("--workspace"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Added `dep` to workspace members
+    Resolved 2 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "parent"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dep",
+    ]
+
+    [tool.uv.workspace]
+    members = [
+        "dep",
+    ]
+
+    [tool.uv.sources]
+    dep = { workspace = true }
     "#
     );
 

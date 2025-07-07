@@ -83,6 +83,7 @@ pub(crate) async fn add(
     extras_of_dependency: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
+    workspace: bool,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     network_settings: NetworkSettings,
@@ -151,7 +152,7 @@ pub(crate) async fn add(
     // Default groups we need the actual project for, interpreter discovery will use this!
     let defaulted_groups;
 
-    let target = if let Some(script) = script {
+    let mut target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
         if package.is_some() {
             warn_user_once!(
@@ -478,6 +479,9 @@ pub(crate) async fn add(
         }
     }
 
+    // Store the content prior to any modifications.
+    let snapshot = target.snapshot().await?;
+
     // If the user provides a single, named index, pin all requirements to that index.
     let index = indexes
         .first()
@@ -488,7 +492,72 @@ pub(crate) async fn add(
             debug!("Pinning all requirements to index: `{index}`");
         });
 
-    // Add the requirements to the `pyproject.toml` or script.
+    // Track modification status, for reverts.
+    let mut modified = false;
+
+    // If `--workspace` is provided, add any members to the `workspace` section of the
+    // `pyproject.toml` file.
+    if workspace {
+        let AddTarget::Project(project, python_target) = target else {
+            unreachable!("`--workspace` and `--script` are conflicting options");
+        };
+
+        let workspace = project.workspace();
+        let mut toml = PyProjectTomlMut::from_toml(
+            &workspace.pyproject_toml().raw,
+            DependencyTarget::PyProjectToml,
+        )?;
+
+        // Check each requirement to see if it's a path dependency
+        for requirement in &requirements {
+            if let RequirementSource::Directory { install_path, .. } = &requirement.source {
+                let absolute_path = if install_path.is_absolute() {
+                    install_path.to_path_buf()
+                } else {
+                    project.root().join(install_path)
+                };
+
+                // Check if the path is not already included in the workspace.
+                if !workspace.includes(&absolute_path)? {
+                    let relative_path = absolute_path
+                        .strip_prefix(workspace.install_path())
+                        .unwrap_or(&absolute_path);
+
+                    toml.add_workspace(relative_path)?;
+                    modified |= true;
+
+                    writeln!(
+                        printer.stderr(),
+                        "Added `{}` to workspace members",
+                        relative_path.user_display().cyan()
+                    )?;
+                }
+            }
+        }
+
+        // If we modified the workspace root, we need to reload it entirely, since this can impact
+        // the discovered members, etc.
+        target = if modified {
+            let workspace_content = toml.to_string();
+            fs_err::write(
+                workspace.install_path().join("pyproject.toml"),
+                &workspace_content,
+            )?;
+
+            AddTarget::Project(
+                VirtualProject::discover(
+                    project.root(),
+                    &DiscoveryOptions::default(),
+                    &WorkspaceCache::default(),
+                )
+                .await?,
+                python_target,
+            )
+        } else {
+            AddTarget::Project(project, python_target)
+        }
+    }
+
     let mut toml = match &target {
         AddTarget::Script(script, _) => {
             PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
@@ -498,6 +567,7 @@ pub(crate) async fn add(
             DependencyTarget::PyProjectToml,
         ),
     }?;
+
     let edits = edits(
         requirements,
         &target,
@@ -543,7 +613,7 @@ pub(crate) async fn add(
     let content = toml.to_string();
 
     // Save the modified `pyproject.toml` or script.
-    let modified = target.write(&content)?;
+    modified |= target.write(&content)?;
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
@@ -562,9 +632,6 @@ pub(crate) async fn add(
             return Ok(ExitStatus::Success);
         }
     }
-
-    // Store the content prior to any modifications.
-    let snapshot = target.snapshot().await?;
 
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content)?;
@@ -1296,6 +1363,16 @@ impl AddTargetSnapshot {
                 Ok(())
             }
             Self::Project(project, lock) => {
+                // Write the workspace `pyproject.toml` back to disk.
+                let workspace = project.workspace();
+                if workspace.install_path() != project.root() {
+                    debug!("Reverting changes to workspace `pyproject.toml`");
+                    fs_err::write(
+                        workspace.install_path().join("pyproject.toml"),
+                        workspace.pyproject_toml().as_ref(),
+                    )?;
+                }
+
                 // Write the `pyproject.toml` back to disk.
                 debug!("Reverting changes to `pyproject.toml`");
                 fs_err::write(
