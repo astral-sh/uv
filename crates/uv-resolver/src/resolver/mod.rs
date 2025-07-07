@@ -25,8 +25,9 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RegistryVariantsJson,
+    RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist, VersionId,
+    VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -83,6 +84,7 @@ use crate::{
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
 use uv_variants::VariantSet;
+use uv_variants::resolved_variants::ResolvedVariants;
 
 mod availability;
 mod batch_prefetch;
@@ -1258,11 +1260,43 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         // If there is no `PrioritizedDist`, our candidate is an installed package.
-        if let Some(variants_json) = candidate
-            .prioritized()
-            .and_then(|prioritized_dist| prioritized_dist.variants_json())
+        if let Some((prioritized_dist, variants_json)) =
+            candidate.prioritized().and_then(|prioritized_dist| {
+                Some((prioritized_dist, prioritized_dist.variants_json()?))
+            })
         {
-            let url = variants_json.file.url.to_url().expect("TODO(konsti)");
+            let version_id = VersionId::NameVersion(name.clone(), candidate.version().clone());
+            if self
+                .index
+                .variant_priorities()
+                .register((version_id.clone(), index.cloned()))
+            {
+                request_sink.blocking_send(Request::Variants(
+                    version_id.clone(),
+                    index.cloned(),
+                    variants_json.clone(),
+                ))?;
+            }
+            dbg!(
+                &VersionId::NameVersion(name.clone(), candidate.version().clone()),
+                &index.cloned()
+            );
+
+            let resolved_variants = self
+                .index
+                .variant_priorities()
+                .wait_blocking(&(version_id, index.cloned()));
+            dbg!(&resolved_variants);
+            if let Some(resolved_variants) = &resolved_variants {
+                for (wheel, compatibility) in prioritized_dist.wheels() {
+                    dbg!(&wheel.filename);
+                    if !compatibility.is_compatible() {
+                        continue;
+                    }
+
+                    dbg!(wheel.filename.variant());
+                }
+            }
         }
 
         let dist = match candidate.dist() {
@@ -2318,6 +2352,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .distributions()
                         .done(dist.version_id(), Arc::new(metadata));
                 }
+                Some(Response::Variants {
+                    version_id,
+                    index_url,
+                    resolved_variants,
+                }) => {
+                    trace!("Received variant metadata for: {version_id}");
+                    dbg!(&version_id, &index_url);
+                    self.index
+                        .variant_priorities()
+                        .done((version_id, index_url), Arc::new(resolved_variants));
+                }
                 None => {}
             }
         }
@@ -2520,7 +2565,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Ok(None)
                 }
             }
+            Request::Variants(version_id, index_url, variants_json) => self
+                .resolve_variants(variants_json, provider)
+                .await
+                .map(|resolved_variants| {
+                    dbg!("RESOLVED");
+                    Some(Response::Variants {
+                        version_id,
+                        index_url,
+                        resolved_variants,
+                    })
+                }),
         }
+    }
+
+    async fn resolve_variants<Provider: ResolverProvider>(
+        &self,
+        variants_json: RegistryVariantsJson,
+        provider: &Provider,
+    ) -> Result<ResolvedVariants, ResolveError> {
+        Ok(provider.variant_priorities(&variants_json).await)
     }
 
     fn convert_no_solution_err(
@@ -3318,6 +3382,8 @@ pub(crate) enum Request {
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
+    /// Resolve the variants for a package
+    Variants(VersionId, Option<IndexUrl>, RegistryVariantsJson),
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {
@@ -3372,6 +3438,13 @@ impl Display for Request {
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
+            Self::Variants(version_id, index_url, _) => {
+                if let Some(index_url) = index_url {
+                    write!(f, "Variants {version_id} {index_url}")
+                } else {
+                    write!(f, "Variants {version_id}")
+                }
+            }
         }
     }
 }
@@ -3390,6 +3463,12 @@ enum Response {
     Installed {
         dist: InstalledDist,
         metadata: MetadataResponse,
+    },
+    /// The returned variant compatibility.
+    Variants {
+        version_id: VersionId,
+        index_url: Option<IndexUrl>,
+        resolved_variants: ResolvedVariants,
     },
 }
 

@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
-
 use rustc_hash::FxHashMap;
 use tracing::instrument;
+
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use uv_client::{FlatIndexEntries, FlatIndexEntry};
 use uv_configuration::BuildOptions;
@@ -17,7 +17,7 @@ use uv_pep440::Version;
 use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
-use uv_variants::{VariantCompatibility, VariantSet};
+use uv_variants::{VariantCompatibility, VariantSet, VariantTag};
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
@@ -251,7 +251,7 @@ impl FlatDistributions {
         // Determine a priority for the wheel based on variants.
         let variant_priority = if let Some(variants) = variants {
             if let Some(variant) = filename.variant() {
-                match variants.compatibility(variant) {
+                match variants.compatibility(&VariantTag::new(variant.to_string())) {
                     VariantCompatibility::Incompatible => {
                         return WheelCompatibility::Incompatible(IncompatibleWheel::Variant);
                     }

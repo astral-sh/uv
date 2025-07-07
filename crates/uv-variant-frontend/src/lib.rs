@@ -21,18 +21,20 @@ use tracing::debug;
 use uv_configuration::{BuildOutput, PreviewMode};
 use uv_distribution_types::Requirement;
 use uv_fs::{PythonExt, Simplified};
-use uv_pypi_types::VariantProviderBackend;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
-use uv_types::{BuildContext, BuildStack};
-use uv_variants::VariantProviderConfig;
+use uv_types::{BuildContext, BuildStack, VariantsTrait};
+use uv_variants::VariantKeyConfig;
+use uv_variants::variants_json::Provider;
 
 pub use crate::error::Error;
 
 pub struct VariantBuild {
     temp_dir: TempDir,
     /// The backend to use.
-    backend: VariantProviderBackend,
+    backend_name: String,
+    /// The backend to use.
+    backend: Provider,
     /// The virtual environment in which to build the source distribution.
     venv: PythonEnvironment,
     /// Whether to send build output to `stderr` or `tracing`, etc.
@@ -46,10 +48,17 @@ pub struct VariantBuild {
     runner: PythonRunner,
 }
 
+impl VariantsTrait for VariantBuild {
+    async fn query(&self) -> anyhow::Result<Vec<VariantKeyConfig>> {
+        Ok(self.build().await?)
+    }
+}
+
 impl VariantBuild {
     /// Create a virtual environment in which to run a variant provider.
     pub async fn setup(
-        backend: VariantProviderBackend,
+        backend_name: String,
+        backend: &Provider,
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         mut environment_variables: FxHashMap<OsString, OsString>,
@@ -126,7 +135,8 @@ impl VariantBuild {
 
         Ok(Self {
             temp_dir,
-            backend,
+            backend_name,
+            backend: backend.clone(),
             venv,
             level,
             modified_path,
@@ -136,7 +146,7 @@ impl VariantBuild {
     }
 
     /// Run a variant provider to infer compatible variants.
-    pub async fn build(&self) -> Result<VariantProviderConfig, Error> {
+    pub async fn build(&self) -> Result<Vec<VariantKeyConfig>, Error> {
         // Write the hook output to a file so that we can read it back reliably.
         let outfile = self.temp_dir.path().join("output.json");
 
@@ -145,11 +155,17 @@ impl VariantBuild {
             r#"
             {}
 
+            if backend.dynamic:
+                raise RuntimeError("Dynamic variant providers are not supported")
+
+            configs = backend.get_supported_configs(None)
+            configs = [(config.name, config.values) for config in configs]
+
             with open("{}", "w") as fp:
                 import json
-                fp.write(json.dumps(backend()))
+                fp.write(json.dumps(configs))
             "#,
-            self.backend.import(),
+            self.backend.import(&self.backend_name),
             outfile.escape_for_python()
         };
 
@@ -167,7 +183,10 @@ impl VariantBuild {
             return Err(Error::from_command_output(
                 format!(
                     "Call to variant backend failed in `{}`",
-                    self.backend.backend
+                    self.backend
+                        .plugin_api
+                        .as_deref()
+                        .unwrap_or(&self.backend_name)
                 ),
                 &output,
                 self.level,
@@ -178,7 +197,7 @@ impl VariantBuild {
         let json = fs::read(&outfile).map_err(|err| {
             Error::CommandFailed(self.venv.python_executable().to_path_buf(), err)
         })?;
-        let config = serde_json::from_slice::<VariantProviderConfig>(&json).map_err(|err| {
+        let config = serde_json::from_slice::<Vec<VariantKeyConfig>>(&json).map_err(|err| {
             Error::CommandFailed(self.venv.python_executable().to_path_buf(), err.into())
         })?;
 

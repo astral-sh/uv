@@ -10,9 +10,8 @@ use tracing::{Level, debug, enabled, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints, DryRun,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
-    Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -37,7 +36,7 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_variants::{VariantSet, get_combinations};
+use uv_variants::VariantSet;
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
@@ -59,7 +58,7 @@ pub(crate) async fn pip_install(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
-    variants: Vec<VariantProviderBackend>,
+    _variants: Vec<VariantProviderBackend>,
     extras: &ExtrasSpecification,
     groups: BTreeMap<PathBuf, Vec<GroupName>>,
     resolution_mode: ResolutionMode,
@@ -455,11 +454,12 @@ pub(crate) async fn pip_install(
 
         // Compute the set of available variants.
         let variants = {
+            /*
             // Run all providers.
             let mut configs = vec![];
             for provider in variants {
                 let builder = build_dispatch
-                    .setup_variants(provider, BuildOutput::Debug)
+                    .setup_variants("TODO".to_string(), &provider, BuildOutput::Debug)
                     .await?;
                 let config = builder.build().await?;
                 configs.push(config);
@@ -467,8 +467,9 @@ pub(crate) async fn pip_install(
 
             // Compute all combinations of the variants.
             let combinations = get_combinations(configs);
+            */
 
-            VariantSet::new(&combinations)?
+            VariantSet::new(&[])?
         };
 
         let options = OptionsBuilder::new()

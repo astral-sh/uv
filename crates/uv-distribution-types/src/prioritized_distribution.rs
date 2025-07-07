@@ -532,6 +532,10 @@ impl PrioritizedDist {
             })
     }
 
+    pub fn wheels(&self) -> impl Iterator<Item = &(RegistryBuiltWheel, WheelCompatibility)> {
+        self.0.wheels.iter()
+    }
+
     /// Return the hashes for each distribution.
     pub fn hashes(&self) -> &[HashDigest] {
         &self.0.hashes

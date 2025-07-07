@@ -5161,6 +5161,7 @@ dependencies = [
  "uv-resolver",
  "uv-types",
  "uv-variant-frontend",
+ "uv-variants",
  "uv-version",
  "uv-workspace",
 ]
@@ -5182,6 +5183,7 @@ dependencies = [
  "rmp-serde",
  "rustc-hash",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
@@ -5208,6 +5210,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-types",
+ "uv-variants",
  "uv-workspace",
  "walkdir",
  "zip",
@@ -5228,7 +5231,6 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-small-str",
- "uv-variants",
 ]
 
 [[package]]
@@ -6011,6 +6013,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-variants",
  "uv-workspace",
 ]
 
@@ -6019,6 +6022,7 @@ name = "uv-variant-frontend"
 version = "0.1.0"
 dependencies = [
  "anstream",
+ "anyhow",
  "fs-err 3.1.1",
  "indoc",
  "owo-colors",
@@ -6044,13 +6048,16 @@ name = "uv-variants"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "indoc",
  "itertools 0.14.0",
  "rkyv",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha3",
  "thiserror 2.0.12",
  "uv-pep508",
+ "uv-pypi-types",
 ]
 
 [[package]]
