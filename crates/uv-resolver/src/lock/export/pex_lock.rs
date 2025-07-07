@@ -15,7 +15,7 @@ use std::hash::{Hash, Hasher};
 use serde::{Deserialize, Serialize};
 use uv_platform_tags::PlatformTag;
 
-use crate::lock::{Lock, LockError, WheelWireSource};
+use crate::lock::{Lock, LockError, Source, WheelWireSource};
 
 /// A PEX lock file representation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,10 +100,12 @@ pub struct PexArtifact {
     /// The filename (optional for git dependencies).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filename: Option<String>,
-    /// Hash algorithm (e.g., "sha256").
-    pub algorithm: String,
-    /// Hash value.
-    pub hash: String,
+    /// Hash algorithm (e.g., "sha256"). Omitted for git dependencies.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub algorithm: Option<String>,
+    /// Hash value. Omitted for git dependencies.  
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
     /// Whether this is a wheel (optional for git dependencies).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_wheel: Option<bool>,
@@ -167,47 +169,24 @@ impl PexLock {
                     // Create a synthetic artifact for git dependencies
                     let git_url = format!("git+{}", git_ref.reference.url);
 
-                    // Use first 16 characters of git commit SHA as hash (matches pants format)
-                    let git_sha = git_ref.sha.to_string();
-                    let hash = if git_sha.len() >= 16 {
-                        git_sha[..16].to_string()
-                    } else {
-                        // Fallback: create a deterministic 16-char hash
-                        use std::collections::hash_map::DefaultHasher;
-                        let mut hasher = DefaultHasher::new();
-                        git_sha.hash(&mut hasher);
-                        package.name().hash(&mut hasher);
-                        format!("{:016x}", hasher.finish())
-                    };
-
                     artifacts.push(PexArtifact {
                         url: git_url,
-                        filename: None, // Git dependencies don't have filenames
-                        algorithm: Self::DEFAULT_HASH_ALGORITHM.to_string(),
-                        hash,
-                        is_wheel: None, // Git dependencies don't specify wheel status
+                        filename: None,  // Git dependencies don't have filenames
+                        algorithm: None, // No hash validation for git dependencies
+                        hash: None,      // Let PEX handle git dependencies without hashes
+                        is_wheel: None,  // Git dependencies don't specify wheel status
                     });
                 } else {
-                    // Fallback: use exact URLs and hashes from pants-generated lock file
-                    let git_info = match package.name().as_ref() {
-                        "pormake" => Some((
-                            "git+https://github.com/sangwon91/pormake".to_string(),
-                            "fa1d74e4734d2a77".to_string(),
-                        )),
-                        "average-minimum-distance" => Some((
-                            "git+https://github.com/dwiddo/average-minimum-distance".to_string(),
-                            "5a77580470327ed9".to_string(),
-                        )),
-                        _ => None,
-                    };
+                    // Fallback: try to extract git info from the package source directly
+                    if let Source::Git(url, _git_ref) = &package.id.source {
+                        let git_url = format!("git+{}", url);
 
-                    if let Some((url, hash)) = git_info {
                         artifacts.push(PexArtifact {
-                            url,
-                            filename: None, // Git dependencies don't have filenames
-                            algorithm: Self::DEFAULT_HASH_ALGORITHM.to_string(),
-                            hash,
-                            is_wheel: None, // Git dependencies don't specify wheel status
+                            url: git_url,
+                            filename: None,  // Git dependencies don't have filenames
+                            algorithm: None, // No hash validation for git dependencies
+                            hash: None,      // Let PEX handle git dependencies without hashes
+                            is_wheel: None,  // Git dependencies don't specify wheel status
                         });
                     }
                 }
@@ -245,8 +224,8 @@ impl PexLock {
                 artifacts.push(PexArtifact {
                     url: wheel_url,
                     filename: Some(wheel.filename.to_string()),
-                    algorithm,
-                    hash,
+                    algorithm: Some(algorithm),
+                    hash: Some(hash),
                     is_wheel: Some(true),
                 });
             }
@@ -301,8 +280,8 @@ impl PexLock {
                 artifacts.push(PexArtifact {
                     url: sdist_url,
                     filename: Some(sdist_filename),
-                    algorithm,
-                    hash,
+                    algorithm: Some(algorithm),
+                    hash: Some(hash),
                     is_wheel: Some(false),
                 });
             }
@@ -340,8 +319,11 @@ impl PexLock {
                             // Only include dependencies that have compatible artifacts
                             if has_compatible_artifacts {
                                 if let Some(dep_version) = dep_package.id.version.as_ref() {
+                                    // Convert package name to use underscores for PEX compatibility
+                                    let pex_package_name =
+                                        dep.package_id.name.to_string().replace('-', "_");
                                     requires_dists
-                                        .push(format!("{}=={}", dep.package_id.name, dep_version));
+                                        .push(format!("{}=={}", pex_package_name, dep_version));
                                 }
                             }
                         }
@@ -361,9 +343,12 @@ impl PexLock {
                         }
                     });
 
+                    // Convert project name to use underscores for PEX compatibility
+                    let pex_project_name = package.id.name.to_string().replace('-', "_");
+
                     locked_requirements.push(PexLockedRequirement {
                         artifacts,
-                        project_name: package.id.name.to_string(),
+                        project_name: pex_project_name,
                         requires_dists,
                         requires_python: lock.requires_python().to_string(),
                         version: version.to_string(),
