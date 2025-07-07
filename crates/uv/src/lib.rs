@@ -435,28 +435,28 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     EnvyInitSubcommand::Init(shell) => {
                         match shell.shell {
                             EnvyShell::Bash => {
-                                uv_envy::init::bash();
+                                uv_envy::init::bash()?;
                             }
                             EnvyShell::Zsh => {
-                                uv_envy::init::zsh();
+                                uv_envy::init::zsh()?;
                             }
                             EnvyShell::Fish => {
-                                uv_envy::init::fish();
+                                uv_envy::init::fish()?;
                             }
                             EnvyShell::Powershell => {
-                                uv_envy::init::powershell();
+                                uv_envy::init::powershell()?;
                             }
                         }
                     }
                 }
                 return Ok(ExitStatus::Success);
-            } else {
-                println!("No init argument provided, skipping envy initialization.");
             }
-            println!("Got to envy");
-            println!("Args: {:#?}", args);
-            envy().unwrap();
-            return Ok(ExitStatus::Success);
+            match envy(args.jump) {
+                Ok(()) => Ok(ExitStatus::Success),
+                Err(err) => {
+                    Err(err)
+                }
+            }
         }
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),

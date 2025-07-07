@@ -539,7 +539,7 @@ pub struct EnvyInitArgs {
     /// The shell to initialize.
     ///
     /// Supported shells are `bash`, `zsh`, `fish`, and `powershell`.
-    #[arg(value_enum, default_value = "bash", help_heading = "Envy options")]
+    #[arg(value_enum, help_heading = "Envy options")]
     pub shell: EnvyShell,
 }
 
