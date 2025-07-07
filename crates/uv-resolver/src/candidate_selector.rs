@@ -289,14 +289,12 @@ impl CandidateSelector {
                 let allow = match self.prerelease_strategy.allows(package_name, env) {
                     AllowPrerelease::Yes => true,
                     AllowPrerelease::No => false,
-                    // If the pre-release is "global", i.e., it comes from a solve without a fork,
-                    // or is provided via a lockfile, accept it unless pre-releases are completely
-                    // banned.
+                    // If the pre-release was provided via an existing file, rather than from the
+                    // current solve, accept it unless pre-releases are completely banned.
                     AllowPrerelease::IfNecessary => match source {
-                        PreferenceSource::Fork => false,
+                        PreferenceSource::Resolver => false,
                         PreferenceSource::Lock
                         | PreferenceSource::Environment
-                        | PreferenceSource::Resolve
                         | PreferenceSource::RequirementsTxt => true,
                     },
                 };

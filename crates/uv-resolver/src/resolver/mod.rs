@@ -438,18 +438,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 self.options.resolution_mode,
                                 ResolutionMode::Lowest | ResolutionMode::Highest
                             ) {
-                                let markers = resolution.env.try_universal_markers();
                                 for (package, version) in &resolution.nodes {
                                     preferences.insert(
                                         package.name.clone(),
                                         package.index.clone(),
-                                        markers.unwrap_or(UniversalMarker::TRUE),
+                                        resolution
+                                            .env
+                                            .try_universal_markers()
+                                            .unwrap_or(UniversalMarker::TRUE),
                                         version.clone(),
-                                        if markers.is_none() {
-                                            PreferenceSource::Resolve
-                                        } else {
-                                            PreferenceSource::Fork
-                                        },
+                                        PreferenceSource::Resolver,
                                     );
                                 }
                             }

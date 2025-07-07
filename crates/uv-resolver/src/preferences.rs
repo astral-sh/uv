@@ -185,10 +185,8 @@ pub(crate) enum PreferenceSource {
     Lock,
     /// The preference is from a `requirements.txt` file.
     RequirementsTxt,
-    /// The preference is from the current solve, without a fork.
-    Resolve,
-    /// The preference is from a fork in the current solve.
-    Fork,
+    /// The preference is from the current solve.
+    Resolver,
 }
 
 #[derive(Debug, Clone)]
