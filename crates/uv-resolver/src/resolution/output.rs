@@ -540,7 +540,7 @@ impl ResolverOutput {
         // 3. Look for hashes from the registry, which are served at the package level.
         if url.is_none() {
             // Query the implicit and explicit indexes (lazily) for the hashes.
-            let implicit_response = in_memory.implicit().get(name);
+            let implicit_response = in_memory.versions().get(&(name.clone(), None));
             let mut explicit_response = None;
 
             // Search in the implicit indexes.
@@ -559,8 +559,11 @@ impl ResolverOutput {
                 .find_map(|version_map| version_map.hashes(version))
                 .or_else(|| {
                     // Search in the explicit indexes.
-                    explicit_response = index
-                        .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
+                    explicit_response = index.and_then(|index| {
+                        in_memory
+                            .versions()
+                            .get(&(name.clone(), Some(index.clone())))
+                    });
                     explicit_response
                         .as_ref()
                         .and_then(|response| {

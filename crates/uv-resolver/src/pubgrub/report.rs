@@ -725,11 +725,10 @@ impl PubGrubReportFormatter<'_> {
         env: &ResolverEnvironment,
         tags: Option<&Tags>,
     ) -> Option<PubGrubHint> {
-        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
-            index.explicit().get(&(name.clone(), url.clone()))
-        } else {
-            index.implicit().get(name)
-        }?;
+        let response = index.versions().get(&(
+            name.clone(),
+            fork_indexes.get(name).map(IndexMetadata::url).cloned(),
+        ))?;
 
         let VersionsResponse::Found(version_maps) = &*response else {
             return None;

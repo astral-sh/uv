@@ -16,9 +16,7 @@ pub struct InMemoryIndex(Arc<SharedInMemoryIndex>);
 struct SharedInMemoryIndex {
     /// A map from package name to the metadata for that package and the index where the metadata
     /// came from.
-    implicit: FxOnceMap<PackageName, Arc<VersionsResponse>>,
-
-    explicit: FxOnceMap<(PackageName, IndexUrl), Arc<VersionsResponse>>,
+    versions: FxOnceMap<(PackageName, Option<IndexUrl>), Arc<VersionsResponse>>,
 
     /// A map from package ID to metadata for that distribution.
     distributions: FxOnceMap<VersionId, Arc<MetadataResponse>>,
@@ -28,13 +26,8 @@ pub(crate) type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
 impl InMemoryIndex {
     /// Returns a reference to the package metadata map.
-    pub fn implicit(&self) -> &FxOnceMap<PackageName, Arc<VersionsResponse>> {
-        &self.0.implicit
-    }
-
-    /// Returns a reference to the package metadata map.
-    pub fn explicit(&self) -> &FxOnceMap<(PackageName, IndexUrl), Arc<VersionsResponse>> {
-        &self.0.explicit
+    pub fn versions(&self) -> &FxOnceMap<(PackageName, Option<IndexUrl>), Arc<VersionsResponse>> {
+        &self.0.versions
     }
 
     /// Returns a reference to the distribution metadata map.

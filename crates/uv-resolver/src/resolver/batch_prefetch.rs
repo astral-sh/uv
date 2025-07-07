@@ -108,19 +108,12 @@ impl BatchPrefetcher {
         let total_prefetch = min(num_tried, 50);
 
         // This is immediate, we already fetched the version map.
-        let versions_response = if let Some(index) = index {
-            self.prefetch_runner
-                .index
-                .explicit()
-                .wait_blocking(&(name.clone(), index.url().clone()))
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
-        } else {
-            self.prefetch_runner
-                .index
-                .implicit()
-                .wait_blocking(name)
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
-        };
+        let versions_response = self
+            .prefetch_runner
+            .index
+            .versions()
+            .wait_blocking(&(name.clone(), index.map(IndexMetadata::url).cloned()))
+            .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?;
 
         let phase = BatchPrefetchStrategy::Compatible {
             compatible: current_range.clone(),

@@ -984,14 +984,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // Emit a request to fetch the metadata for this package on the index.
             if self
                 .index
-                .explicit()
-                .register((name.clone(), index.url().clone()))
+                .versions()
+                .register((name.clone(), Some(index.url().clone())))
             {
                 request_sink.blocking_send(Request::Package(name.clone(), Some(index.clone())))?;
             }
         } else {
             // Emit a request to fetch the metadata for this package.
-            if self.index.implicit().register(name.clone()) {
+            if self.index.versions().register((name.clone(), None)) {
                 request_sink.blocking_send(Request::Package(name.clone(), None))?;
             }
         }
@@ -1204,17 +1204,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         // Wait for the metadata to be available.
-        let versions_response = if let Some(index) = index {
-            self.index
-                .explicit()
-                .wait_blocking(&(name.clone(), index.clone()))
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
-        } else {
-            self.index
-                .implicit()
-                .wait_blocking(name)
-                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
-        };
+        let versions_response = self
+            .index
+            .versions()
+            .wait_blocking(&(name.clone(), index.cloned()))
+            .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?;
         visited.insert(name.clone());
 
         let version_maps = match *versions_response {
@@ -2273,13 +2267,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             match response? {
                 Some(Response::Package(name, index, version_map)) => {
                     trace!("Received package metadata for: {name}");
-                    if let Some(index) = index {
-                        self.index
-                            .explicit()
-                            .done((name, index), Arc::new(version_map));
-                    } else {
-                        self.index.implicit().done(name, Arc::new(version_map));
-                    }
+                    self.index
+                        .versions()
+                        .done((name, index), Arc::new(version_map));
                 }
                 Some(Response::Installed { dist, metadata }) => {
                     trace!("Received installed distribution metadata for: {dist}");
@@ -2376,8 +2366,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Wait for the package metadata to become available.
                 let versions_response = self
                     .index
-                    .implicit()
-                    .wait(&package_name)
+                    .versions()
+                    .wait(&(package_name.clone(), None))
                     .await
                     .ok_or_else(|| ResolveError::UnregisteredTask(package_name.to_string()))?;
 
@@ -2560,13 +2550,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // we represent the self of the resolver at the time of failure.
                 continue;
             }
-            let versions_response = if let Some(index) = fork_indexes.get(name) {
-                self.index
-                    .explicit()
-                    .get(&(name.clone(), index.url().clone()))
-            } else {
-                self.index.implicit().get(name)
-            };
+            let versions_response = self.index.versions().get(&(
+                name.clone(),
+                fork_indexes.get(name).map(|index| index.url().clone()),
+            ));
             if let Some(response) = versions_response {
                 if let VersionsResponse::Found(ref version_maps) = *response {
                     // Track the available versions, across all indexes.
