@@ -3575,6 +3575,7 @@ fn no_install_project() -> Result<()> {
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
+    hint: To create one run `uv init`
     "###);
 
     Ok(())
@@ -3715,6 +3716,7 @@ fn no_install_workspace() -> Result<()> {
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
+    hint: To create one run `uv init`
     "###);
 
     Ok(())
