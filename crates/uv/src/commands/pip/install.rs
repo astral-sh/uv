@@ -450,7 +450,6 @@ pub(crate) async fn pip_install(
         // When resolving, don't take any external preferences into account.
         let preferences = Vec::default();
 
-
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
             .prerelease_mode(prerelease_mode)

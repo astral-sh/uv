@@ -1441,14 +1441,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let Some(resolved_properties) = resolved_variants
                         .resolved_priorities
                         .get(namespace)
-                        .and_then(|namespace| namespace.iter().find(|x| &x.key == feature))
+                        .and_then(|namespace| namespace.features.get(feature))
                     else {
                         compatible = false;
                         break 'compatibility;
                     };
                     if !properties
                         .iter()
-                        .any(|property| resolved_properties.values.contains(property))
+                        .any(|property| resolved_properties.contains(property))
                     {
                         compatible = false;
                         break 'compatibility;
@@ -2724,7 +2724,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         variants_json: RegistryVariantsJson,
         provider: &Provider,
     ) -> Result<ResolvedVariants, ResolveError> {
-        Ok(provider.variant_priorities(&variants_json).await)
+        provider
+            .variant_priorities(&variants_json)
+            .await
+            .map_err(ResolveError::VariantFrontend)
     }
 
     fn convert_no_solution_err(

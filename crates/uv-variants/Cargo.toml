@@ -14,6 +14,7 @@ uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 
 hex = { workspace = true }
+indexmap = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 rkyv = { workspace = true }
@@ -21,9 +22,6 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 sha3 = { workspace = true }
 thiserror = { workspace = true }
-
-[dev-dependencies]
-serde_json = { workspace = true }
 
 [lints]
 workspace = true
