@@ -1260,10 +1260,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         let variant_prioritized_dist =
-            self.highest_priority_variant(name, index, request_sink, &candidate)?;
+            self.variant_prioritized_dist(name, index, request_sink, &candidate)?;
         let candidate = if let Some(variant_prioritized_dist) = &variant_prioritized_dist {
             candidate.select_best_variant_wheel(variant_prioritized_dist)
         } else {
+            if let CandidateDist::Compatible(dist) = candidate.dist() {
+                if dist
+                    .wheel()
+                    .is_some_and(|wheel| wheel.filename.variant().is_some())
+                {
+                    // TODO(konsti): List the existing variants?
+                    return Ok(Some(ResolverVersion::Unavailable(
+                        candidate.version().clone(),
+                        UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                            IncompatibleWheel::Variant,
+                        )),
+                    )));
+                }
+            }
             candidate
         };
 
@@ -1365,7 +1379,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(Some(ResolverVersion::Unforked(version)))
     }
 
-    fn highest_priority_variant(
+    fn variant_prioritized_dist(
         &self,
         name: &PackageName,
         index: Option<&IndexUrl>,

@@ -100,11 +100,11 @@ impl WheelFilename {
     pub fn stem(&self) -> String {
         if let Some(variant) = &self.variant {
             format!(
-                "{}-{}-~{}~-{}",
+                "{}-{}-{}-{}",
                 self.name.as_dist_info_name(),
                 self.version,
-                variant,
-                self.tags
+                self.tags,
+                variant
             )
         } else {
             format!(

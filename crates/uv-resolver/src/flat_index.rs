@@ -17,7 +17,7 @@ use uv_pep440::Version;
 use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
-use uv_variants::{VariantCompatibility, VariantSet, VariantTag};
+use uv_variants::{VariantPriority, VariantSet};
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
@@ -248,20 +248,12 @@ impl FlatDistributions {
             None => None,
         };
 
-        // Determine a priority for the wheel based on variants.
-        let variant_priority = if let Some(variants) = variants {
-            if let Some(variant) = filename.variant() {
-                match variants.compatibility(&VariantTag::new(variant.to_string())) {
-                    VariantCompatibility::Incompatible => {
-                        return WheelCompatibility::Incompatible(IncompatibleWheel::Variant);
-                    }
-                    VariantCompatibility::Compatible(priority) => Some(priority),
-                }
-            } else {
-                None
-            }
+        // TODO(konsti): For now, we always want to prefer non-variants over variants.
+        // TODO(konsti): 00000 variant
+        let variant_priority = if filename.variant().is_none() {
+            VariantPriority::try_from(2).unwrap()
         } else {
-            None
+            VariantPriority::try_from(1).unwrap()
         };
 
         // Check if hashes line up.
@@ -282,7 +274,12 @@ impl FlatDistributions {
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
-        WheelCompatibility::Compatible(hash, tag_priority, variant_priority, build_tag)
+        WheelCompatibility::Compatible {
+            hash,
+            variant_priority,
+            tag_priority,
+            build_tag,
+        }
     }
 }
 
