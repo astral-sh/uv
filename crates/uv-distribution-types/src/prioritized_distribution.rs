@@ -408,10 +408,12 @@ impl PrioritizedDist {
         }
         // Track the highest-priority wheel.
         if let Some((.., existing_compatibility)) = self.best_wheel() {
-            if compatibility.is_more_compatible(existing_compatibility) {
+            if compatibility.is_more_compatible(existing_compatibility)
+                && dist.filename.variant().is_none()
+            {
                 self.0.best_wheel_index = Some(self.0.wheels.len());
             }
-        } else {
+        } else if dist.filename.variant().is_none() {
             self.0.best_wheel_index = Some(self.0.wheels.len());
         }
         self.0.wheels.push((dist, compatibility));
