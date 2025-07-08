@@ -1488,11 +1488,7 @@ impl Lock {
                                 .version
                                 .as_ref()
                                 .expect("version for registry source");
-                            return Ok(SatisfiesResult::MissingRemoteIndex(
-                                name,
-                                version,
-                                url.into_owned(),
-                            ));
+                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
                         }
                     }
                     RegistrySource::Path(path) => {
