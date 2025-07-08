@@ -651,7 +651,7 @@ async fn do_lock(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, None, None, &hasher, build_options)
+        FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -823,7 +823,6 @@ async fn do_lock(
                 &hasher,
                 &Reinstall::default(),
                 upgrade,
-                None,
                 None,
                 resolver_env,
                 python_requirement,
