@@ -78,6 +78,9 @@ impl Provider {
                 sys.path.pop(0)
 
             {import}
+
+            if callable(backend):
+                backend = backend()
         "#}
     }
 }
