@@ -19,7 +19,7 @@ use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 use uv_types::HashStrategy;
-use uv_variants::{VariantCompatibility, VariantPriority, VariantSet, VariantTag};
+use uv_variants::{VariantPriority, VariantSet};
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
