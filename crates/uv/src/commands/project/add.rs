@@ -421,7 +421,6 @@ pub(crate) async fn add(
                 FlatIndex::from_entries(
                     entries,
                     None,
-                    None,
                     &hasher,
                     &settings.resolver.build_options,
                 )

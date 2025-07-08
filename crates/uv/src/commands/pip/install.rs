@@ -36,7 +36,6 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_variants::VariantSet;
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
@@ -376,7 +375,7 @@ pub(crate) async fn pip_install(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), None, &hasher, &build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
     };
 
     // Determine whether to enable build isolation.
@@ -451,25 +450,6 @@ pub(crate) async fn pip_install(
         // When resolving, don't take any external preferences into account.
         let preferences = Vec::default();
 
-        // Compute the set of available variants.
-        let variants = {
-            /*
-            // Run all providers.
-            let mut configs = vec![];
-            for provider in variants {
-                let builder = build_dispatch
-                    .setup_variants("TODO".to_string(), &provider, BuildOutput::Debug)
-                    .await?;
-                let config = builder.build().await?;
-                configs.push(config);
-            }
-
-            // Compute all combinations of the variants.
-            let combinations = get_combinations(configs);
-            */
-
-            VariantSet::new(&[])?
-        };
 
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
@@ -497,7 +477,6 @@ pub(crate) async fn pip_install(
             &reinstall,
             &upgrade,
             Some(&tags),
-            Some(&variants),
             ResolverEnvironment::specific(marker_env.clone()),
             python_requirement,
             interpreter.markers(),

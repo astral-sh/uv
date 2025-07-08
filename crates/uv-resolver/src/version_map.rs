@@ -19,7 +19,7 @@ use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 use uv_types::HashStrategy;
-use uv_variants::{VariantPriority, VariantSet};
+use uv_variants::VariantPriority;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
@@ -48,7 +48,6 @@ impl VersionMap {
         package_name: &PackageName,
         index: &IndexUrl,
         tags: Option<&Tags>,
-        variants: Option<&VariantSet>,
         requires_python: &RequiresPython,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
@@ -111,7 +110,6 @@ impl VersionMap {
                 no_build: build_options.no_build_package(package_name),
                 index: index.clone(),
                 tags: tags.cloned(),
-                variants: variants.cloned(),
                 allowed_yanks: allowed_yanks.clone(),
                 hasher: hasher.clone(),
                 requires_python: requires_python.clone(),
@@ -124,7 +122,6 @@ impl VersionMap {
     pub(crate) fn from_flat_metadata(
         flat_metadata: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
-        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -133,7 +130,7 @@ impl VersionMap {
         let mut map = BTreeMap::new();
 
         for (version, prioritized_dist) in
-            FlatDistributions::from_entries(flat_metadata, tags, variants, hasher, build_options)
+            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
         {
             stable |= version.is_stable();
             local |= version.is_local();
@@ -368,8 +365,6 @@ struct VersionMapLazy {
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
     tags: Option<Tags>,
-    /// The set of active variants in the environment.
-    variants: Option<VariantSet>,
     /// Whether files newer than this timestamp should be excluded or not.
     exclude_newer: Option<ExcludeNewer>,
     /// Which yanked versions are allowed

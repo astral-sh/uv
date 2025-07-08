@@ -436,16 +436,13 @@ pub(crate) async fn pip_compile(
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
 
-    // STOPSHIP(charlie): Resolve all the variants, with caching.
-    let variants = None;
-
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, tags.as_deref(), variants, &hasher, &build_options)
+        FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };
 
     // Determine whether to enable build isolation.
@@ -517,7 +514,6 @@ pub(crate) async fn pip_compile(
         &Reinstall::None,
         &upgrade,
         tags.as_deref(),
-        variants,
         resolver_env.clone(),
         python_requirement,
         interpreter.markers(),

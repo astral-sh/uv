@@ -238,7 +238,6 @@ impl BuildContext for BuildDispatch<'_> {
             // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
-            None,
             self.flat_index,
             &self.shared_state.index,
             self.hasher,

@@ -17,7 +17,7 @@ use uv_pep440::Version;
 use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
-use uv_variants::{VariantPriority, VariantSet};
+use uv_variants::VariantPriority;
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
@@ -36,7 +36,6 @@ impl FlatIndex {
     pub fn from_entries(
         entries: FlatIndexEntries,
         tags: Option<&Tags>,
-        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -48,7 +47,6 @@ impl FlatIndex {
                 entry.file,
                 entry.filename,
                 tags,
-                variants,
                 hasher,
                 build_options,
                 entry.index,
@@ -84,7 +82,6 @@ impl FlatDistributions {
     pub fn from_entries(
         entries: Vec<FlatIndexEntry>,
         tags: Option<&Tags>,
-        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
@@ -94,7 +91,6 @@ impl FlatDistributions {
                 entry.file,
                 entry.filename,
                 tags,
-                variants,
                 hasher,
                 build_options,
                 entry.index,
@@ -119,7 +115,6 @@ impl FlatDistributions {
         file: File,
         filename: IndexEntryFilename,
         tags: Option<&Tags>,
-        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
         index: IndexUrl,
@@ -134,7 +129,6 @@ impl FlatDistributions {
                     &filename,
                     file.hashes.as_slice(),
                     tags,
-                    variants,
                     hasher,
                     build_options,
                 );
@@ -228,7 +222,6 @@ impl FlatDistributions {
         filename: &WheelFilename,
         hashes: &[HashDigest],
         tags: Option<&Tags>,
-        variants: Option<&VariantSet>,
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> WheelCompatibility {
