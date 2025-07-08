@@ -51,11 +51,8 @@ impl VerbatimUrl {
 
     /// Parse a URL from a string.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
-        let url = Url::parse(given.as_ref())?;
-        Ok(Self {
-            url: DisplaySafeUrl::from(url),
-            given: None,
-        })
+        let url = DisplaySafeUrl::parse(given.as_ref())?;
+        Ok(Self { url, given: None })
     }
 
     /// Parse a URL from an absolute or relative path.
@@ -192,6 +189,32 @@ impl VerbatimUrl {
         self.url
             .to_file_path()
             .map_err(|()| VerbatimUrlError::UrlConversion(self.url.to_file_path().unwrap()))
+    }
+
+    /// Return the [`VerbatimUrl`] (as a [`Cow`]) with trailing slash removed.
+    ///
+    /// This matches the semantics of [`Url::pop_if_empty`], which will not trim a trailing slash if
+    /// it's the only path segment, e.g., `https://example.com/` would be unchanged.
+    #[must_use]
+    pub fn without_trailing_slash(&self) -> Cow<'_, Self> {
+        if !self.as_ref().ends_with('/') {
+            return Cow::Borrowed(self);
+        }
+
+        self.as_ref()
+            .strip_suffix('/')
+            .filter(|path| {
+                // Only strip the trailing slash if there's _another_ trailing slash that isn't a
+                // part of the scheme.
+                path.split_once("://")
+                    .map(|(_scheme, rest)| rest)
+                    .unwrap_or(path)
+                    .contains('/')
+            })
+            .map(|path| {
+                Cow::Owned(VerbatimUrl::parse_url(path).expect("URL should still be parseable"))
+            })
+            .unwrap_or(Cow::Borrowed(self))
     }
 }
 

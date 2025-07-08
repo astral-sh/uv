@@ -1433,7 +1433,8 @@ impl Lock {
                 .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().without_credentials().as_ref()))
+                        let url = UrlString::from(index.url().without_credentials().as_ref());
+                        Some(url.without_trailing_slash().into_owned())
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -4825,7 +4826,13 @@ fn normalize_requirement(
                     index.remove_credentials();
                     index
                 })
-                .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
+                .map(|index| {
+                    IndexMetadata::from(IndexUrl::from(
+                        VerbatimUrl::from_url(index)
+                            .without_trailing_slash()
+                            .into_owned(),
+                    ))
+                });
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
@@ -4867,7 +4874,9 @@ fn normalize_requirement(
                     location,
                     subdirectory,
                     ext,
-                    url: VerbatimUrl::from_url(url),
+                    url: VerbatimUrl::from_url(url)
+                        .without_trailing_slash()
+                        .into_owned(),
                 },
                 origin: None,
             })
