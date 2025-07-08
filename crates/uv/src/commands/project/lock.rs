@@ -933,7 +933,7 @@ impl ValidatedLock {
                 lock.prerelease_mode().cyan(),
                 options.prerelease_mode.cyan()
             );
-            return Ok(Self::Unusable(lock));
+            return Ok(Self::Preferable(lock));
         }
         if lock.fork_strategy() != options.fork_strategy {
             let _ = writeln!(
