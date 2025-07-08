@@ -1455,7 +1455,7 @@ impl Lock {
                         Some(path)
                     }
                 })
-                .collect::<BTreeSet<_>>()
+                .collect::<Vec<_>>()
         });
 
         // Add the workspace packages to the queue.
@@ -1478,12 +1478,11 @@ impl Lock {
             if let Source::Registry(index) = &package.id.source {
                 match index {
                     RegistrySource::Url(url) => {
-                        // Normalize URL before validating.
-                        let url = url.without_trailing_slash();
-                        if remotes
-                            .as_ref()
-                            .is_some_and(|remotes| !remotes.contains(&url))
-                        {
+                        if remotes.as_ref().is_some_and(|remotes| {
+                            !remotes.iter().any(|remote| {
+                                matches!(url.as_ref().strip_prefix(remote.as_ref()), Some("" | "/"))
+                            })
+                        }) {
                             let name = &package.id.name;
                             let version = &package
                                 .id
@@ -1493,7 +1492,7 @@ impl Lock {
                             return Ok(SatisfiesResult::MissingRemoteIndex(
                                 name,
                                 version,
-                                url.into_owned(),
+                                url.clone(),
                             ));
                         }
                     }

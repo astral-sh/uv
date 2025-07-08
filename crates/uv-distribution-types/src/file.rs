@@ -169,26 +169,6 @@ impl UrlString {
             .map(|(path, _)| Cow::Owned(UrlString(SmallString::from(path))))
             .unwrap_or(Cow::Borrowed(self))
     }
-
-    /// Return the [`UrlString`] (as a [`Cow`]) with trailing slash removed.
-    ///
-    /// This matches the semantics of [`Url::pop_if_empty`], which will not trim a trailing slash if
-    /// it's the only path segment, e.g., `https://example.com/` would be unchanged.
-    #[must_use]
-    pub fn without_trailing_slash(&self) -> Cow<'_, Self> {
-        self.as_ref()
-            .strip_suffix('/')
-            .filter(|path| {
-                // Only strip the trailing slash if there's _another_ trailing slash that isn't a
-                // part of the scheme.
-                path.split_once("://")
-                    .map(|(_scheme, rest)| rest)
-                    .unwrap_or(path)
-                    .contains('/')
-            })
-            .map(|path| Cow::Owned(UrlString(SmallString::from(path))))
-            .unwrap_or(Cow::Borrowed(self))
-    }
 }
 
 impl AsRef<str> for UrlString {
@@ -282,39 +262,5 @@ mod tests {
             &UrlString("https://example.com/path?query".into())
         );
         assert!(matches!(url.without_fragment(), Cow::Owned(_)));
-    }
-
-    #[test]
-    fn without_trailing_slash() {
-        // Borrows a URL without a slash
-        let url = UrlString("https://example.com/path".into());
-        assert_eq!(&*url.without_trailing_slash(), &url);
-        assert!(matches!(url.without_trailing_slash(), Cow::Borrowed(_)));
-
-        // Removes the trailing slash if present on the URL
-        let url = UrlString("https://example.com/path/".into());
-        assert_eq!(
-            &*url.without_trailing_slash(),
-            &UrlString("https://example.com/path".into())
-        );
-        assert!(matches!(url.without_trailing_slash(), Cow::Owned(_)));
-
-        // Does not remove a trailing slash if it's the only path segment
-        let url = UrlString("https://example.com/".into());
-        assert_eq!(&*url.without_trailing_slash(), &url);
-        assert!(matches!(url.without_trailing_slash(), Cow::Borrowed(_)));
-
-        // Does not remove a trailing slash if it's the only path segment with a missing scheme
-        let url = UrlString("example.com/".into());
-        assert_eq!(&*url.without_trailing_slash(), &url);
-        assert!(matches!(url.without_trailing_slash(), Cow::Borrowed(_)));
-
-        // Removes the trailing slash when the scheme is missing
-        let url = UrlString("example.com/path/".into());
-        assert_eq!(
-            &*url.without_trailing_slash(),
-            &UrlString("example.com/path".into())
-        );
-        assert!(matches!(url.without_trailing_slash(), Cow::Owned(_)));
     }
 }
