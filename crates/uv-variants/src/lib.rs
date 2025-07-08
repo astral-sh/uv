@@ -50,8 +50,8 @@ pub enum VariantError {
 /// In `variantlib`, this is called [`VariantKeyConfig`].
 #[derive(Debug, Clone, Eq, Ord, PartialOrd, PartialEq, Hash, serde::Deserialize)]
 pub struct VariantKeyConfig {
-    key: String,
-    values: Vec<String>,
+    pub key: String,
+    pub values: Vec<String>,
 }
 
 /// In `variantlib`, this is called [`VariantProviderConfig`].

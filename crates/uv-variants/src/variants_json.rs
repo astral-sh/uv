@@ -64,11 +64,11 @@ impl Provider {
             if let Some((path, object)) = plugin_api.split_once(':') {
                 format!("from {path} import {object} as backend")
             } else {
-                format!("import {} as backend", plugin_api)
+                format!("import {plugin_api} as backend")
             }
         } else {
             // TODO(konsti): Normalize the name to a valid python identifier
-            format!("import {} as backend", name)
+            format!("import {name} as backend")
         };
 
         formatdoc! {r#"

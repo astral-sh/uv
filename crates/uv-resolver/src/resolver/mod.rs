@@ -25,9 +25,9 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RegistryVariantsJson,
-    RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist, VersionId,
-    VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PrioritizedDist, PythonRequirementKind,
+    RegistryVariantsJson, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist,
+    VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -1259,45 +1259,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
 
-        // If there is no `PrioritizedDist`, our candidate is an installed package.
-        if let Some((prioritized_dist, variants_json)) =
-            candidate.prioritized().and_then(|prioritized_dist| {
-                Some((prioritized_dist, prioritized_dist.variants_json()?))
-            })
-        {
-            let version_id = VersionId::NameVersion(name.clone(), candidate.version().clone());
-            if self
-                .index
-                .variant_priorities()
-                .register((version_id.clone(), index.cloned()))
-            {
-                request_sink.blocking_send(Request::Variants(
-                    version_id.clone(),
-                    index.cloned(),
-                    variants_json.clone(),
-                ))?;
-            }
-            dbg!(
-                &VersionId::NameVersion(name.clone(), candidate.version().clone()),
-                &index.cloned()
-            );
-
-            let resolved_variants = self
-                .index
-                .variant_priorities()
-                .wait_blocking(&(version_id, index.cloned()));
-            dbg!(&resolved_variants);
-            if let Some(resolved_variants) = &resolved_variants {
-                for (wheel, compatibility) in prioritized_dist.wheels() {
-                    dbg!(&wheel.filename);
-                    if !compatibility.is_compatible() {
-                        continue;
-                    }
-
-                    dbg!(wheel.filename.variant());
-                }
-            }
-        }
+        let variant_prioritized_dist =
+            self.highest_priority_variant(name, index, request_sink, &candidate)?;
+        let candidate = if let Some(variant_prioritized_dist) = &variant_prioritized_dist {
+            candidate.select_best_variant_wheel(variant_prioritized_dist)
+        } else {
+            candidate
+        };
 
         let dist = match candidate.dist() {
             CandidateDist::Compatible(dist) => dist,
@@ -1395,6 +1363,166 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
+    }
+
+    fn highest_priority_variant(
+        &self,
+        name: &PackageName,
+        index: Option<&IndexUrl>,
+        request_sink: &Sender<Request>,
+        candidate: &Candidate,
+    ) -> Result<Option<PrioritizedDist>, ResolveError> {
+        // If there is no `PrioritizedDist`, our candidate is an installed package.
+        let Some(prioritized_dist) = candidate.prioritized() else {
+            return Ok(None);
+        };
+
+        // No variants.json, no variants
+        // TODO(konsti): Be more lenient?
+        let Some(variants_json) = prioritized_dist.variants_json() else {
+            return Ok(None);
+        };
+
+        // Query the host for the applicable features and properties.
+        let version_id = VersionId::NameVersion(name.clone(), candidate.version().clone());
+        if self
+            .index
+            .variant_priorities()
+            .register((version_id.clone(), index.cloned()))
+        {
+            request_sink.blocking_send(Request::Variants(
+                version_id.clone(),
+                index.cloned(),
+                variants_json.clone(),
+            ))?;
+        }
+        let resolved_variants = self
+            .index
+            .variant_priorities()
+            .wait_blocking(&(version_id, index.cloned()));
+        let Some(resolved_variants) = &resolved_variants else {
+            panic!("We have variants, why didn't they resolve?");
+        };
+
+        let mut highest_priority_variant_wheel: Option<(usize, Vec<usize>)> = None;
+        for (wheel_index, (wheel, compatibility)) in prioritized_dist.wheels().enumerate() {
+            if !compatibility.is_compatible() {
+                continue;
+            }
+
+            let Some(variant) = wheel.filename.variant() else {
+                // The non-variant wheel is already supported
+                continue;
+            };
+
+            let Some(variants_properties) = resolved_variants.variants_json.variants.get(variant)
+            else {
+                // TODO(konsti): For production, this should be a warning.
+                panic!("Variant {variant} not found in variants.json");
+            };
+
+            let mut compatible = true;
+            'compatibility: for (namespace, features) in variants_properties {
+                for (feature, properties) in features {
+                    let Some(resolved_properties) = resolved_variants
+                        .resolved_priorities
+                        .get(namespace)
+                        .and_then(|namespace| namespace.iter().find(|x| &x.key == feature))
+                    else {
+                        compatible = false;
+                        break 'compatibility;
+                    };
+                    if !properties
+                        .iter()
+                        .any(|property| resolved_properties.values.contains(property))
+                    {
+                        compatible = false;
+                        break 'compatibility;
+                    }
+                }
+            }
+            if !compatible {
+                continue;
+            }
+
+            // TODO(konsti): Implement the actual priority scoring.
+            // TODO(konsti): This is performance sensitive
+            let mut scores = Vec::new();
+            for namespace in &resolved_variants.variants_json.default_priorities.namespace {
+                let Some(feature_priorities) = resolved_variants
+                    .variants_json
+                    .default_priorities
+                    .feature
+                    .get(namespace)
+                else {
+                    continue;
+                };
+                for feature in feature_priorities {
+                    let Some(property_order) = resolved_variants
+                        .variants_json
+                        .default_priorities
+                        .property
+                        .get(namespace)
+                        .and_then(|namespace_features| namespace_features.get(feature))
+                    else {
+                        debug!("missing feature {feature}");
+                        continue;
+                    };
+                    let Some(wheel_properties) = variants_properties
+                        .get(namespace)
+                        .and_then(|namespace| namespace.get(feature))
+                    else {
+                        scores.push(0);
+                        continue;
+                    };
+
+                    // Give a higher score to earlier entries
+                    let score = property_order.len()
+                        - property_order
+                            .iter()
+                            .position(|feature| wheel_properties.contains(feature))
+                            .unwrap_or(property_order.len());
+                    scores.push(score);
+                }
+            }
+
+            if let Some((_, old_scores)) = &highest_priority_variant_wheel {
+                if let Some((new, old)) = scores
+                    .iter()
+                    .zip(old_scores.iter())
+                    .find(|(new, old)| new != old)
+                {
+                    if new > old {
+                        highest_priority_variant_wheel = Some((wheel_index, scores));
+                    }
+                }
+            } else {
+                highest_priority_variant_wheel = Some((wheel_index, scores));
+            }
+        }
+
+        if let Some((wheel_index, _)) = highest_priority_variant_wheel {
+            use owo_colors::OwoColorize;
+            debug!(
+                "{} {}",
+                "Selecting variant wheel".red(),
+                prioritized_dist
+                    .wheels()
+                    .nth(wheel_index)
+                    .unwrap()
+                    .0
+                    .filename
+                    .to_string()
+            );
+
+            Ok(Some(
+                prioritized_dist
+                    .clone()
+                    .select_best_variant_wheel(wheel_index),
+            ))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Determine whether a candidate covers all supported platforms; and, if not, generate a fork.
@@ -2198,108 +2326,108 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         'data: 'parameters,
     {
         self.constraints
-            .get(&requirement.name)
-            .into_iter()
-            .flatten()
-            .filter_map(move |constraint| {
-                // If the requirement would not be selected with any Python version
-                // supported by the root, skip it.
-                let constraint = if constraint.marker.is_true() {
-                    // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                    // and the constraint is `requests ; python_version == '3.6'`, the
-                    // constraint should only apply when _both_ markers are true.
-                    if requirement.marker.is_true() {
-                        Cow::Borrowed(constraint)
+                .get(&requirement.name)
+                .into_iter()
+                .flatten()
+                .filter_map(move |constraint| {
+                    // If the requirement would not be selected with any Python version
+                    // supported by the root, skip it.
+                    let constraint = if constraint.marker.is_true() {
+                        // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
+                        // and the constraint is `requests ; python_version == '3.6'`, the
+                        // constraint should only apply when _both_ markers are true.
+                        if requirement.marker.is_true() {
+                            Cow::Borrowed(constraint)
+                        } else {
+                            let mut marker = constraint.marker;
+                            marker.and(requirement.marker);
+
+                            if marker.is_false() {
+                                trace!(
+                                "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                constraint.marker.try_to_string().unwrap(),
+                                requirement.marker.try_to_string().unwrap(),
+                            );
+                                return None;
+                            }
+
+                            Cow::Owned(Requirement {
+                                name: constraint.name.clone(),
+                                extras: constraint.extras.clone(),
+                                groups: constraint.groups.clone(),
+                                source: constraint.source.clone(),
+                                origin: constraint.origin.clone(),
+                                marker,
+                            })
+                        }
                     } else {
+                        let requires_python = python_requirement.target();
+
                         let mut marker = constraint.marker;
                         marker.and(requirement.marker);
 
                         if marker.is_false() {
                             trace!(
-                                "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                                constraint.marker.try_to_string().unwrap(),
-                                requirement.marker.try_to_string().unwrap(),
-                            );
-                            return None;
-                        }
-
-                        Cow::Owned(Requirement {
-                            name: constraint.name.clone(),
-                            extras: constraint.extras.clone(),
-                            groups: constraint.groups.clone(),
-                            source: constraint.source.clone(),
-                            origin: constraint.origin.clone(),
-                            marker,
-                        })
-                    }
-                } else {
-                    let requires_python = python_requirement.target();
-
-                    let mut marker = constraint.marker;
-                    marker.and(requirement.marker);
-
-                    if marker.is_false() {
-                        trace!(
                             "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
                             constraint.marker.try_to_string().unwrap(),
                             requirement.marker.try_to_string().unwrap(),
                         );
-                        return None;
-                    }
+                            return None;
+                        }
 
-                    // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                    // and the constraint is `requests ; python_version == '3.6'`, the
-                    // constraint should only apply when _both_ markers are true.
-                    if python_marker.is_disjoint(marker) {
-                        trace!(
+                        // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
+                        // and the constraint is `requests ; python_version == '3.6'`, the
+                        // constraint should only apply when _both_ markers are true.
+                        if python_marker.is_disjoint(marker) {
+                            trace!(
                             "Skipping constraint {requirement} because of Requires-Python: {requires_python}"
                         );
+                            return None;
+                        }
+
+                        if marker == constraint.marker {
+                            Cow::Borrowed(constraint)
+                        } else {
+                            Cow::Owned(Requirement {
+                                name: constraint.name.clone(),
+                                extras: constraint.extras.clone(),
+                                groups: constraint.groups.clone(),
+                                source: constraint.source.clone(),
+                                origin: constraint.origin.clone(),
+                                marker,
+                            })
+                        }
+                    };
+
+                    // If we're in a fork in universal mode, ignore any dependency that isn't part of
+                    // this fork (but will be part of another fork).
+                    if !env.included_by_marker(constraint.marker) {
+                        trace!("Skipping {constraint} because of {env}");
                         return None;
                     }
 
-                    if marker == constraint.marker {
-                        Cow::Borrowed(constraint)
-                    } else {
-                        Cow::Owned(Requirement {
-                            name: constraint.name.clone(),
-                            extras: constraint.extras.clone(),
-                            groups: constraint.groups.clone(),
-                            source: constraint.source.clone(),
-                            origin: constraint.origin.clone(),
-                            marker,
-                        })
-                    }
-                };
-
-                // If we're in a fork in universal mode, ignore any dependency that isn't part of
-                // this fork (but will be part of another fork).
-                if !env.included_by_marker(constraint.marker) {
-                    trace!("Skipping {constraint} because of {env}");
-                    return None;
-                }
-
-                // If the constraint isn't relevant for the current platform, skip it.
-                match extra {
-                    Some(source_extra) => {
-                        if !constraint
-                            .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                        {
-                            return None;
+                    // If the constraint isn't relevant for the current platform, skip it.
+                    match extra {
+                        Some(source_extra) => {
+                            if !constraint
+                                .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
+                            {
+                                return None;
+                            }
+                            if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
+                            {
+                                return None;
+                            }
                         }
-                        if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
-                        {
-                            return None;
+                        None => {
+                            if !constraint.evaluate_markers(env.marker_environment(), &[]) {
+                                return None;
+                            }
                         }
                     }
-                    None => {
-                        if !constraint.evaluate_markers(env.marker_environment(), &[]) {
-                            return None;
-                        }
-                    }
-                }
 
-                Some(constraint)
-            })
+                    Some(constraint)
+                })
     }
 
     /// Fetch the metadata for a stream of packages and versions.
@@ -2358,7 +2486,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     resolved_variants,
                 }) => {
                     trace!("Received variant metadata for: {version_id}");
-                    dbg!(&version_id, &index_url);
                     self.index
                         .variant_priorities()
                         .done((version_id, index_url), Arc::new(resolved_variants));
@@ -2569,7 +2696,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .resolve_variants(variants_json, provider)
                 .await
                 .map(|resolved_variants| {
-                    dbg!("RESOLVED");
                     Some(Response::Variants {
                         version_id,
                         index_url,

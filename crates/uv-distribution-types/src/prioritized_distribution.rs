@@ -452,6 +452,15 @@ impl PrioritizedDist {
         self.0.variants_json.as_ref()
     }
 
+    // TODO(konsti): Stop breaking isolation
+    #[must_use]
+    pub fn select_best_variant_wheel(self, best_wheel_index: usize) -> Self {
+        Self(Box::new(PrioritizedDistInner {
+            best_wheel_index: Some(best_wheel_index),
+            ..*self.0
+        }))
+    }
+
     /// Return the highest-priority distribution for the package version, if any.
     pub fn get(&self) -> Option<CompatibleDist> {
         let best_wheel = self.0.best_wheel_index.map(|i| &self.0.wheels[i]);
