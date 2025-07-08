@@ -169,15 +169,6 @@ impl UrlString {
             .map(|(path, _)| Cow::Owned(UrlString(SmallString::from(path))))
             .unwrap_or(Cow::Borrowed(self))
     }
-
-    /// Return the [`UrlString`] (as a [`Cow`]) with trailing slash removed.
-    #[must_use]
-    pub fn without_trailing_slash(&self) -> Cow<'_, Self> {
-        self.as_ref()
-            .strip_suffix('/')
-            .map(|path| Cow::Owned(UrlString(SmallString::from(path))))
-            .unwrap_or(Cow::Borrowed(self))
-    }
 }
 
 impl AsRef<str> for UrlString {
@@ -271,20 +262,5 @@ mod tests {
             &UrlString("https://example.com/path?query".into())
         );
         assert!(matches!(url.without_fragment(), Cow::Owned(_)));
-    }
-
-    #[test]
-    fn without_trailing_slash() {
-        // Borrows a URL without a slash
-        let url = UrlString("https://example.com/path".into());
-        assert_eq!(&*url.without_trailing_slash(), &url);
-        assert!(matches!(url.without_trailing_slash(), Cow::Borrowed(_)));
-
-        // Removes the trailing slash if present on the URL
-        let url = UrlString("https://example.com/path/".into());
-        assert_eq!(
-            &*url.without_trailing_slash(),
-            &UrlString("https://example.com/path".into())
-        );
     }
 }

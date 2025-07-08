@@ -4374,7 +4374,7 @@ fn add_lower_bound_local() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r#"
+            pyproject_toml, @r###"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4384,8 +4384,8 @@ fn add_lower_bound_local() -> Result<()> {
         ]
 
         [[tool.uv.index]]
-        url = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html"
-        "#
+        url = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/"
+        "###
         );
     });
 
@@ -4403,7 +4403,7 @@ fn add_lower_bound_local() -> Result<()> {
         [[package]]
         name = "local-simple-a"
         version = "1.2.3+foo"
-        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html" }
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo.tar.gz", hash = "sha256:ebd55c4a79d0a5759126657cb289ff97558902abcfb142e036b993781497edac" }
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/local_simple_a-1.2.3+foo-py3-none-any.whl", hash = "sha256:6f30e2e709b3e171cd734bb58705229a582587c29e0a7041227435583c7224cc" },
@@ -9259,7 +9259,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r#"
+            pyproject_toml, @r###"
         [project]
         name = "project"
         version = "0.1.0"
@@ -9272,8 +9272,8 @@ fn add_index_with_trailing_slash() -> Result<()> {
         constraint-dependencies = ["markupsafe<3"]
 
         [[tool.uv.index]]
-        url = "https://pypi.org/simple"
-        "#
+        url = "https://pypi.org/simple/"
+        "###
         );
     });
 
@@ -9297,7 +9297,7 @@ fn add_index_with_trailing_slash() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple/" }
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
@@ -11194,7 +11194,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r#"
+            pyproject_toml, @r###"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11204,8 +11204,8 @@ fn repeated_index_cli_reversed() -> Result<()> {
         ]
 
         [[tool.uv.index]]
-        url = "https://test.pypi.org/simple"
-        "#
+        url = "https://test.pypi.org/simple/"
+        "###
         );
     });
 
@@ -11226,7 +11226,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://test.pypi.org/simple" }
+        source = { registry = "https://test.pypi.org/simple/" }
         sdist = { url = "https://test-files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:16.826Z" }
         wheels = [
             { url = "https://test-files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:14.843Z" },
