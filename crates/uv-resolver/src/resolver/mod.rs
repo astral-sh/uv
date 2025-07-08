@@ -1463,14 +1463,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // TODO(konsti): This is performance sensitive
             let mut scores = Vec::new();
             for namespace in &resolved_variants.variants_json.default_priorities.namespace {
-                let Some(feature_priorities) = resolved_variants
+                // Explicit priorities are optional, but take priority over the provider
+                let explicit_feature_priorities = resolved_variants
                     .variants_json
                     .default_priorities
                     .feature
-                    .get(namespace)
+                    .get(namespace);
+                let Some(resolved_features_priorities) =
+                    resolved_variants.resolved_priorities.get(namespace)
                 else {
+                    // TODO(konsti): Can this even happen?
                     continue;
                 };
+                let feature_priorities = explicit_feature_priorities.into_iter().flatten().chain(
+                    resolved_features_priorities
+                        .features
+                        .keys()
+                        .filter(|priority| {
+                            explicit_feature_priorities
+                                .is_none_or(|explicit| !explicit.contains(priority))
+                        }),
+                );
+
                 for feature in feature_priorities {
                     let Some(property_order) = resolved_variants
                         .variants_json
