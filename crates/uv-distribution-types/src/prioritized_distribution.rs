@@ -217,7 +217,9 @@ impl Display for IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => f.write_str("no source distribution"),
-                IncompatibleWheel::Variant => f.write_str("no wheels with a matching variant"),
+                IncompatibleWheel::Variant => {
+                    f.write_str("no wheels with a variant supported on the current platform")
+                }
                 IncompatibleWheel::Tag(tag) => match tag {
                     IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
@@ -292,12 +294,12 @@ pub enum PythonRequirementKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
-    Compatible(
-        HashComparison,
-        Option<TagPriority>,
-        Option<VariantPriority>,
-        Option<BuildTag>,
-    ),
+    Compatible {
+        hash: HashComparison,
+        variant_priority: VariantPriority,
+        tag_priority: Option<TagPriority>,
+        build_tag: Option<BuildTag>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -469,7 +471,14 @@ impl PrioritizedDist {
             // source distribution with a matching hash over a wheel with a mismatched hash. When
             // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
             (
-                Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority, ..))),
+                Some((
+                    wheel,
+                    WheelCompatibility::Compatible {
+                        hash: wheel_hash,
+                        tag_priority,
+                        ..
+                    },
+                )),
                 Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
             ) => {
                 if sdist_hash > wheel_hash {
@@ -486,13 +495,21 @@ impl PrioritizedDist {
                 }
             }
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, WheelCompatibility::Compatible(_, tag_priority, ..))), _) => {
-                Some(CompatibleDist::CompatibleWheel {
+            (
+                Some((
                     wheel,
-                    priority: *tag_priority,
-                    prioritized: self,
-                })
-            }
+                    WheelCompatibility::Compatible {
+                        hash: _,
+                        tag_priority,
+                        ..
+                    },
+                )),
+                _,
+            ) => Some(CompatibleDist::CompatibleWheel {
+                wheel,
+                priority: *tag_priority,
+                prioritized: self,
+            }),
             // If we have a compatible source distribution and an incompatible wheel, return the
             // wheel. We assume that all distributions have the same metadata for a given package
             // version. If a compatible source distribution exists, we assume we can build it, but
@@ -536,7 +553,7 @@ impl PrioritizedDist {
             .best_wheel_index
             .map(|i| &self.0.wheels[i])
             .and_then(|(_, compatibility)| match compatibility {
-                WheelCompatibility::Compatible(..) => None,
+                WheelCompatibility::Compatible { .. } => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
             })
     }
@@ -711,7 +728,7 @@ impl<'a> CompatibleDist<'a> {
 impl WheelCompatibility {
     /// Return `true` if the distribution is compatible.
     pub fn is_compatible(&self) -> bool {
-        matches!(self, Self::Compatible(..))
+        matches!(self, Self::Compatible { .. })
     }
 
     /// Return `true` if the distribution is excluded.
@@ -725,25 +742,30 @@ impl WheelCompatibility {
     /// Compatible wheel ordering is determined by tag priority.
     pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible(..), Self::Incompatible(..)) => true,
+            (Self::Compatible { .. }, Self::Incompatible(..)) => true,
             (
-                Self::Compatible(hash, tag_priority, variant_priority, build_tag),
-                Self::Compatible(
-                    other_hash,
-                    other_tag_priority,
-                    other_variant_priority,
-                    other_build_tag,
-                ),
+                Self::Compatible {
+                    hash,
+                    variant_priority,
+                    tag_priority,
+                    build_tag,
+                },
+                Self::Compatible {
+                    hash: other_hash,
+                    variant_priority: other_variant_priority,
+                    tag_priority: other_tag_priority,
+                    build_tag: other_build_tag,
+                },
             ) => {
-                (hash, tag_priority, variant_priority, build_tag)
+                (hash, variant_priority, tag_priority, build_tag)
                     > (
                         other_hash,
-                        other_tag_priority,
                         other_variant_priority,
+                        other_tag_priority,
                         other_build_tag,
                     )
             }
-            (Self::Incompatible(..), Self::Compatible(..)) => false,
+            (Self::Incompatible(..), Self::Compatible { .. }) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }

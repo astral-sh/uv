@@ -70,8 +70,6 @@ def get_x86_64_level() -> int | None:
         # For other platforms, we can't easily detect features
         return None
 
-    print(sorted(flags))
-
     # Check for v4 features (AVX512)
     v4_features = {"avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl"}
     if v4_features.issubset(flags):
