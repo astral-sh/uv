@@ -24,7 +24,7 @@ use uv_fs::{PythonExt, Simplified};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildStack, VariantsTrait};
-use uv_variants::VariantKeyConfig;
+use uv_variants::VariantProviderOutput;
 use uv_variants::variants_json::Provider;
 
 pub use crate::error::Error;
@@ -49,7 +49,7 @@ pub struct VariantBuild {
 }
 
 impl VariantsTrait for VariantBuild {
-    async fn query(&self) -> anyhow::Result<Vec<VariantKeyConfig>> {
+    async fn query(&self) -> anyhow::Result<VariantProviderOutput> {
         Ok(self.build().await?)
     }
 }
@@ -146,7 +146,7 @@ impl VariantBuild {
     }
 
     /// Run a variant provider to infer compatible variants.
-    pub async fn build(&self) -> Result<Vec<VariantKeyConfig>, Error> {
+    pub async fn build(&self) -> Result<VariantProviderOutput, Error> {
         // Write the hook output to a file so that we can read it back reliably.
         let outfile = self.temp_dir.path().join("output.json");
 
@@ -159,11 +159,12 @@ impl VariantBuild {
                 raise RuntimeError("Dynamic variant providers are not supported")
 
             configs = backend.get_supported_configs(None)
-            configs = [(config.name, config.values) for config in configs]
+            features = {{config.name: config.values for config in configs}}
+            output = {{"namespace": backend.namespace, "features": features}}
 
             with open("{}", "w") as fp:
                 import json
-                fp.write(json.dumps(configs))
+                fp.write(json.dumps(output))
             "#,
             self.backend.import(&self.backend_name),
             outfile.escape_for_python()
@@ -197,11 +198,11 @@ impl VariantBuild {
         let json = fs::read(&outfile).map_err(|err| {
             Error::CommandFailed(self.venv.python_executable().to_path_buf(), err)
         })?;
-        let config = serde_json::from_slice::<Vec<VariantKeyConfig>>(&json).map_err(|err| {
+        let output = serde_json::from_slice::<VariantProviderOutput>(&json).map_err(|err| {
             Error::CommandFailed(self.venv.python_executable().to_path_buf(), err.into())
         })?;
 
-        Ok(config)
+        Ok(output)
     }
 }
 

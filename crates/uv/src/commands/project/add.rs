@@ -421,12 +421,7 @@ pub(crate) async fn add(
                             .map(Index::url),
                     )
                     .await?;
-                FlatIndex::from_entries(
-                    entries,
-                    None,
-                    &hasher,
-                    &settings.resolver.build_options,
-                )
+                FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
             };
 
             // Create a build dispatch.

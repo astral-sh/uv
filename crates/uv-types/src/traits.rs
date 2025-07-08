@@ -16,7 +16,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
-use uv_variants::VariantKeyConfig;
+use uv_variants::VariantProviderOutput;
 use uv_workspace::WorkspaceCache;
 
 use crate::BuildArena;
@@ -184,7 +184,7 @@ pub trait SourceBuildTrait {
 }
 
 pub trait VariantsTrait {
-    fn query(&self) -> impl Future<Output = anyhow::Result<Vec<VariantKeyConfig>>>;
+    fn query(&self) -> impl Future<Output = anyhow::Result<VariantProviderOutput>>;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]

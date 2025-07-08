@@ -4745,7 +4745,6 @@ dependencies = [
  "uv-torch",
  "uv-trampoline-builder",
  "uv-types",
- "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",
@@ -5781,6 +5780,7 @@ dependencies = [
 name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "arcstr",
  "clap",
  "dashmap",
@@ -6035,7 +6035,6 @@ dependencies = [
  "uv-configuration",
  "uv-distribution-types",
  "uv-fs",
- "uv-pypi-types",
  "uv-python",
  "uv-static",
  "uv-types",
@@ -6048,12 +6047,12 @@ name = "uv-variants"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "indexmap",
  "indoc",
  "itertools 0.14.0",
  "rkyv",
  "rustc-hash",
  "serde",
- "serde_json",
  "sha3",
  "thiserror 2.0.12",
  "uv-pep508",

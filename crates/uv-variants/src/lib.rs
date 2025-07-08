@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
+use indexmap::IndexMap;
 use itertools::Itertools;
 use sha3::{
     Shake128,
@@ -45,6 +46,14 @@ impl std::fmt::Display for VariantTag {
 pub enum VariantError {
     #[error("Invalid priority: `{0}`")]
     InvalidPriority(usize, #[source] std::num::TryFromIntError),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize)]
+pub struct VariantProviderOutput {
+    /// The namespace of the provider.
+    pub namespace: String,
+    /// Features (in order) mapped to their properties (in order).
+    pub features: IndexMap<String, Vec<String>>,
 }
 
 /// In `variantlib`, this is called [`VariantKeyConfig`].

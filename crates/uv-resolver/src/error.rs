@@ -38,6 +38,9 @@ use crate::{InMemoryIndex, Options};
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
     #[error(transparent)]
+    VariantFrontend(anyhow::Error),
+
+    #[error(transparent)]
     Client(#[from] uv_client::Error),
 
     #[error(transparent)]

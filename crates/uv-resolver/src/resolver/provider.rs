@@ -104,7 +104,7 @@ pub trait ResolverProvider {
     fn variant_priorities<'io>(
         &'io self,
         variants_json: &'io RegistryVariantsJson,
-    ) -> impl Future<Output = ResolvedVariants> + 'io;
+    ) -> impl Future<Output = anyhow::Result<ResolvedVariants>> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -312,11 +312,8 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn variant_priorities<'io>(
         &'io self,
         variants_json: &'io RegistryVariantsJson,
-    ) -> ResolvedVariants {
-        self.fetcher
-            .fetch_variants(variants_json)
-            .await
-            .expect("TODO(konsti)")
+    ) -> anyhow::Result<ResolvedVariants> {
+        Ok(self.fetcher.fetch_variants(variants_json).await?)
     }
 
     /// Set the [`Reporter`] to use for this installer.
