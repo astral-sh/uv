@@ -176,10 +176,6 @@ impl UrlString {
     /// it's the only path segment, e.g., `https://example.com/` would be unchanged.
     #[must_use]
     pub fn without_trailing_slash(&self) -> Cow<'_, Self> {
-        if !self.as_ref().ends_with('/') {
-            return Cow::Borrowed(self);
-        }
-
         self.as_ref()
             .strip_suffix('/')
             .filter(|path| {
