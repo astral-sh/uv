@@ -1261,14 +1261,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let variant_prioritized_dist =
             self.variant_prioritized_dist(name, index, request_sink, &candidate)?;
-        let candidate = if let Some(variant_prioritized_dist) = &variant_prioritized_dist {
-            candidate.select_best_variant_wheel(variant_prioritized_dist)
-        } else {
-            if let CandidateDist::Compatible(dist) = candidate.dist() {
-                if dist
-                    .wheel()
-                    .is_some_and(|wheel| wheel.filename.variant().is_some())
+
+        let candidate = match &variant_prioritized_dist {
+            Some(variant_prioritized_dist) => {
+                candidate.select_best_variant_wheel(variant_prioritized_dist)
+            }
+            None => candidate,
+        };
+
+        let dist = match candidate.dist() {
+            CandidateDist::Compatible(dist) => {
+                if variant_prioritized_dist.is_none()
+                    && dist
+                        .wheel()
+                        .is_some_and(|wheel| wheel.filename.variant().is_some())
                 {
+                    // If no variant prioritized distribution but this is a variant wheel, it's incompatible
                     // TODO(konsti): List the existing variants?
                     return Ok(Some(ResolverVersion::Unavailable(
                         candidate.version().clone(),
@@ -1277,14 +1285,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         )),
                     )));
                 }
+                dist
             }
-            candidate
-        };
-
-        let dist = match candidate.dist() {
-            CandidateDist::Compatible(dist) => dist,
             CandidateDist::Incompatible(incompatibility) => {
-                // If the version is incompatible because no distributions are compatible, exit early.
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
                     // TODO(charlie): We can avoid this clone; the candidate is dropped here and
