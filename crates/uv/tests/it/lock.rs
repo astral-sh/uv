@@ -12041,7 +12041,7 @@ fn lock_remove_member() -> Result<()> {
         [[package]]
         name = "leaf"
         version = "0.1.0"
-        source = { virtual = "leaf" }
+        source = { editable = "leaf" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12058,7 +12058,7 @@ fn lock_remove_member() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "leaf", virtual = "leaf" }]
+        requires-dist = [{ name = "leaf", editable = "leaf" }]
 
         [[package]]
         name = "sniffio"

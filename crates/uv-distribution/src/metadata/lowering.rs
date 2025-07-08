@@ -306,7 +306,9 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member.pyproject_toml().is_package() {
+                            // Workspace member sources should be built by default unless they are explicitly marked
+                            // as `tool.uv.package = false`.
+                            } else if member.pyproject_toml().tool_uv_package().unwrap_or(true) {
                                 RequirementSource::Directory {
                                     install_path: install_path.into_boxed_path(),
                                     url,
