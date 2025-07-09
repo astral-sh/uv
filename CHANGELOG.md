@@ -19,6 +19,7 @@ See the [PyPy](https://pypy.org/posts/2025/07/pypy-v7320-release.html) and [`pyt
 - Add auto-detection for Intel GPUs ([#14386](https://github.com/astral-sh/uv/pull/14386))
 - Drop trailing arguments when writing shebangs ([#14519](https://github.com/astral-sh/uv/pull/14519))
 - Add debug message when skipping Python downloads ([#14509](https://github.com/astral-sh/uv/pull/14509))
+- Add support for declaring multiple modules in namespace packages ([#14460](https://github.com/astral-sh/uv/pull/14460))
 
 ### Bug fixes
 
