@@ -24,11 +24,14 @@ use uv_distribution_types::{
     IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_fs::CWD;
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
+use uv_python::PythonVersionFile;
+use uv_python::VersionFileDiscoveryOptions;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
@@ -733,6 +736,23 @@ async fn get_or_create_environment(
             }
         }
         ToolRequest::Package { .. } => python.map(PythonRequest::parse),
+    };
+
+    // Discover a global Python version pin, if no request was made.
+    let python_request = if python_request.is_none() {
+        PythonVersionFile::discover(
+            // TODO(zanieb): We don't use the directory, should we expose another interface?
+            // Should `no_local` be implied by `None` here?
+            &*CWD,
+            &VersionFileDiscoveryOptions::default()
+                // TODO(zanieb): Propagate `no_config` from the global options to here
+                .with_no_config(false)
+                .with_no_local(true),
+        )
+        .await?
+        .and_then(PythonVersionFile::into_version)
+    } else {
+        python_request
     };
 
     // Discover an interpreter.
