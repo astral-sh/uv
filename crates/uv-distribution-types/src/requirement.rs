@@ -70,7 +70,7 @@ impl Requirement {
     /// expressions based on the environment to `true`. That is, this provides
     /// environment independent marker evaluation.
     pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
-        self.marker.evaluate_optional_environment(env, extras)
+        self.marker.evaluate_optional_environment(env, None, extras)
     }
 
     /// Returns `true` if the requirement is editable.

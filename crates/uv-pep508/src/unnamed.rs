@@ -92,7 +92,7 @@ impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
         env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
     ) -> bool {
-        self.marker.evaluate_optional_environment(env, extras)
+        self.marker.evaluate_optional_environment(env, None, extras)
     }
 
     /// Set the source file containing the requirement.

@@ -402,7 +402,7 @@ impl NoSolutionError {
                 ":".bold(),
                 current_python_version,
             )?;
-        } else if !markers.evaluate(&self.current_environment, &[]) {
+        } else if !markers.evaluate(&self.current_environment, None, &[]) {
             write!(
                 f,
                 "\n\n{}{} The resolution failed for an environment that is not the current one, \

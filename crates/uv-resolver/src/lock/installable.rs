@@ -207,7 +207,7 @@ pub trait Installable<'lock> {
         // Add any requirements that are exclusive to the workspace root (e.g., dependencies in
         // PEP 723 scripts).
         for dependency in self.lock().requirements() {
-            if !dependency.marker.evaluate(marker_env, &[]) {
+            if !dependency.marker.evaluate(marker_env, None, &[]) {
                 continue;
             }
 
@@ -259,7 +259,7 @@ pub trait Installable<'lock> {
             })
             .flatten()
         {
-            if !dependency.marker.evaluate(marker_env, &[]) {
+            if !dependency.marker.evaluate(marker_env, None, &[]) {
                 continue;
             }
 
