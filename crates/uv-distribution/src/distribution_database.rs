@@ -20,8 +20,7 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, InstalledDist, Name,
-    SourceDist,
+    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, InstalledDist, Name, SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;

@@ -21,8 +21,8 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;

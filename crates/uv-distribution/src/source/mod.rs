@@ -32,8 +32,8 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed,
-    PathSourceUrl, SourceDist, SourceUrl,
+    BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, PathSourceUrl,
+    SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
