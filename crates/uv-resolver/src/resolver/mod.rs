@@ -1439,7 +1439,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             'compatibility: for (namespace, features) in variants_properties {
                 for (feature, properties) in features {
                     let Some(resolved_properties) = resolved_variants
-                        .resolved_priorities
+                        .target_variants
                         .get(namespace)
                         .and_then(|namespace| namespace.features.get(feature))
                     else {
@@ -1459,36 +1459,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 continue;
             }
 
-            // TODO(konsti): Implement the actual priority scoring.
             // TODO(konsti): This is performance sensitive
+            let default_priorities = &resolved_variants.variants_json.default_priorities;
             let mut scores = Vec::new();
-            for namespace in &resolved_variants.variants_json.default_priorities.namespace {
+            for namespace in &default_priorities.namespace {
                 // Explicit priorities are optional, but take priority over the provider
-                let explicit_feature_priorities = resolved_variants
-                    .variants_json
-                    .default_priorities
-                    .feature
-                    .get(namespace);
-                let Some(resolved_features_priorities) =
-                    resolved_variants.resolved_priorities.get(namespace)
-                else {
+                let explicit_feature_priorities = default_priorities.feature.get(namespace);
+                let Some(target_variants) = resolved_variants.target_variants.get(namespace) else {
                     // TODO(konsti): Can this even happen?
                     continue;
                 };
                 let feature_priorities = explicit_feature_priorities.into_iter().flatten().chain(
-                    resolved_features_priorities
-                        .features
-                        .keys()
-                        .filter(|priority| {
-                            explicit_feature_priorities
-                                .is_none_or(|explicit| !explicit.contains(priority))
-                        }),
+                    target_variants.features.keys().filter(|priority| {
+                        explicit_feature_priorities
+                            .is_none_or(|explicit| !explicit.contains(priority))
+                    }),
                 );
 
                 for feature in feature_priorities {
-                    let Some(property_order) = resolved_variants
-                        .variants_json
-                        .default_priorities
+                    let Some(property_order) = default_priorities
                         .property
                         .get(namespace)
                         .and_then(|namespace_features| namespace_features.get(feature))
@@ -1504,7 +1493,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         continue;
                     };
 
-                    // Give a higher score to earlier entries
+                    // Determine the highest scoring property
+                    // Reversed to give a higher score to earlier entries
                     let score = property_order.len()
                         - property_order
                             .iter()

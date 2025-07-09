@@ -613,7 +613,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         Ok(ResolvedVariants {
             variants_json,
-            resolved_priorities,
+            target_variants: resolved_priorities,
         })
     }
 

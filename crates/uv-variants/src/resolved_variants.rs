@@ -5,5 +5,5 @@ use rustc_hash::FxHashMap;
 #[derive(Debug)]
 pub struct ResolvedVariants {
     pub variants_json: VariantsJsonContent,
-    pub resolved_priorities: FxHashMap<VariantNamespace, VariantProviderOutput>,
+    pub target_variants: FxHashMap<VariantNamespace, VariantProviderOutput>,
 }
