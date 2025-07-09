@@ -594,12 +594,11 @@ impl VersionMapLazy {
             None
         };
 
-        // TODO(konsti): For now, we always want to prefer non-variants over variants.
-        // TODO(konsti): 00000 variant
+        // TODO(konsti): Currently we ignore variants here on only determine them later
         let variant_priority = if filename.variant().is_none() {
-            VariantPriority::try_from(2).unwrap()
+            VariantPriority::NoVariant
         } else {
-            VariantPriority::try_from(1).unwrap()
+            VariantPriority::Variant
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
