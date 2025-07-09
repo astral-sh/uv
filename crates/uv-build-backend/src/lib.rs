@@ -577,31 +577,7 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
         ");
-        assert_snapshot!(build.source_dist_contents.iter().join("\n"), @r"
-        built_by_uv-0.1.0/
-        built_by_uv-0.1.0/LICENSE-APACHE
-        built_by_uv-0.1.0/LICENSE-MIT
-        built_by_uv-0.1.0/PKG-INFO
-        built_by_uv-0.1.0/README.md
-        built_by_uv-0.1.0/assets
-        built_by_uv-0.1.0/assets/data.csv
-        built_by_uv-0.1.0/header
-        built_by_uv-0.1.0/header/built_by_uv.h
-        built_by_uv-0.1.0/pyproject.toml
-        built_by_uv-0.1.0/scripts
-        built_by_uv-0.1.0/scripts/whoami.sh
-        built_by_uv-0.1.0/src
-        built_by_uv-0.1.0/src/built_by_uv
-        built_by_uv-0.1.0/src/built_by_uv/__init__.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
-        built_by_uv-0.1.0/src/built_by_uv/build-only.h
-        built_by_uv-0.1.0/src/built_by_uv/cli.py
-        built_by_uv-0.1.0/third-party-licenses
-        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
-        ");
+        assert_snapshot!(build.source_dist_contents.iter().join("\n"), @"f9b83f377ca7595f1badd5c53933326f7f91be0e3962f7533b604dc4755a82db");
 
         let wheel_path = dist.path().join(build.wheel_filename.to_string());
         assert_eq!(
