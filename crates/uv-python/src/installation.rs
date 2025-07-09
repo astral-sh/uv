@@ -112,7 +112,7 @@ impl PythonInstallation {
             && client_builder.connectivity.is_online();
 
         if !downloads_enabled {
-            debug!("Downloads disabled. Skipping...");
+            debug!("Python downloads are disabled. Skipping check for available downloads...");
             return Err(err);
         }
 
