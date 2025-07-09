@@ -651,7 +651,7 @@ pub(super) async fn do_sync(
     if !environments.is_empty() {
         if !environments
             .iter()
-            .any(|env| env.evaluate(&marker_env, &[]))
+            .any(|env| env.evaluate(&marker_env, None, &[]))
         {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 // For error reporting, we use the "simplified"

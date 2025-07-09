@@ -119,6 +119,27 @@ impl Display for MarkerValueString {
     }
 }
 
+/// Those environment markers selecting for variant as value such as `variant_properties`
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum MarkerValueVariant {
+    /// `variant_namespaces`
+    VariantNamespaces,
+    /// `variant_properties`
+    VariantProperties,
+    /// `variant_features`
+    VariantFeatures,
+}
+
+impl Display for MarkerValueVariant {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::VariantNamespaces => f.write_str("variant_namespaces"),
+            Self::VariantProperties => f.write_str("variant_properties"),
+            Self::VariantFeatures => f.write_str("variant_features"),
+        }
+    }
+}
+
 /// One of the predefined environment values
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
@@ -128,6 +149,8 @@ pub enum MarkerValue {
     MarkerEnvVersion(MarkerValueVersion),
     /// Those environment markers with an arbitrary string as value such as `sys_platform`
     MarkerEnvString(MarkerValueString),
+    /// Those environment markers selecting for variant as value such as `variant_properties`
+    MarkerEnvVariant(MarkerValueVariant),
     /// `extra`. This one is special because it's a list and not env but user given
     Extra,
     /// Not a constant, but a user given quoted string with a value inside such as '3.8' or "windows"
@@ -169,6 +192,9 @@ impl FromStr for MarkerValue {
             "python_version" => Self::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
             "sys_platform" => Self::MarkerEnvString(MarkerValueString::SysPlatform),
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
+            "variant_namespaces" => Self::MarkerEnvVariant(MarkerValueVariant::VariantNamespaces),
+            "variant_features" => Self::MarkerEnvVariant(MarkerValueVariant::VariantFeatures),
+            "variant_properties" => Self::MarkerEnvVariant(MarkerValueVariant::VariantProperties),
             "extra" => Self::Extra,
             _ => return Err(format!("Invalid key: {s}")),
         };
@@ -181,6 +207,7 @@ impl Display for MarkerValue {
         match self {
             Self::MarkerEnvVersion(marker_value_version) => marker_value_version.fmt(f),
             Self::MarkerEnvString(marker_value_string) => marker_value_string.fmt(f),
+            Self::MarkerEnvVariant(marker_value_variant) => marker_value_variant.fmt(f),
             Self::Extra => f.write_str("extra"),
             Self::QuotedString(value) => write!(f, "'{value}'"),
         }
@@ -502,6 +529,12 @@ pub enum MarkerExpression {
         operator: MarkerOperator,
         value: ArcStr,
     },
+    /// A variant expression, e.g. `'gpu :: cuda :: cu128' in variant_properties`.
+    Variant {
+        key: MarkerValueVariant,
+        value: ArcStr,
+        negated: bool,
+    },
     /// `extra <extra op> '...'` or `'...' <extra op> extra`.
     Extra {
         operator: ExtraOperator,
@@ -518,6 +551,8 @@ pub(crate) enum MarkerExpressionKind {
     VersionIn(MarkerValueVersion),
     /// A string marker comparison, e.g. `sys_platform == '...'`.
     String(MarkerValueString),
+    /// A variant expression, e.g. `'gpu :: cuda :: cu128' in variant_properties`.
+    Variant(MarkerValueVariant),
     /// An extra expression, e.g. `extra == '...'`.
     Extra,
 }
@@ -599,6 +634,7 @@ impl MarkerExpression {
             MarkerExpression::Version { key, .. } => MarkerExpressionKind::Version(*key),
             MarkerExpression::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
             MarkerExpression::String { key, .. } => MarkerExpressionKind::String(*key),
+            MarkerExpression::Variant { key, .. } => MarkerExpressionKind::Variant(*key),
             MarkerExpression::Extra { .. } => MarkerExpressionKind::Extra,
         }
     }
@@ -637,6 +673,14 @@ impl Display for MarkerExpression {
                 }
 
                 write!(f, "{key} {operator} '{value}'")
+            }
+            MarkerExpression::Variant {
+                key,
+                value,
+                negated,
+            } => {
+                let op = if *negated { "not in" } else { "in" };
+                write!(f, "'{value}' {op} {key}")
             }
             MarkerExpression::Extra { operator, name } => {
                 write!(f, "extra {operator} '{name}'")
@@ -852,6 +896,17 @@ impl MarkerTree {
                     low: low.negate(self.0),
                 })
             }
+            Variable::Variant { key, value } => {
+                let Edges::Boolean { low, high } = node.children else {
+                    unreachable!()
+                };
+                MarkerTreeKind::Variant(VariantMarkerTree {
+                    key,
+                    value,
+                    high: high.negate(self.0),
+                    low: low.negate(self.0),
+                })
+            }
             Variable::Extra(name) => {
                 let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
@@ -871,8 +926,13 @@ impl MarkerTree {
     }
 
     /// Does this marker apply in the given environment?
-    pub fn evaluate(self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        self.evaluate_reporter_impl(env, extras, &mut TracingReporter)
+    pub fn evaluate(
+        self,
+        env: &MarkerEnvironment,
+        variants: Option<&[(String, String, String)]>,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.evaluate_reporter_impl(env, extras, variants, &mut TracingReporter)
     }
 
     /// Evaluates this marker tree against an optional environment and a
@@ -885,11 +945,12 @@ impl MarkerTree {
     pub fn evaluate_optional_environment(
         self,
         env: Option<&MarkerEnvironment>,
+        variants: Option<&[(String, String, String)]>,
         extras: &[ExtraName],
     ) -> bool {
         match env {
             None => self.evaluate_extras(extras),
-            Some(env) => self.evaluate_reporter_impl(env, extras, &mut TracingReporter),
+            Some(env) => self.evaluate_reporter_impl(env, extras, variants, &mut TracingReporter),
         }
     }
 
@@ -899,15 +960,17 @@ impl MarkerTree {
         self,
         env: &MarkerEnvironment,
         extras: &[ExtraName],
+        variants: Option<&[(String, String, String)]>,
         reporter: &mut impl Reporter,
     ) -> bool {
-        self.evaluate_reporter_impl(env, extras, reporter)
+        self.evaluate_reporter_impl(env, extras, variants, reporter)
     }
 
     fn evaluate_reporter_impl(
         self,
         env: &MarkerEnvironment,
         extras: &[ExtraName],
+        variants: Option<&[(String, String, String)]>,
         reporter: &mut impl Reporter,
     ) -> bool {
         match self.kind() {
@@ -916,7 +979,7 @@ impl MarkerTree {
             MarkerTreeKind::Version(marker) => {
                 for (range, tree) in marker.edges() {
                     if range.contains(env.get_version(marker.key())) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                        return tree.evaluate_reporter_impl(env, extras, variants, reporter);
                     }
                 }
             }
@@ -943,24 +1006,68 @@ impl MarkerTree {
                     }
 
                     if range.contains(l_string) {
-                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                        return tree.evaluate_reporter_impl(env, extras, variants, reporter);
                     }
                 }
             }
             MarkerTreeKind::In(marker) => {
                 return marker
                     .edge(marker.value().contains(env.get_string(marker.key())))
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .evaluate_reporter_impl(env, extras, variants, reporter);
             }
             MarkerTreeKind::Contains(marker) => {
                 return marker
                     .edge(env.get_string(marker.key()).contains(marker.value()))
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .evaluate_reporter_impl(env, extras, variants, reporter);
+            }
+            MarkerTreeKind::Variant(marker) => {
+                let Some(variants) = variants else {
+                    // If we're not limiting to specific variants, we're solving universally.
+                    return true;
+                };
+
+                let edge = match marker.key() {
+                    MarkerValueVariant::VariantNamespaces => variants
+                        .iter()
+                        .any(|(namespace, _feature, _property)| namespace == marker.value.trim()),
+                    MarkerValueVariant::VariantProperties => marker
+                        .value
+                        .split_once("::")
+                        .is_some_and(|(value_namespace, value_feature)| {
+                            variants.iter().any(|(namespace, feature, _property)| {
+                                namespace == value_namespace.trim()
+                                    && feature == value_feature.trim()
+                            })
+                        }),
+                    MarkerValueVariant::VariantFeatures => marker
+                        .value
+                        .split_once("::")
+                        .and_then(|(value_namespace, value_feature_property)| {
+                            let (value_feature, value_property) =
+                                value_feature_property.split_once("::")?;
+                            Some((value_namespace, value_feature, value_property))
+                        })
+                        .is_some_and(|(value_namespace, value_feature, value_property)| {
+                            variants.iter().any(|(namespace, feature, property)| {
+                                namespace == value_namespace.trim()
+                                    && feature == value_feature.trim()
+                                    && property == value_property.trim()
+                            })
+                        }),
+                };
+
+                // TODO(konsti): Why do we need to negate the edge here?
+                return marker.edge(!edge).evaluate_reporter_impl(
+                    env,
+                    extras,
+                    Some(variants),
+                    reporter,
+                );
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
                     .edge(extras.contains(marker.name().extra()))
-                    .evaluate_reporter_impl(env, extras, reporter);
+                    .evaluate_reporter_impl(env, extras, variants, reporter);
             }
         }
 
@@ -984,6 +1091,9 @@ impl MarkerTree {
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::Contains(marker) => marker
+                .children()
+                .any(|(_, tree)| tree.evaluate_extras(extras)),
+            MarkerTreeKind::Variant(marker) => marker
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::Extra(marker) => marker
@@ -1216,6 +1326,11 @@ impl MarkerTree {
                         imp(tree, f);
                     }
                 }
+                MarkerTreeKind::Variant(kind) => {
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
                 MarkerTreeKind::Extra(kind) => {
                     if kind.low.is_false() {
                         f(MarkerOperator::Equal, kind.name().extra());
@@ -1333,6 +1448,21 @@ impl MarkerTree {
                 write!(f, "{} not in {} -> ", kind.value(), kind.key())?;
                 kind.edge(false).fmt_graph(f, level + 1)?;
             }
+            MarkerTreeKind::Variant(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in {} -> ", kind.value(), kind.key())?;
+                kind.edge(true).fmt_graph(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} not in {} -> ", kind.value(), kind.key())?;
+                kind.edge(false).fmt_graph(f, level + 1)?;
+            }
             MarkerTreeKind::Extra(kind) => {
                 writeln!(f)?;
                 for _ in 0..level {
@@ -1417,7 +1547,9 @@ pub enum MarkerTreeKind<'a> {
     In(InMarkerTree<'a>),
     /// A string expression with the `contains` operator.
     Contains(ContainsMarkerTree<'a>),
-    /// A string expression.
+    /// A variant expression.
+    Variant(VariantMarkerTree<'a>),
+    /// An extra expression.
     Extra(ExtraMarkerTree<'a>),
 }
 
@@ -1588,6 +1720,56 @@ impl Ord for ContainsMarkerTree<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
             .cmp(&other.key())
+            .then_with(|| self.value().cmp(other.value()))
+            .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct VariantMarkerTree<'a> {
+    // No separate canonical type, the type is already canonical.
+    key: &'a MarkerValueVariant,
+    value: &'a ArcStr,
+    high: NodeId,
+    low: NodeId,
+}
+
+impl VariantMarkerTree<'_> {
+    /// The key (RHS) for this node.
+    pub fn key(&self) -> &MarkerValueVariant {
+        self.key
+    }
+
+    /// The value (LHS) for this node.
+    pub fn value(&self) -> &ArcStr {
+        self.value
+    }
+
+    /// The edges of this node, corresponding to the boolean evaluation of the expression.
+    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+        [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
+    }
+
+    /// Returns the subtree associated with the given edge value.
+    pub fn edge(&self, value: bool) -> MarkerTree {
+        if value {
+            MarkerTree(self.high)
+        } else {
+            MarkerTree(self.low)
+        }
+    }
+}
+
+impl PartialOrd for VariantMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for VariantMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key()
+            .cmp(other.key())
             .then_with(|| self.value().cmp(other.value()))
             .then_with(|| self.children().cmp(other.children()))
     }
@@ -1887,12 +2069,12 @@ mod test {
         let marker3 = MarkerTree::from_str(
             "python_version == \"2.7\" and (sys_platform == \"win32\" or sys_platform == \"linux\")",
         ).unwrap();
-        assert!(marker1.evaluate(&env27, &[]));
-        assert!(!marker1.evaluate(&env37, &[]));
-        assert!(marker2.evaluate(&env27, &[]));
-        assert!(marker2.evaluate(&env37, &[]));
-        assert!(marker3.evaluate(&env27, &[]));
-        assert!(!marker3.evaluate(&env37, &[]));
+        assert!(marker1.evaluate(&env27, None, &[]));
+        assert!(!marker1.evaluate(&env37, None, &[]));
+        assert!(marker2.evaluate(&env27, None, &[]));
+        assert!(marker2.evaluate(&env37, None, &[]));
+        assert!(marker3.evaluate(&env27, None, &[]));
+        assert!(!marker3.evaluate(&env37, None, &[]));
     }
 
     #[test]
@@ -1914,48 +2096,48 @@ mod test {
         let env37 = env37();
 
         let marker = MarkerTree::from_str("python_version in \"2.7 3.2 3.3\"").unwrap();
-        assert!(marker.evaluate(&env27, &[]));
-        assert!(!marker.evaluate(&env37, &[]));
+        assert!(marker.evaluate(&env27, None, &[]));
+        assert!(!marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("python_version in \"2.7 3.7\"").unwrap();
-        assert!(marker.evaluate(&env27, &[]));
-        assert!(marker.evaluate(&env37, &[]));
+        assert!(marker.evaluate(&env27, None, &[]));
+        assert!(marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("python_version in \"2.4 3.8 4.0\"").unwrap();
-        assert!(!marker.evaluate(&env27, &[]));
-        assert!(!marker.evaluate(&env37, &[]));
+        assert!(!marker.evaluate(&env27, None, &[]));
+        assert!(!marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("python_version not in \"2.7 3.2 3.3\"").unwrap();
-        assert!(!marker.evaluate(&env27, &[]));
-        assert!(marker.evaluate(&env37, &[]));
+        assert!(!marker.evaluate(&env27, None, &[]));
+        assert!(marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("python_version not in \"2.7 3.7\"").unwrap();
-        assert!(!marker.evaluate(&env27, &[]));
-        assert!(!marker.evaluate(&env37, &[]));
+        assert!(!marker.evaluate(&env27, None, &[]));
+        assert!(!marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("python_version not in \"2.4 3.8 4.0\"").unwrap();
-        assert!(marker.evaluate(&env27, &[]));
-        assert!(marker.evaluate(&env37, &[]));
+        assert!(marker.evaluate(&env27, None, &[]));
+        assert!(marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("python_full_version in \"2.7\"").unwrap();
-        assert!(marker.evaluate(&env27, &[]));
-        assert!(!marker.evaluate(&env37, &[]));
+        assert!(marker.evaluate(&env27, None, &[]));
+        assert!(!marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("implementation_version in \"2.7 3.2 3.3\"").unwrap();
-        assert!(marker.evaluate(&env27, &[]));
-        assert!(!marker.evaluate(&env37, &[]));
+        assert!(marker.evaluate(&env27, None, &[]));
+        assert!(!marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("implementation_version in \"2.7 3.7\"").unwrap();
-        assert!(marker.evaluate(&env27, &[]));
-        assert!(marker.evaluate(&env37, &[]));
+        assert!(marker.evaluate(&env27, None, &[]));
+        assert!(marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("implementation_version not in \"2.7 3.7\"").unwrap();
-        assert!(!marker.evaluate(&env27, &[]));
-        assert!(!marker.evaluate(&env37, &[]));
+        assert!(!marker.evaluate(&env27, None, &[]));
+        assert!(!marker.evaluate(&env37, None, &[]));
 
         let marker = MarkerTree::from_str("implementation_version not in \"2.4 3.8 4.0\"").unwrap();
-        assert!(marker.evaluate(&env27, &[]));
-        assert!(marker.evaluate(&env37, &[]));
+        assert!(marker.evaluate(&env27, None, &[]));
+        assert!(marker.evaluate(&env37, None, &[]));
     }
 
     #[test]
@@ -1964,7 +2146,7 @@ mod test {
     fn warnings1() {
         let env37 = env37();
         let compare_keys = MarkerTree::from_str("platform_version == sys_platform").unwrap();
-        compare_keys.evaluate(&env37, &[]);
+        compare_keys.evaluate(&env37, None, &[]);
         logs_contain(
             "Comparing two markers with each other doesn't make any sense, will evaluate to false",
         );
@@ -1976,7 +2158,7 @@ mod test {
     fn warnings2() {
         let env37 = env37();
         let non_pep440 = MarkerTree::from_str("python_version >= '3.9.'").unwrap();
-        non_pep440.evaluate(&env37, &[]);
+        non_pep440.evaluate(&env37, None, &[]);
         logs_contain(
             "Expected PEP 440 version to compare with python_version, found `3.9.`, \
              will evaluate to false: after parsing `3.9`, found `.`, which is \
@@ -1990,7 +2172,7 @@ mod test {
     fn warnings3() {
         let env37 = env37();
         let string_string = MarkerTree::from_str("'b' >= 'a'").unwrap();
-        string_string.evaluate(&env37, &[]);
+        string_string.evaluate(&env37, None, &[]);
         logs_contain(
             "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false",
         );
@@ -2002,7 +2184,7 @@ mod test {
     fn warnings4() {
         let env37 = env37();
         let string_string = MarkerTree::from_str(r"os.name == 'posix' and platform.machine == 'x86_64' and platform.python_implementation == 'CPython' and 'Ubuntu' in platform.version and sys.platform == 'linux'").unwrap();
-        string_string.evaluate(&env37, &[]);
+        string_string.evaluate(&env37, None, &[]);
         logs_assert(|lines: &[&str]| {
             let lines: Vec<_> = lines
                 .iter()
@@ -2034,18 +2216,18 @@ mod test {
         let env37 = env37();
         let result = MarkerTree::from_str("python_version > '3.6'")
             .unwrap()
-            .evaluate(&env37, &[]);
+            .evaluate(&env37, None, &[]);
         assert!(result);
 
         let result = MarkerTree::from_str("'3.6' > python_version")
             .unwrap()
-            .evaluate(&env37, &[]);
+            .evaluate(&env37, None, &[]);
         assert!(!result);
 
         // Meaningless expressions are ignored, so this is always true.
         let result = MarkerTree::from_str("'3.*' == python_version")
             .unwrap()
-            .evaluate(&env37, &[]);
+            .evaluate(&env37, None, &[]);
         assert!(result);
     }
 
@@ -2054,12 +2236,12 @@ mod test {
         let env37 = env37();
         let result = MarkerTree::from_str("'nux' in sys_platform")
             .unwrap()
-            .evaluate(&env37, &[]);
+            .evaluate(&env37, None, &[]);
         assert!(result);
 
         let result = MarkerTree::from_str("sys_platform in 'nux'")
             .unwrap()
-            .evaluate(&env37, &[]);
+            .evaluate(&env37, None, &[]);
         assert!(!result);
     }
 
@@ -2068,7 +2250,7 @@ mod test {
         let env37 = env37();
         let result = MarkerTree::from_str("python_version == '3.7.*'")
             .unwrap()
-            .evaluate(&env37, &[]);
+            .evaluate(&env37, None, &[]);
         assert!(result);
     }
 
@@ -2077,7 +2259,7 @@ mod test {
         let env37 = env37();
         let result = MarkerTree::from_str("python_version ~= '3.7'")
             .unwrap()
-            .evaluate(&env37, &[]);
+            .evaluate(&env37, None, &[]);
         assert!(result);
     }
 
@@ -3422,5 +3604,72 @@ mod test {
         let left = left_tree.try_to_string().unwrap();
         let right = "python_full_version == '3.10.*'";
         assert_eq!(left, right, "{left} != {right}");
+    }
+
+    #[test]
+    fn test_marker_evaluation_variants() {
+        let env37 = env37();
+        let gpu_namespaces = [("gpu".to_string(), "cuda".to_string(), "12.4".to_string())];
+        let cpu_namespaces = [("cpu".to_string(), String::new(), String::new())];
+
+        // namespace variant markers
+        let marker1 = m("'gpu' in variant_namespaces");
+        let marker2 = m("'gpu' not in variant_namespaces");
+
+        // If no variants are provided, we solve universally.
+        assert!(marker1.evaluate(&env37, None, &[]));
+        assert!(marker2.evaluate(&env37, None, &[]));
+
+        assert!(marker1.evaluate(&env37, Some(&gpu_namespaces), &[]));
+        assert!(!marker1.evaluate(&env37, Some(&cpu_namespaces), &[]));
+        assert!(!marker2.evaluate(&env37, Some(&gpu_namespaces), &[]));
+        assert!(marker2.evaluate(&env37, Some(&cpu_namespaces), &[]));
+
+        // property variant markers
+        let marker3 = m("'gpu :: cuda' in variant_properties");
+        let marker4 = m("'gpu :: rocm' in variant_properties");
+
+        assert!(marker3.evaluate(&env37, None, &[]));
+        assert!(marker4.evaluate(&env37, None, &[]));
+
+        assert!(marker3.evaluate(&env37, Some(&gpu_namespaces), &[]));
+        assert!(!marker3.evaluate(&env37, Some(&cpu_namespaces), &[]));
+        assert!(!marker4.evaluate(&env37, Some(&gpu_namespaces), &[]));
+        assert!(!marker4.evaluate(&env37, Some(&cpu_namespaces), &[]));
+
+        // feature variant markers
+        let marker5 = m("'gpu :: cuda :: 12.4' in variant_features");
+        let marker6 = m("'gpu :: cuda :: 12.8' in variant_features");
+
+        assert!(marker5.evaluate(&env37, None, &[]));
+        assert!(marker6.evaluate(&env37, None, &[]));
+
+        assert!(marker5.evaluate(&env37, Some(&gpu_namespaces), &[]));
+        assert!(!marker5.evaluate(&env37, Some(&cpu_namespaces), &[]));
+        assert!(!marker6.evaluate(&env37, Some(&gpu_namespaces), &[]));
+        assert!(!marker6.evaluate(&env37, Some(&cpu_namespaces), &[]));
+    }
+
+    #[test]
+    fn test_marker_evaluation_variants_combined() {
+        let env37 = env37();
+        let namespaces = [
+            ("gpu".to_string(), "cuda".to_string(), "12.4".to_string()),
+            ("gpu".to_string(), "cuda".to_string(), "12.6".to_string()),
+            ("cpu".to_string(), "x86_64".to_string(), "v1".to_string()),
+            ("cpu".to_string(), "x86_64".to_string(), "v2".to_string()),
+            ("cpu".to_string(), "x86_64".to_string(), "v3".to_string()),
+        ];
+
+        let marker1 = m("'gpu' in variant_namespaces \
+            and 'cpu:: x86_64      :: v3' in variant_features \
+            and python_version >= '3.7' \
+            and 'gpu :: rocm' not in variant_properties");
+        assert!(marker1.evaluate(&env37, None, &[]));
+        assert!(marker1.evaluate(&env37, Some(&namespaces), &[]));
+
+        let marker2 = m("python_version >= '3.7' and 'gpu' not in variant_namespaces");
+        assert!(marker2.evaluate(&env37, None, &[]));
+        assert!(!marker2.evaluate(&env37, Some(&namespaces), &[]));
     }
 }

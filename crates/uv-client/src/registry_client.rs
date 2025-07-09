@@ -21,8 +21,9 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
+    BuiltDist, File, IndexCapabilities, IndexEntryFilename, IndexFormat, IndexLocations,
     IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    VariantsJson,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -682,30 +683,14 @@ impl RegistryClient {
 
                 let wheel = wheels.best_wheel();
 
-                let location = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        let url = uv_pypi_types::base_url_join_relative(base, url)
-                            .map_err(ErrorKind::JoinRelativeUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
-                    FileLocation::AbsoluteUrl(url) => {
-                        let url = url.to_url().map_err(ErrorKind::InvalidUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
+                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let location = if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+                    WheelLocation::Path(path)
+                } else {
+                    WheelLocation::Url(url)
                 };
 
                 match location {
@@ -1050,19 +1035,28 @@ impl FlatIndexCache {
 pub struct VersionFiles {
     pub wheels: Vec<VersionWheel>,
     pub source_dists: Vec<VersionSourceDist>,
+    pub variant_jsons: Vec<VersionVariantJson>,
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: DistFilename, file: File) {
+    fn push(&mut self, filename: IndexEntryFilename, file: File) {
         match filename {
-            DistFilename::WheelFilename(name) => self.wheels.push(VersionWheel { name, file }),
-            DistFilename::SourceDistFilename(name) => {
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(name)) => {
+                self.wheels.push(VersionWheel { name, file });
+            }
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(name)) => {
                 self.source_dists.push(VersionSourceDist { name, file });
+            }
+            IndexEntryFilename::VariantJson(variants_json) => {
+                self.variant_jsons.push(VersionVariantJson {
+                    name: variants_json,
+                    file,
+                });
             }
         }
     }
 
-    pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
+    pub fn dists(self) -> impl Iterator<Item = (DistFilename, File)> {
         self.source_dists
             .into_iter()
             .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
@@ -1070,6 +1064,30 @@ impl VersionFiles {
                 self.wheels
                     .into_iter()
                     .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file)),
+            )
+    }
+
+    pub fn all(self) -> impl Iterator<Item = (IndexEntryFilename, File)> {
+        self.source_dists
+            .into_iter()
+            .map(|VersionSourceDist { name, file }| {
+                (
+                    IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(name)),
+                    file,
+                )
+            })
+            .chain(self.wheels.into_iter().map(|VersionWheel { name, file }| {
+                (
+                    IndexEntryFilename::DistFilename(DistFilename::WheelFilename(name)),
+                    file,
+                )
+            }))
+            .chain(
+                self.variant_jsons
+                    .into_iter()
+                    .map(|VersionVariantJson { name, file }| {
+                        (IndexEntryFilename::VariantJson(name), file)
+                    }),
             )
     }
 }
@@ -1085,6 +1103,13 @@ pub struct VersionWheel {
 #[rkyv(derive(Debug))]
 pub struct VersionSourceDist {
     pub name: SourceDistFilename,
+    pub file: File,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+pub struct VersionVariantJson {
+    pub name: VariantsJson,
     pub file: File,
 }
 
@@ -1112,14 +1137,11 @@ impl SimpleMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
+            let Some(filename) =
+                IndexEntryFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
-            };
-            let version = match filename {
-                DistFilename::SourceDistFilename(ref inner) => &inner.version,
-                DistFilename::WheelFilename(ref inner) => &inner.version,
             };
             let file = match File::try_from(file, &base) {
                 Ok(file) => file,
@@ -1129,7 +1151,7 @@ impl SimpleMetadata {
                     continue;
                 }
             };
-            match map.entry(version.clone()) {
+            match map.entry(filename.version().clone()) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     entry.get_mut().push(filename, file);
                 }
@@ -1233,16 +1255,17 @@ mod tests {
 
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{JoinRelativeError, SimpleJson};
+    use uv_pypi_types::SimpleJson;
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
+    use crate::RegistryClientBuilder;
     use uv_cache::Cache;
+    use uv_distribution_types::{FileLocation, ToUrlError};
+    use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    use crate::RegistryClientBuilder;
 
     type Error = Box<dyn std::error::Error>;
 
@@ -1469,7 +1492,7 @@ mod tests {
     ///
     /// See: <https://github.com/astral-sh/uv/issues/1388>
     #[test]
-    fn relative_urls_code_artifact() -> Result<(), JoinRelativeError> {
+    fn relative_urls_code_artifact() -> Result<(), ToUrlError> {
         let text = r#"
         <!DOCTYPE html>
         <html>
@@ -1492,12 +1515,13 @@ mod tests {
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
+        let base = SmallString::from(base.as_str());
 
         // Test parsing of the file urls
         let urls = files
-            .iter()
-            .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
-            .collect::<Result<Vec<_>, JoinRelativeError>>()?;
+            .into_iter()
+            .map(|file| FileLocation::new(file.url, &base).to_url())
+            .collect::<Result<Vec<_>, _>>()?;
         let urls = urls
             .iter()
             .map(DisplaySafeUrl::to_string)

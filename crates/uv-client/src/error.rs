@@ -153,9 +153,6 @@ pub enum ErrorKind {
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
 
     #[error(transparent)]
-    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
-
-    #[error(transparent)]
     Flat(#[from] FlatIndexError),
 
     #[error("Expected a file URL, but received: {0}")]

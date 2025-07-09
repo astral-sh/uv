@@ -6,29 +6,34 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
+use reqwest::Response;
+use rustc_hash::FxHashMap;
 use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
-use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{ArchiveId, CacheBucket, CacheEntry, Freshness, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_configuration::BuildOutput;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, InstalledDist, Name,
-    SourceDist,
+    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, InstalledDist, Name,
+    RegistryVariantsJson, SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::DisplaySafeUrl;
-use uv_types::{BuildContext, BuildStack};
+use uv_types::{BuildContext, BuildStack, VariantsTrait};
+use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::variants_json::VariantsJsonContent;
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -179,12 +184,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
-                let url = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        uv_pypi_types::base_url_join_relative(base, url)?
-                    }
-                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
-                };
+                let url = wheel.file.url.to_url()?;
 
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
@@ -534,6 +534,87 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         self.builder
             .source_tree_requires_dist(source_tree.as_ref())
             .await
+    }
+
+    pub async fn fetch_variants(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<ResolvedVariants, Error> {
+        let url = variants_json.file.url.to_url().expect("TODO(konsti)");
+
+        // If the URL is a file URL, load the variants directly from the file system.
+        let variants_json = if url.scheme() == "file" {
+            let path = url
+                .to_file_path()
+                .map_err(|()| Error::NonFileUrl(url.clone()))?;
+            let bytes = fs_err::tokio::read(&path).await.expect("TODO(konsti)");
+            info_span!("parse_variants_json")
+                .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+                .expect("TODO(konsti)")
+        } else {
+            let req = self.request(url.clone()).expect("TODO(konsti)");
+
+            let cache_entry = self.build_context.cache().entry(
+                CacheBucket::Interpreter,
+                "wheel-variants",
+                "TODO_foo",
+            );
+
+            let cache_control = match self.client.unmanaged.connectivity() {
+                Connectivity::Online => CacheControl::from(
+                    // TODO(konsti)
+                    Freshness::Stale,
+                ),
+                Connectivity::Offline => CacheControl::AllowStale,
+            };
+
+            let response_callback = async |response: Response| {
+                let bytes = response.bytes().await.expect("TODO(konsti)");
+
+                info_span!("parse_variants_json")
+                    .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+            };
+
+            self.client
+                .managed(|client| {
+                    client.cached_client().get_serde_with_retry(
+                        req,
+                        &cache_entry,
+                        cache_control,
+                        response_callback,
+                    )
+                })
+                .await
+                .map_err(|err| match err {
+                    CachedClientError::Callback { err, .. } => panic!("TODO(konsti): {err}"),
+                    CachedClientError::Client { err, .. } => Error::Client(err),
+                })?
+        };
+
+        // Compute the set of available variants.
+        // Run all providers.
+        let mut resolved_priorities = FxHashMap::default();
+        for (name, provider) in &variants_json.providers {
+            debug!("Querying provider {name}");
+            // TODO(konsti): That's not spec compliant
+            let backend_name = provider.plugin_api.clone().unwrap_or(name.clone());
+            let builder = self
+                .builder
+                .build_context
+                .setup_variants(backend_name, provider, BuildOutput::Debug)
+                .await?;
+            let config = builder.query().await?;
+            trace!(
+                "Found namespace {} with configs {:?}",
+                config.namespace, config
+            );
+            resolved_priorities.insert(config.namespace.clone(), config);
+        }
+
+        Ok(ResolvedVariants {
+            variants_json,
+            target_variants: resolved_priorities,
+        })
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.

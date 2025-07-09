@@ -240,7 +240,7 @@ impl UniversalMarker {
     /// This should only be used when evaluating a marker that is known not to
     /// have any extras. For example, the PEP 508 markers on a fork.
     pub(crate) fn evaluate_no_extras(self, env: &MarkerEnvironment) -> bool {
-        self.marker.evaluate(env, &[])
+        self.marker.evaluate(env, None, &[])
     }
 
     /// Returns true if this universal marker is satisfied by the given marker
@@ -265,7 +265,7 @@ impl UniversalMarker {
         let groups =
             groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
         self.marker
-            .evaluate(env, &extras.chain(groups).collect::<Vec<ExtraName>>())
+            .evaluate(env, None, &extras.chain(groups).collect::<Vec<ExtraName>>())
     }
 
     /// Returns the internal marker that combines both the PEP 508
@@ -454,8 +454,11 @@ impl ConflictMarker {
         let groups = groups
             .iter()
             .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
-        self.marker
-            .evaluate(&DUMMY, &extras.chain(groups).collect::<Vec<ExtraName>>())
+        self.marker.evaluate(
+            &DUMMY,
+            None,
+            &extras.chain(groups).collect::<Vec<ExtraName>>(),
+        )
     }
 
     /// Returns inclusion and exclusion (respectively) conflict items parsed

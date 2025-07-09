@@ -57,10 +57,10 @@ use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
 
-use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
+use crate::marker::{MarkerValueExtra, MarkerValueVariant};
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
@@ -313,6 +313,11 @@ impl InternerGuard<'_> {
                 };
                 (Variable::String(key), Edges::from_string(operator, value))
             }
+            MarkerExpression::Variant {
+                key,
+                value,
+                negated,
+            } => (Variable::Variant { key, value }, Edges::from_bool(negated)),
             // A variable representing the existence or absence of a particular extra.
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Extra(extra),
@@ -1039,6 +1044,12 @@ pub(crate) enum Variable {
     /// string marker and value.
     Contains {
         key: CanonicalMarkerValueString,
+        value: ArcStr,
+    },
+    /// A variable representing the existence or absence of a given variant namespace,
+    /// property, or feature.
+    Variant {
+        key: MarkerValueVariant,
         value: ArcStr,
     },
     /// A variable representing the existence or absence of a given extra.

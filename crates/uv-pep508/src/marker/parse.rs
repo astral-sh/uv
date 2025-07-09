@@ -168,6 +168,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerExpression>, Pep508Error<T>> {
     cursor.eat_whitespace();
+    let start = cursor.pos();
     let l_value = parse_marker_value(cursor, reporter)?;
     cursor.eat_whitespace();
     // "not in" and "in" must be preceded by whitespace. We must already have matched a whitespace
@@ -176,6 +177,10 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     let operator = parse_marker_operator(cursor)?;
     cursor.eat_whitespace();
     let r_value = parse_marker_value(cursor, reporter)?;
+    let len = cursor.pos() - start;
+
+    // TODO(konsti): Catch incorrect variant markers in all places, now that we have the
+    // opportunity to check from the beginning.
 
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
@@ -209,7 +214,8 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
             let value = match r_value {
                 MarkerValue::Extra
                 | MarkerValue::MarkerEnvVersion(_)
-                | MarkerValue::MarkerEnvString(_) => {
+                | MarkerValue::MarkerEnvString(_)
+                | MarkerValue::MarkerEnvVariant(_) => {
                     reporter.report(
                         MarkerWarningKind::MarkerMarkerComparison,
                         "Comparing two markers with each other doesn't make any sense,
@@ -237,11 +243,21 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 value,
             })
         }
+        // `"gpu :: cuda :: cu128" in variant_properties`
+        MarkerValue::MarkerEnvVariant(key) => {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::VariantSyntaxLValue(key),
+                start,
+                len,
+                input: cursor.to_string(),
+            });
+        }
         // `extra == '...'`
         MarkerValue::Extra => {
             let value = match r_value {
                 MarkerValue::MarkerEnvVersion(_)
                 | MarkerValue::MarkerEnvString(_)
+                | MarkerValue::MarkerEnvVariant(_)
                 | MarkerValue::Extra => {
                     reporter.report(
                         MarkerWarningKind::ExtraInvalidComparison,
@@ -271,6 +287,27 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     operator: operator.invert(),
                     value: l_string,
                 }),
+                // `"gpu :: cuda :: cu128" in variant_properties`
+                MarkerValue::MarkerEnvVariant(key) => {
+                    let negated = match operator {
+                        MarkerOperator::In => false,
+                        MarkerOperator::NotIn => true,
+                        _ => {
+                            return Err(Pep508Error {
+                                message: Pep508ErrorSource::VariantSyntax(operator, key),
+                                start,
+                                len,
+                                input: cursor.to_string(),
+                            });
+                        }
+                    };
+
+                    Some(MarkerExpression::Variant {
+                        key,
+                        value: l_string,
+                        negated,
+                    })
+                }
                 // `'...' == extra`
                 MarkerValue::Extra => parse_extra_expr(operator, &l_string, reporter),
                 // `'...' == '...'`, doesn't make much sense

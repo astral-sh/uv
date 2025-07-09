@@ -161,6 +161,19 @@ fn collect_dnf(
                 path.pop();
             }
         }
+        MarkerTreeKind::Variant(marker) => {
+            for (value, tree) in marker.children() {
+                let expr = MarkerExpression::Variant {
+                    key: *marker.key(),
+                    value: ArcStr::from(marker.value()),
+                    negated: !value,
+                };
+
+                path.push(expr);
+                collect_dnf(tree, dnf, path);
+                path.pop();
+            }
+        }
         MarkerTreeKind::Extra(marker) => {
             for (value, tree) in marker.children() {
                 let operator = if value {
@@ -439,6 +452,22 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
             };
 
             name == name2 && operator.negate() == *operator2
+        }
+        MarkerExpression::Variant {
+            key,
+            negated,
+            value,
+        } => {
+            let MarkerExpression::Variant {
+                key: key2,
+                negated: negated2,
+                value: value2,
+            } = right
+            else {
+                return false;
+            };
+
+            key == key2 && negated != negated2 && value == value2
         }
     }
 }
