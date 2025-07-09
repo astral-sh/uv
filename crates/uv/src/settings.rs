@@ -1329,7 +1329,7 @@ pub(crate) struct AddSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
-    pub(crate) workspace: bool,
+    pub(crate) workspace: Option<bool>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
@@ -1368,6 +1368,7 @@ impl AddSettings {
             script,
             python,
             workspace,
+            no_workspace,
         } = args;
 
         let dependency_type = if let Some(extra) = optional {
@@ -1468,7 +1469,7 @@ impl AddSettings {
             package,
             script,
             python: python.and_then(Maybe::into_option),
-            workspace,
+            workspace: flag(workspace, no_workspace, "workspace"),
             editable: flag(editable, no_editable, "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
