@@ -1,0 +1,61 @@
+{
+  "default-priorities": {
+    "feature": {
+      "cpu_level": [
+        "x86_64_level"
+      ]
+    },
+    "namespace": [
+      "cpu_level"
+    ],
+    "property": {
+      "cpu_level": {
+        "x86_64_level": [
+          "v4",
+          "v3",
+          "v2",
+          "v1"
+        ]
+      }
+    }
+  },
+  "providers": {
+    "cpu_level": {
+      "enable-if": "platform_machine == 'x86_64' or platform_machine == 'AMD64'",
+      "plugin-api": "cpu_level_provider",
+      "requires": [
+        "cpu_level_provider"
+      ]
+    }
+  },
+  "variants": {
+    "cpu1": {
+      "cpu_level": {
+        "x86_64_level": [
+          "v1"
+        ]
+      }
+    },
+    "cpu2": {
+      "cpu_level": {
+        "x86_64_level": [
+          "v2"
+        ]
+      }
+    },
+    "cpu3": {
+      "cpu_level": {
+        "x86_64_level": [
+          "v3"
+        ]
+      }
+    },
+    "cpu4": {
+      "cpu_level": {
+        "x86_64_level": [
+          "v4"
+        ]
+      }
+    }
+  }
+}
