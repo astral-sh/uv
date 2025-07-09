@@ -15500,7 +15500,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
 
 /// Use a trailing slash on the declared index.
 #[test]
-fn lock_trailing_slash() -> Result<()> {
+fn lock_trailing_slash_index_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -15543,7 +15543,7 @@ fn lock_trailing_slash() -> Result<()> {
         [[package]]
         name = "anyio"
         version = "3.7.0"
-        source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple/" }
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -15556,7 +15556,7 @@ fn lock_trailing_slash() -> Result<()> {
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple/" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
@@ -15576,7 +15576,7 @@ fn lock_trailing_slash() -> Result<()> {
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi.org/simple" }
+        source = { registry = "https://pypi.org/simple/" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
@@ -28310,10 +28310,10 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
     Ok(())
 }
 
-/// Add a package with an `--index` URL with no trailing slash. Run `uv lock --locked`
-/// with a `pyproject.toml` with that same URL but with a trailing slash.
+/// Add a package with an `--index` URL with no trailing slash while an index with the same URL
+/// exists with a trailing slash in the `pyproject.toml`.
 #[test]
-fn lock_with_inconsistent_trailing_slash() -> Result<()> {
+fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -28408,20 +28408,22 @@ fn lock_with_inconsistent_trailing_slash() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
 }
 
-/// Run `uv lock --locked` with a lockfile with trailing slashes on index URLs.
+/// Run `uv lock --locked` with a lockfile with trailing slashes on the index URL but a
+/// `pyproject.toml` without a trailing slash on the index URL.
 #[test]
-fn lock_with_index_trailing_slashes_in_lockfile() -> Result<()> {
+fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -28497,20 +28499,22 @@ fn lock_with_index_trailing_slashes_in_lockfile() -> Result<()> {
 
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
 }
 
-/// Run `uv lock --locked` with a lockfile with trailing slashes on index URLs.
+/// Run `uv lock --locked` with `pyproject.toml` with trailing slashes on the index URL but a
+/// lockfile without trailing slashes on the index URL.
 #[test]
-fn lock_with_index_trailing_slashes_in_pyproject_toml() -> Result<()> {
+fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -28586,20 +28590,22 @@ fn lock_with_index_trailing_slashes_in_pyproject_toml() -> Result<()> {
 
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
 }
 
-/// Run `uv lock --locked` with a lockfile with trailing slashes on index URLs.
+/// Run `uv lock --locked` with a lockfile and `pyproject.toml` with trailing slashes on the index
+/// URL.
 #[test]
-fn lock_with_index_trailing_slashes_in_lockfile_and_pyproject_toml() -> Result<()> {
+fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -28682,6 +28688,152 @@ fn lock_with_index_trailing_slashes_in_lockfile_and_pyproject_toml() -> Result<(
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+#[test]
+fn lock_trailing_slash_find_links() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["packaging==23.2"]
+        [tool.uv]
+        no-index = true
+        find-links = ["https://pypi.org/simple/packaging"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+            filters => context.filters(),
+    }, {
+            assert_snapshot!(
+                lock, @r#"
+            version = 1
+            revision = 2
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "packaging"
+            version = "23.2"
+            source = { registry = "https://pypi.org/simple/packaging" }
+            sdist = { url = "https://files.pythonhosted.org/packages/fb/2b/9b9c33ffed44ee921d0967086d653047286054117d584f1b1a7c22ceaf7b/packaging-23.2.tar.gz", hash = "sha256:048fb0e9405036518eaaf48a55953c750c11e1a1b68e0dd1a9d62ed0c092cfc5" }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/ec/1a/610693ac4ee14fcdf2d9bf3c493370e4f2ef7ae2e19217d7a237ff42367d/packaging-23.2-py3-none-any.whl", hash = "sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7" },
+            ]
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "packaging" },
+            ]
+
+            [package.metadata]
+            requires-dist = [{ name = "packaging", specifier = "==23.2" }]
+            "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Add a trailing slash, which should invalidate the lockfile
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["packaging==23.2"]
+        [tool.uv]
+        no-index = true
+        find-links = ["https://pypi.org/simple/packaging/"]
+        "#,
+    )?;
+
+    // Re-run with `--locked`
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "packaging"
+        version = "23.2"
+        source = { registry = "https://pypi.org/simple/packaging/" }
+        sdist = { url = "https://files.pythonhosted.org/packages/fb/2b/9b9c33ffed44ee921d0967086d653047286054117d584f1b1a7c22ceaf7b/packaging-23.2.tar.gz", hash = "sha256:048fb0e9405036518eaaf48a55953c750c11e1a1b68e0dd1a9d62ed0c092cfc5" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ec/1a/610693ac4ee14fcdf2d9bf3c493370e4f2ef7ae2e19217d7a237ff42367d/packaging-23.2-py3-none-any.whl", hash = "sha256:8c491190033a9af7e1d931d0b5dacc2ef47509b34dd0de67ed209b5203fc88c7" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "packaging" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "packaging", specifier = "==23.2" }]
+        "#
+        );
+    });
 
     Ok(())
 }

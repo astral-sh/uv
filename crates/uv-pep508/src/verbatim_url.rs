@@ -171,11 +171,6 @@ impl VerbatimUrl {
         &self.url
     }
 
-    /// Return a mutable reference to the underlying [`DisplaySafeUrl`].
-    pub fn raw_mut(&mut self) -> &mut DisplaySafeUrl {
-        &mut self.url
-    }
-
     /// Convert a [`VerbatimUrl`] into a [`DisplaySafeUrl`].
     pub fn to_url(&self) -> DisplaySafeUrl {
         self.url.clone()
