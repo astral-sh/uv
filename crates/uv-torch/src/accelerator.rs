@@ -35,7 +35,7 @@ pub enum Accelerator {
     },
     /// The Intel GPU (XPU).
     ///
-    /// Currently, Intel GPUs do not depend on a driver/toolkit version at this level.
+    /// Currently, Intel GPUs do not depend on a driver or toolkit version at this level.
     Xpu,
 }
 
@@ -44,13 +44,13 @@ impl std::fmt::Display for Accelerator {
         match self {
             Self::Cuda { driver_version } => write!(f, "CUDA {driver_version}"),
             Self::Amd { gpu_architecture } => write!(f, "AMD {gpu_architecture}"),
-            Self::Xpu => write!(f, "Intel GPU (XPU) detected"),
+            Self::Xpu => write!(f, "Intel GPU (XPU)"),
         }
     }
 }
 
 impl Accelerator {
-    /// Detect the GPU driver/architecture version from the system.
+    /// Detect the GPU driver and/or architecture version from the system.
     ///
     /// Query, in order:
     /// 1. The `UV_CUDA_DRIVER_VERSION` environment variable.
@@ -61,7 +61,7 @@ impl Accelerator {
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
     pub fn detect() -> Result<Option<Self>, AcceleratorError> {
-        // Constants used for PCI device detection
+        // Constants used for PCI device detection.
         const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
         const PCI_BASE_CLASS_DISPLAY: u32 = 0x0003_0000;
         const PCI_VENDOR_ID_INTEL: u32 = 0x8086;
