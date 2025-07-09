@@ -2,7 +2,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use tracing::debug;
-use walkdir::WalkDir;
 
 use uv_pep440::Version;
 use uv_static::EnvVars;
@@ -17,8 +16,6 @@ pub enum AcceleratorError {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
-    #[error(transparent)]
-    WalkDir(#[from] walkdir::Error),
     #[error("Unknown AMD GPU architecture: {0}")]
     UnknownAmdGpuArchitecture(String),
 }
@@ -168,15 +165,10 @@ impl Accelerator {
         }
 
         // Read from `/sys/bus/pci/devices` to filter for Intel GPU via PCI.
-        match WalkDir::new("/sys/bus/pci/devices")
-            .min_depth(1)
-            .max_depth(1)
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()
-        {
+        match fs_err::read_dir("/sys/bus/pci/devices") {
             Ok(entries) => {
-                for entry in entries {
-                    match parse_pci_device_ids(entry.path()) {
+                for entry in entries.flatten() {
+                    match parse_pci_device_ids(&entry.path()) {
                         Ok((class, vendor)) => {
                             if (class & PCI_BASE_CLASS_MASK) == PCI_BASE_CLASS_DISPLAY
                                 && vendor == PCI_VENDOR_ID_INTEL
@@ -191,13 +183,8 @@ impl Accelerator {
                     }
                 }
             }
-            Err(e)
-                if e.io_error()
-                    .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) => {}
-            Err(e) => {
-                debug!("Failed to read PCI device directory with WalkDir: {e}");
-                return Err(e.into());
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
         }
 
         debug!("Failed to detect GPU driver version");
