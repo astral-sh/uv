@@ -3641,7 +3641,8 @@ pub struct AddArgs {
         long,
         conflicts_with = "dev",
         conflicts_with = "optional",
-        conflicts_with = "package"
+        conflicts_with = "package",
+        conflicts_with = "workspace"
     )]
     pub script: Option<PathBuf>,
 
@@ -3657,6 +3658,13 @@ pub struct AddArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// Add the dependency as a workspace member.
+    ///
+    /// When used with a path dependency, the package will be added to the workspace's `members`
+    /// list in the root `pyproject.toml` file.
+    #[arg(long)]
+    pub workspace: bool,
 }
 
 #[derive(Args)]

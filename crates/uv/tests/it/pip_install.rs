@@ -11490,3 +11490,110 @@ fn conflicting_flags_clap_bug() {
     "
     );
 }
+
+/// Test that shebang arguments are stripped when installing scripts
+#[test]
+#[cfg(unix)]
+fn strip_shebang_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project_dir = context.temp_dir.child("shebang_test");
+    project_dir.create_dir_all()?;
+
+    // Create a package with scripts that have shebang arguments.
+    let pyproject_toml = project_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "shebang-test"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["setuptools>=61.0"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools]
+        packages = ["shebang_test"]
+        
+        [tool.setuptools.data-files]
+        "scripts" = ["scripts/custom_script", "scripts/custom_gui_script"]
+    "#})?;
+
+    // Create the package directory.
+    let package_dir = project_dir.child("shebang_test");
+    package_dir.create_dir_all()?;
+
+    // Create an `__init__.py` file in the package directory.
+    let init_file = package_dir.child("__init__.py");
+    init_file.touch()?;
+
+    // Create scripts directory with scripts that have shebangs with arguments
+    let scripts_dir = project_dir.child("scripts");
+    scripts_dir.create_dir_all()?;
+
+    let script_with_args = scripts_dir.child("custom_script");
+    script_with_args.write_str(indoc! {r#"
+        #!python -E -s
+        # This is a test script with shebang arguments
+        import sys
+        print(f"Hello from {sys.executable}")
+        print(f"Arguments: {sys.argv}")
+    "#})?;
+
+    let gui_script_with_args = scripts_dir.child("custom_gui_script");
+    gui_script_with_args.write_str(indoc! {r#"
+        #!pythonw -E
+        # This is a test GUI script with shebang arguments
+        import sys
+        print(f"Hello from GUI script: {sys.executable}")
+    "#})?;
+
+    // Create a `setup.py` that explicitly handles scripts.
+    let setup_py = project_dir.child("setup.py");
+    setup_py.write_str(indoc! {r"
+        from setuptools import setup
+        setup(scripts=['scripts/custom_script', 'scripts/custom_gui_script'])
+    "})?;
+
+    // Install the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg(project_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + shebang-test==0.1.0 (from file://[TEMP_DIR]/shebang_test)
+    "###);
+
+    // Check the installed scripts have their shebangs stripped of arguments.
+    let custom_script_path = venv_bin_path(&context.venv).join("custom_script");
+    let script_content = fs::read_to_string(&custom_script_path)?;
+
+    insta::with_settings!({filters => context.filters()
+    }, {
+        insta::assert_snapshot!(script_content, @r#"
+        #![VENV]/bin/python3
+        # This is a test script with shebang arguments
+        import sys
+        print(f"Hello from {sys.executable}")
+        print(f"Arguments: {sys.argv}")
+        "#);
+    });
+
+    let custom_gui_script_path = venv_bin_path(&context.venv).join("custom_gui_script");
+    let gui_script_content = fs::read_to_string(&custom_gui_script_path)?;
+
+    insta::with_settings!({filters => context.filters()
+    }, {
+        insta::assert_snapshot!(gui_script_content, @r#"
+        #![VENV]/bin/python3
+        # This is a test GUI script with shebang arguments
+        import sys
+        print(f"Hello from GUI script: {sys.executable}")
+        "#);
+    });
+
+    Ok(())
+}

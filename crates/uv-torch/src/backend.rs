@@ -185,6 +185,8 @@ pub enum TorchStrategy {
         os: Os,
         gpu_architecture: AmdGpuArchitecture,
     },
+    /// Select the appropriate PyTorch index based on the operating system and Intel GPU presence.
+    Xpu { os: Os },
     /// Use the specified PyTorch index.
     Backend(TorchBackend),
 }
@@ -202,6 +204,7 @@ impl TorchStrategy {
                     os: os.clone(),
                     gpu_architecture,
                 }),
+                Some(Accelerator::Xpu) => Ok(Self::Xpu { os: os.clone() }),
                 None => Ok(Self::Backend(TorchBackend::Cpu)),
             },
             TorchMode::Cpu => Ok(Self::Backend(TorchBackend::Cpu)),
@@ -347,9 +350,27 @@ impl TorchStrategy {
                     Either::Right(Either::Left(std::iter::once(TorchBackend::Cpu.index_url())))
                 }
             },
-            TorchStrategy::Backend(backend) => {
-                Either::Right(Either::Right(std::iter::once(backend.index_url())))
-            }
+            TorchStrategy::Xpu { os } => match os {
+                Os::Manylinux { .. } => Either::Right(Either::Right(Either::Left(
+                    std::iter::once(TorchBackend::Xpu.index_url()),
+                ))),
+                Os::Windows
+                | Os::Musllinux { .. }
+                | Os::Macos { .. }
+                | Os::FreeBsd { .. }
+                | Os::NetBsd { .. }
+                | Os::OpenBsd { .. }
+                | Os::Dragonfly { .. }
+                | Os::Illumos { .. }
+                | Os::Haiku { .. }
+                | Os::Android { .. }
+                | Os::Pyodide { .. } => {
+                    Either::Right(Either::Left(std::iter::once(TorchBackend::Cpu.index_url())))
+                }
+            },
+            TorchStrategy::Backend(backend) => Either::Right(Either::Right(Either::Right(
+                std::iter::once(backend.index_url()),
+            ))),
         }
     }
 }
