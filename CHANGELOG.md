@@ -3,6 +3,42 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.20
+
+### Python
+
+- Add Python 3.14.0b4
+- Add zstd support to Python 3.14 on Unix (it already was available on Windows)
+- Add PyPy 7.3.20 (for Python 3.11.13)
+
+See the [PyPy](https://pypy.org/posts/2025/07/pypy-v7320-release.html) and [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone/releases/tag/20250708) release notes for more details.
+
+### Enhancements
+
+- Add `--workspace` flag to `uv add` ([#14496](https://github.com/astral-sh/uv/pull/14496))
+- Add auto-detection for Intel GPUs ([#14386](https://github.com/astral-sh/uv/pull/14386))
+- Drop trailing arguments when writing shebangs ([#14519](https://github.com/astral-sh/uv/pull/14519))
+- Add debug message when skipping Python downloads ([#14509](https://github.com/astral-sh/uv/pull/14509))
+
+### Bug fixes
+
+- Revert normalization of trailing slashes on index URLs ([#14511](https://github.com/astral-sh/uv/pull/14511))
+- Fix forced resolution with all extras in `uv version` ([#14434](https://github.com/astral-sh/uv/pull/14434))
+- Fix handling of pre-releases in preferences ([#14498](https://github.com/astral-sh/uv/pull/14498))
+- Remove transparent variants in `uv-extract` to enable retries ([#14450](https://github.com/astral-sh/uv/pull/14450))
+
+### Rust API
+
+- Add method to get packages involved in a `NoSolutionError` ([#14457](https://github.com/astral-sh/uv/pull/14457))
+- Make `ErrorTree` for `NoSolutionError` public ([#14444](https://github.com/astral-sh/uv/pull/14444))
+
+### Documentation
+
+- Finish incomplete sentence in pip migration guide ([#14432](https://github.com/astral-sh/uv/pull/14432))
+- Remove `cache-dependency-glob` examples for `setup-uv` ([#14493](https://github.com/astral-sh/uv/pull/14493))
+- Remove `uv pip sync` suggestion with `pyproject.toml` ([#14510](https://github.com/astral-sh/uv/pull/14510))
+- Update documentation for GitHub to use `setup-uv@v6` ([#14490](https://github.com/astral-sh/uv/pull/14490))
+
 ## 0.7.19
 
 The **[uv build backend](https://docs.astral.sh/uv/concepts/build-backend/) is now stable**, and considered ready for production use.
@@ -45,9 +81,9 @@ See the [python-build-standalone release](https://github.com/astral-sh/python-bu
 ### Python
 
 - Added arm64 Windows Python 3.11, 3.12, 3.13, and 3.14
-
+  
   These are not downloaded by default, since x86-64 Python has broader ecosystem support on Windows.
-  However, they can be requested with `cpython-<version>-windows-aarch64`.
+However, they can be requested with `cpython-<version>-windows-aarch64`.
 
 See the [python-build-standalone release](https://github.com/astral-sh/python-build-standalone/releases/tag/20250630) for more details.
 
