@@ -645,7 +645,7 @@ impl ResolverOutput {
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
         use uv_pep508::{
             CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerExpression,
-            MarkerOperator, MarkerTree,
+            MarkerOperator, MarkerTree, MarkerValueVariant,
         };
 
         /// A subset of the possible marker values.
@@ -657,6 +657,7 @@ impl ResolverOutput {
         enum MarkerParam {
             Version(CanonicalMarkerValueVersion),
             String(CanonicalMarkerValueString),
+            Variant(MarkerValueVariant),
         }
 
         /// Add all marker parameters from the given tree to the given set.
@@ -684,6 +685,12 @@ impl ResolverOutput {
                 }
                 MarkerTreeKind::Contains(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(tree, set);
+                    }
+                }
+                MarkerTreeKind::Variant(marker) => {
+                    set.insert(MarkerParam::Variant(*marker.key()));
                     for (_, tree) in marker.children() {
                         add_marker_params_from_tree(tree, set);
                     }
@@ -757,6 +764,11 @@ impl ResolverOutput {
                         operator: MarkerOperator::Equal,
                         value: from_env.into(),
                     }
+                }
+                MarkerParam::Variant(_value_variant) => {
+                    // We ignore variants for the resolution marker tree since they are package
+                    // specific.
+                    continue;
                 }
             };
             conjunction.and(MarkerTree::expression(expr));

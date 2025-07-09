@@ -32,8 +32,8 @@ pub use marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
-    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVariant,
+    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -80,6 +80,17 @@ pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
     /// The version requirement is not supported.
     #[error("{0}")]
     UnsupportedRequirement(String),
+    /// The operator is not supported with the variant marker.
+    #[error(
+        "The operator {0} is not supported with the variant marker {1}, only the `in` and `not in` operators are supported"
+    )]
+    VariantSyntax(MarkerOperator, MarkerValueVariant),
+    /// The value is not a quoted string.
+    #[error("Only quoted strings are supported with the variant marker {1}, not {0}")]
+    VariantSyntaxValue(MarkerValue, MarkerValueVariant),
+    /// The variant marker is on the left hand side of the expression.
+    #[error("The variant marker {0} must be on the right hand side of the expression")]
+    VariantSyntaxLValue(MarkerValueVariant),
 }
 
 impl<T: Pep508Url> Display for Pep508Error<T> {
@@ -254,7 +265,7 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        self.marker.evaluate(env, extras)
+        self.marker.evaluate(env, None, extras)
     }
 
     /// Return the requirement with an additional marker added, to require the given extra.
