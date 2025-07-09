@@ -582,6 +582,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt id="uv-add--upgrade-package"><a href="#uv-add--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-add--verbose"><a href="#uv-add--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
+</dd><dt id="uv-add--workspace"><a href="#uv-add--workspace"><code>--workspace</code></a></dt><dd><p>Add the dependency as a workspace member.</p>
+<p>When used with a path dependency, the package will be added to the workspace's <code>members</code> list in the root <code>pyproject.toml</code> file.</p>
 </dd></dl>
 
 ## uv remove
