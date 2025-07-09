@@ -13040,3 +13040,128 @@ fn add_path_with_workspace() -> Result<()> {
 
     Ok(())
 }
+
+/// Add a path dependency within the same source tree - should default to workspace member
+#[test]
+fn add_path_default_workspace_same_source_tree() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a dependency package within the workspace (same source tree)
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+
+    let dep_toml = dep_dir.child("pyproject.toml");
+    dep_toml.write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Add the dependency without any flags - should default to workspace member
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./dep"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Added `dep` to workspace members
+    Resolved 2 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "parent"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dep",
+    ]
+
+    [tool.uv.workspace]
+    members = [
+        "dep",
+    ]
+
+    [tool.uv.sources]
+    dep = { workspace = true }
+    "#
+    );
+
+    Ok(())
+}
+
+/// Add a path dependency within the same source tree with --no-workspace - should not add to workspace
+#[test]
+fn add_path_no_workspace_same_source_tree() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a dependency package within the workspace (same source tree)
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+
+    let dep_toml = dep_dir.child("pyproject.toml");
+    dep_toml.write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Add the dependency with --no-workspace flag - should not add to workspace
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./dep")
+        .arg("--no-workspace"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "parent"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dep",
+    ]
+
+    [tool.uv.sources]
+    dep = { path = "dep" }
+    "#
+    );
+
+    Ok(())
+}

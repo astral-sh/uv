@@ -84,6 +84,7 @@ pub(crate) async fn add(
     package: Option<PackageName>,
     python: Option<String>,
     workspace: bool,
+    no_workspace: bool,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     network_settings: NetworkSettings,
@@ -495,16 +496,28 @@ pub(crate) async fn add(
     // Track modification status, for reverts.
     let mut modified = false;
 
-    // If `--workspace` is provided, add any members to the `workspace` section of the
-    // `pyproject.toml` file.
-    if workspace {
+    // Determine if we should add path dependencies as workspace members.
+    // This is the default behavior for path dependencies within the same source tree,
+    // unless explicitly disabled with `--no-workspace`.
+    let should_add_workspace_members = if workspace {
+        true
+    } else if no_workspace {
+        false
+    } else {
+        // Default: add as workspace members if the path is within the workspace root
+        true
+    };
+
+    // If we should add workspace members, add any path dependencies to the `workspace` section
+    // of the `pyproject.toml` file.
+    if should_add_workspace_members {
         let AddTarget::Project(project, python_target) = target else {
             unreachable!("`--workspace` and `--script` are conflicting options");
         };
 
-        let workspace = project.workspace();
+        let workspace_obj = project.workspace();
         let mut toml = PyProjectTomlMut::from_toml(
-            &workspace.pyproject_toml().raw,
+            &workspace_obj.pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
         )?;
 
@@ -517,20 +530,32 @@ pub(crate) async fn add(
                     project.root().join(install_path)
                 };
 
-                // Check if the path is not already included in the workspace.
-                if !workspace.includes(&absolute_path)? {
-                    let relative_path = absolute_path
-                        .strip_prefix(workspace.install_path())
-                        .unwrap_or(&absolute_path);
+                // Check if the path is within the workspace root (same source tree)
+                let is_within_workspace = absolute_path
+                    .strip_prefix(workspace_obj.install_path())
+                    .is_ok();
 
-                    toml.add_workspace(relative_path)?;
-                    modified |= true;
+                // Only add to workspace if:
+                // 1. The path is within the workspace root (same source tree), OR
+                // 2. --workspace was explicitly provided
+                let should_add_to_workspace = is_within_workspace || workspace;
 
-                    writeln!(
-                        printer.stderr(),
-                        "Added `{}` to workspace members",
-                        relative_path.user_display().cyan()
-                    )?;
+                if should_add_to_workspace {
+                    // Check if the path is not already included in the workspace.
+                    if !workspace_obj.includes(&absolute_path)? {
+                        let relative_path = absolute_path
+                            .strip_prefix(workspace_obj.install_path())
+                            .unwrap_or(&absolute_path);
+
+                        toml.add_workspace(relative_path)?;
+                        modified |= true;
+
+                        writeln!(
+                            printer.stderr(),
+                            "Added `{}` to workspace members",
+                            relative_path.user_display().cyan()
+                        )?;
+                    }
                 }
             }
         }
@@ -540,7 +565,7 @@ pub(crate) async fn add(
         target = if modified {
             let workspace_content = toml.to_string();
             fs_err::write(
-                workspace.install_path().join("pyproject.toml"),
+                workspace_obj.install_path().join("pyproject.toml"),
                 &workspace_content,
             )?;
 

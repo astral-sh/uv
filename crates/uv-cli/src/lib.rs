@@ -3633,7 +3633,8 @@ pub struct AddArgs {
         conflicts_with = "dev",
         conflicts_with = "optional",
         conflicts_with = "package",
-        conflicts_with = "workspace"
+        conflicts_with = "workspace",
+        conflicts_with = "no_workspace"
     )]
     pub script: Option<PathBuf>,
 
@@ -3654,8 +3655,15 @@ pub struct AddArgs {
     ///
     /// When used with a path dependency, the package will be added to the workspace's `members`
     /// list in the root `pyproject.toml` file.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "no_workspace")]
     pub workspace: bool,
+
+    /// Prevent adding the dependency as a workspace member.
+    ///
+    /// By default, uv will add path dependencies within the same source tree as workspace members.
+    /// Use this flag to add the dependency as a regular path dependency instead.
+    #[arg(long, conflicts_with = "workspace")]
+    pub no_workspace: bool,
 }
 
 #[derive(Args)]
