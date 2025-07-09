@@ -1967,6 +1967,7 @@ async fn run_project(
                 args.extras,
                 args.package,
                 args.python,
+                args.workspace,
                 args.install_mirrors,
                 args.settings,
                 globals.network_settings,

@@ -1,6 +1,7 @@
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
+use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -127,55 +128,61 @@ fn write_wheel(
         source_tree,
         pyproject_toml,
         &settings.module_root,
-        settings.module_name.as_deref(),
+        settings.module_name.as_ref(),
         settings.namespace,
     )?;
 
-    // For convenience, have directories for the whole tree in the wheel
-    for ancestor in module_relative.ancestors().skip(1) {
-        if ancestor == Path::new("") {
-            continue;
-        }
-        wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
-    }
-
     let mut files_visited = 0;
-    for entry in WalkDir::new(src_root.join(module_relative))
-        .sort_by_file_name()
-        .into_iter()
-        .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
-    {
-        let entry = entry.map_err(|err| Error::WalkDir {
-            root: source_tree.to_path_buf(),
-            err,
-        })?;
+    let mut prefix_directories = FxHashSet::default();
+    for module_relative in module_relative {
+        // For convenience, have directories for the whole tree in the wheel
+        for ancestor in module_relative.ancestors().skip(1) {
+            if ancestor == Path::new("") {
+                continue;
+            }
+            // Avoid duplicate directories in the zip.
+            if prefix_directories.insert(ancestor.to_path_buf()) {
+                wheel_writer.write_directory(&ancestor.portable_display().to_string())?;
+            }
+        }
 
-        files_visited += 1;
-        if files_visited > 10000 {
-            warn_user_once!(
-                "Visited more than 10,000 files for wheel build. \
+        for entry in WalkDir::new(src_root.join(module_relative))
+            .sort_by_file_name()
+            .into_iter()
+            .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
+        {
+            let entry = entry.map_err(|err| Error::WalkDir {
+                root: source_tree.to_path_buf(),
+                err,
+            })?;
+
+            files_visited += 1;
+            if files_visited > 10000 {
+                warn_user_once!(
+                    "Visited more than 10,000 files for wheel build. \
                 Consider using more constrained includes or more excludes."
-            );
-        }
+                );
+            }
 
-        // We only want to take the module root, but since excludes start at the source tree root,
-        // we strip higher than we iterate.
-        let match_path = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-        let entry_path = entry
-            .path()
-            .strip_prefix(&src_root)
-            .expect("walkdir starts with root");
-        if exclude_matcher.is_match(match_path) {
-            trace!("Excluding from module: `{}`", match_path.user_display());
-            continue;
-        }
+            // We only want to take the module root, but since excludes start at the source tree root,
+            // we strip higher than we iterate.
+            let match_path = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
+            let entry_path = entry
+                .path()
+                .strip_prefix(&src_root)
+                .expect("walkdir starts with root");
+            if exclude_matcher.is_match(match_path) {
+                trace!("Excluding from module: `{}`", match_path.user_display());
+                continue;
+            }
 
-        let entry_path = entry_path.portable_display().to_string();
-        debug!("Adding to wheel: {entry_path}");
-        wheel_writer.write_dir_entry(&entry, &entry_path)?;
+            let entry_path = entry_path.portable_display().to_string();
+            debug!("Adding to wheel: {entry_path}");
+            wheel_writer.write_dir_entry(&entry, &entry_path)?;
+        }
     }
     debug!("Visited {files_visited} files for wheel build");
 
@@ -269,7 +276,7 @@ pub fn build_editable(
         source_tree,
         &pyproject_toml,
         &settings.module_root,
-        settings.module_name.as_deref(),
+        settings.module_name.as_ref(),
         settings.namespace,
     )?;
 

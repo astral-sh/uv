@@ -38,8 +38,6 @@ impl IndexUrl {
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
-    ///
-    /// Normalizes non-file URLs by removing trailing slashes for consistency.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
         let url = match split_scheme(path) {
             Some((scheme, ..)) => {
@@ -258,20 +256,13 @@ impl<'de> serde::de::Deserialize<'de> for IndexUrl {
 }
 
 impl From<VerbatimUrl> for IndexUrl {
-    fn from(mut url: VerbatimUrl) -> Self {
+    fn from(url: VerbatimUrl) -> Self {
         if url.scheme() == "file" {
             Self::Path(Arc::new(url))
+        } else if *url.raw() == *PYPI_URL {
+            Self::Pypi(Arc::new(url))
         } else {
-            // Remove trailing slashes for consistency. They'll be re-added if necessary when
-            // querying the Simple API.
-            if let Ok(mut path_segments) = url.raw_mut().path_segments_mut() {
-                path_segments.pop_if_empty();
-            }
-            if *url.raw() == *PYPI_URL {
-                Self::Pypi(Arc::new(url))
-            } else {
-                Self::Url(Arc::new(url))
-            }
+            Self::Url(Arc::new(url))
         }
     }
 }

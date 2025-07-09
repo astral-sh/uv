@@ -474,13 +474,17 @@ being the module name, and which contain a `__init__.pyi` file.
 For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
 `foo-stubs.bar`.
 
+For namespace packages with multiple modules, the path can be a list, e.g.,
+`["foo", "bar"]`. We recommend using a single module per package, splitting multiple
+packages into a workspace.
+
 Note that using this option runs the risk of creating two packages with different names but
 the same module names. Installing such packages together leads to unspecified behavior,
 often with corrupted files or directory trees.
 
 **Default value**: `None`
 
-**Type**: `str`
+**Type**: `str | list[str]`
 
 **Example usage**:
 

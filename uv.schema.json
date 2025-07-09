@@ -668,10 +668,14 @@
           "default": true
         },
         "module-name": {
-          "description": "The name of the module directory inside `module-root`.\n\nThe default module name is the package name with dots and dashes replaced by underscores.\n\nPackage names need to be valid Python identifiers, and the directory needs to contain a\n`__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem\nbeing the module name, and which contain a `__init__.pyi` file.\n\nFor namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or\n`foo-stubs.bar`.\n\nNote that using this option runs the risk of creating two packages with different names but\nthe same module names. Installing such packages together leads to unspecified behavior,\noften with corrupted files or directory trees.",
-          "type": [
-            "string",
-            "null"
+          "description": "The name of the module directory inside `module-root`.\n\nThe default module name is the package name with dots and dashes replaced by underscores.\n\nPackage names need to be valid Python identifiers, and the directory needs to contain a\n`__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem\nbeing the module name, and which contain a `__init__.pyi` file.\n\nFor namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or\n`foo-stubs.bar`.\n\nFor namespace packages with multiple modules, the path can be a list, e.g.,\n`[\"foo\", \"bar\"]`. We recommend using a single module per package, splitting multiple\npackages into a workspace.\n\nNote that using this option runs the risk of creating two packages with different names but\nthe same module names. Installing such packages together leads to unspecified behavior,\noften with corrupted files or directory trees.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ModuleName"
+            },
+            {
+              "type": "null"
+            }
           ],
           "default": null
         },
@@ -1051,6 +1055,22 @@
     "MarkerTree": {
       "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
       "type": "string"
+    },
+    "ModuleName": {
+      "description": "Whether to include a single module or multiple modules.",
+      "anyOf": [
+        {
+          "description": "A single module name.",
+          "type": "string"
+        },
+        {
+          "description": "Multiple module names, which are all included.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",

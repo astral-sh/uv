@@ -1730,7 +1730,7 @@ pub(crate) async fn resolve_names(
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum PreferenceSource<'lock> {
+pub(crate) enum PreferenceLocation<'lock> {
     /// The preferences should be extracted from a lockfile.
     Lock {
         lock: &'lock Lock,
@@ -1745,7 +1745,7 @@ pub(crate) struct EnvironmentSpecification<'lock> {
     /// The requirements to include in the environment.
     requirements: RequirementsSpecification,
     /// The preferences to respect when resolving.
-    preferences: Option<PreferenceSource<'lock>>,
+    preferences: Option<PreferenceLocation<'lock>>,
 }
 
 impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
@@ -1758,9 +1758,9 @@ impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
 }
 
 impl<'lock> EnvironmentSpecification<'lock> {
-    /// Set the [`PreferenceSource`] for the specification.
+    /// Set the [`PreferenceLocation`] for the specification.
     #[must_use]
-    pub(crate) fn with_preferences(self, preferences: PreferenceSource<'lock>) -> Self {
+    pub(crate) fn with_preferences(self, preferences: PreferenceLocation<'lock>) -> Self {
         Self {
             preferences: Some(preferences),
             ..self
@@ -1869,7 +1869,7 @@ pub(crate) async fn resolve_environment(
 
     // If an existing lockfile exists, build up a set of preferences.
     let preferences = match spec.preferences {
-        Some(PreferenceSource::Lock { lock, install_path }) => {
+        Some(PreferenceLocation::Lock { lock, install_path }) => {
             let LockedRequirements { preferences, git } =
                 read_lock_requirements(lock, install_path, &upgrade)?;
 
@@ -1881,7 +1881,7 @@ pub(crate) async fn resolve_environment(
 
             preferences
         }
-        Some(PreferenceSource::Entries(entries)) => entries,
+        Some(PreferenceLocation::Entries(entries)) => entries,
         None => vec![],
     };
 
