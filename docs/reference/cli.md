@@ -1019,11 +1019,6 @@ uv sync [OPTIONS]
 <ul>
 <li><code>fewest</code>:  Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms</li>
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
-</ul></dd><dt id="uv-sync--format"><a href="#uv-sync--format"><code>--format</code></a> <i>format</i></dt><dd><p>Select the output format</p>
-<p>[default: text]</p><p>Possible values:</p>
-<ul>
-<li><code>text</code>:  Display the result in a human-readable format</li>
-<li><code>json</code>:  Display the result in JSON format</li>
 </ul></dd><dt id="uv-sync--frozen"><a href="#uv-sync--frozen"><code>--frozen</code></a></dt><dd><p>Sync without updating the <code>uv.lock</code> file.</p>
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p></dd><dt id="uv-sync--group"><a href="#uv-sync--group"><code>--group</code></a> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
@@ -1112,7 +1107,12 @@ uv sync [OPTIONS]
 </dd><dt id="uv-sync--only-group"><a href="#uv-sync--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
+</dd><dt id="uv-sync--output-format"><a href="#uv-sync--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>Select the output format</p>
+<p>[default: text]</p><p>Possible values:</p>
+<ul>
+<li><code>text</code>:  Display the result in a human-readable format</li>
+<li><code>json</code>:  Display the result in JSON format</li>
+</ul></dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
 <p>The workspace's environment (<code>.venv</code>) is updated to reflect the subset of dependencies declared by the specified workspace member package.</p>
 <p>If the workspace member does not exist, uv will exit with an error.</p>
 </dd><dt id="uv-sync--prerelease"><a href="#uv-sync--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>

@@ -6,8 +6,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use tracing::warn;
 use uv_cache::Cache;
+use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
@@ -74,8 +76,14 @@ pub(crate) async fn sync(
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
-    format: SyncFormat,
+    output_format: SyncFormat,
 ) -> Result<ExitStatus> {
+    if preview.is_enabled() && matches!(output_format, SyncFormat::Json) {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview` to disable this warning."
+        );
+    }
+
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
@@ -178,60 +186,16 @@ pub(crate) async fn sync(
         })
         .ok();
 
-    // Notify the user of any environment changes.
-    let mut report = ProjectReport {
-        project_dir: project_dir.into(),
-        workspace_dir: match &target {
-            SyncTarget::Project(project) => Some(project.root().into()),
-            SyncTarget::Script(_) => None,
-        },
-        sync: None,
-        lock: None,
-    };
-    report.sync = Some(SyncReport {
+    let sync_report = SyncReport {
         dry_run: dry_run.enabled(),
-        python_executable: environment.python_executable().into(),
-        python_version: environment.interpreter().python_full_version().to_string(),
-        env_kind: match &environment {
-            SyncEnvironment::Project(..) => EnvKind::Project,
-            SyncEnvironment::Script(..) => EnvKind::Script,
-        },
-        env_path: match &environment {
-            SyncEnvironment::Project(
-                ProjectEnvironment::Existing(env)
-                | ProjectEnvironment::Created(env)
-                | ProjectEnvironment::Replaced(env),
-            )
-            | SyncEnvironment::Script(
-                ScriptEnvironment::Existing(env)
-                | ScriptEnvironment::Created(env)
-                | ScriptEnvironment::Replaced(env),
-            ) => env.root().into(),
-            SyncEnvironment::Project(
-                ProjectEnvironment::WouldCreate(root, ..)
-                | ProjectEnvironment::WouldReplace(root, ..),
-            )
-            | SyncEnvironment::Script(
-                ScriptEnvironment::WouldCreate(root, ..)
-                | ScriptEnvironment::WouldReplace(root, ..),
-            ) => root.as_path().into(),
-        },
-        action: match &environment {
-            SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => SyncAction::AlreadyExist,
-            SyncEnvironment::Project(ProjectEnvironment::Created(..)) => SyncAction::Create,
-            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(..)) => SyncAction::Create,
-            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(..)) => SyncAction::Update,
-            SyncEnvironment::Project(ProjectEnvironment::Replaced(..)) => SyncAction::Update,
-            SyncEnvironment::Script(ScriptEnvironment::Existing(..)) => SyncAction::AlreadyExist,
-            SyncEnvironment::Script(ScriptEnvironment::Created(..)) => SyncAction::Create,
-            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(..)) => SyncAction::Create,
-            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(..)) => SyncAction::Update,
-            SyncEnvironment::Script(ScriptEnvironment::Replaced(..)) => SyncAction::Update,
-        },
-    });
-    // If we're printing human, eagerly report these partial results
-    if !format.is_json() {
-        report.print_sync_text(printer)?;
+        environment: EnvironmentReport::from(&environment),
+        action: SyncAction::from(&environment),
+        target: TargetName::from(&target),
+    };
+
+    // Show the intermediate results if relevant
+    if let Some(message) = sync_report.format(output_format) {
+        writeln!(printer.stderr(), "{message}")?;
     }
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
@@ -296,12 +260,22 @@ pub(crate) async fn sync(
             .await
             {
                 Ok(..) => {
-                    // If we're successfully exiting early, be sure to print buffered json output
-                    if format.is_json() {
-                        report.print_json(printer)?;
+                    // Generate a report for the script without a lockfile
+                    let report = Report {
+                        schema: SchemaReport::default(),
+                        target: TargetName::from(&target),
+                        project: None,
+                        script: Some(ScriptReport::from(script)),
+                        sync: sync_report,
+                        lock: None,
+                        dry_run: dry_run.enabled(),
+                    };
+                    if let Some(output) = report.format(output_format) {
+                        writeln!(printer.stdout(), "{output}")?;
                     }
                     return Ok(ExitStatus::Success);
                 }
+                // TODO(zanieb): We should respect `--output-format json` for the error case
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         network_settings.native_tls,
@@ -348,18 +322,7 @@ pub(crate) async fn sync(
     .execute(lock_target)
     .await
     {
-        Ok(result) => {
-            report.lock = Some(LockReport {
-                lock_path: lock_target.lock_path().deref().into(),
-                dry_run: dry_run.enabled(),
-                action: match &result {
-                    LockResult::Unchanged(..) => LockAction::AlreadyExist,
-                    LockResult::Changed(None, ..) => LockAction::Create,
-                    LockResult::Changed(Some(_), ..) => LockAction::Update,
-                },
-            });
-            Outcome::Success(result.into_lock())
-        }
+        Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
@@ -373,15 +336,23 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     };
 
-    match format {
-        // If printing human, report the new results
-        SyncFormat::Text => {
-            report.print_lock_text(printer)?;
-        }
-        // If printing json, report the full buffered results
-        SyncFormat::Json => {
-            report.print_json(printer)?;
-        }
+    let lock_report = LockReport::from((&lock_target, &mode, &outcome));
+    if let Some(message) = lock_report.format(output_format) {
+        writeln!(printer.stderr(), "{message}")?;
+    }
+
+    let report = Report {
+        schema: SchemaReport::default(),
+        target: TargetName::from(&target),
+        project: target.project().map(ProjectReport::from),
+        script: target.script().map(ScriptReport::from),
+        sync: sync_report,
+        lock: Some(lock_report),
+        dry_run: dry_run.enabled(),
+    };
+
+    if let Some(output) = report.format(output_format) {
+        writeln!(printer.stdout(), "{output}")?;
     }
 
     // Identify the installation target.
@@ -433,7 +404,7 @@ pub(crate) async fn sync(
 #[allow(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
-    Success(Lock),
+    Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
     LockMismatch(Box<Lock>),
 }
@@ -442,7 +413,7 @@ impl Outcome {
     /// Return the [`Lock`] associated with this outcome.
     fn lock(&self) -> &Lock {
         match self {
-            Self::Success(lock) => lock,
+            Self::Success(lock) => lock.lock(),
             Self::LockMismatch(lock) => lock,
         }
     }
@@ -506,12 +477,37 @@ enum SyncTarget {
     Script(Pep723Script),
 }
 
+impl SyncTarget {
+    fn project(&self) -> Option<&VirtualProject> {
+        match self {
+            Self::Project(project) => Some(project),
+            Self::Script(_) => None,
+        }
+    }
+
+    fn script(&self) -> Option<&Pep723Script> {
+        match self {
+            Self::Project(_) => None,
+            Self::Script(script) => Some(script),
+        }
+    }
+}
+
 #[derive(Debug)]
 enum SyncEnvironment {
     /// A Python environment for a project.
     Project(ProjectEnvironment),
     /// A Python environment for a script.
     Script(ScriptEnvironment),
+}
+
+impl SyncEnvironment {
+    fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::Project(env) => env.dry_run_target(),
+            Self::Script(env) => env.dry_run_target(),
+        }
+    }
 }
 
 impl Deref for SyncEnvironment {
@@ -834,256 +830,391 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
     }
 }
 
-/// A report of a project's state and updates to make.
-#[derive(Debug, Serialize)]
-struct ProjectReport {
-    /// The project directory path.
-    project_dir: PortablePathBuf,
-    /// The workspace root
-    workspace_dir: Option<PortablePathBuf>,
-    /// The environment details, including path and action.
-    sync: Option<SyncReport>,
-    // Lockfile details, including path and actions taken
-    lock: Option<LockReport>,
-}
-
-/// The kind of environment this is
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum EnvKind {
-    /// An environment for a project
+struct WorkspaceReport {
+    /// The workspace directory path.
+    path: PortablePathBuf,
+}
+
+impl From<&Workspace> for WorkspaceReport {
+    fn from(workspace: &Workspace) -> Self {
+        WorkspaceReport {
+            path: workspace.install_path().as_path().into(),
+        }
+    }
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct ProjectReport {
+    //
+    path: PortablePathBuf,
+    workspace: WorkspaceReport,
+}
+
+impl From<&VirtualProject> for ProjectReport {
+    fn from(project: &VirtualProject) -> Self {
+        ProjectReport {
+            path: project.root().into(),
+            workspace: WorkspaceReport::from(project.workspace()),
+        }
+    }
+}
+
+impl From<&SyncTarget> for TargetName {
+    fn from(target: &SyncTarget) -> Self {
+        match target {
+            SyncTarget::Project(_) => TargetName::Project,
+            SyncTarget::Script(_) => TargetName::Script,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct ScriptReport {
+    /// The path to the script.
+    path: PortablePathBuf,
+}
+
+impl From<&Pep723Script> for ScriptReport {
+    fn from(script: &Pep723Script) -> Self {
+        ScriptReport {
+            path: script.path.as_path().into(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+enum SchemaVersion {
+    /// An unstable, experimental schema.
+    #[default]
+    Preview,
+}
+
+#[derive(Serialize, Debug, Default)]
+struct SchemaReport {
+    /// The version of the schema.
+    version: SchemaVersion,
+}
+
+/// A report of the uv sync operation
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct Report {
+    /// The schema of this report.
+    schema: SchemaReport,
+    /// The target of the sync operation, either a project or a script.
+    target: TargetName,
+    /// The report for a [`TargetName::Project`], if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    project: Option<ProjectReport>,
+    /// The report for a [`TargetName::Script`], if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    script: Option<ScriptReport>,
+    /// The report for the sync operation.
+    sync: SyncReport,
+    /// The report for the lock operation.
+    lock: Option<LockReport>,
+    /// Whether this is a dry run.
+    dry_run: bool,
+}
+
+/// The kind of target
+#[derive(Debug, Serialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum TargetName {
     Project,
-    /// An environment for a script
     Script,
 }
 
-/// Represents the lockfile details during a dry run.
-///
-/// this struct captures the path to the lockfile and action
-/// that would be taken on it.
-#[derive(Debug, Serialize)]
-struct LockReport {
-    /// The path to the lockfile
-    lock_path: PortablePathBuf,
-    /// Whether the lockfile was preserved, created, or updated.
-    action: LockAction,
-    /// Whether this is a dry run
-    dry_run: bool,
+impl std::fmt::Display for TargetName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TargetName::Project => write!(f, "project"),
+            TargetName::Script => write!(f, "script"),
+        }
+    }
 }
 
 /// Represents the action taken during a sync.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 enum SyncAction {
-    /// No changes are needed.
-    AlreadyExist,
-    /// The environment would be updated.
+    /// The environment was checked and required no updates.
+    Check,
+    /// The environment was updated.
     Update,
-    /// Create a new environment.
+    /// The environment was replaced.
+    Replace,
+    /// A new environment was created.
     Create,
+}
+
+impl From<&SyncEnvironment> for SyncAction {
+    fn from(env: &SyncEnvironment) -> Self {
+        match &env {
+            SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => SyncAction::Check,
+            SyncEnvironment::Project(ProjectEnvironment::Created(..)) => SyncAction::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(..)) => SyncAction::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(..)) => SyncAction::Replace,
+            SyncEnvironment::Project(ProjectEnvironment::Replaced(..)) => SyncAction::Update,
+            SyncEnvironment::Script(ScriptEnvironment::Existing(..)) => SyncAction::Check,
+            SyncEnvironment::Script(ScriptEnvironment::Created(..)) => SyncAction::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(..)) => SyncAction::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(..)) => SyncAction::Replace,
+            SyncEnvironment::Script(ScriptEnvironment::Replaced(..)) => SyncAction::Update,
+        }
+    }
+}
+
+impl SyncAction {
+    fn message(&self, target: TargetName, dry_run: bool) -> Option<&'static str> {
+        let message = if dry_run {
+            match self {
+                SyncAction::Check => "Would use",
+                SyncAction::Update => "Would update",
+                SyncAction::Replace => "Would replace",
+                SyncAction::Create => "Would create",
+            }
+        } else {
+            // For projects, we omit some of these messages when we're not in dry-run mode
+            let is_project = matches!(target, TargetName::Project);
+            match self {
+                SyncAction::Check | SyncAction::Update | SyncAction::Create if is_project => {
+                    return None;
+                }
+                SyncAction::Check => "Using",
+                SyncAction::Update => "Updating",
+                SyncAction::Replace => "Replacing",
+                SyncAction::Create => "Creating",
+            }
+        };
+        Some(message)
+    }
 }
 
 /// Represents the action taken during a lock.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 enum LockAction {
-    /// No changes are needed.
-    AlreadyExist,
-    /// The lock would be updated.
+    /// The lockfile was used without checking.
+    Use,
+    /// The lockfile was checked and required no updates.
+    Check,
+    /// The lockfile was updated.
     Update,
-    /// Create a new lock.
+    /// A new lockfile was created.
     Create,
 }
 
-/// The synced environment details, including path, action, and Python configuration.
-#[derive(Serialize, Debug)]
-struct SyncReport {
-    /// The path to the environment.
-    env_path: PortablePathBuf,
-    /// Whether a project or a script environment is used.
-    env_kind: EnvKind,
-    /// Whether this is a dry run.
-    dry_run: bool,
-    /// Whether the environment was preserved, created, or updated.
-    action: SyncAction,
-    // Python executable path.
-    python_executable: PortablePathBuf,
-    // Python full version.
-    python_version: String,
+impl LockAction {
+    fn message(&self, dry_run: bool) -> Option<&'static str> {
+        let message = if dry_run {
+            match self {
+                LockAction::Use => return None,
+                LockAction::Check => "Found up-to-date",
+                LockAction::Update => "Would update",
+                LockAction::Create => "Would create",
+            }
+        } else {
+            return None;
+        };
+        Some(message)
+    }
 }
 
-impl ProjectReport {
-    /// Prints the entire report as JSON
-    fn print_json(&self, printer: Printer) -> Result<()> {
-        let output = serde_json::to_string_pretty(self)?;
-        writeln!(printer.stdout(), "{output}")?;
-        Ok(())
+#[derive(Serialize, Debug)]
+struct PythonReport {
+    path: PortablePathBuf,
+    version: uv_pep508::StringVersion,
+    implementation: String,
+}
+
+impl From<&uv_python::Interpreter> for PythonReport {
+    fn from(interpreter: &uv_python::Interpreter) -> Self {
+        PythonReport {
+            path: interpreter.sys_executable().into(),
+            version: interpreter.python_full_version().clone(),
+            implementation: interpreter.implementation_name().to_string(),
+        }
+    }
+}
+
+impl PythonReport {
+    /// Set the path for this Python report.
+    #[must_use]
+    fn with_path(mut self, path: PortablePathBuf) -> Self {
+        self.path = path;
+        self
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct EnvironmentReport {
+    /// The path to the environment.
+    path: PortablePathBuf,
+    /// The Python interpreter for the environment.
+    python: PythonReport,
+}
+
+impl From<&PythonEnvironment> for EnvironmentReport {
+    fn from(env: &PythonEnvironment) -> Self {
+        EnvironmentReport {
+            python: PythonReport::from(env.interpreter()),
+            path: env.root().into(),
+        }
+    }
+}
+
+impl From<&SyncEnvironment> for EnvironmentReport {
+    fn from(env: &SyncEnvironment) -> Self {
+        let report = EnvironmentReport::from(&**env);
+        // Replace the path if necessary; we construct a temporary virtual environment during dry
+        // run invocations and want to report the path we _would_ use.
+        if let Some(path) = env.dry_run_target() {
+            report.with_path(path.into())
+        } else {
+            report
+        }
+    }
+}
+
+impl EnvironmentReport {
+    /// Set the path for this environment report.
+    #[must_use]
+    fn with_path(mut self, path: PortablePathBuf) -> Self {
+        let python_path = &self.python.path;
+        if let Ok(python_path) = python_path.as_ref().strip_prefix(self.path) {
+            let new_path = path.as_ref().to_path_buf().join(python_path);
+            self.python = self.python.with_path(new_path.as_path().into());
+        }
+        self.path = path;
+        self
+    }
+}
+
+/// The report for a sync operation.
+#[derive(Serialize, Debug)]
+struct SyncReport {
+    /// The environment.
+    environment: EnvironmentReport,
+    /// The action performed during the sync, e.g., what was done to the environment.
+    action: SyncAction,
+
+    // We store these fields so the report can format itself self-contained, but the outer
+    // [`Report`] is intended to include these in user-facing output
+    #[serde(skip)]
+    dry_run: bool,
+    #[serde(skip)]
+    target: TargetName,
+}
+
+impl SyncReport {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            // This is an intermediate report, when using JSON, it's only rendered at the end
+            SyncFormat::Json => None,
+            SyncFormat::Text => self.to_human_readable_string(),
+        }
     }
 
-    /// Prints the sync component in human readable form
-    fn print_sync_text(&self, printer: Printer) -> Result<()> {
-        let Some(SyncReport {
-            env_path: path,
-            env_kind: kind,
-            dry_run: dry,
+    fn to_human_readable_string(&self) -> Option<String> {
+        let Self {
+            environment,
             action,
-            python_executable: _,
-            python_version: _,
-        }) = &self.sync
-        else {
-            return Ok(());
-        };
+            dry_run,
+            target,
+        } = self;
 
-        match (kind, action, dry) {
-            (EnvKind::Project, SyncAction::AlreadyExist, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Discovered existing environment at: {}",
-                        path.user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            }
-            (EnvKind::Project, SyncAction::AlreadyExist, false) => {
-                // Currently intentionally silent
-            }
-            (EnvKind::Project, SyncAction::Update, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Would replace existing virtual environment at: {}",
-                        path.user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            }
-            (EnvKind::Project, SyncAction::Update, false) => {
-                // Currently intentionally silent
-            }
-            (EnvKind::Project, SyncAction::Create, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Would create virtual environment at: {}",
-                        path.user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            }
-            (EnvKind::Project, SyncAction::Create, false) => {
-                // Currently intentionally silent
-            }
-            (EnvKind::Script, SyncAction::AlreadyExist, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Discovered existing environment at: {}",
-                        path.user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            }
-            (EnvKind::Script, SyncAction::AlreadyExist, false) => {
-                writeln!(
-                    printer.stderr(),
-                    "Using script environment at: {}",
-                    path.user_display().cyan()
-                )?;
-            }
-            (EnvKind::Script, SyncAction::Update, false) => {
-                writeln!(
-                    printer.stderr(),
-                    "Recreating script environment at: {}",
-                    path.user_display().cyan()
-                )?;
-            }
-            (EnvKind::Script, SyncAction::Create, false) => {
-                writeln!(
-                    printer.stderr(),
-                    "Creating script environment at: {}",
-                    path.user_display().cyan()
-                )?;
-            }
-            (EnvKind::Script, SyncAction::Update, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Would replace existing script environment at: {}",
-                        path.user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            }
-            (EnvKind::Script, SyncAction::Create, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Would create script environment at: {}",
-                        path.user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            }
+        let action = action.message(*target, *dry_run)?;
+
+        let message = format!(
+            "{action} {target} environment at: {path}",
+            path = environment.path.user_display().cyan(),
+        );
+        if *dry_run {
+            return Some(message.dimmed().to_string());
         }
 
-        Ok(())
+        Some(message)
+    }
+}
+
+/// The report for a lock operation.
+#[derive(Debug, Serialize)]
+struct LockReport {
+    /// The path to the lockfile
+    path: PortablePathBuf,
+    /// Whether the lockfile was preserved, created, or updated.
+    action: LockAction,
+
+    // We store this field so the report can format itself self-contained, but the outer
+    // [`Report`] is intended to include this in user-facing output
+    #[serde(skip)]
+    dry_run: bool,
+}
+
+impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
+    fn from((target, mode, outcome): (&LockTarget, &LockMode, &Outcome)) -> Self {
+        LockReport {
+            path: target.lock_path().deref().into(),
+            action: match outcome {
+                Outcome::Success(result) => {
+                    match result {
+                        LockResult::Unchanged(..) => match mode {
+                            // When `--frozen` is used, we don't check the lockfile
+                            LockMode::Frozen => LockAction::Use,
+                            LockMode::DryRun(_) | LockMode::Locked(_) | LockMode::Write(_) => {
+                                LockAction::Check
+                            }
+                        },
+                        LockResult::Changed(None, ..) => LockAction::Create,
+                        LockResult::Changed(Some(_), ..) => LockAction::Update,
+                    }
+                }
+                // TODO(zanieb): We don't have a way to report the outcome of the lock yet
+                Outcome::LockMismatch(_) => LockAction::Check,
+            },
+            dry_run: matches!(mode, LockMode::DryRun(_)),
+        }
+    }
+}
+
+impl LockReport {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            SyncFormat::Json => None,
+            SyncFormat::Text => self.to_human_readable_string(),
+        }
     }
 
-    /// Prints the lock component in human readable form
-    fn print_lock_text(&self, printer: Printer) -> Result<()> {
-        let Some(LockReport {
-            lock_path: path,
+    fn to_human_readable_string(&self) -> Option<String> {
+        let Self {
+            path,
             action,
-            dry_run: dry,
-        }) = &self.lock
-        else {
-            return Ok(());
-        };
+            dry_run,
+        } = self;
 
-        match (action, dry) {
-            (LockAction::AlreadyExist, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Found up-to-date lockfile at: {}",
-                        path.user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            }
-            (LockAction::AlreadyExist, false) => {
-                // Currently intentionally silent
-            }
-            (LockAction::Update, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!("Would update lockfile at: {}", path.user_display().bold()).dimmed()
-                )?;
-            }
-            (LockAction::Update, false) => {
-                // Currently intentionally silent
-            }
-            (LockAction::Create, true) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!("Would create lockfile at: {}", path.user_display().bold()).dimmed()
-                )?;
-            }
-            (LockAction::Create, false) => {
-                // Currently intentionally silent
-            }
+        let action = action.message(*dry_run)?;
+
+        let message = format!(
+            "{action} lockfile at: {path}",
+            path = path.user_display().cyan(),
+        );
+        if *dry_run {
+            return Some(message.dimmed().to_string());
         }
 
-        Ok(())
+        Some(message)
+    }
+}
+
+impl Report {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            SyncFormat::Json => serde_json::to_string_pretty(self).ok(),
+            SyncFormat::Text => None,
+        }
     }
 }

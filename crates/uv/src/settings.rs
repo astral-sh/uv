@@ -1153,7 +1153,7 @@ pub(crate) struct SyncSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) format: SyncFormat,
+    pub(crate) output_format: SyncFormat,
 }
 
 impl SyncSettings {
@@ -1193,7 +1193,7 @@ impl SyncSettings {
             python,
             check,
             no_check,
-            format,
+            output_format,
         } = args;
         let install_mirrors = filesystem
             .clone()
@@ -1213,7 +1213,7 @@ impl SyncSettings {
         };
 
         Self {
-            format,
+            output_format,
             locked,
             frozen,
             dry_run,

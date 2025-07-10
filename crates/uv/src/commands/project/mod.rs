@@ -1212,14 +1212,14 @@ enum ProjectEnvironment {
     /// requirements. A new environment would've been created, but `--dry-run` mode is enabled; as
     /// such, a temporary environment was created instead.
     WouldReplace(
-        #[allow(dead_code)] PathBuf,
+        PathBuf,
         PythonEnvironment,
         #[allow(unused)] tempfile::TempDir,
     ),
     /// A new [`PythonEnvironment`] would've been created, but `--dry-run` mode is enabled; as such,
     /// a temporary environment was created instead.
     WouldCreate(
-        #[allow(dead_code)] PathBuf,
+        PathBuf,
         PythonEnvironment,
         #[allow(unused)] tempfile::TempDir,
     ),
@@ -1406,6 +1406,14 @@ impl ProjectEnvironment {
             Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
         }
     }
+
+    /// Return the path to the actual target, if this was a dry run environment.
+    pub(crate) fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::WouldReplace(path, _, _) | Self::WouldCreate(path, _, _) => Some(path),
+            Self::Created(_) | Self::Existing(_) | Self::Replaced(_) => None,
+        }
+    }
 }
 
 impl std::ops::Deref for ProjectEnvironment {
@@ -1436,14 +1444,14 @@ enum ScriptEnvironment {
     /// requirements. A new environment would've been created, but `--dry-run` mode is enabled; as
     /// such, a temporary environment was created instead.
     WouldReplace(
-        #[allow(dead_code)] PathBuf,
+        PathBuf,
         PythonEnvironment,
         #[allow(unused)] tempfile::TempDir,
     ),
     /// A new [`PythonEnvironment`] would've been created, but `--dry-run` mode is enabled; as such,
     /// a temporary environment was created instead.
     WouldCreate(
-        #[allow(dead_code)] PathBuf,
+        PathBuf,
         PythonEnvironment,
         #[allow(unused)] tempfile::TempDir,
     ),
@@ -1584,6 +1592,14 @@ impl ScriptEnvironment {
             Self::Created(environment) => Ok(environment),
             Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
             Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+        }
+    }
+
+    /// Return the path to the actual target, if this was a dry run environment.
+    pub(crate) fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::WouldReplace(path, _, _) | Self::WouldCreate(path, _, _) => Some(path),
+            Self::Created(_) | Self::Existing(_) | Self::Replaced(_) => None,
         }
     }
 }

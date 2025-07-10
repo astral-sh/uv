@@ -46,18 +46,13 @@ pub enum PythonListFormat {
     Json,
 }
 
-#[derive(Debug, Default, Clone, clap::ValueEnum)]
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum SyncFormat {
     /// Display the result in a human-readable format.
     #[default]
     Text,
     /// Display the result in JSON format.
     Json,
-}
-impl SyncFormat {
-    pub fn is_json(&self) -> bool {
-        matches!(self, SyncFormat::Json)
-    }
 }
 
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
@@ -3179,7 +3174,7 @@ pub struct SyncArgs {
 
     /// Select the output format.
     #[arg(long, value_enum, default_value_t = SyncFormat::default())]
-    pub format: SyncFormat,
+    pub output_format: SyncFormat,
 
     /// Include all optional dependencies.
     ///

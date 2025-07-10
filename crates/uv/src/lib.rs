@@ -1814,7 +1814,7 @@ async fn run_project(
                 &cache,
                 printer,
                 globals.preview,
-                args.format,
+                args.output_format,
             ))
             .await
         }
