@@ -2558,6 +2558,7 @@ fn version_set_evil_constraints() -> Result<()> {
 /// Bump the version with conflicting extras, to ensure we're activating the correct subset of
 /// extras during the resolve.
 #[test]
+#[cfg(feature = "pypi")]
 fn version_extras() -> Result<()> {
     let context = TestContext::new("3.12");
 
