@@ -205,21 +205,26 @@ pub(crate) async fn project_version(
         // Very little reason to do "bump to stable" and then do other things,
         // even if we can make sense of it.
         if stable_count > 0 && bump.len() > 1 {
-            if let Some(component) = release_components.first() {
-                return Err(anyhow!(
-                    "`--bump stable` isn't needed if you're already passing `--bump {component}`"
-                ));
-            }
+            let components = bump
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
             return Err(anyhow!(
-                "`--bump stable` cannot be combined with any other `--bump`"
+                "`--bump stable` cannot be used with another `--bump` value, got: {components}"
             ));
         }
 
         // Very little reason to "bump to post" and then do other things,
         // how is it a post-release otherwise?
         if post_count > 0 && bump.len() > 1 {
+            let components = bump
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
             return Err(anyhow!(
-                "`--bump post` cannot be combined with any other `--bump`"
+                "`--bump post` cannot be used with another `--bump` value, got: {components}"
             ));
         }
 
@@ -228,8 +233,13 @@ pub(crate) async fn project_version(
         // `--bump major --bump major` perfect sense (1.2.3 => 3.0.0)
         // ...but it's weird and probably a mistake?
         if release_components.len() > 1 {
+            let components = release_components
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
             return Err(anyhow!(
-                "`--bump` can only take one of `major`, `minor`, `patch`"
+                "Only one release version component can be provided to `--bump`, got: {components}"
             ));
         }
 
@@ -237,10 +247,15 @@ pub(crate) async fn project_version(
         // `--bump beta --bump beta` makes perfect sense (1.2.3b4 => 1.2.3b6)
         // ...but it's weird and probably a mistake?
         // `--bump beta --bump dev` makes perfect sense (1.2.3 => 1.2.3b1.dev1)
-        // ...but we want to discourage mixing `dev` with prereleases
+        // ...but we want to discourage mixing `dev` with pre-releases
         if prerelease_components.len() > 1 {
+            let components = prerelease_components
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
             return Err(anyhow!(
-                "`--bump` can only take one of `alpha`, `beta`, `rc`, `dev`"
+                "Only one pre-release version component can be provided to `--bump`, got: {components}"
             ));
         }
 
@@ -274,11 +289,11 @@ pub(crate) async fn project_version(
         if new_version <= old_version {
             if old_version.is_stable() && new_version.is_pre() {
                 return Err(anyhow!(
-                    "{old_version} => {new_version} didn't increase the version; when moving to a prerelease you also need to increase the release `--bump patch`?"
+                    "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
                 ));
             }
             return Err(anyhow!(
-                "{old_version} => {new_version} didn't increase the version"
+                "{old_version} => {new_version} didn't increase the version; provide the exact version to force an update"
             ));
         }
 

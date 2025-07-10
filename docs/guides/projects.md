@@ -163,30 +163,22 @@ details.
 ## Managing version
 
 The `uv version` command can be used to read your package's version.
-[See the publishing docs for updating your package's version](./package.md#updating-your-version).
 
-To get the version of your package, run `uv version` with no other arguments:
+To get the version of your package, run `uv version`:
 
 ```console
 $ uv version
 hello-world 0.7.0
 ```
 
-To get the version of a particular package, pass `--package`:
-
-```console
-$ uv version --package myapp
-myapp 1.2.3
-```
-
-To just get the version with no other output, pass `--short`:
+To get the version without the package name, use the `--short` option:
 
 ```console
 $ uv version --short
 0.7.0
 ```
 
-To get the version as json, pass `--output-format json`:
+To get version information in a JSON format, use the `--output-format json` option:
 
 ```console
 $ uv version --output-format json
@@ -196,6 +188,9 @@ $ uv version --output-format json
     "commit_info": null
 }
 ```
+
+See the [publishing guide](./package.md#updating-your-version) for details on updating your package
+version.
 
 ## Running commands
 

@@ -61,14 +61,14 @@ The `uv version` command provides conveniences for updating the version of your 
 publish it.
 [See the project docs for reading your package's version](./projects.md#managing-version).
 
-To set the the exact version of your package, just pass that version:
+To update to an exact version, provide it as a positional argument:
 
 ```console
 $ uv version 1.0.0
 hello-world 0.7.0 => 1.0.0
 ```
 
-If you want to preview the change without actually applying it, use the `--dry-run` flag:
+To preview the change without updating the `pyproject.toml`, use the `--dry-run` flag:
 
 ```console
 $ uv version 2.0.0 --dry-run
@@ -77,49 +77,37 @@ $ uv version
 hello-world 1.0.0
 ```
 
-If you want to change the version of a particular package, use the `--package` flag:
-
-```console
-$ uv version --package hello-world 1.2.3
-hello-world 1.0.0 => 1.2.3
-```
-
-To increase the version of your package, use the `--bump` flag:
+To increase the version of your package semantics, use the `--bump` option:
 
 ```console
 $ uv version --bump minor
 hello-world 1.2.3 => 1.3.0
 ```
 
-The `--bump` flag can be passed multiple times, and uv will run them in the following order that
-prevents bumps from clobbering eachother:
+The `--bump` option supports the following common version components: `major`, `minor`, `patch`,
+`stable`, `alpha`, `beta`, `rc`, `post`, and `dev`. When provided more than once, the components
+will be applied in order, from largest (`major`) to smallest (`dev`).
 
-```text
-    major > minor > patch > stable > alpha > beta > rc > post > dev
-```
-
-When you're on a stable version and want to start shipping prereleases, you'll want to bump the
-release and the prerelease:
+To move from a stable to pre-release version, bump one of the major, minor, or patch components in
+addition to the pre-release component:
 
 ```console
 $ uv version --bump patch --bump beta
 hello-world 1.3.0 => 1.3.1b1
+$ uv version --bump major --bump alpha
+hello-world 1.3.0 => 2.0.0a1
 ```
 
-!!! Note
-
-    If you only bump the prerelease here it will actually decrease the current version.
-    `uv version` will error if that ever happens. If you intended to do that, you can pass
-    `--allow-decreases` to disable the check.
-
-When you're on a prerelease and want to ship another, you can just bump the prerelease:
+When moving from a pre-release to a new pre-release version, just bump the relevant pre-release
+component:
 
 ```console
 uv version --bump beta
 hello-world 1.3.0b1 => 1.3.1b2
 ```
 
-When you're on a prerelease and want to ship a stable version, you can bump to stable:
+When moving from a pre-release to a stable version, the `stable` option can be used to clear the
+pre-release component:
 
 ```console
 uv version --bump stable
@@ -128,9 +116,8 @@ hello-world 1.3.1b2 => 1.3.1
 
 !!! info
 
-    By default, when `uv version` modifies your package it will lock and sync your project to
-    ensure everything sees the change. To prevent locking and syncing, pass `--frozen`. To just
-    prevent syncing, pass `--no-sync`.
+    By default, when `uv version` modifies the project it will perform a lock and sync. To
+    prevent locking and syncing, use `--frozen`, or,  to just prevent syncing, use `--no-sync`.
 
 ## Publishing your package
 

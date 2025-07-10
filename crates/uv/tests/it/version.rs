@@ -601,7 +601,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: `--bump post` cannot be combined with any other `--bump`
+    error: `--bump post` cannot be used with another `--bump` value, got: major, patch, alpha, minor, dev, minor, post, post
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -919,7 +919,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: 2.3.4.post6 => 2.3.4 didn't increase the version
+    error: 2.3.4.post6 => 2.3.4 didn't increase the version; provide the exact version to force an update
     ");
     Ok(())
 }
@@ -946,7 +946,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: 2.3.4b5 => 2.3.4a1 didn't increase the version
+    error: 2.3.4b5 => 2.3.4a1 didn't increase the version; provide the exact version to force an update
     ");
     Ok(())
 }
@@ -973,7 +973,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: 2.3.4 => 2.3.4a1 didn't increase the version; when moving to a prerelease you also need to increase the release `--bump patch`?
+    error: 2.3.4 => 2.3.4a1 didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`
     ");
     Ok(())
 }
@@ -1001,7 +1001,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: `--bump` can only take one of `major`, `minor`, `patch`
+    error: Only one release version component can be provided to `--bump`, got: major, major
     ");
     Ok(())
 }
@@ -1029,7 +1029,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: `--bump` can only take one of `alpha`, `beta`, `rc`, `dev`
+    error: Only one pre-release version component can be provided to `--bump`, got: alpha, alpha
     ");
     Ok(())
 }
@@ -1057,7 +1057,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: `--bump stable` isn't needed if you're already passing `--bump major`
+    error: `--bump stable` cannot be used with another `--bump` value, got: stable, major
     ");
     Ok(())
 }
@@ -1145,7 +1145,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: `--bump` can only take one of `alpha`, `beta`, `rc`, `dev`
+    error: Only one pre-release version component can be provided to `--bump`, got: alpha, dev
     ");
     Ok(())
 }
@@ -1203,7 +1203,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: `--bump post` cannot be combined with any other `--bump`
+    error: `--bump post` cannot be used with another `--bump` value, got: major, post
     ");
     Ok(())
 }

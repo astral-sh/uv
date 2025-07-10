@@ -533,8 +533,7 @@ pub struct VersionArgs {
 
     /// Update the project version using the given semantics
     ///
-    /// This flag can be passed multiple times to allow going to a new release and entering
-    /// a prerelease: `--bump patch --bump beta`
+    /// This flag can be passed multiple times.
     #[arg(group = "operation", long)]
     pub bump: Vec<VersionBump>,
 
@@ -615,25 +614,34 @@ pub struct VersionArgs {
 // to perform, we sort them and apply them in order, so users don't have to think too hard about it.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum VersionBump {
-    /// Increase the major version (1.2.3 => 2.0.0)
+    /// Increase the major version (e.g., 1.2.3 => 2.0.0)
     Major,
-    /// Increase the minor version (1.2.3 => 1.3.0)
+    /// Increase the minor version (e.g., 1.2.3 => 1.3.0)
     Minor,
-    /// Increase the patch version (1.2.3 => 1.2.4)
+    /// Increase the patch version (e.g., 1.2.3 => 1.2.4)
     Patch,
-    /// Make the version stable (1.2.3b4.post5.dev6 => 1.2.3)
+    /// Move from a pre-release to stable version (e.g., 1.2.3b4.post5.dev6 => 1.2.3)
     ///
-    /// This intentionally clears `.postN` and preserves `+local`
+    /// Removes all pre-release components, but will not remove "local" components.
     Stable,
-    /// Increase the alpha version (1.2.3a4 => 1.2.3a5)
+    /// Increase the alpha version (e.g., 1.2.3a4 => 1.2.3a5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0a1, you'd also include [`VersionBump::Major`].
     Alpha,
-    /// Increase the beta version (1.2.3b4 => 1.2.3b5)
+    /// Increase the beta version (e.g., 1.2.3b4 => 1.2.3b5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0b1, you'd also include [`VersionBump::Major`].
     Beta,
-    /// Increase the rc version (1.2.3rc4 => 1.2.3rc5)
+    /// Increase the rc version (e.g., 1.2.3rc4 => 1.2.3rc5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0rc1, you'd also include [`VersionBump::Major`].]
     Rc,
-    /// Increase the post version (1.2.3.post5 => 1.2.3.post6)
+    /// Increase the post version (e.g., 1.2.3.post5 => 1.2.3.post6)
     Post,
-    /// Increase the dev version (1.2.3a4.dev6 => 1.2.3.dev7)
+    /// Increase the dev version (e.g., 1.2.3a4.dev6 => 1.2.3.dev7)
     Dev,
 }
 
