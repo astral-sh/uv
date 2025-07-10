@@ -690,6 +690,7 @@ impl ScriptInterpreter {
         }
 
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -946,6 +947,7 @@ impl ProjectInterpreter {
         }
 
         let client_builder = BaseClientBuilder::default()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -1656,6 +1658,8 @@ pub(crate) async fn resolve_names(
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()
+        .map_err(uv_requirements::Error::ClientError)?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
@@ -1813,6 +1817,7 @@ pub(crate) async fn resolve_environment(
     } = spec.requirements;
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
@@ -1984,6 +1989,7 @@ pub(crate) async fn sync_environment(
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
@@ -2147,6 +2153,7 @@ pub(crate) async fn update_environment(
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)

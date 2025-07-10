@@ -376,6 +376,7 @@ pub(crate) async fn install(
 
     // Download and unpack the Python versions concurrently
     let client = uv_client::BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone())

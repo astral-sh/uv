@@ -207,6 +207,7 @@ async fn build_impl(
     } = settings;
 
     let client_builder = BaseClientBuilder::default()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());

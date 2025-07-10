@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, io, iter};
 
+use anyhow::Context;
 use anyhow::anyhow;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
@@ -127,18 +128,7 @@ impl BaseClientBuilder<'_> {
             allow_insecure_host: vec![],
             native_tls: false,
             connectivity: Connectivity::Online,
-            retries: env::var_os(EnvVars::UV_HTTP_RETRIES)
-                .and_then(|value| {
-                    if let Some(value) = value.to_str() {
-                        value.parse::<u32>().inspect_err(|err|
-                            warn_user_once!("`UV_HTTP_RETRIES={value}` is not a valid integer and will be ignored: {err}")
-                        ).inspect(|value| debug!("Using `UV_HTTP_RETRIES={value}`")).ok()
-                    } else {
-                        warn_user_once!("`UV_HTTP_RETRIES={value:?}` is not valid UTF-8 and will be ignored");
-                        None
-                    }
-                })
-                .unwrap_or(DEFAULT_RETRIES),
+            retries: DEFAULT_RETRIES,
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
@@ -175,6 +165,25 @@ impl<'a> BaseClientBuilder<'a> {
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
         self
+    }
+
+    /// Read the retry count from [`EnvVars::UV_HTTP_RETRIES`] if set, otherwise, make no change.
+    ///
+    /// Errors when [`EnvVars::UV_HTTP_RETRIES`] is not a valid u32.
+    pub fn retries_from_env(self) -> anyhow::Result<Self> {
+        // TODO(zanieb): We should probably parse this in another layer, but there's not a natural
+        // fit for it right now
+        if let Some(value) = env::var_os(EnvVars::UV_HTTP_RETRIES) {
+            Ok(self.retries(
+                value
+                    .to_string_lossy()
+                    .as_ref()
+                    .parse::<u32>()
+                    .context("Failed to parse `UV_HTTP_RETRIES`")?,
+            ))
+        } else {
+            Ok(self)
+        }
     }
 
     #[must_use]

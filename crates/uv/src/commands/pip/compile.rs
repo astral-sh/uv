@@ -179,6 +179,7 @@ pub(crate) async fn pip_compile(
     }
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)

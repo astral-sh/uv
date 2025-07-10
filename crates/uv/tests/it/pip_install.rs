@@ -511,7 +511,7 @@ async fn install_http_retries() {
         .mount(&server)
         .await;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index")
         .arg(server.uri())
@@ -521,14 +521,12 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `UV_HTTP_RETRIES=foo` is not a valid integer and will be ignored: invalid digit found in string
-    error: Request failed after 3 retries
-      Caused by: Failed to fetch: `http://127.0.0.1:50917/anyio/`
-      Caused by: HTTP status server error (503 Service Unavailable) for url (http://127.0.0.1:50917/anyio/)
+    error: Failed to parse `UV_HTTP_RETRIES`
+      Caused by: invalid digit found in string
     "
     );
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index")
         .arg(server.uri())
@@ -538,14 +536,12 @@ async fn install_http_retries() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `UV_HTTP_RETRIES=999999999999` is not a valid integer and will be ignored: number too large to fit in target type
-    error: Request failed after 3 retries
-      Caused by: Failed to fetch: `http://127.0.0.1:50917/anyio/`
-      Caused by: HTTP status server error (503 Service Unavailable) for url (http://127.0.0.1:50917/anyio/)
+    error: Failed to parse `UV_HTTP_RETRIES`
+      Caused by: number too large to fit in target type
     "
     );
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index")
         .arg(server.uri())
@@ -557,8 +553,8 @@ async fn install_http_retries() {
 
     ----- stderr -----
     error: Request failed after 5 retries
-      Caused by: Failed to fetch: `http://127.0.0.1:50917/anyio/`
-      Caused by: HTTP status server error (503 Service Unavailable) for url (http://127.0.0.1:50917/anyio/)
+      Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
     );
 }

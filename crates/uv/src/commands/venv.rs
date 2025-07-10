@@ -193,6 +193,9 @@ async fn venv_impl(
             .unwrap_or(PathBuf::from(".venv")),
     );
 
+    // TODO(zanieb): We don't use [`BaseClientBuilder::retries_from_env`] here because it's a pain
+    // to map into a miette diagnostic. We should just remove miette diagnostics here, we're not
+    // using them elsewhere.
     let client_builder = BaseClientBuilder::default()
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

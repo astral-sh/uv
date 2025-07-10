@@ -99,6 +99,7 @@ pub(crate) async fn pip_install(
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)

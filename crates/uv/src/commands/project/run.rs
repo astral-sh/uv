@@ -617,6 +617,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
                 let client_builder = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -857,6 +858,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -927,6 +929,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         None
     } else {
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -1524,6 +1527,7 @@ impl RunCommand {
                     .tempfile()?;
 
                 let client = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone())
