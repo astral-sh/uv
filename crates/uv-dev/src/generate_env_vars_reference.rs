@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use uv_static::EnvVars;
 
-use crate::generate_all::Mode;
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
@@ -21,7 +21,7 @@ pub(crate) fn main(args: &Args) -> anyhow::Result<()> {
     let filename = "environment.md";
     let reference_path = PathBuf::from(ROOT_DIR)
         .join("docs")
-        .join("configuration")
+        .join("reference")
         .join(filename);
 
     match args.mode {
@@ -34,7 +34,9 @@ pub(crate) fn main(args: &Args) -> anyhow::Result<()> {
                     anstream::println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
-                    bail!("{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -60,7 +62,9 @@ pub(crate) fn main(args: &Args) -> anyhow::Result<()> {
                 fs_err::write(reference_path, reference_string.as_bytes())?;
             }
             Err(err) => {
-                bail!("{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{err}");
+                bail!(
+                    "{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{err}"
+                );
             }
         },
     }
@@ -100,4 +104,24 @@ fn render(var: &str, doc: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::env;
+
+    use anyhow::Result;
+
+    use uv_static::EnvVars;
+
+    use crate::generate_all::Mode;
+
+    use super::{Args, main};
+
+    #[test]
+    fn test_generate_env_vars_reference() -> Result<()> {
+        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
+            Mode::Write
+        } else {
+            Mode::Check
+        };
+        main(&Args { mode })
+    }
+}

@@ -1,3 +1,5 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -5,8 +7,14 @@ use std::str::FromStr;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PythonVersion(StringVersion);
+
+impl From<StringVersion> for PythonVersion {
+    fn from(version: StringVersion) -> Self {
+        Self(version)
+    }
+}
 
 impl Deref for PythonVersion {
     type Target = StringVersion;
@@ -31,6 +39,27 @@ impl FromStr for PythonVersion {
         if version.epoch() != 0 {
             return Err(format!("Python version `{s}` has a non-zero epoch"));
         }
+        if let Some(major) = version.release().first() {
+            if u8::try_from(*major).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid major version ({major})"
+                ));
+            }
+        }
+        if let Some(minor) = version.release().get(1) {
+            if u8::try_from(*minor).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid minor version ({minor})"
+                ));
+            }
+        }
+        if let Some(patch) = version.release().get(2) {
+            if u8::try_from(*patch).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid patch version ({patch})"
+                ));
+            }
+        }
 
         Ok(Self(version))
     }
@@ -38,31 +67,36 @@ impl FromStr for PythonVersion {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PythonVersion {
-    fn schema_name() -> String {
-        String::from("PythonVersion")
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PythonVersion")
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            string: Some(Box::new(schemars::schema::StringValidation {
-                pattern: Some(r"^3\.\d+(\.\d+)?$".to_string()),
-                ..schemars::schema::StringValidation::default()
-            })),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A Python version specifier, e.g. `3.7` or `3.8.0`.".to_string()),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^3\.\d+(\.\d+)?$",
+            "description": "A Python version specifier, e.g. `3.11` or `3.12.4`."
+        })
     }
 }
 
 impl<'de> serde::Deserialize<'de> for PythonVersion {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        PythonVersion::from_str(&s).map_err(serde::de::Error::custom)
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = PythonVersion;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                PythonVersion::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -140,6 +174,11 @@ impl PythonVersion {
         &self.0.version
     }
 
+    /// Return the full parsed Python version.
+    pub fn into_version(self) -> Version {
+        self.0.version
+    }
+
     /// Return the major version of this Python version.
     pub fn major(&self) -> u8 {
         u8::try_from(self.0.release().first().copied().unwrap_or(0)).expect("invalid major version")
@@ -168,4 +207,37 @@ impl PythonVersion {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::str::FromStr;
+
+    use uv_pep440::{Prerelease, PrereleaseKind, Version};
+
+    use crate::PythonVersion;
+
+    #[test]
+    fn python_markers() {
+        let version = PythonVersion::from_str("3.11.0").expect("valid python version");
+        assert_eq!(version.python_version(), Version::new([3, 11]));
+        assert_eq!(version.python_version().to_string(), "3.11");
+        assert_eq!(version.python_full_version(), Version::new([3, 11, 0]));
+        assert_eq!(version.python_full_version().to_string(), "3.11.0");
+
+        let version = PythonVersion::from_str("3.11").expect("valid python version");
+        assert_eq!(version.python_version(), Version::new([3, 11]));
+        assert_eq!(version.python_version().to_string(), "3.11");
+        assert_eq!(version.python_full_version(), Version::new([3, 11, 0]));
+        assert_eq!(version.python_full_version().to_string(), "3.11.0");
+
+        let version = PythonVersion::from_str("3.11.8a1").expect("valid python version");
+        assert_eq!(version.python_version(), Version::new([3, 11]));
+        assert_eq!(version.python_version().to_string(), "3.11");
+        assert_eq!(
+            version.python_full_version(),
+            Version::new([3, 11, 8]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1
+            }))
+        );
+        assert_eq!(version.python_full_version().to_string(), "3.11.8a1");
+    }
+}

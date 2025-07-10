@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
-use uv_bench::criterion::black_box;
-use uv_bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
+use std::hint::black_box;
+use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_pypi_types::Requirement;
+use uv_distribution_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
 
@@ -86,24 +86,24 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, LowerBound,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, PreviewMode,
         SourceStrategy,
     };
-    use uv_dispatch::BuildDispatch;
+    use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
-    use uv_distribution_types::{DependencyMetadata, IndexCapabilities, IndexLocations};
-    use uv_git::GitResolver;
-    use uv_install_wheel::linker::LinkMode;
+    use uv_distribution_types::{DependencyMetadata, IndexLocations, RequiresPython};
+    use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, Tags};
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{
-        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
-        Resolver, ResolverEnvironment, ResolverOutput,
+        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
+        ResolverEnvironment, ResolverOutput,
     };
-    use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+    use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+    use uv_workspace::WorkspaceCache;
 
     static MARKERS: LazyLock<MarkerEnvironment> = LazyLock::new(|| {
         MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -145,18 +145,16 @@ mod resolver {
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let exclude_newer = Some(
-            jiff::civil::date(2024, 8, 8)
+            jiff::civil::date(2024, 9, 1)
                 .to_zoned(jiff::tz::TimeZone::UTC)
                 .unwrap()
                 .timestamp()
                 .into(),
         );
         let build_constraints = Constraints::default();
-        let capabilities = IndexCapabilities::default();
         let flat_index = FlatIndex::default();
-        let git = GitResolver::default();
         let hashes = HashStrategy::default();
-        let in_flight = InFlight::default();
+        let state = SharedState::default();
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
@@ -164,6 +162,7 @@ mod resolver {
         let sources = SourceStrategy::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
+        let workspace_cache = WorkspaceCache::default();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -182,10 +181,7 @@ mod resolver {
             &index_locations,
             &flat_index,
             &dependency_metadata,
-            &index,
-            &git,
-            &capabilities,
-            &in_flight,
+            state,
             IndexStrategy::default(),
             &config_settings,
             build_isolation,
@@ -193,9 +189,10 @@ mod resolver {
             &build_options,
             &hashes,
             exclude_newer,
-            LowerBound::default(),
             sources,
+            workspace_cache,
             concurrency,
+            PreviewMode::Enabled,
         );
 
         let markers = if universal {
@@ -209,6 +206,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
+            interpreter.markers(),
             conflicts,
             Some(&TAGS),
             &flat_index,

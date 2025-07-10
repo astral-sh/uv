@@ -8,30 +8,13 @@ which are good opportunities for new contributors.
 
 ## Setup
 
-[Rust](https://rustup.rs/), a C compiler, and CMake are required to build uv.
+[Rust](https://rustup.rs/) (and a C compiler) are required to build uv.
 
-### Linux
-
-On Ubuntu and other Debian-based distributions, you can install the C compiler and CMake with:
+On Ubuntu and other Debian-based distributions, you can install a C compiler with:
 
 ```shell
-sudo apt install build-essential cmake
+sudo apt install build-essential
 ```
-
-### macOS
-
-You can install CMake with Homebrew:
-
-```shell
-brew install cmake
-```
-
-See the [Python](#python) section for instructions on installing the Python versions.
-
-### Windows
-
-You can install CMake from the [installers](https://cmake.org/download/) or with
-`pipx install cmake`.
 
 ## Testing
 
@@ -47,7 +30,7 @@ Testing uv requires multiple specific Python versions; they can be installed wit
 cargo run python install
 ```
 
-The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
+The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`. (It must be an absolute path.)
 
 ### Snapshot testing
 
@@ -82,18 +65,6 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
-### Testing on Windows
-
-When testing debug builds on Windows, the stack can overflow resulting in a `STATUS_STACK_OVERFLOW`
-error code. This is due to a small stack size limit on Windows that we encounter when running
-unoptimized builds — the release builds do not have this problem. We
-[added a `UV_STACK_SIZE` variable](https://github.com/astral-sh/uv/pull/941) to bypass this problem
-during testing. We recommend bumping the stack size from the default of 1MB to 2MB, for example:
-
-```powershell
-$Env:UV_STACK_SIZE = '2000000'
-```
-
 ## Running inside a Docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your
@@ -103,7 +74,7 @@ system
 just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 
 ```console
-$ docker buildx build -t uv-builder -f builder.dockerfile --load .
+$ docker build -t uv-builder -f crates/uv-dev/builder.dockerfile --load .
 # Build for musl to avoid glibc errors, might not be required with your OS version
 cargo build --target x86_64-unknown-linux-musl --profile profiling
 docker run --rm -it -v $(pwd):/app uv-builder /app/target/x86_64-unknown-linux-musl/profiling/uv-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt
@@ -206,7 +177,7 @@ Changelog entries and version bumps are automated. First, run:
 
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.
 
-Then, open a pull request e.g. `Bump version to ...`.
+Then, open a pull request, e.g., `Bump version to ...`.
 
 Binary builds will automatically be tested for the release.
 

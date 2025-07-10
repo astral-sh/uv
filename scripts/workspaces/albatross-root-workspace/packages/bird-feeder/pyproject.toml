@@ -2,7 +2,7 @@
 name = "bird-feeder"
 version = "1.0.0"
 requires-python = ">=3.8"
-dependencies = ["anyio>=4.3.0,<5", "seeds"]
+dependencies = ["iniconfig>=2,<3", "seeds"]
 
 [tool.uv.sources]
 seeds = { workspace = true }

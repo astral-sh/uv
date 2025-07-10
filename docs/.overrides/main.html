@@ -21,6 +21,10 @@
 <meta name="robots" content="index,follow"/>
 <script type="application/ld+json">
     {
+        {% if page and page.meta.git_revision_date_localized_raw_iso_datetime %}
+        "datePublished": "{{ page.meta.git_revision_date_localized_raw_iso_datetime }}Z",
+        "dateModified": "{{ page.meta.git_revision_date_localized_raw_iso_datetime  }}Z",
+        {% endif %}
         "@context": "https://schema.org",
         "@type": "WebSite",
         "name": "Astral Docs",

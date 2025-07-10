@@ -3,9 +3,9 @@ use std::borrow::Cow;
 use either::Either;
 use rustc_hash::FxHashMap;
 
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{Requirement, RequirementSource};
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
@@ -28,7 +28,7 @@ impl Constraints {
                 .or_default()
                 .push(Requirement {
                     // We add and apply constraints independent of their extras.
-                    extras: vec![],
+                    extras: Box::new([]),
                     ..requirement
                 });
         }
@@ -75,7 +75,7 @@ impl Constraints {
                 constraints.iter().cloned().map(move |constraint| {
                     // Add the extra to the override marker.
                     let mut joint_marker = MarkerTree::expression(extra_expression.clone());
-                    joint_marker.and(constraint.marker.clone());
+                    joint_marker.and(constraint.marker);
                     Cow::Owned(Requirement {
                         marker: joint_marker,
                         ..constraint

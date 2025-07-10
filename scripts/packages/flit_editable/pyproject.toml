@@ -1,0 +1,17 @@
+[project]
+name = "flit-editable"
+version = "0.1.0"
+description = "Example Flit project"
+authors = [
+    {name = "konstin", email = "konstin@mailbox.org"},
+]
+dependencies = []
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+[project.scripts]
+flit-editable = "flit_editable:main"
+
+[build-system]
+requires = ["flit_core>=3.4,<4"]
+build-backend = "flit_core.buildapi"

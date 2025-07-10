@@ -2,20 +2,24 @@ use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
+    #[error("Failed to read from zip file")]
     Zip(#[from] zip::result::ZipError),
-    #[error(transparent)]
+    #[error("Failed to read from zip file")]
     AsyncZip(#[from] async_zip::error::ZipError),
-    #[error(transparent)]
+    #[error("I/O operation failed during extraction")]
     Io(#[from] std::io::Error),
-    #[error("Unsupported archive type: {0}")]
-    UnsupportedArchive(PathBuf),
     #[error(
         "The top-level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
     NonSingularArchive(Vec<OsString>),
     #[error("The top-level of the archive must only contain a list directory, but it's empty")]
     EmptyArchive,
+    #[error("Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {}", path.display())]
+    BadCrc32 {
+        path: PathBuf,
+        computed: u32,
+        expected: u32,
+    },
 }
 
 impl Error {

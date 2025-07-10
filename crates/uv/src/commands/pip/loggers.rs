@@ -11,7 +11,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 
 use crate::commands::pip::operations::Changelog;
-use crate::commands::{elapsed, ChangeEvent, ChangeEventKind};
+use crate::commands::{ChangeEvent, ChangeEventKind, elapsed};
 use crate::printer::Printer;
 
 /// A trait to handle logging during install operations.
@@ -398,7 +398,7 @@ impl InstallLogger for UpgradeInstallLogger {
 pub(crate) trait ResolveLogger {
     /// Log the completion of the operation.
     fn on_complete(&self, count: usize, start: std::time::Instant, printer: Printer)
-        -> fmt::Result;
+    -> fmt::Result;
 }
 
 /// The default logger for resolve operations.

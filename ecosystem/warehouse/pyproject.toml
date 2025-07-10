@@ -153,6 +153,12 @@ dev-dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Avoid a dependency on `pg_config`
+[[tool.uv.dependency-metadata]]
+name = "psycopg-c"
+version = "3.2.1"
+requires-dist = []
+
 [tool.coverage.run]
 branch = true
 dynamic_context = "test_function"

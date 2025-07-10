@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use uv_distribution_types::Hashed;
 
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, HashDigests};
 
 /// The [`Revision`] is a thin wrapper around a unique identifier for the source distribution.
 ///
@@ -13,7 +13,7 @@ use uv_pypi_types::HashDigest;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Revision {
     id: RevisionId,
-    hashes: Vec<HashDigest>,
+    hashes: HashDigests,
 }
 
 impl Revision {
@@ -21,7 +21,7 @@ impl Revision {
     pub(crate) fn new() -> Self {
         Self {
             id: RevisionId::new(),
-            hashes: vec![],
+            hashes: HashDigests::empty(),
         }
     }
 
@@ -32,17 +32,17 @@ impl Revision {
 
     /// Return the computed hashes of the archive.
     pub(crate) fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 
     /// Return the computed hashes of the archive.
-    pub(crate) fn into_hashes(self) -> Vec<HashDigest> {
+    pub(crate) fn into_hashes(self) -> HashDigests {
         self.hashes
     }
 
     /// Set the computed hashes of the archive.
     #[must_use]
-    pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
+    pub(crate) fn with_hashes(mut self, hashes: HashDigests) -> Self {
         self.hashes = hashes;
         self
     }
@@ -50,7 +50,7 @@ impl Revision {
 
 impl Hashed for Revision {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }
 

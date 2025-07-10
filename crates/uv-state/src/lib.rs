@@ -5,7 +5,7 @@ use std::{
 };
 
 use fs_err as fs;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 /// The main state storage abstraction.
 ///

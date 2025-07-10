@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import argparse
 import re
+import tomllib
 import urllib.parse
 from pathlib import Path
-
-import tomllib
 
 # To be kept in sync with: `docs/index.md`
 URL = "https://github.com/astral-sh/uv/assets/1309177/{}"

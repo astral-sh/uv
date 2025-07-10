@@ -1,40 +1,47 @@
 mod trusted_publishing;
 
-use crate::trusted_publishing::TrustedPublishingError;
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+use std::{env, fmt, io};
+
 use fs_err::tokio::File;
 use futures::TryStreamExt;
-use glob::{glob, GlobError, PatternError};
+use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
-use reqwest_middleware::RequestBuilder;
-use reqwest_retry::{Retryable, RetryableStrategy};
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
+use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
-use tracing::{debug, enabled, trace, Level};
+use tracing::{Level, debug, enabled, trace, warn};
+use trusted_publishing::TrustedPublishingToken;
 use url::Url;
-use uv_client::{BaseClient, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy};
+
+use uv_auth::Credentials;
+use uv_cache::{Cache, Refresh};
+use uv_client::{
+    BaseClient, DEFAULT_RETRIES, MetadataFormat, OwnedArchive, RegistryClientBuilder,
+    RequestBuilder, UvRetryableStrategy,
+};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
+use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
-pub use trusted_publishing::TrustedPublishingToken;
-use uv_cache::{Cache, Refresh};
-use uv_distribution_types::{IndexCapabilities, IndexUrl};
-use uv_extract::hash::{HashReader, Hasher};
+use crate::trusted_publishing::TrustedPublishingError;
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -52,7 +59,7 @@ pub enum PublishError {
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(PathBuf, Url, #[source] PublishSendError),
+    PublishSend(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -66,8 +73,8 @@ pub enum PublishError {
     HashMismatch {
         filename: Box<DistFilename>,
         hash_algorithm: HashAlgorithm,
-        local: Box<str>,
-        remote: Box<str>,
+        local: String,
+        remote: String,
     },
     #[error("Hash is missing in index for {0}")]
     MissingHash(Box<DistFilename>),
@@ -101,23 +108,29 @@ pub enum PublishSendError {
     StatusNoBody(StatusCode, #[source] reqwest::Error),
     #[error("Upload failed with status code {0}. Server says: {1}")]
     Status(StatusCode, String),
-    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?")]
+    #[error(
+        "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
+    )]
     MethodNotAllowedNoBody,
-    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}")]
+    #[error(
+        "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}"
+    )]
     MethodNotAllowed(String),
     /// The registry returned a "403 Forbidden".
     #[error("Permission denied (status code {0}): {1}")]
     PermissionDenied(StatusCode, String),
     /// See inline comment.
-    #[error("The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`")]
+    #[error(
+        "The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`"
+    )]
     RedirectError(Url),
 }
 
 pub trait Reporter: Send + Sync + 'static {
     fn on_progress(&self, name: &str, id: usize);
-    fn on_download_start(&self, name: &str, size: Option<u64>) -> usize;
-    fn on_download_progress(&self, id: usize, inc: u64);
-    fn on_download_complete(&self, id: usize);
+    fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
+    fn on_upload_progress(&self, id: usize, inc: u64);
+    fn on_upload_complete(&self, id: usize);
 }
 
 /// Context for using a fresh registry client for check URL requests.
@@ -230,6 +243,7 @@ impl PublishSendError {
 /// <https://github.com/astral-sh/uv/issues/8030> caused by
 /// <https://github.com/pypa/setuptools/issues/3777> in combination with
 /// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
+#[allow(clippy::result_large_err)]
 pub fn files_for_publishing(
     paths: Vec<String>,
 ) -> Result<Vec<(PathBuf, String, DistFilename)>, PublishError> {
@@ -294,7 +308,7 @@ pub async fn check_trusted_publishing(
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
     trusted_publishing: TrustedPublishing,
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
 ) -> Result<TrustedPublishResult, PublishError> {
     match trusted_publishing {
@@ -312,8 +326,12 @@ pub async fn check_trusted_publishing(
             }
             // We could check for credentials from the keyring or netrc the auth middleware first, but
             // given that we are in GitHub Actions we check for trusted publishing first.
-            debug!("Running on GitHub Actions without explicit credentials, checking for trusted publishing");
-            match trusted_publishing::get_token(registry, client.for_host(registry)).await {
+            debug!(
+                "Running on GitHub Actions without explicit credentials, checking for trusted publishing"
+            );
+            match trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
+                .await
+            {
                 Ok(token) => Ok(TrustedPublishResult::Configured(token)),
                 Err(err) => {
                     // TODO(konsti): It would be useful if we could differentiate between actual errors
@@ -347,7 +365,9 @@ pub async fn check_trusted_publishing(
                 );
             }
 
-            let token = trusted_publishing::get_token(registry, client.for_host(registry)).await?;
+            let token =
+                trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
+                    .await?;
             Ok(TrustedPublishResult::Configured(token))
         }
         TrustedPublishing::Never => Ok(TrustedPublishResult::Skipped),
@@ -363,30 +383,29 @@ pub async fn upload(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
-    retries: u32,
-    username: Option<&str>,
-    password: Option<&str>,
+    credentials: &Credentials,
     check_url_client: Option<&CheckUrlClient<'_>>,
+    download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
-    let form_metadata = form_metadata(file, filename)
+    let form_metadata = FormMetadata::read_from_file(file, filename)
         .await
         .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
 
-    // Retry loop
-    let mut attempt = 0;
+    let mut n_past_retries = 0;
+    let start_time = SystemTime::now();
+    // N.B. We cannot use the client policy here because it is set to zero retries
+    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(DEFAULT_RETRIES);
     loop {
-        attempt += 1;
         let (request, idx) = build_request(
             file,
             raw_filename,
             filename,
             registry,
             client,
-            username,
-            password,
+            credentials,
             &form_metadata,
             reporter.clone(),
         )
@@ -394,10 +413,18 @@ pub async fn upload(
         .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
 
         let result = request.send().await;
-        if attempt < retries && UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
-            reporter.on_download_complete(idx);
-            warn_user!("Transient request failure for {}, retrying", registry);
-            continue;
+        if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
+            let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+            if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                warn_user!("Transient failure while handling response for {registry}; retrying...");
+                reporter.on_upload_complete(idx);
+                let duration = execute_after
+                    .duration_since(SystemTime::now())
+                    .unwrap_or_else(|_| Duration::default());
+                tokio::time::sleep(duration).await;
+                n_past_retries += 1;
+                continue;
+            }
         }
 
         let response = result.map_err(|err| {
@@ -420,7 +447,8 @@ pub async fn upload(
                     PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
                 ) {
                     if let Some(check_url_client) = &check_url_client {
-                        if check_url(check_url_client, file, filename).await? {
+                        if check_url(check_url_client, file, filename, download_concurrency).await?
+                        {
                             // There was a raced upload of the same file, so even though our upload failed,
                             // the right file now exists in the registry.
                             return Ok(false);
@@ -442,6 +470,7 @@ pub async fn check_url(
     check_url_client: &CheckUrlClient<'_>,
     file: &Path,
     filename: &DistFilename,
+    download_concurrency: &Semaphore,
 ) -> Result<bool, PublishError> {
     let CheckUrlClient {
         index_url,
@@ -461,11 +490,30 @@ pub async fn check_url(
         .wrap_existing(client);
 
     debug!("Checking for {filename} in the registry");
-    let response = registry_client
-        .simple(filename.name(), Some(index_url), index_capabilities)
+    let response = match registry_client
+        .package_metadata(
+            filename.name(),
+            Some(index_url.into()),
+            index_capabilities,
+            download_concurrency,
+        )
         .await
-        .map_err(PublishError::CheckUrlIndex)?;
-    let [(_, simple_metadata)] = response.as_slice() else {
+    {
+        Ok(response) => response,
+        Err(err) => {
+            return match err.into_kind() {
+                uv_client::ErrorKind::PackageNotFound(_) => {
+                    // The package doesn't exist, so we can't have uploaded it.
+                    warn!(
+                        "Package not found in the registry; skipping upload check for {filename}"
+                    );
+                    Ok(false)
+                }
+                kind => Err(PublishError::CheckUrlIndex(kind.into())),
+            };
+        }
+    };
+    let [(_, MetadataFormat::Simple(simple_metadata))] = response.as_slice() else {
         unreachable!("We queried a single index, we must get a single response");
     };
     let simple_metadata = OwnedArchive::deserialize(simple_metadata);
@@ -516,8 +564,8 @@ pub async fn check_url(
             Err(PublishError::HashMismatch {
                 filename: Box::new(filename.clone()),
                 hash_algorithm: remote_hash.algorithm,
-                local: local_hash.digest,
-                remote: remote_hash.digest.clone(),
+                local: local_hash.digest.to_string(),
+                remote: remote_hash.digest.to_string(),
             })
         }
     } else {
@@ -542,7 +590,7 @@ async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareErro
     let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
         .entries()?
         .map_err(PublishPrepareError::from)
-        .try_filter_map(|mut entry| async move {
+        .try_filter_map(async |mut entry| {
             let path = entry
                 .path()
                 .map_err(PublishPrepareError::from)?
@@ -596,132 +644,175 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
     Ok(Metadata23::parse(&contents)?)
 }
 
-/// Collect the non-file fields for the multipart request from the package METADATA.
-///
-/// Reference implementation: <https://github.com/pypi/warehouse/blob/d2c36d992cf9168e0518201d998b2707a3ef1e72/warehouse/forklift/legacy.py#L1376-L1430>
-async fn form_metadata(
-    file: &Path,
-    filename: &DistFilename,
-) -> Result<Vec<(&'static str, String)>, PublishPrepareError> {
-    let hash_hex = hash_file(file, Hasher::from(HashAlgorithm::Sha256)).await?;
+#[derive(Debug, Clone)]
+struct FormMetadata(Vec<(&'static str, String)>);
 
-    let metadata = metadata(file, filename).await?;
+impl FormMetadata {
+    /// Collect the non-file fields for the multipart request from the package METADATA.
+    ///
+    /// Reference implementation: <https://github.com/pypi/warehouse/blob/d2c36d992cf9168e0518201d998b2707a3ef1e72/warehouse/forklift/legacy.py#L1376-L1430>
+    async fn read_from_file(
+        file: &Path,
+        filename: &DistFilename,
+    ) -> Result<Self, PublishPrepareError> {
+        let hash_hex = hash_file(file, Hasher::from(HashAlgorithm::Sha256)).await?;
 
-    let mut form_metadata = vec![
-        (":action", "file_upload".to_string()),
-        ("sha256_digest", hash_hex.digest.to_string()),
-        ("protocol_version", "1".to_string()),
-        ("metadata_version", metadata.metadata_version.clone()),
-        // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
-        // * <https://github.com/pypa/twine/issues/743>
-        // * <https://github.com/pypa/twine/blob/5bf3f38ff3d8b2de47b7baa7b652c697d7a64776/twine/package.py#L57-L65>
-        // warehouse seems to call `packaging.utils.canonicalize_name` nowadays and has a separate
-        // `normalized_name`, so we'll start with this and we'll readjust if there are user reports.
-        ("name", metadata.name.clone()),
-        ("version", metadata.version.clone()),
-        ("filetype", filename.filetype().to_string()),
-    ];
+        let Metadata23 {
+            metadata_version,
+            name,
+            version,
+            platforms,
+            // Not used by PyPI legacy upload
+            supported_platforms: _,
+            summary,
+            description,
+            description_content_type,
+            keywords,
+            home_page,
+            download_url,
+            author,
+            author_email,
+            maintainer,
+            maintainer_email,
+            license,
+            license_expression,
+            license_files,
+            classifiers,
+            requires_dist,
+            provides_dist,
+            obsoletes_dist,
+            requires_python,
+            requires_external,
+            project_urls,
+            provides_extras,
+            dynamic,
+        } = metadata(file, filename).await?;
 
-    if let DistFilename::WheelFilename(wheel) = filename {
-        form_metadata.push(("pyversion", wheel.python_tag.join(".")));
-    } else {
-        form_metadata.push(("pyversion", "source".to_string()));
+        let mut form_metadata = vec![
+            (":action", "file_upload".to_string()),
+            ("sha256_digest", hash_hex.digest.to_string()),
+            ("protocol_version", "1".to_string()),
+            ("metadata_version", metadata_version.clone()),
+            // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
+            // * <https://github.com/pypa/twine/issues/743>
+            // * <https://github.com/pypa/twine/blob/5bf3f38ff3d8b2de47b7baa7b652c697d7a64776/twine/package.py#L57-L65>
+            // warehouse seems to call `packaging.utils.canonicalize_name` nowadays and has a separate
+            // `normalized_name`, so we'll start with this and we'll readjust if there are user reports.
+            ("name", name.clone()),
+            ("version", version.clone()),
+            ("filetype", filename.filetype().to_string()),
+        ];
+
+        if let DistFilename::WheelFilename(wheel) = filename {
+            form_metadata.push(("pyversion", wheel.python_tags().iter().join(".")));
+        } else {
+            form_metadata.push(("pyversion", "source".to_string()));
+        }
+
+        let mut add_option = |name, value: Option<String>| {
+            if let Some(some) = value.clone() {
+                form_metadata.push((name, some));
+            }
+        };
+
+        add_option("author", author);
+        add_option("author_email", author_email);
+        add_option("description", description);
+        add_option("description_content_type", description_content_type);
+        add_option("download_url", download_url);
+        add_option("home_page", home_page);
+        add_option("keywords", keywords);
+        add_option("license", license);
+        add_option("license_expression", license_expression);
+        add_option("maintainer", maintainer);
+        add_option("maintainer_email", maintainer_email);
+        add_option("summary", summary);
+
+        // The GitLab PyPI repository API implementation requires this metadata field and twine always
+        // includes it in the request, even when it's empty.
+        form_metadata.push(("requires_python", requires_python.unwrap_or(String::new())));
+
+        let mut add_vec = |name, values: Vec<String>| {
+            for i in values {
+                form_metadata.push((name, i.clone()));
+            }
+        };
+
+        add_vec("classifiers", classifiers);
+        add_vec("dynamic", dynamic);
+        add_vec("license_file", license_files);
+        add_vec("obsoletes_dist", obsoletes_dist);
+        add_vec("platform", platforms);
+        add_vec("project_urls", project_urls);
+        add_vec("provides_dist", provides_dist);
+        add_vec("provides_extra", provides_extras);
+        add_vec("requires_dist", requires_dist);
+        add_vec("requires_external", requires_external);
+
+        Ok(Self(form_metadata))
     }
 
-    let mut add_option = |name, value: Option<String>| {
-        if let Some(some) = value.clone() {
-            form_metadata.push((name, some));
-        }
-    };
+    /// Returns an iterator over the metadata fields.
+    fn iter(&self) -> std::slice::Iter<'_, (&'static str, String)> {
+        self.0.iter()
+    }
+}
 
-    add_option("summary", metadata.summary);
-    add_option("description", metadata.description);
-    add_option(
-        "description_content_type",
-        metadata.description_content_type,
-    );
-    add_option("author", metadata.author);
-    add_option("author_email", metadata.author_email);
-    add_option("maintainer", metadata.maintainer);
-    add_option("maintainer_email", metadata.maintainer_email);
-    add_option("license", metadata.license);
-    add_option("keywords", metadata.keywords);
-    add_option("home_page", metadata.home_page);
-    add_option("download_url", metadata.download_url);
-
-    // The GitLab PyPI repository API implementation requires this metadata field and twine always
-    // includes it in the request, even when it's empty.
-    form_metadata.push((
-        "requires_python",
-        metadata.requires_python.unwrap_or(String::new()),
-    ));
-
-    let mut add_vec = |name, values: Vec<String>| {
-        for i in values {
-            form_metadata.push((name, i.clone()));
-        }
-    };
-
-    add_vec("classifiers", metadata.classifiers);
-    add_vec("platform", metadata.platforms);
-    add_vec("requires_dist", metadata.requires_dist);
-    add_vec("provides_dist", metadata.provides_dist);
-    add_vec("obsoletes_dist", metadata.obsoletes_dist);
-    add_vec("requires_external", metadata.requires_external);
-    add_vec("project_urls", metadata.project_urls);
-
-    Ok(form_metadata)
+impl<'a> IntoIterator for &'a FormMetadata {
+    type Item = &'a (&'a str, String);
+    type IntoIter = std::slice::Iter<'a, (&'a str, String)>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
 }
 
 /// Build the upload request.
 ///
 /// Returns the request and the reporter progress bar id.
-async fn build_request(
+async fn build_request<'a>(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &Url,
-    client: &BaseClient,
-    username: Option<&str>,
-    password: Option<&str>,
-    form_metadata: &[(&'static str, String)],
+    registry: &DisplaySafeUrl,
+    client: &'a BaseClient,
+    credentials: &Credentials,
+    form_metadata: &FormMetadata,
     reporter: Arc<impl Reporter>,
-) -> Result<(RequestBuilder, usize), PublishPrepareError> {
+) -> Result<(RequestBuilder<'a>, usize), PublishPrepareError> {
     let mut form = reqwest::multipart::Form::new();
-    for (key, value) in form_metadata {
+    for (key, value) in form_metadata.iter() {
         form = form.text(*key, value.clone());
     }
 
     let file = File::open(file).await?;
-    let idx = reporter.on_download_start(&filename.to_string(), Some(file.metadata().await?.len()));
+    let file_size = file.metadata().await?.len();
+    let idx = reporter.on_upload_start(&filename.to_string(), Some(file_size));
     let reader = ProgressReader::new(file, move |read| {
-        reporter.on_download_progress(idx, read as u64);
+        reporter.on_upload_progress(idx, read as u64);
     });
     // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
     // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
     let file_reader = Body::wrap_stream(ReaderStream::new(reader));
     // See [`files_for_publishing`] on `raw_filename`
-    let part = Part::stream(file_reader).file_name(raw_filename.to_string());
+    let part = Part::stream_with_length(file_reader, file_size).file_name(raw_filename.to_string());
     form = form.part("content", part);
 
-    let url = if let Some(username) = username {
-        if password.is_none() {
-            // Attach the username to the URL so the authentication middleware can find the matching
-            // password.
-            let mut url = registry.clone();
-            let _ = url.set_username(username);
-            url
-        } else {
-            // We set the authorization header below.
-            registry.clone()
-        }
+    // If we have a username but no password, attach the username to the URL so the authentication
+    // middleware can find the matching password.
+    let url = if let Some(username) = credentials
+        .username()
+        .filter(|_| credentials.password().is_none())
+    {
+        let mut url = registry.clone();
+        let _ = url.set_username(username);
+        url
     } else {
         registry.clone()
     };
 
     let mut request = client
         .for_host(&url)
-        .post(url)
+        .post(Url::from(url))
         .multipart(form)
         // Ask PyPI for a structured error messages instead of HTML-markup error messages.
         // For other registries, we ask them to return plain text over HTML. See
@@ -730,11 +821,20 @@ async fn build_request(
             reqwest::header::ACCEPT,
             "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
         );
-    if let (Some(username), Some(password)) = (username, password) {
-        debug!("Using username/password basic auth");
-        let credentials = BASE64_STANDARD.encode(format!("{username}:{password}"));
-        request = request.header(AUTHORIZATION, format!("Basic {credentials}"));
+
+    match credentials {
+        Credentials::Basic { password, .. } => {
+            if password.is_some() {
+                debug!("Using HTTP Basic authentication");
+                request = request.header(AUTHORIZATION, credentials.to_header_value());
+            }
+        }
+        Credentials::Bearer { .. } => {
+            debug!("Using Bearer token authentication");
+            request = request.header(AUTHORIZATION, credentials.to_header_value());
+        }
     }
+
     Ok((request, idx))
 }
 
@@ -805,4 +905,294 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use insta::{assert_debug_snapshot, assert_snapshot};
+    use itertools::Itertools;
+
+    use uv_auth::Credentials;
+    use uv_client::BaseClientBuilder;
+    use uv_distribution_filename::DistFilename;
+    use uv_redacted::DisplaySafeUrl;
+
+    use crate::{FormMetadata, Reporter, build_request};
+
+    struct DummyReporter;
+
+    impl Reporter for DummyReporter {
+        fn on_progress(&self, _name: &str, _id: usize) {}
+        fn on_upload_start(&self, _name: &str, _size: Option<u64>) -> usize {
+            0
+        }
+        fn on_upload_progress(&self, _id: usize, _inc: u64) {}
+        fn on_upload_complete(&self, _id: usize) {}
+    }
+
+    /// Snapshot the data we send for an upload request for a source distribution.
+    #[tokio::test]
+    async fn upload_request_source_dist() {
+        let raw_filename = "tqdm-999.0.0.tar.gz";
+        let file = PathBuf::from("../../scripts/links/").join(raw_filename);
+        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+
+        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+            .await
+            .unwrap();
+
+        let formatted_metadata = form_metadata
+            .iter()
+            .map(|(k, v)| format!("{k}: {v}"))
+            .join("\n");
+        assert_snapshot!(&formatted_metadata, @r###"
+        :action: file_upload
+        sha256_digest: 89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+        protocol_version: 1
+        metadata_version: 2.3
+        name: tqdm
+        version: 999.0.0
+        filetype: sdist
+        pyversion: source
+        author_email: Charlie Marsh <charlie.r.marsh@gmail.com>
+        description: # tqdm
+
+        [![PyPI - Version](https://img.shields.io/pypi/v/tqdm.svg)](https://pypi.org/project/tqdm)
+        [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/tqdm.svg)](https://pypi.org/project/tqdm)
+
+        -----
+
+        **Table of Contents**
+
+        - [Installation](#installation)
+        - [License](#license)
+
+        ## Installation
+
+        ```console
+        pip install tqdm
+        ```
+
+        ## License
+
+        `tqdm` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
+
+        description_content_type: text/markdown
+        license_expression: MIT
+        requires_python: >=3.8
+        classifiers: Development Status :: 4 - Beta
+        classifiers: Programming Language :: Python
+        classifiers: Programming Language :: Python :: 3.8
+        classifiers: Programming Language :: Python :: 3.9
+        classifiers: Programming Language :: Python :: 3.10
+        classifiers: Programming Language :: Python :: 3.11
+        classifiers: Programming Language :: Python :: 3.12
+        classifiers: Programming Language :: Python :: Implementation :: CPython
+        classifiers: Programming Language :: Python :: Implementation :: PyPy
+        license_file: LICENSE.txt
+        project_urls: Documentation, https://github.com/unknown/tqdm#readme
+        project_urls: Issues, https://github.com/unknown/tqdm/issues
+        project_urls: Source, https://github.com/unknown/tqdm
+        "###);
+
+        let client = BaseClientBuilder::new().build();
+        let (request, _) = build_request(
+            &file,
+            raw_filename,
+            &filename,
+            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
+            &client,
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
+            &form_metadata,
+            Arc::new(DummyReporter),
+        )
+        .await
+        .unwrap();
+
+        insta::with_settings!({
+            filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
+        }, {
+            assert_debug_snapshot!(&request.raw_builder(), @r#"
+            RequestBuilder {
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
+                    },
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "6803",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
+                    },
+                },
+                ..
+            }
+            "#);
+        });
+    }
+
+    /// Snapshot the data we send for an upload request for a wheel.
+    #[tokio::test]
+    async fn upload_request_wheel() {
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let file = PathBuf::from("../../scripts/links/").join(raw_filename);
+        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+
+        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+            .await
+            .unwrap();
+
+        let formatted_metadata = form_metadata
+            .iter()
+            .map(|(k, v)| format!("{k}: {v}"))
+            .join("\n");
+        assert_snapshot!(&formatted_metadata, @r###"
+        :action: file_upload
+        sha256_digest: 0d88ca657bc6b64995ca416e0c59c71af85cc10015d940fa446c42a8b485ee1c
+        protocol_version: 1
+        metadata_version: 2.1
+        name: tqdm
+        version: 4.66.1
+        filetype: bdist_wheel
+        pyversion: py3
+        description_content_type: text/x-rst
+        keywords: progressbar,progressmeter,progress,bar,meter,rate,eta,console,terminal,time
+        license: MPL-2.0 AND MIT
+        maintainer_email: tqdm developers <devs@tqdm.ml>
+        summary: Fast, Extensible Progress Meter
+        requires_python: >=3.7
+        classifiers: Development Status :: 5 - Production/Stable
+        classifiers: Environment :: Console
+        classifiers: Environment :: MacOS X
+        classifiers: Environment :: Other Environment
+        classifiers: Environment :: Win32 (MS Windows)
+        classifiers: Environment :: X11 Applications
+        classifiers: Framework :: IPython
+        classifiers: Framework :: Jupyter
+        classifiers: Intended Audience :: Developers
+        classifiers: Intended Audience :: Education
+        classifiers: Intended Audience :: End Users/Desktop
+        classifiers: Intended Audience :: Other Audience
+        classifiers: Intended Audience :: System Administrators
+        classifiers: License :: OSI Approved :: MIT License
+        classifiers: License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)
+        classifiers: Operating System :: MacOS
+        classifiers: Operating System :: MacOS :: MacOS X
+        classifiers: Operating System :: Microsoft
+        classifiers: Operating System :: Microsoft :: MS-DOS
+        classifiers: Operating System :: Microsoft :: Windows
+        classifiers: Operating System :: POSIX
+        classifiers: Operating System :: POSIX :: BSD
+        classifiers: Operating System :: POSIX :: BSD :: FreeBSD
+        classifiers: Operating System :: POSIX :: Linux
+        classifiers: Operating System :: POSIX :: SunOS/Solaris
+        classifiers: Operating System :: Unix
+        classifiers: Programming Language :: Python
+        classifiers: Programming Language :: Python :: 3
+        classifiers: Programming Language :: Python :: 3.7
+        classifiers: Programming Language :: Python :: 3.8
+        classifiers: Programming Language :: Python :: 3.9
+        classifiers: Programming Language :: Python :: 3.10
+        classifiers: Programming Language :: Python :: 3.11
+        classifiers: Programming Language :: Python :: 3 :: Only
+        classifiers: Programming Language :: Python :: Implementation
+        classifiers: Programming Language :: Python :: Implementation :: IronPython
+        classifiers: Programming Language :: Python :: Implementation :: PyPy
+        classifiers: Programming Language :: Unix Shell
+        classifiers: Topic :: Desktop Environment
+        classifiers: Topic :: Education :: Computer Aided Instruction (CAI)
+        classifiers: Topic :: Education :: Testing
+        classifiers: Topic :: Office/Business
+        classifiers: Topic :: Other/Nonlisted Topic
+        classifiers: Topic :: Software Development :: Build Tools
+        classifiers: Topic :: Software Development :: Libraries
+        classifiers: Topic :: Software Development :: Libraries :: Python Modules
+        classifiers: Topic :: Software Development :: Pre-processors
+        classifiers: Topic :: Software Development :: User Interfaces
+        classifiers: Topic :: System :: Installation/Setup
+        classifiers: Topic :: System :: Logging
+        classifiers: Topic :: System :: Monitoring
+        classifiers: Topic :: System :: Shells
+        classifiers: Topic :: Terminals
+        classifiers: Topic :: Utilities
+        license_file: LICENCE
+        project_urls: homepage, https://tqdm.github.io
+        project_urls: repository, https://github.com/tqdm/tqdm
+        project_urls: changelog, https://tqdm.github.io/releases
+        project_urls: wiki, https://github.com/tqdm/tqdm/wiki
+        provides_extra: dev
+        provides_extra: notebook
+        provides_extra: slack
+        provides_extra: telegram
+        requires_dist: colorama ; platform_system == "Windows"
+        requires_dist: pytest >=6 ; extra == 'dev'
+        requires_dist: pytest-cov ; extra == 'dev'
+        requires_dist: pytest-timeout ; extra == 'dev'
+        requires_dist: pytest-xdist ; extra == 'dev'
+        requires_dist: ipywidgets >=6 ; extra == 'notebook'
+        requires_dist: slack-sdk ; extra == 'slack'
+        requires_dist: requests ; extra == 'telegram'
+        "###);
+
+        let client = BaseClientBuilder::new().build();
+        let (request, _) = build_request(
+            &file,
+            raw_filename,
+            &filename,
+            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
+            &client,
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
+            &form_metadata,
+            Arc::new(DummyReporter),
+        )
+        .await
+        .unwrap();
+
+        insta::with_settings!({
+            filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
+        }, {
+            assert_debug_snapshot!(&request.raw_builder(), @r#"
+            RequestBuilder {
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
+                    },
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "19330",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
+                    },
+                },
+                ..
+            }
+            "#);
+        });
+    }
+}

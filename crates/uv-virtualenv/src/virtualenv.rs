@@ -10,8 +10,10 @@ use fs_err::File;
 use itertools::Itertools;
 use tracing::debug;
 
-use uv_fs::{cachedir, Simplified, CWD};
+use uv_configuration::PreviewMode;
+use uv_fs::{CWD, Simplified, cachedir};
 use uv_pypi_types::Scheme;
+use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
@@ -53,26 +55,24 @@ pub(crate) fn create(
     allow_existing: bool,
     relocatable: bool,
     seed: bool,
+    upgradeable: bool,
+    preview: PreviewMode,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
-    // considered the "base" for the virtual environment. This is typically the Python executable
-    // from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
-    // the base Python executable is the Python executable of the interpreter's base interpreter.
+    // considered the "base" for the virtual environment.
+    //
+    // For consistency with the standard library, rely on `sys._base_executable`, _unless_ we're
+    // using a uv-managed Python (in which case, we can do better for symlinked executables).
     let base_python = if cfg!(unix) && interpreter.is_standalone() {
-        // In `python-build-standalone`, a symlinked interpreter will return its own executable path
-        // as `sys._base_executable`. Using the symlinked path as the base Python executable is
-        // incorrect,  since it will cause `home` to point to something that is _not_ a Python
-        // installation.
-        //
-        // Instead, we want to fully resolve the symlink to the actual Python executable.
-        uv_fs::canonicalize_executable(interpreter.sys_executable())?
+        interpreter.find_base_python()?
     } else {
-        std::path::absolute(
-            interpreter
-                .sys_base_executable()
-                .unwrap_or(interpreter.sys_executable()),
-        )?
+        interpreter.to_base_python()?
     };
+
+    debug!(
+        "Using base executable for virtual environment: {}",
+        base_python.display()
+    );
 
     // Validate the existing location.
     match location.metadata() {
@@ -85,8 +85,20 @@ pub(crate) fn create(
             } else if metadata.is_dir() {
                 if allow_existing {
                     debug!("Allowing existing directory");
-                } else if location.join("pyvenv.cfg").is_file() {
+                } else if uv_fs::is_virtualenv_base(location) {
                     debug!("Removing existing directory");
+
+                    // On Windows, if the current executable is in the directory, guard against
+                    // self-deletion.
+                    #[cfg(windows)]
+                    if let Ok(itself) = std::env::current_exe() {
+                        let target = std::path::absolute(location)?;
+                        if itself.starts_with(&target) {
+                            debug!("Detected self-delete of executable: {}", itself.display());
+                            self_replace::self_delete_outside_path(location)?;
+                        }
+                    }
+
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
                 } else if location
@@ -135,13 +147,51 @@ pub(crate) fn create(
     // Create a `.gitignore` file to ignore all files in the venv.
     fs::write(location.join(".gitignore"), "*")?;
 
+    let mut using_minor_version_link = false;
+    let executable_target = if upgradeable && interpreter.is_standalone() {
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_executable(
+            base_python.as_path(),
+            &interpreter.key(),
+            preview,
+        ) {
+            if !minor_version_link.exists() {
+                base_python.clone()
+            } else {
+                let debug_symlink_term = if cfg!(windows) {
+                    "junction"
+                } else {
+                    "symlink directory"
+                };
+                debug!(
+                    "Using {} {} instead of base Python path: {}",
+                    debug_symlink_term,
+                    &minor_version_link.symlink_directory.display(),
+                    &base_python.display()
+                );
+                using_minor_version_link = true;
+                minor_version_link.symlink_executable.clone()
+            }
+        } else {
+            base_python.clone()
+        }
+    } else {
+        base_python.clone()
+    };
+
     // Per PEP 405, the Python `home` is the parent directory of the interpreter.
-    let python_home = base_python.parent().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "The Python interpreter needs to have a parent directory",
-        )
-    })?;
+    // In preview mode, for standalone interpreters, this `home` value will include a
+    // symlink directory on Unix or junction on Windows to enable transparent Python patch
+    // upgrades.
+    let python_home = executable_target
+        .parent()
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "The Python interpreter needs to have a parent directory",
+            )
+        })?
+        .to_path_buf();
+    let python_home = python_home.as_path();
 
     // Different names for the python interpreter
     fs::create_dir_all(&scripts)?;
@@ -149,7 +199,7 @@ pub(crate) fn create(
 
     #[cfg(unix)]
     {
-        uv_fs::replace_symlink(&base_python, &executable)?;
+        uv_fs::replace_symlink(&executable_target, &executable)?;
         uv_fs::replace_symlink(
             "python",
             scripts.join(format!("python{}", interpreter.python_major())),
@@ -176,91 +226,102 @@ pub(crate) fn create(
         }
     }
 
-    // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
+    // On Windows, we use trampolines that point to an executable target. For standalone
+    // interpreters, this target path includes a minor version junction to enable
+    // transparent upgrades.
     if cfg!(windows) {
-        copy_launcher_windows(
-            WindowsExecutable::Python,
-            interpreter,
-            &base_python,
-            &scripts,
-            python_home,
-        )?;
-
-        if interpreter.markers().implementation_name() == "graalpy" {
-            copy_launcher_windows(
-                WindowsExecutable::GraalPy,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PythonMajor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
+        if using_minor_version_link {
+            let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
+            create_link_to_executable(target.as_path(), executable_target.clone())
+                .map_err(Error::Python)?;
+            let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
+            create_link_to_executable(targetw.as_path(), executable_target)
+                .map_err(Error::Python)?;
         } else {
             copy_launcher_windows(
-                WindowsExecutable::Pythonw,
+                WindowsExecutable::Python,
                 interpreter,
                 &base_python,
                 &scripts,
                 python_home,
             )?;
-        }
 
-        if interpreter.markers().implementation_name() == "pypy" {
-            copy_launcher_windows(
-                WindowsExecutable::PythonMajor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PythonMajorMinor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPy,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPyMajor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPyMajorMinor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPyw,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPyMajorMinorw,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
+            if interpreter.markers().implementation_name() == "graalpy" {
+                copy_launcher_windows(
+                    WindowsExecutable::GraalPy,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PythonMajor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+            } else {
+                copy_launcher_windows(
+                    WindowsExecutable::Pythonw,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+            }
+
+            if interpreter.markers().implementation_name() == "pypy" {
+                copy_launcher_windows(
+                    WindowsExecutable::PythonMajor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PythonMajorMinor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPy,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPyMajor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPyMajorMinor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPyw,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPyMajorMinorw,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+            }
         }
     }
 
@@ -376,7 +437,7 @@ pub(crate) fn create(
         && interpreter.markers().os_name() == "posix"
         && interpreter.markers().sys_platform() != "darwin"
     {
-        match std::os::unix::fs::symlink("lib", location.join("lib64")) {
+        match fs_err::os::unix::fs::symlink("lib", location.join("lib64")) {
             Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
             Err(err) => {
@@ -399,6 +460,7 @@ pub(crate) fn create(
         },
         root: location,
         executable,
+        base_executable: base_python,
     })
 }
 
@@ -596,7 +658,7 @@ fn copy_launcher_windows(
                 Err(err) => {
                     return Err(err.into());
                 }
-            };
+            }
 
             return Ok(());
         }

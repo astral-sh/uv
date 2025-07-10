@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io;
-use std::io::{BufReader, Read, Seek, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -9,23 +9,26 @@ use fs_err::{DirEntry, File};
 use mailparse::parse_headers;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
-use tracing::{instrument, warn};
+use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
 use uv_cache_info::CacheInfo;
-use uv_fs::{relative_to, Simplified};
+use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
 use uv_trampoline_builder::windows_script_launcher;
+use uv_warnings::warn_user_once;
 
 use crate::record::RecordEntry;
-use crate::script::Script;
+use crate::script::{Script, scripts_from_ini};
 use crate::{Error, Layout};
 
 /// Wrapper script template function
 ///
 /// <https://github.com/pypa/pip/blob/7f8a6844037fb7255cfd0d34ff8e8cf44f2598d4/src/pip/_vendor/distlib/scripts.py#L41-L48>
+///
+/// Script template slightly modified: removed `import re`, allowing scripts that never import `re` to load faster.
 fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
     let Script {
         module, function, ..
@@ -34,15 +37,17 @@ fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
     let import_name = entry_point.import_name();
 
     format!(
-        r##"{shebang}
+        r#"{shebang}
 # -*- coding: utf-8 -*-
-import re
 import sys
 from {module} import {import_name}
 if __name__ == "__main__":
-    sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+    if sys.argv[0].endswith("-script.pyw"):
+        sys.argv[0] = sys.argv[0][:-11]
+    elif sys.argv[0].endswith(".exe"):
+        sys.argv[0] = sys.argv[0][:-4]
     sys.exit({function}())
-"##
+"#
     )
 }
 
@@ -139,7 +144,7 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
 ///
 /// <https://github.com/pypa/pip/blob/76e82a43f8fb04695e834810df64f2d9a2ff6020/src/pip/_vendor/distlib/scripts.py#L121-L126>
 fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
-    // Only check for pythonw.exe on Windows
+    // Only check for `pythonw.exe` on Windows.
     if cfg!(windows) && is_gui {
         python_executable
             .file_name()
@@ -182,17 +187,33 @@ pub(crate) fn write_script_entrypoints(
     is_gui: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
+        let warn_names = ["activate", "activate_this.py"];
+        if warn_names.contains(&entrypoint.name.as_str())
+            || entrypoint.name.starts_with("activate.")
+        {
+            warn_user_once!(
+                "The script name `{}` is reserved for virtual environment activation scripts.",
+                entrypoint.name
+            );
+        }
+        let reserved_names = ["python", "pythonw", "python3"];
+        if reserved_names.contains(&entrypoint.name.as_str())
+            || entrypoint
+                .name
+                .strip_prefix("python3.")
+                .is_some_and(|suffix| suffix.parse::<u8>().is_ok())
+        {
+            return Err(Error::ReservedScriptName(entrypoint.name.clone()));
+        }
+
         let entrypoint_absolute = entrypoint_path(entrypoint, layout);
 
         let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
             .ok_or_else(|| {
-                Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "Could not find relative path for: {}",
-                        entrypoint_absolute.simplified_display()
-                    ),
-                ))
+                Error::Io(io::Error::other(format!(
+                    "Could not find relative path for: {}",
+                    entrypoint_absolute.simplified_display()
+                )))
             })?;
 
         // Generate the launcher script.
@@ -308,6 +329,7 @@ pub(crate) fn move_folder_recorded(
     site_packages: &Path,
     record: &mut [RecordEntry],
 ) -> Result<(), Error> {
+    let mut rename_or_copy = RenameOrCopy::default();
     fs::create_dir_all(dest_dir)?;
     for entry in WalkDir::new(src_dir) {
         let entry = entry?;
@@ -326,7 +348,7 @@ pub(crate) fn move_folder_recorded(
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else {
-            fs::rename(src, &target)?;
+            rename_or_copy.rename_or_copy(src, &target)?;
             let entry = record
                 .iter_mut()
                 .find(|entry| Path::new(&entry.path) == relative_to_site_packages)
@@ -345,13 +367,14 @@ pub(crate) fn move_folder_recorded(
 
 /// Installs a single script (not an entrypoint).
 ///
-/// Has to deal with both binaries files (just move) and scripts (rewrite the shebang if applicable).
+/// Binary files are moved with a copy fallback, while we rewrite scripts' shebangs if applicable.
 fn install_script(
     layout: &Layout,
     relocatable: bool,
     site_packages: &Path,
     record: &mut [RecordEntry],
     file: &DirEntry,
+    #[allow(unused)] rename_or_copy: &mut RenameOrCopy,
 ) -> Result<(), Error> {
     let file_type = file.file_type()?;
 
@@ -381,13 +404,10 @@ fn install_script(
     let script_absolute = layout.scheme.scripts.join(file.file_name());
     let script_relative =
         pathdiff::diff_paths(&script_absolute, site_packages).ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    script_absolute.simplified_display()
-                ),
-            ))
+            Error::Io(io::Error::other(format!(
+                "Could not find relative path for: {}",
+                script_absolute.simplified_display()
+            )))
         })?;
 
     let path = file.path();
@@ -404,36 +424,52 @@ fn install_script(
     let placeholder_python = b"#!python";
     // scripts might be binaries, so we read an exact number of bytes instead of the first line as string
     let mut start = vec![0; placeholder_python.len()];
-    script.read_exact(&mut start)?;
+    match script.read_exact(&mut start) {
+        Ok(()) => {}
+        // Ignore scripts shorter than the buffer.
+        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {}
+        Err(err) => return Err(Error::Io(err)),
+    }
     let size_and_encoded_hash = if start == placeholder_python {
-        let is_gui = {
-            let mut buf = vec![0; 1];
-            script.read_exact(&mut buf)?;
-            if buf == b"w" {
-                true
-            } else {
-                script.seek_relative(-1)?;
-                false
+        // Read the rest of the first line, one byte at a time, until we hit a newline.
+        let mut is_gui = false;
+        let mut first = true;
+        let mut byte = [0u8; 1];
+        loop {
+            match script.read_exact(&mut byte) {
+                Ok(()) => {
+                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                        break;
+                    }
+
+                    // Check if this is a GUI script (starts with 'w').
+                    if first {
+                        is_gui = byte[0] == b'w';
+                        first = false;
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(err) => return Err(Error::Io(err)),
             }
-        };
+        }
+
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
-        let start = format_shebang(&executable, &layout.os_name, relocatable)
+        let mut start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
 
+        // Use appropriate line ending for the platform.
+        if layout.os_name == "nt" {
+            start.extend_from_slice(b"\r\n");
+        } else {
+            start.push(b'\n');
+        }
+
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
-        target.persist(&script_absolute).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    path.user_display(),
-                    err.error
-                ),
-            )
-        })?;
+
+        persist_with_retry_sync(target, &script_absolute)?;
         fs::remove_file(&path)?;
 
         // Make the script executable. We just created the file, so we can set permissions directly.
@@ -464,12 +500,13 @@ fn install_script(
             use std::os::unix::fs::PermissionsExt;
 
             let permissions = fs::metadata(&path)?.permissions();
-
             if permissions.mode() & 0o111 == 0o111 {
                 // If the permissions are already executable, we don't need to change them.
-                fs::rename(&path, &script_absolute)?;
+                // We fall back to copy when the file is on another drive.
+                rename_or_copy.rename_or_copy(&path, &script_absolute)?;
             } else {
-                // If we have to modify the permissions, copy the file, since we might not own it.
+                // If we have to modify the permissions, copy the file, since we might not own it,
+                // and we may not be allowed to change permissions on an unowned moved file.
                 warn!(
                     "Copying script from {} to {} (permissions: {:o})",
                     path.simplified_display(),
@@ -488,7 +525,21 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            fs::rename(&path, &script_absolute)?;
+            // Here, two wrappers over rename are clashing: We want to retry for security software
+            // blocking the file, but we also need the copy fallback is the problem was trying to
+            // move a file cross-drive.
+            match uv_fs::with_retry_sync(&path, &script_absolute, "renaming", || {
+                fs_err::rename(&path, &script_absolute)
+            }) {
+                Ok(()) => (),
+                Err(err) => {
+                    debug!("Failed to rename, falling back to copy: {err}");
+                    uv_fs::with_retry_sync(&path, &script_absolute, "copying", || {
+                        fs_err::copy(&path, &script_absolute)?;
+                        Ok(())
+                    })?;
+                }
+            }
         }
 
         None
@@ -537,10 +588,21 @@ pub(crate) fn install_data(
 
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
+                trace!(
+                    ?dist_name,
+                    "Installing data/data to {}",
+                    layout.scheme.data.user_display()
+                );
                 // Move the content of the folder to the root of the venv
                 move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
+                trace!(
+                    ?dist_name,
+                    "Installing data/scripts to {}",
+                    layout.scheme.scripts.user_display()
+                );
+                let mut rename_or_copy = RenameOrCopy::default();
                 let mut initialized = false;
                 for file in fs::read_dir(path)? {
                     let file = file?;
@@ -567,17 +629,39 @@ pub(crate) fn install_data(
                         initialized = true;
                     }
 
-                    install_script(layout, relocatable, site_packages, record, &file)?;
+                    install_script(
+                        layout,
+                        relocatable,
+                        site_packages,
+                        record,
+                        &file,
+                        &mut rename_or_copy,
+                    )?;
                 }
             }
             Some("headers") => {
                 let target_path = layout.scheme.include.join(dist_name.as_str());
+                trace!(
+                    ?dist_name,
+                    "Installing data/headers to {}",
+                    target_path.user_display()
+                );
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
+                trace!(
+                    ?dist_name,
+                    "Installing data/purelib to {}",
+                    layout.scheme.purelib.user_display()
+                );
                 move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
             }
             Some("platlib") => {
+                trace!(
+                    ?dist_name,
+                    "Installing data/platlib to {}",
+                    layout.scheme.platlib.user_display()
+                );
                 move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
             }
             _ => {
@@ -612,7 +696,7 @@ pub(crate) fn write_file_recorded(
     let hash = Sha256::new().chain_update(content.as_ref()).finalize();
     let encoded_hash = format!("sha256={}", BASE64URL_NOPAD.encode(&hash));
     record.push(RecordEntry {
-        path: relative_path.display().to_string(),
+        path: relative_path.portable_display().to_string(),
         hash: Some(encoded_hash),
         size: Some(content.as_ref().len() as u64),
     });
@@ -620,7 +704,7 @@ pub(crate) fn write_file_recorded(
 }
 
 /// Adds `INSTALLER`, `REQUESTED` and `direct_url.json` to the .dist-info dir
-pub(crate) fn extra_dist_info(
+pub(crate) fn write_installer_metadata(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,
@@ -672,13 +756,10 @@ pub(crate) fn get_relocatable_executable(
 ) -> Result<PathBuf, Error> {
     Ok(if relocatable {
         pathdiff::diff_paths(&executable, &layout.scheme.scripts).ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    executable.simplified_display()
-                ),
-            ))
+            Error::Io(io::Error::other(format!(
+                "Could not find relative path for: {}",
+                executable.simplified_display()
+            )))
         })?
     } else {
         executable
@@ -736,6 +817,106 @@ fn parse_email_message_file(
     Ok(data)
 }
 
+/// Find the `dist-info` directory in an unzipped wheel.
+///
+/// See: <https://github.com/PyO3/python-pkginfo-rs>
+///
+/// See: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
+pub(crate) fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
+    // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
+    let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
+        let entry = entry.ok()?;
+        let file_type = entry.file_type().ok()?;
+        if file_type.is_dir() {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "dist-info") {
+                Some(path)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }) else {
+        return Err(Error::InvalidWheel(
+            "Missing .dist-info directory".to_string(),
+        ));
+    };
+
+    let Some(dist_info_prefix) = dist_info.file_stem() else {
+        return Err(Error::InvalidWheel(
+            "Missing .dist-info directory".to_string(),
+        ));
+    };
+
+    Ok(dist_info_prefix.to_string_lossy().to_string())
+}
+
+/// Read the `dist-info` metadata from a directory.
+pub(crate) fn dist_info_metadata(
+    dist_info_prefix: &str,
+    wheel: impl AsRef<Path>,
+) -> Result<Vec<u8>, Error> {
+    let metadata_file = wheel
+        .as_ref()
+        .join(format!("{dist_info_prefix}.dist-info/METADATA"));
+    Ok(fs::read(metadata_file)?)
+}
+
+/// Parses the `entry_points.txt` entry in the wheel for console scripts
+///
+/// Returns (`script_name`, module, function)
+///
+/// Extras are supposed to be ignored, which happens if you pass None for extras.
+pub(crate) fn parse_scripts(
+    wheel: impl AsRef<Path>,
+    dist_info_prefix: &str,
+    extras: Option<&[String]>,
+    python_minor: u8,
+) -> Result<(Vec<Script>, Vec<Script>), Error> {
+    let entry_points_path = wheel
+        .as_ref()
+        .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
+
+    // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
+    let Ok(ini) = fs::read_to_string(entry_points_path) else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+
+    scripts_from_ini(extras, python_minor, ini)
+}
+
+/// Rename a file with a fallback to copy that switches over on the first failure.
+#[derive(Default, Copy, Clone)]
+enum RenameOrCopy {
+    #[default]
+    Rename,
+    Copy,
+}
+
+impl RenameOrCopy {
+    /// Try to rename, and on failure, copy.
+    ///
+    /// Usually, source and target are on the same device, so we can rename, but if that fails, we
+    /// have to copy. If renaming failed once, we switch to copy permanently.
+    fn rename_or_copy(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
+        match self {
+            Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
+                Ok(()) => {}
+                Err(err) => {
+                    *self = RenameOrCopy::Copy;
+                    debug!("Failed to rename, falling back to copy: {err}");
+                    fs_err::copy(from.as_ref(), to.as_ref())?;
+                }
+            },
+            Self::Copy => {
+                fs_err::copy(from.as_ref(), to.as_ref())?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::Cursor;
@@ -745,11 +926,12 @@ mod test {
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
-    use crate::wheel::format_shebang;
     use crate::Error;
+    use crate::wheel::format_shebang;
 
     use super::{
-        get_script_executable, parse_email_message_file, parse_wheel_file, read_record_file, Script,
+        RecordEntry, Script, get_script_executable, parse_email_message_file, parse_wheel_file,
+        read_record_file, write_installer_metadata,
     };
 
     #[test]
@@ -937,9 +1119,14 @@ mod test {
         );
 
         // If the path is too long, we should not use the `exec` trick.
-        let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
+        let executable = Path::new(
+            "/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3",
+        );
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name, false), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
+        );
     }
 
     #[test]
@@ -1023,5 +1210,37 @@ mod test {
         assert_eq!(script_path, dot_python_exe.to_path_buf());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_write_installer_metadata() {
+        let temp_dir = assert_fs::TempDir::new().unwrap();
+        let site_packages = temp_dir.path();
+        let mut record: Vec<RecordEntry> = Vec::new();
+        temp_dir
+            .child("foo-0.1.0.dist-info")
+            .create_dir_all()
+            .unwrap();
+        write_installer_metadata(
+            site_packages,
+            "foo-0.1.0",
+            true,
+            None,
+            None,
+            Some("uv"),
+            &mut record,
+        )
+        .unwrap();
+        let expected = [
+            "foo-0.1.0.dist-info/REQUESTED",
+            "foo-0.1.0.dist-info/INSTALLER",
+        ]
+        .map(ToString::to_string)
+        .to_vec();
+        let actual = record
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect::<Vec<String>>();
+        assert_eq!(expected, actual);
     }
 }

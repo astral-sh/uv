@@ -11,7 +11,7 @@ use predicates::prelude::predicate;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn tool_install() {
@@ -62,11 +62,13 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -124,9 +126,11 @@ fn tool_install() {
     "###);
 
     tool_dir.child("flask").assert(predicate::path::is_dir());
-    assert!(bin_dir
-        .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
-        .exists());
+    assert!(
+        bin_dir
+            .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
 
     #[cfg(not(windows))]
     insta::with_settings!({
@@ -135,11 +139,13 @@ fn tool_install() {
         assert_snapshot!(fs_err::read_to_string(bin_dir.join("flask")).unwrap(), @r###"
         #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from flask.cli import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
     });
@@ -172,8 +178,116 @@ fn tool_install() {
 }
 
 #[test]
-fn tool_install_with_editable() -> anyhow::Result<()> {
+fn tool_install_with_global_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let uv = context.user_config_dir.child("uv");
+    let versions = uv.child(".python-version");
+    versions.write_str("3.11")?;
+
+    // Install a tool
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    "###);
+
+    tool_dir.child("flask").assert(predicate::path::is_dir());
+    assert!(
+        bin_dir
+            .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    // Change global version
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `[UV_USER_CONFIG_DIR]/.python-version` from `3.11` -> `3.12`
+
+    ----- stderr -----
+    "
+    );
+
+    // Install flask again
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ blinker==1.7.0
+     ~ click==8.1.7
+     ~ flask==3.0.2
+     ~ itsdangerous==2.1.2
+     ~ jinja2==3.1.3
+     ~ markupsafe==2.1.5
+     ~ werkzeug==3.0.1
+    Installed 1 executable: flask
+    ");
+
+    // Currently, when reinstalling a tool we use the original version the tool
+    // was installed with, not the most up-to-date global version
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_with_editable() -> Result<()> {
     let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -189,7 +303,7 @@ fn tool_install_with_editable() -> anyhow::Result<()> {
         .arg("./src/anyio_local")
         .arg("--with")
         .arg("iniconfig")
-        .arg("flask")
+        .arg("executable-application")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -202,41 +316,145 @@ fn tool_install_with_editable() -> anyhow::Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
-     + blinker==1.7.0
-     + click==8.1.7
-     + flask==3.0.2
+     + executable-application==0.3.0
      + iniconfig==2.0.0
-     + itsdangerous==2.1.2
-     + jinja2==3.1.3
-     + markupsafe==2.1.5
-     + werkzeug==3.0.1
-    Installed 1 executable: flask
+    Installed 1 executable: app
     "###);
 
     Ok(())
 }
 
 #[test]
+fn tool_install_with_compatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.9")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with")
+        .arg("requests==1.2")
+        .arg("--build-constraints")
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.4.2
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.1
+     + requests==1.2.0
+     + tomli==2.0.1
+     + typing-extensions==4.11.0
+    Installed 2 executables: black, blackd
+    ");
+
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            { name = "black" },
+            { name = "requests", specifier = "==1.2" },
+        ]
+        build-constraint-dependencies = [{ name = "setuptools", specifier = ">=40" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-05-04T00:00:00Z"
+        "###);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_with_incompatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.9")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==2")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with")
+        .arg("requests==1.2")
+        .arg("--build-constraints")
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+#[test]
 fn tool_install_suggest_other_packages_with_executable() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    // FastAPI 0.111 is only available from this date onwards.
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let mut filters = context.filters();
     filters.push(("\\+ uvloop(.+)\n ", ""));
 
     uv_snapshot!(filters, context.tool_install()
-    .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-    .arg("fastapi==0.111.0")
-    .env(EnvVars::UV_EXCLUDE_NEWER, "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
-    // (FastAPI 0.111 is only available from this date onwards)
-    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .arg("fastapi==0.111.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by `fastapi`
-    However, an executable with the name `fastapi` is available via dependency `fastapi-cli`.
-    Did you mean `uv tool install fastapi-cli`?
+    No executables are provided by package `fastapi`; removing tool
+    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
+          Did you mean `uv tool install fastapi-cli`?
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -276,7 +494,7 @@ fn tool_install_suggest_other_packages_with_executable() {
      + uvicorn==0.29.0
      + watchfiles==0.21.0
      + websockets==12.0
-    "###);
+    ");
 }
 
 /// Test installing a tool at a version
@@ -327,11 +545,13 @@ fn tool_install_version() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -409,11 +629,13 @@ fn tool_install_editable() {
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -455,6 +677,8 @@ fn tool_install_editable() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
     Installed 1 executable: black
     "###);
 
@@ -597,11 +821,11 @@ fn tool_install_remove_on_empty() -> Result<()> {
         .arg(black.path())
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by `black`
+    No executables are provided by package `black`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -615,7 +839,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
      - packaging==24.0
      - pathspec==0.12.1
      - platformdirs==4.2.0
-    "###);
+    ");
 
     // Re-request `black`. It should reinstall, without requiring `--force`.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -705,11 +929,13 @@ fn tool_install_editable_from() {
         assert_snapshot!(fs_err::read_to_string(&executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -856,11 +1082,13 @@ fn tool_install_already_installed() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
     });
@@ -991,7 +1219,7 @@ fn tool_install_already_installed() {
 
 /// Test installing a tool when its entry point already exists
 #[test]
-fn tool_install_entry_point_exists() {
+fn tool_install_force() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -1140,6 +1368,10 @@ fn tool_install_entry_point_exists() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ black==24.3.0
     Installed 2 executables: black, blackd
     "###);
 
@@ -1214,11 +1446,13 @@ fn tool_install_entry_point_exists() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python3
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1415,18 +1649,18 @@ fn tool_install_no_entrypoints() {
         .arg("iniconfig")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    No executables are provided by `iniconfig`
+    No executables are provided by package `iniconfig`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure the tool environment is not created.
     tool_dir
@@ -1448,8 +1682,7 @@ fn tool_install_uninstallable() {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"bdist\.[^/\\\s]+(-[^/\\\s]+)?", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"#+", "#"),
         ])
@@ -1458,15 +1691,16 @@ fn tool_install_uninstallable() {
         .arg("pyenv")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `pyenv==0.0.1`
-      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      × Failed to build `pyenv==0.0.1`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stdout]
           running bdist_wheel
@@ -1482,7 +1716,10 @@ fn tool_install_uninstallable() {
      
           https://github.com/pyenv/pyenv#installation
           #
-    "###);
+
+
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
 
     // Ensure the tool environment is not created.
     tool_dir.child("pyenv").assert(predicate::path::missing());
@@ -1537,11 +1774,13 @@ fn tool_install_unnamed_package() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1650,11 +1889,13 @@ fn tool_install_unnamed_from() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1739,11 +1980,13 @@ fn tool_install_unnamed_with() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/black/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from black import patched_main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
         "###);
 
@@ -1780,7 +2023,7 @@ fn tool_install_unnamed_with() {
     "###);
 }
 
-/// Test installing a tool with extra requirements from a `requirements.txt` file.
+/// Test installing a tool with additional requirements from a `requirements.txt` file.
 #[test]
 fn tool_install_requirements_txt() {
     let context = TestContext::new("3.12")
@@ -1970,7 +2213,7 @@ fn tool_install_requirements_txt_arguments() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed 2 executables: black, blackd
+    `black` is already installed
     "###);
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -2073,6 +2316,8 @@ fn tool_install_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
     Installed 2 executables: black, blackd
     "###);
 
@@ -2569,14 +2814,15 @@ fn tool_install_bad_receipt() -> Result<()> {
 #[test]
 fn tool_install_malformed_dist_info() {
     let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `babel`
+    // Install `executable-application`
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("babel")
+        .arg("executable-application")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -2588,17 +2834,19 @@ fn tool_install_malformed_dist_info() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + babel==2.14.0
-    Installed 1 executable: pybabel
+     + executable-application==0.3.0
+    Installed 1 executable: app
     "###);
 
-    tool_dir.child("babel").assert(predicate::path::is_dir());
     tool_dir
-        .child("babel")
+        .child("executable-application")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("executable-application")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
 
-    let executable = bin_dir.child(format!("pybabel{}", std::env::consts::EXE_SUFFIX));
+    let executable = bin_dir.child(format!("app{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
 
     // On Windows, we can't snapshot an executable file.
@@ -2608,13 +2856,15 @@ fn tool_install_malformed_dist_info() {
     }, {
         // Should run black in the virtual environment
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
-        #![TEMP_DIR]/tools/babel/bin/python
+        #![TEMP_DIR]/tools/executable-application/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
-        from babel.messages.frontend import main
+        from executable_application import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -2624,15 +2874,15 @@ fn tool_install_malformed_dist_info() {
         filters => context.filters(),
     }, {
         // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "babel" }]
+        requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
         ]
 
         [tool.options]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer = "2025-01-18T00:00:00Z"
         "###);
     });
 }
@@ -2688,11 +2938,13 @@ fn tool_install_settings() {
         assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
         #![TEMP_DIR]/tools/flask/bin/python
         # -*- coding: utf-8 -*-
-        import re
         import sys
         from flask.cli import main
         if __name__ == "__main__":
-            sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
 
@@ -2908,15 +3160,16 @@ fn tool_install_at_latest() {
 #[test]
 fn tool_install_from_at_latest() {
     let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("pybabel")
+        .arg("app")
         .arg("--from")
-        .arg("babel@latest")
+        .arg("executable-application@latest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -2928,22 +3181,22 @@ fn tool_install_from_at_latest() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + babel==2.14.0
-    Installed 1 executable: pybabel
+     + executable-application==0.3.0
+    Installed 1 executable: app
     "###);
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "babel" }]
+        requirements = [{ name = "executable-application" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
         ]
 
         [tool.options]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer = "2025-01-18T00:00:00Z"
         "###);
     });
 }
@@ -2952,15 +3205,16 @@ fn tool_install_from_at_latest() {
 #[test]
 fn tool_install_from_at_version() {
     let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("pybabel")
+        .arg("app")
         .arg("--from")
-        .arg("babel@2.13.0")
+        .arg("executable-application@0.2.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -2972,22 +3226,22 @@ fn tool_install_from_at_version() {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + babel==2.13.0
-    Installed 1 executable: pybabel
+     + executable-application==0.2.0
+    Installed 1 executable: app
     "###);
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("babel").join("uv-receipt.toml")).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "babel", specifier = "==2.13.0" }]
+        requirements = [{ name = "executable-application", specifier = "==0.2.0" }]
         entrypoints = [
-            { name = "pybabel", install-path = "[TEMP_DIR]/bin/pybabel" },
+            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
         ]
 
         [tool.options]
-        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer = "2025-01-18T00:00:00Z"
         "###);
     });
 }
@@ -3053,6 +3307,8 @@ fn tool_install_at_latest_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
     Installed 2 executables: black, blackd
     "###);
 
@@ -3109,4 +3365,267 @@ fn tool_install_at_latest_upgrade() {
         exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
+}
+
+/// Install a tool with `--constraints`.
+#[test]
+fn tool_install_constraints() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc::indoc! {r"
+        mypy-extensions<1
+        anyio>=3
+    "})?;
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==0.4.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        constraints = [
+            { name = "mypy-extensions", specifier = "<1" },
+            { name = "anyio", specifier = ">=3" },
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    // Installing with the same constraints should be a no-op.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `black` is already installed
+    "###);
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc::indoc! {r"
+        platformdirs<4
+    "})?;
+
+    // Installing with revised constraints should reinstall the tool.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - platformdirs==4.2.0
+     + platformdirs==3.11.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    Ok(())
+}
+
+/// Install a tool with `--overrides`.
+#[test]
+fn tool_install_overrides() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str(indoc::indoc! {r"
+        click<8
+        anyio>=3
+    "})?;
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--overrides")
+        .arg(overrides_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==7.1.2
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        overrides = [
+            { name = "click", specifier = "<8" },
+            { name = "anyio", specifier = ">=3" },
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    Ok(())
+}
+
+/// `uv tool install python` is not allowed
+#[test]
+fn tool_install_python() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `python`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("python")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot install Python with `uv tool install`. Did you mean to use `uv python install`?
+    "###);
+
+    // Install `python@<version>`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("python@3.12")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot install Python with `uv tool install`. Did you mean to use `uv python install`?
+    "###);
+}
+
+#[test]
+fn tool_install_mismatched_name() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--from")
+        .arg("https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package name (`flask`) provided with `--from` does not match install request (`black`)
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--from")
+        .arg("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package name (`flask`) provided with `--from` does not match install request (`black`)
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .arg("--from")
+        .arg("black @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package name (`black`) provided with `--from` does not match install request (`flask`)
+    "###);
 }

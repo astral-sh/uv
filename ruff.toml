@@ -1,10 +1,10 @@
-target-version = "py37"
+target-version = "py312"
 exclude = [
   "crates/uv-virtualenv/src/activator/activate_this.py",
   "crates/uv-virtualenv/src/_virtualenv.py",
-  "crates/uv-python/python",
   "ecosystem",
   "scripts/workspaces",
+  "scripts/packages",
 ]
 
 [lint]

@@ -3,7 +3,8 @@
 use std::io::Write;
 use std::{io, path};
 
-use cachedir::HEADER;
+/// The `CACHEDIR.TAG` file header as defined by the [specification](https://bford.info/cachedir/).
+const HEADER: &[u8; 43] = b"Signature: 8a477f597d28d172789f06886806bc55";
 
 /// Adds a tag to the specified `directory`.
 ///

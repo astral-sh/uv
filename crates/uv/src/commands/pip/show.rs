@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 
 use uv_cache::Cache;
+use uv_configuration::PreviewMode;
 use uv_distribution_types::{Diagnostic, Name};
 use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
@@ -14,8 +15,8 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
-use crate::commands::pip::operations::report_target_environment;
 use crate::commands::ExitStatus;
+use crate::commands::pip::operations::report_target_environment;
 use crate::printer::Printer;
 
 /// Show information about one or more installed packages.
@@ -27,6 +28,7 @@ pub(crate) fn pip_show(
     files: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     if packages.is_empty() {
         #[allow(clippy::print_stderr)]
@@ -46,6 +48,7 @@ pub(crate) fn pip_show(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
@@ -97,9 +100,7 @@ pub(crate) fn pip_show(
         if let Ok(metadata) = dist.metadata() {
             requires_map.insert(
                 dist.name(),
-                metadata
-                    .requires_dist
-                    .into_iter()
+                Box::into_iter(metadata.requires_dist)
                     .filter(|req| req.evaluate_markers(&markers, &[]))
                     .map(|req| req.name)
                     .sorted_unstable()
@@ -115,9 +116,7 @@ pub(crate) fn pip_show(
                 continue;
             }
             if let Ok(metadata) = installed.metadata() {
-                let requires = metadata
-                    .requires_dist
-                    .into_iter()
+                let requires = Box::into_iter(metadata.requires_dist)
                     .filter(|req| req.evaluate_markers(&markers, &[]))
                     .map(|req| req.name)
                     .collect_vec();
@@ -142,7 +141,7 @@ pub(crate) fn pip_show(
             printer.stdout(),
             "Location: {}",
             distribution
-                .path()
+                .install_path()
                 .parent()
                 .expect("package path is not root")
                 .simplified_display()
@@ -190,7 +189,7 @@ pub(crate) fn pip_show(
 
         // If requests, show the list of installed files.
         if files {
-            let path = distribution.path().join("RECORD");
+            let path = distribution.install_path().join("RECORD");
             let record = read_record_file(&mut File::open(path)?)?;
             writeln!(printer.stdout(), "Files:")?;
             for entry in record {

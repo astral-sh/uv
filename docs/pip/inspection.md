@@ -2,7 +2,7 @@
 
 ## Listing installed packages
 
-To list all of the packages in the environment:
+To list all the packages in the environment:
 
 ```console
 $ uv pip list
@@ -14,7 +14,7 @@ To list the packages in a JSON format:
 $ uv pip list --format json
 ```
 
-To list all of the packages in the environment in a `requirements.txt` format:
+To list all the packages in the environment in a `requirements.txt` format:
 
 ```console
 $ uv pip freeze

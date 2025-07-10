@@ -3,15 +3,15 @@ use std::fmt::Write;
 use anyhow::Result;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{KeyringProviderType, TrustedHost};
+use uv_client::BaseClientBuilder;
+use uv_configuration::{DryRun, KeyringProviderType, PreviewMode};
+use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
-use uv_pypi_types::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
@@ -19,10 +19,12 @@ use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::commands::pip::operations::report_target_environment;
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Uninstall packages from the current environment.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
     python: Option<String>,
@@ -31,19 +33,19 @@ pub(crate) async fn pip_uninstall(
     target: Option<Target>,
     prefix: Option<Prefix>,
     cache: Cache,
-    connectivity: Connectivity,
-    native_tls: bool,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: &[TrustedHost],
+    network_settings: &NetworkSettings,
+    dry_run: DryRun,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read all requirements from the provided sources.
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
@@ -56,6 +58,7 @@ pub(crate) async fn pip_uninstall(
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
         &cache,
+        preview,
     )?;
 
     report_target_environment(&environment, &cache, printer)?;
@@ -97,7 +100,13 @@ pub(crate) async fn pip_uninstall(
         }
     }
 
-    let _lock = environment.lock().await?;
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_environment(&environment)?;
@@ -142,13 +151,15 @@ pub(crate) async fn pip_uninstall(
         for package in &names {
             let installed = site_packages.get_packages(package);
             if installed.is_empty() {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} Skipping {} as it is not installed",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                    package.as_ref().bold()
-                )?;
+                if !dry_run.enabled() {
+                    writeln!(
+                        printer.stderr(),
+                        "{}{} Skipping {} as it is not installed",
+                        "warning".yellow().bold(),
+                        ":".bold(),
+                        package.as_ref().bold()
+                    )?;
+                }
             } else {
                 distributions.extend(installed);
             }
@@ -158,62 +169,79 @@ pub(crate) async fn pip_uninstall(
         for url in &urls {
             let installed = site_packages.get_urls(url);
             if installed.is_empty() {
-                writeln!(
-                    printer.stderr(),
-                    "{}{} Skipping {} as it is not installed",
-                    "warning".yellow().bold(),
-                    ":".bold(),
-                    url.as_ref().bold()
-                )?;
+                if !dry_run.enabled() {
+                    writeln!(
+                        printer.stderr(),
+                        "{}{} Skipping {} as it is not installed",
+                        "warning".yellow().bold(),
+                        ":".bold(),
+                        url.as_ref().bold()
+                    )?;
+                }
             } else {
                 distributions.extend(installed);
             }
         }
 
         // Deduplicate, since a package could be listed both by name and editable URL.
-        distributions.sort_unstable_by_key(|dist| dist.path());
-        distributions.dedup_by_key(|dist| dist.path());
+        distributions.sort_unstable_by_key(|dist| dist.install_path());
+        distributions.dedup_by_key(|dist| dist.install_path());
         distributions
     };
 
     if distributions.is_empty() {
-        writeln!(
-            printer.stderr(),
-            "{}{} No packages to uninstall",
-            "warning".yellow().bold(),
-            ":".bold(),
-        )?;
+        if dry_run.enabled() {
+            writeln!(printer.stderr(), "Would make no changes")?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{}{} No packages to uninstall",
+                "warning".yellow().bold(),
+                ":".bold(),
+            )?;
+        }
         return Ok(ExitStatus::Success);
     }
 
     // Uninstall each package.
-    for distribution in &distributions {
-        let summary = uv_installer::uninstall(distribution).await?;
-        debug!(
-            "Uninstalled {} ({} file{}, {} director{})",
-            distribution.name(),
-            summary.file_count,
-            if summary.file_count == 1 { "" } else { "s" },
-            summary.dir_count,
-            if summary.dir_count == 1 { "y" } else { "ies" },
-        );
+    if !dry_run.enabled() {
+        for distribution in &distributions {
+            let summary = uv_installer::uninstall(distribution).await?;
+            debug!(
+                "Uninstalled {} ({} file{}, {} director{})",
+                distribution.name(),
+                summary.file_count,
+                if summary.file_count == 1 { "" } else { "s" },
+                summary.dir_count,
+                if summary.dir_count == 1 { "y" } else { "ies" },
+            );
+        }
     }
 
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Uninstalled {} {}",
+    let uninstalls = distributions.len();
+    let s = if uninstalls == 1 { "" } else { "s" };
+    if dry_run.enabled() {
+        writeln!(
+            printer.stderr(),
+            "{}",
             format!(
-                "{} package{}",
-                distributions.len(),
-                if distributions.len() == 1 { "" } else { "s" }
+                "Would uninstall {}",
+                format!("{uninstalls} package{s}").bold(),
             )
-            .bold(),
-            format!("in {}", elapsed(start.elapsed())).dimmed()
-        )
-        .dimmed()
-    )?;
+            .dimmed()
+        )?;
+    } else {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Uninstalled {} {}",
+                format!("{uninstalls} package{s}").bold(),
+                format!("in {}", elapsed(start.elapsed())).dimmed(),
+            )
+            .dimmed()
+        )?;
+    }
 
     for distribution in distributions {
         writeln!(

@@ -50,7 +50,7 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Generator, Iterable, NamedTuple, Self
@@ -60,6 +60,10 @@ import httpx
 
 SELF_DIR = Path(__file__).parent
 VERSIONS_FILE = SELF_DIR / "download-metadata.json"
+
+# The date at which the default CPython musl builds became dynamically linked
+# instead of statically.
+CPYTHON_MUSL_STATIC_RELEASE_END = 20250311
 
 
 def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
@@ -72,10 +76,39 @@ def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
         yield batch
 
 
+@dataclass(frozen=True)
+class Arch:
+    # The architecture family, e.g. "x86_64", "aarch64".
+    family: str
+    # The architecture variant, e.g., "v2" in "x86_64_v2"
+    variant: str | None = None
+
+    def key(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return (self.family + "_" + self.variant) if self.variant else self.family
+
+    def __gt__(self, other) -> bool:
+        return (self.family, self.variant or "") > (other.family, other.variant or "")
+
+    def __lt__(self, other) -> bool:
+        return (self.family, self.variant or "") < (other.family, other.variant or "")
+
+
+type PlatformTripleKey = tuple[str, str, str]
+
+
 class PlatformTriple(NamedTuple):
+    # The operating system, e.g. "linux", "macos", "windows".
     platform: str
-    arch: str
+    # The architecture, e.g. "x86_64", "aarch64".
+    arch: Arch
+    # The libc implementation, e.g. "gnu", "musl", "none".
     libc: str
+
+    def key(self) -> PlatformTripleKey:
+        return (self.platform, self.arch.key(), self.libc)
 
 
 class Version(NamedTuple):
@@ -104,6 +137,7 @@ class Version(NamedTuple):
 class ImplementationName(StrEnum):
     CPYTHON = "cpython"
     PYPY = "pypy"
+    GRAALPY = "graalpy"
 
 
 class Variant(StrEnum):
@@ -113,6 +147,7 @@ class Variant(StrEnum):
 
 @dataclass
 class PythonDownload:
+    release: int
     version: Version
     triple: PlatformTriple
     flavor: str
@@ -142,7 +177,7 @@ class CPythonFinder(Finder):
     implementation = ImplementationName.CPYTHON
 
     RELEASE_URL = (
-        "https://api.github.com/repos/indygreg/python-build-standalone/releases"
+        "https://api.github.com/repos/astral-sh/python-build-standalone/releases"
     )
 
     FLAVOR_PREFERENCES = [
@@ -209,16 +244,25 @@ class CPythonFinder(Finder):
         # Collect all available Python downloads
         for page in range(1, pages + 1):
             logging.info("Fetching CPython release page %d", page)
-            resp = await self.client.get(self.RELEASE_URL, params={"page": page})
+            resp = await self.client.get(
+                self.RELEASE_URL, params={"page": page, "per_page": 10}
+            )
             resp.raise_for_status()
             rows = resp.json()
             if not rows:
                 break
             for row in rows:
+                # Sort the assets to ensure deterministic results
+                row["assets"].sort(key=lambda asset: asset["browser_download_url"])
                 for asset in row["assets"]:
                     url = asset["browser_download_url"]
                     download = self._parse_download_url(url)
                     if download is None:
+                        continue
+                    if (
+                        download.release < CPYTHON_MUSL_STATIC_RELEASE_END
+                        and download.triple.libc == "musl"
+                    ):
                         continue
                     logging.debug("Found %s (%s)", download.key(), download.filename)
                     downloads_by_version.setdefault(download.version, []).append(
@@ -229,12 +273,12 @@ class CPythonFinder(Finder):
         downloads = []
         for version_downloads in downloads_by_version.values():
             selected: dict[
-                tuple[PlatformTriple, Variant | None],
+                tuple[PlatformTripleKey, Variant | None],
                 tuple[PythonDownload, tuple[int, int]],
             ] = {}
             for download in version_downloads:
                 priority = self._get_priority(download)
-                existing = selected.get((download.triple, download.variant))
+                existing = selected.get((download.triple.key(), download.variant))
                 if existing:
                     existing_download, existing_priority = existing
                     # Skip if we have a flavor with higher priority already (indicated by a smaller value)
@@ -247,7 +291,7 @@ class CPythonFinder(Finder):
                             existing_download.flavor,
                         )
                         continue
-                selected[(download.triple, download.variant)] = (
+                selected[(download.triple.key(), download.variant)] = (
                     download,
                     priority,
                 )
@@ -304,10 +348,11 @@ class CPythonFinder(Finder):
     def _parse_download_url(self, url: str) -> PythonDownload | None:
         """Parse an indygreg download URL into a PythonDownload object."""
         # Ex)
-        # https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
+        # https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
         if url.endswith(".sha256"):
             return None
         filename = unquote(url.rsplit("/", maxsplit=1)[-1])
+        release = int(url.rsplit("/")[-2])
 
         match = self._filename_re.match(filename) or self._legacy_filename_re.match(
             filename
@@ -337,6 +382,7 @@ class CPythonFinder(Finder):
             return None
 
         return PythonDownload(
+            release=release,
             version=version,
             triple=triple,
             flavor=flavor,
@@ -368,11 +414,12 @@ class CPythonFinder(Finder):
 
         return PlatformTriple(operating_system, arch, libc)
 
-    def _normalize_arch(self, arch: str) -> str:
+    def _normalize_arch(self, arch: str) -> Arch:
         arch = self.ARCH_MAP.get(arch, arch)
         pieces = arch.split("_")
-        # Strip `_vN` from `x86_64`
-        return "_".join(pieces[:2])
+        family = "_".join(pieces[:2])
+        variant = pieces[2] if len(pieces) > 2 else None
+        return Arch(family, variant)
 
     def _normalize_os(self, os: str) -> str:
         return os
@@ -398,6 +445,7 @@ class CPythonFinder(Finder):
             (
                 "lto" in build_options,
                 "pgo" in build_options,
+                "static" not in build_options,
             )
         )
 
@@ -455,6 +503,7 @@ class PyPyFinder(Finder):
                 platform = self._normalize_os(file["platform"])
                 libc = "gnu" if platform == "linux" else "none"
                 download = PythonDownload(
+                    release=0,
                     version=python_version,
                     triple=PlatformTriple(
                         platform=platform,
@@ -472,8 +521,8 @@ class PyPyFinder(Finder):
 
         return list(results.values())
 
-    def _normalize_arch(self, arch: str) -> str:
-        return self.ARCH_MAPPING.get(arch, arch)
+    def _normalize_arch(self, arch: str) -> Arch:
+        return Arch(self.ARCH_MAPPING.get(arch, arch), None)
 
     def _normalize_os(self, os: str) -> str:
         return self.PLATFORM_MAPPING.get(os, os)
@@ -490,6 +539,107 @@ class PyPyFinder(Finder):
 
         for download in downloads:
             download.sha256 = checksums.get(download.filename)
+
+
+class GraalPyFinder(Finder):
+    implementation = ImplementationName.GRAALPY
+
+    RELEASE_URL = "https://api.github.com/repos/oracle/graalpython/releases"
+
+    PLATFORM_MAPPING = {
+        "windows": "windows",
+        "linux": "linux",
+        "macos": "darwin",
+    }
+
+    ARCH_MAPPING = {
+        "amd64": "x86_64",
+        "aarch64": "aarch64",
+    }
+
+    GRAALPY_VERSION_RE = re.compile(r"-(\d+\.\d+\.\d+)$", re.ASCII)
+    CPY_VERSION_RE = re.compile(r"Python (\d+\.\d+(\.\d+)?)", re.ASCII)
+    PLATFORM_RE = re.compile(r"(\w+)-(\w+)\.(?:zip|tar\.gz)$", re.ASCII)
+
+    def __init__(self, client: httpx.AsyncClient):
+        self.client = client
+
+    async def find(self) -> list[PythonDownload]:
+        downloads = await self._fetch_downloads()
+        await self._fetch_checksums(downloads, n=10)
+        return downloads
+
+    async def _fetch_downloads(self) -> list[PythonDownload]:
+        # This will only download the first page, i.e., ~30 releases of
+        # GraalPy. Since GraalPy releases 6 times a year and has a support
+        # window of 2 years this is plenty.
+        resp = await self.client.get(self.RELEASE_URL)
+        resp.raise_for_status()
+        releases = resp.json()
+
+        results = {}
+        for release in releases:
+            m = self.GRAALPY_VERSION_RE.search(release["tag_name"])
+            if not m:
+                continue
+            graalpy_version = m.group(1)
+            m = self.CPY_VERSION_RE.search(release["body"])
+            if not m:
+                continue
+            python_version_str = m.group(1)
+            if not m.group(2):
+                python_version_str += ".0"
+            python_version = Version.from_str(python_version_str)
+            for asset in release["assets"]:
+                url = asset["browser_download_url"]
+                m = self.PLATFORM_RE.search(url)
+                if not m:
+                    continue
+                platform = self._normalize_os(m.group(1))
+                arch = self._normalize_arch(m.group(2))
+                libc = "gnu" if platform == "linux" else "none"
+                download = PythonDownload(
+                    release=0,
+                    version=python_version,
+                    triple=PlatformTriple(
+                        platform=platform,
+                        arch=arch,
+                        libc=libc,
+                    ),
+                    flavor=graalpy_version,
+                    implementation=self.implementation,
+                    filename=asset["name"],
+                    url=url,
+                )
+                # Only keep the latest GraalPy version of each arch/platform
+                if (python_version, arch, platform) not in results:
+                    results[(python_version, arch, platform)] = download
+
+        return list(results.values())
+
+    def _normalize_arch(self, arch: str) -> Arch:
+        return Arch(self.ARCH_MAPPING.get(arch, arch), None)
+
+    def _normalize_os(self, os: str) -> str:
+        return self.PLATFORM_MAPPING.get(os, os)
+
+    async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
+        for idx, batch in enumerate(batched(downloads, n)):
+            logging.info("Fetching GraalPy checksums: %d/%d", idx * n, len(downloads))
+            checksum_requests = []
+            for download in batch:
+                url = download.url + ".sha256"
+                checksum_requests.append(self.client.get(url))
+            for download, resp in zip(
+                batch, await asyncio.gather(*checksum_requests), strict=False
+            ):
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        continue
+                    raise
+                download.sha256 = resp.text.strip()
 
 
 def render(downloads: list[PythonDownload]) -> None:
@@ -516,7 +666,11 @@ def render(downloads: list[PythonDownload]) -> None:
 
     def sort_key(download: PythonDownload) -> tuple:
         # Sort by implementation, version (latest first), and then by triple.
-        impl_order = [ImplementationName.CPYTHON, ImplementationName.PYPY]
+        impl_order = [
+            ImplementationName.CPYTHON,
+            ImplementationName.PYPY,
+            ImplementationName.GRAALPY,
+        ]
         prerelease = prerelease_sort_key(download.version.prerelease)
         return (
             impl_order.index(download.implementation),
@@ -534,12 +688,20 @@ def render(downloads: list[PythonDownload]) -> None:
     results = {}
     for download in downloads:
         key = download.key()
+        if (download.version.major, download.version.minor) < (3, 8):
+            logging.info(
+                "Skipping unsupported version %s%s",
+                key,
+                (" (%s)" % download.flavor) if download.flavor else "",
+            )
+            continue
+
         logging.info(
             "Selected %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
         )
         results[key] = {
             "name": download.implementation,
-            "arch": download.triple.arch,
+            "arch": asdict(download.triple.arch),
             "os": download.triple.platform,
             "libc": download.triple.libc,
             "major": download.version.major,
@@ -563,14 +725,18 @@ async def find() -> None:
             "`GITHUB_TOKEN` env var not found, you may hit rate limits for GitHub API requests."
         )
 
-    headers = {"X-GitHub-Api-Version": "2022-11-28"}
+    headers = {
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Accept-Encoding": "gzip, deflate",
+    }
     if token:
         headers["Authorization"] = "Bearer " + token
-    client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=15)
+    client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=60)
 
     finders = [
         CPythonFinder(client),
         PyPyFinder(client),
+        GraalPyFinder(client),
     ]
     downloads = []
 

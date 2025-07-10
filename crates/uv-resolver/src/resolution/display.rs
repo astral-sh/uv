@@ -14,7 +14,6 @@ use crate::{ResolverEnvironment, ResolverOutput};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolverOutput,
@@ -46,6 +45,11 @@ enum DisplayResolutionGraphNode<'dist> {
 
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    ///
+    /// Note that this panics if any of the forks in the given resolver
+    /// output contain non-empty conflicting groups. That is, when using `uv
+    /// pip compile`, specifying conflicts is not supported because their
+    /// conditional logic cannot be encoded into a `requirements.txt`.
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolverOutput,
@@ -58,6 +62,13 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
+        for fork_marker in &underlying.fork_markers {
+            assert!(
+                fork_marker.conflict().is_true(),
+                "found fork marker {fork_marker:?} with non-trivial conflicting marker, \
+                 cannot display resolver output with conflicts in requirements.txt format",
+            );
+        }
         Self {
             resolution: underlying,
             env,
@@ -278,7 +289,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // `# from https://pypi.org/simple`).
             if self.include_index_annotation {
                 if let Some(index) = node.dist.index() {
-                    let url = index.redacted();
+                    let url = index.without_credentials();
                     writeln!(f, "{}", format!("    # from {url}").green())?;
                 }
             }
@@ -320,9 +331,7 @@ type RequirementsTxtGraph<'dist> = Graph<RequirementsTxtDist<'dist>, (), Directe
 /// We also remove the root node, to simplify the graph structure.
 fn combine_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGraph<'dist> {
     /// Return the key for a node.
-    fn version_marker<'dist>(
-        dist: &'dist RequirementsTxtDist,
-    ) -> (&'dist PackageName, &'dist MarkerTree) {
+    fn version_marker<'dist>(dist: &'dist RequirementsTxtDist) -> (&'dist PackageName, MarkerTree) {
         (dist.name(), dist.markers)
     }
 
@@ -394,6 +403,13 @@ fn strip_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGr
                 let index = *entry.get();
                 let node: &mut RequirementsTxtDist = &mut next[index];
                 node.extras.clear();
+                // Consider:
+                // ```
+                // foo[bar]==1.0.0; sys_platform == 'linux'
+                // foo==1.0.0; sys_platform != 'linux'
+                // ```
+                // In this case, we want to write `foo==1.0.0; sys_platform == 'linux' or sys_platform == 'windows'`
+                node.markers.or(dist.markers);
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
                 let index = next.add_node(dist.clone());

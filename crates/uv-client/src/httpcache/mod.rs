@@ -307,7 +307,7 @@ impl ArchivedCachePolicy {
         // completely.
         if !self.is_storable() {
             tracing::trace!(
-                "request {} does not match cache request {} because it isn't storable",
+                "Request {} does not match cache request {} because it isn't storable",
                 request.url(),
                 self.request.uri,
             );
@@ -320,7 +320,7 @@ impl ArchivedCachePolicy {
         // and..."
         if self.request.uri != request.url().as_str() {
             tracing::trace!(
-                "request {} does not match cache URL of {}",
+                "Request {} does not match cache URL of {}",
                 request.url(),
                 self.request.uri,
             );
@@ -330,20 +330,20 @@ impl ArchivedCachePolicy {
         // be used for the presented request, and..."
         if request.method() != http::Method::GET && request.method() != http::Method::HEAD {
             tracing::trace!(
-                "method {:?} for request {} is not supported by this cache",
+                "Method {:?} for request {} is not supported by this cache",
                 request.method(),
                 request.url(),
             );
             return BeforeRequest::NoMatch;
         }
-        // "request header fields nominated by the stored response (if any)
+        // "Request header fields nominated by the stored response (if any)
         // match those presented, and..."
         //
         // We don't support the `Vary` header, so if it was set, we
         // conservatively require revalidation.
         if !self.vary.matches(request.headers()) {
             tracing::trace!(
-                "request {} does not match cached request because of the 'Vary' header",
+                "Request {} does not match cached request because of the 'Vary' header",
                 request.url(),
             );
             self.set_revalidation_headers(request);
@@ -416,7 +416,7 @@ impl ArchivedCachePolicy {
         // [RFC 9111 S4.3.3]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.3.3
         if new_policy.response.status != 304 {
             tracing::trace!(
-                "is modified because status is {:?} and not 304",
+                "Resource is modified because status is {:?} and not 304",
                 new_policy.response.status
             );
             return true;
@@ -431,7 +431,7 @@ impl ArchivedCachePolicy {
                 // both strong.
                 if !old_etag.weak && !new_etag.weak && old_etag.value == new_etag.value {
                     tracing::trace!(
-                        "not modified because old and new etag values ({:?}) match",
+                        "Resource is not modified because old and new etag values ({:?}) match",
                         new_etag.value,
                     );
                     return false;
@@ -452,7 +452,7 @@ impl ArchivedCachePolicy {
             {
                 if old_last_modified == new_last_modified {
                     tracing::trace!(
-                        "not modified because modified times ({new_last_modified:?}) match",
+                        "Resource is not modified because modified times ({new_last_modified:?}) match",
                     );
                     return false;
                 }
@@ -473,7 +473,7 @@ impl ArchivedCachePolicy {
                 .is_none()
         {
             tracing::trace!(
-                "not modified because there are no etags or last modified \
+                "Resource is not modified because there are no etags or last modified \
                  timestamps, so we assume the 304 status is correct",
             );
             return false;
@@ -563,7 +563,7 @@ impl ArchivedCachePolicy {
             ArchivedMethod::Get | ArchivedMethod::Head
         ) {
             tracing::trace!(
-                "cached request {} is not storable because of its method {:?}",
+                "Cached request {} is not storable because of its method {:?}",
                 self.request.uri,
                 self.request.method
             );
@@ -575,7 +575,7 @@ impl ArchivedCachePolicy {
         // below, but we can bail out early here.
         if !self.response.has_final_status() {
             tracing::trace!(
-                "cached request {} is not storable because its response has \
+                "Cached request {} is not storable because its response has \
                  non-final status code {:?}",
                 self.request.uri,
                 self.response.status,
@@ -591,7 +591,7 @@ impl ArchivedCachePolicy {
         // itself.
         if self.response.status == 206 || self.response.status == 304 {
             tracing::trace!(
-                "cached request {} is not storable because its response has \
+                "Cached request {} is not storable because its response has \
                  unsupported status code {:?}",
                 self.request.uri,
                 self.response.status,
@@ -605,7 +605,7 @@ impl ArchivedCachePolicy {
         // S3.)
         if self.request.headers.cc.no_store {
             tracing::trace!(
-                "cached request {} is not storable because its request has \
+                "Cached request {} is not storable because its request has \
                  a 'no-store' cache-control directive",
                 self.request.uri,
             );
@@ -614,7 +614,7 @@ impl ArchivedCachePolicy {
         // "the no-store cache directive is not present in the response"
         if self.response.headers.cc.no_store {
             tracing::trace!(
-                "cached request {} is not storable because its response has \
+                "Cached request {} is not storable because its response has \
                  a 'no-store' cache-control directive",
                 self.request.uri,
             );
@@ -631,7 +631,7 @@ impl ArchivedCachePolicy {
             // private).
             if self.response.headers.cc.private {
                 tracing::trace!(
-                    "cached request {} is not storable because this is a shared \
+                    "Cached request {} is not storable because this is a shared \
                      cache and its response has a 'private' cache-control directive",
                     self.request.uri,
                 );
@@ -642,7 +642,7 @@ impl ArchivedCachePolicy {
             // explicitly allows shared caching"
             if self.request.headers.authorization && !self.allows_authorization_storage() {
                 tracing::trace!(
-                    "cached request {} is not storable because this is a shared \
+                    "Cached request {} is not storable because this is a shared \
                      cache and the request has an 'Authorization' header set and \
                      the response has indicated that caching requests with an \
                      'Authorization' header is allowed",
@@ -657,7 +657,7 @@ impl ArchivedCachePolicy {
         // "a public response directive"
         if self.response.headers.cc.public {
             tracing::trace!(
-                "cached request {} is storable because its response has \
+                "Cached request {} is storable because its response has \
                  a 'public' cache-control directive",
                 self.request.uri,
             );
@@ -666,7 +666,7 @@ impl ArchivedCachePolicy {
         // "a private response directive, if the cache is not shared"
         if !self.config.shared && self.response.headers.cc.private {
             tracing::trace!(
-                "cached request {} is storable because this is a shared cache \
+                "Cached request {} is storable because this is a shared cache \
                  and its response has a 'private' cache-control directive",
                 self.request.uri,
             );
@@ -675,7 +675,7 @@ impl ArchivedCachePolicy {
         // "an Expires header field"
         if self.response.headers.expires_unix_timestamp.is_some() {
             tracing::trace!(
-                "cached request {} is storable because its response has an \
+                "Cached request {} is storable because its response has an \
                  'Expires' header set",
                 self.request.uri,
             );
@@ -684,7 +684,7 @@ impl ArchivedCachePolicy {
         // "a max-age response directive"
         if self.response.headers.cc.max_age_seconds.is_some() {
             tracing::trace!(
-                "cached request {} is storable because its response has an \
+                "Cached request {} is storable because its response has an \
                  'max-age' cache-control directive",
                 self.request.uri,
             );
@@ -693,7 +693,7 @@ impl ArchivedCachePolicy {
         // "if the cache is shared: an s-maxage response directive"
         if self.config.shared && self.response.headers.cc.s_maxage_seconds.is_some() {
             tracing::trace!(
-                "cached request {} is storable because this is a shared cache \
+                "Cached request {} is storable because this is a shared cache \
                  and its response has a 's-maxage' cache-control directive",
                 self.request.uri,
             );
@@ -705,7 +705,7 @@ impl ArchivedCachePolicy {
         // "a status code that is defined as heuristically cacheable"
         if HEURISTICALLY_CACHEABLE_STATUS_CODES.contains(&self.response.status.into()) {
             tracing::trace!(
-                "cached request {} is storable because its response has a \
+                "Cached request {} is storable because its response has a \
                  heuristically cacheable status code {:?}",
                 self.request.uri,
                 self.response.status,
@@ -713,7 +713,7 @@ impl ArchivedCachePolicy {
             return true;
         }
         tracing::trace!(
-            "cached response {} is not storable because it does not meet any \
+            "Cached response {} is not storable because it does not meet any \
              of the necessary criteria (e.g., it doesn't have an 'Expires' \
              header set or a 'max-age' cache-control directive)",
             self.request.uri,
@@ -766,7 +766,7 @@ impl ArchivedCachePolicy {
             // [RFC 9111 S5.2.1.4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-5.2.1.4
             if reqcc.no_cache {
                 tracing::trace!(
-                    "request {} does not have a fresh cache because \
+                    "Request {} does not have a fresh cache because \
                  it has a 'no-cache' cache-control directive",
                     request.url(),
                 );
@@ -780,7 +780,7 @@ impl ArchivedCachePolicy {
             if let Some(&max_age) = reqcc.max_age_seconds.as_ref() {
                 if age > max_age {
                     tracing::trace!(
-                        "request {} does not have a fresh cache because \
+                        "Request {} does not have a fresh cache because \
                      the cached response's age is {} seconds and the max age \
                      allowed by the request is {} seconds",
                         request.url(),
@@ -800,7 +800,7 @@ impl ArchivedCachePolicy {
                 let time_to_live = freshness_lifetime.saturating_sub(unix_timestamp(now));
                 if time_to_live < min_fresh {
                     tracing::trace!(
-                        "request {} does not have a fresh cache because \
+                        "Request {} does not have a fresh cache because \
                      the request set a 'min-fresh' cache-control directive, \
                      and its time-to-live is {} seconds but it needs to be \
                      at least {} seconds",
@@ -818,7 +818,7 @@ impl ArchivedCachePolicy {
             let allows_stale = self.allows_stale(now);
             if !allows_stale {
                 tracing::trace!(
-                    "request {} does not have a fresh cache because \
+                    "Request {} does not have a fresh cache because \
                      its age is {} seconds, it is greater than the freshness \
                      lifetime of {} seconds and stale cached responses are not \
                      allowed",
@@ -846,7 +846,7 @@ impl ArchivedCachePolicy {
         // [RFC 9111 S5.2.2.2]: https://www.rfc-editor.org/rfc/rfc9111.html#section-5.2.2.2
         if self.response.headers.cc.must_revalidate {
             tracing::trace!(
-                "cached request {} has a cached response that does not \
+                "Cached request {} has a cached response that does not \
                  permit staleness because the response has a 'must-revalidate' \
                  cache-control directive set",
                 self.request.uri,
@@ -865,7 +865,7 @@ impl ArchivedCachePolicy {
                 .saturating_sub(self.freshness_lifetime().as_secs());
             if stale_amount <= max_stale.into() {
                 tracing::trace!(
-                    "cached request {} has a cached response that allows staleness \
+                    "Cached request {} has a cached response that allows staleness \
                      in this case because the stale amount is {} seconds and the \
                      'max-stale' cache-control directive set by the cached request \
                      is {} seconds",
@@ -885,7 +885,7 @@ impl ArchivedCachePolicy {
         //
         // [RFC 9111 S4.2.4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2.4
         tracing::trace!(
-            "cached request {} has a cached response that does not allow staleness",
+            "Cached request {} has a cached response that does not allow staleness",
             self.request.uri,
         );
         false
@@ -926,7 +926,7 @@ impl ArchivedCachePolicy {
             if let Some(&s_maxage) = self.response.headers.cc.s_maxage_seconds.as_ref() {
                 let duration = Duration::from_secs(s_maxage.into());
                 tracing::trace!(
-                    "freshness lifetime found via shared \
+                    "Freshness lifetime found via shared \
                      cache-control max age setting: {duration:?}"
                 );
                 return duration;
@@ -935,14 +935,14 @@ impl ArchivedCachePolicy {
         if let Some(&max_age) = self.response.headers.cc.max_age_seconds.as_ref() {
             let duration = Duration::from_secs(max_age.into());
             tracing::trace!(
-                "freshness lifetime found via cache-control max age setting: {duration:?}"
+                "Freshness lifetime found via cache-control max age setting: {duration:?}"
             );
             return duration;
         }
         if let Some(&expires) = self.response.headers.expires_unix_timestamp.as_ref() {
             let duration =
                 Duration::from_secs(u64::from(expires).saturating_sub(self.response.header_date()));
-            tracing::trace!("freshness lifetime found via expires header: {duration:?}");
+            tracing::trace!("Freshness lifetime found via expires header: {duration:?}");
             return duration;
         }
         if self.response.headers.last_modified_unix_timestamp.is_some() {
@@ -965,7 +965,7 @@ impl ArchivedCachePolicy {
             // [1]: https://github.com/astral-sh/uv/issues/5351#issuecomment-2260588764
             let duration = Duration::from_secs(600);
             tracing::trace!(
-                "freshness lifetime heuristically assumed \
+                "Freshness lifetime heuristically assumed \
                  because of presence of last-modified header: {duration:?}"
             );
             return duration;
@@ -973,7 +973,7 @@ impl ArchivedCachePolicy {
         // Without any indicators as to the freshness lifetime, we act
         // conservatively and use a value that will always result in a response
         // being treated as stale.
-        tracing::trace!("could not determine freshness lifetime, assuming none exists");
+        tracing::trace!("Could not determine freshness lifetime, assuming none exists");
         Duration::ZERO
     }
 
@@ -992,6 +992,7 @@ impl ArchivedCachePolicy {
 /// This dictates what the caller should do next by indicating whether the
 /// cached response is stale or not.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum BeforeRequest {
     /// The cached response is still fresh, and the caller may return the
     /// cached response without issuing an HTTP requests.

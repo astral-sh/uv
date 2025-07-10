@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anstream::println;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::Parser;
 
 use uv_cache::{Cache, CacheArgs};
@@ -33,7 +33,7 @@ pub(crate) async fn wheel_metadata(args: WheelMetadataArgs) -> Result<()> {
         .wheel_metadata(
             &BuiltDist::DirectUrl(DirectUrlBuiltDist {
                 filename,
-                location: archive.url,
+                location: Box::new(archive.url),
                 url: args.url,
             }),
             &capabilities,

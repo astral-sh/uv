@@ -6,16 +6,18 @@ use uv_pep440::Version;
 pub use build_tag::{BuildTag, BuildTagError};
 pub use egg::{EggInfoFilename, EggInfoFilenameError};
 pub use extension::{DistExtension, ExtensionError, SourceDistExtension};
-pub use source_dist::SourceDistFilename;
+pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
 pub use wheel::{WheelFilename, WheelFilenameError};
 
 mod build_tag;
 mod egg;
 mod extension;
 mod source_dist;
+mod splitter;
 mod wheel;
+mod wheel_tag;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DistFilename {
     SourceDistFilename(SourceDistFilename),
     WheelFilename(WheelFilename),
@@ -90,5 +92,15 @@ impl Display for DistFilename {
             Self::SourceDistFilename(filename) => Display::fmt(filename, f),
             Self::WheelFilename(filename) => Display::fmt(filename, f),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::WheelFilename;
+
+    #[test]
+    fn wheel_filename_size() {
+        assert_eq!(size_of::<WheelFilename>(), 48);
     }
 }

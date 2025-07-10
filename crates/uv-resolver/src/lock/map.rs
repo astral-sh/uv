@@ -13,6 +13,11 @@ impl<T> Default for PackageMap<T> {
 }
 
 impl<T> PackageMap<T> {
+    /// Insert a value by [`PackageId`].
+    pub fn insert(&mut self, package: Package, value: T) -> Option<T> {
+        self.0.insert(package.id, value)
+    }
+
     /// Get a value by [`PackageId`].
     pub(crate) fn get(&self, package_id: &PackageId) -> Option<&T> {
         self.0.get(package_id)

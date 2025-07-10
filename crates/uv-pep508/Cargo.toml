@@ -13,8 +13,6 @@ repository = { workspace = true }
 authors = { workspace = true }
 
 [lib]
-name = "uv_pep508"
-crate-type = ["cdylib", "rlib"]
 doctest = false
 
 [lints]
@@ -24,7 +22,9 @@ workspace = true
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
+uv-redacted = { workspace = true }
 
+arcstr = { workspace = true}
 boxcar = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
@@ -41,7 +41,7 @@ version-ranges = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.40.0" }
-serde_json = { version = "1.0.128" }
+serde_json = { workspace = true }
 tracing-test = { version = "0.2.5" }
 
 [features]

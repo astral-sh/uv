@@ -28,6 +28,7 @@ uv-git = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-requirements-txt = { workspace = true, features = ["http"] }
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-types = { workspace = true }

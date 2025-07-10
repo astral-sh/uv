@@ -1,8 +1,10 @@
+use anstream::eprintln;
+
 use uv_cache::Refresh;
 use uv_configuration::ConfigSettings;
-use uv_distribution_types::{PipExtraIndex, PipFindLinks, PipIndex};
 use uv_resolver::PrereleaseMode;
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
+use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
     BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
@@ -10,12 +12,27 @@ use crate::{
 };
 
 /// Given a boolean flag pair (like `--upgrade` and `--no-upgrade`), resolve the value of the flag.
-pub fn flag(yes: bool, no: bool) -> Option<bool> {
+pub fn flag(yes: bool, no: bool, name: &str) -> Option<bool> {
     match (yes, no) {
         (true, false) => Some(true),
         (false, true) => Some(false),
         (false, false) => None,
-        (..) => unreachable!("Clap should make this impossible"),
+        (..) => {
+            eprintln!(
+                "{}{} `{}` and `{}` cannot be used together. \
+                Boolean flags on different levels are currently not supported \
+                (https://github.com/clap-rs/clap/issues/6049)",
+                "error".bold().red(),
+                ":".bold(),
+                format!("--{name}").green(),
+                format!("--no-{name}").green(),
+            );
+            // No error forwarding since should eventually be solved on the clap side.
+            #[allow(clippy::exit)]
+            {
+                std::process::exit(2);
+            }
+        }
     }
 }
 
@@ -27,7 +44,7 @@ impl From<RefreshArgs> for Refresh {
             refresh_package,
         } = value;
 
-        Self::from_args(flag(refresh, no_refresh), refresh_package)
+        Self::from_args(flag(refresh, no_refresh, "no-refresh"), refresh_package)
     }
 }
 
@@ -43,6 +60,7 @@ impl From<ResolverArgs> for PipOptions {
             resolution,
             prerelease,
             pre,
+            fork_strategy,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -53,11 +71,12 @@ impl From<ResolverArgs> for PipOptions {
         } = args;
 
         Self {
-            upgrade: flag(upgrade, no_upgrade),
+            upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
             upgrade_package: Some(upgrade_package),
             index_strategy,
             keyring_provider,
             resolution,
+            fork_strategy,
             prerelease: if pre {
                 Some(PrereleaseMode::Allow)
             } else {
@@ -65,7 +84,7 @@ impl From<ResolverArgs> for PipOptions {
             },
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            no_build_isolation: flag(no_build_isolation, build_isolation),
+            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
             link_mode,
@@ -95,16 +114,16 @@ impl From<InstallerArgs> for PipOptions {
         } = args;
 
         Self {
-            reinstall: flag(reinstall, no_reinstall),
+            reinstall: flag(reinstall, no_reinstall, "reinstall"),
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            no_build_isolation: flag(no_build_isolation, build_isolation),
+            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             exclude_newer,
             link_mode,
-            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
         }
@@ -126,6 +145,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             resolution,
             prerelease,
             pre,
+            fork_strategy,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -138,9 +158,9 @@ impl From<ResolverInstallerArgs> for PipOptions {
         } = args;
 
         Self {
-            upgrade: flag(upgrade, no_upgrade),
+            upgrade: flag(upgrade, no_upgrade, "upgrade"),
             upgrade_package: Some(upgrade_package),
-            reinstall: flag(reinstall, no_reinstall),
+            reinstall: flag(reinstall, no_reinstall, "reinstall"),
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
@@ -150,13 +170,14 @@ impl From<ResolverInstallerArgs> for PipOptions {
             } else {
                 prerelease
             },
+            fork_strategy,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-            no_build_isolation: flag(no_build_isolation, build_isolation),
+            no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
             link_mode,
-            compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
+            compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
         }
@@ -196,15 +217,18 @@ impl From<IndexArgs> for PipOptions {
             index: default_index
                 .and_then(Maybe::into_option)
                 .map(|default_index| vec![default_index])
-                .combine(
-                    index.map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
-                ),
-            index_url: index_url.and_then(Maybe::into_option).map(PipIndex::from),
+                .combine(index.map(|index| {
+                    index
+                        .iter()
+                        .flat_map(std::clone::Clone::clone)
+                        .filter_map(Maybe::into_option)
+                        .collect()
+                })),
+            index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
                 extra_index_urls
                     .into_iter()
                     .filter_map(Maybe::into_option)
-                    .map(PipExtraIndex::from)
                     .collect()
             }),
             no_index: if no_index { Some(true) } else { None },
@@ -212,7 +236,6 @@ impl From<IndexArgs> for PipOptions {
                 find_links
                     .into_iter()
                     .filter_map(Maybe::into_option)
-                    .map(PipFindLinks::from)
                     .collect()
             }),
             ..PipOptions::default()
@@ -235,6 +258,7 @@ pub fn resolver_options(
         resolution,
         prerelease,
         pre,
+        fork_strategy,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -258,11 +282,13 @@ pub fn resolver_options(
             .default_index
             .and_then(Maybe::into_option)
             .map(|default_index| vec![default_index])
-            .combine(
-                index_args
-                    .index
-                    .map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
-            ),
+            .combine(index_args.index.map(|index| {
+                index
+                    .into_iter()
+                    .flat_map(|v| v.clone())
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            })),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -281,7 +307,7 @@ pub fn resolver_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: flag(upgrade, no_upgrade),
+        upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
         upgrade_package: Some(upgrade_package),
         index_strategy,
         keyring_provider,
@@ -291,16 +317,17 @@ pub fn resolver_options(
         } else {
             prerelease
         },
+        fork_strategy,
         dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-        no_build_isolation: flag(no_build_isolation, build_isolation),
+        no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
         no_build_isolation_package: Some(no_build_isolation_package),
         exclude_newer,
         link_mode,
-        no_build: flag(no_build, build),
+        no_build: flag(no_build, build, "build"),
         no_build_package: Some(no_build_package),
-        no_binary: flag(no_binary, binary),
+        no_binary: flag(no_binary, binary, "binary"),
         no_binary_package: Some(no_binary_package),
         no_sources: if no_sources { Some(true) } else { None },
     }
@@ -324,6 +351,7 @@ pub fn resolver_installer_options(
         resolution,
         prerelease,
         pre,
+        fork_strategy,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -348,9 +376,13 @@ pub fn resolver_installer_options(
         .default_index
         .and_then(Maybe::into_option)
         .map(|default_index| vec![default_index]);
-    let index = index_args
-        .index
-        .map(|index| index.into_iter().filter_map(Maybe::into_option).collect());
+    let index = index_args.index.map(|index| {
+        index
+            .into_iter()
+            .flat_map(|v| v.clone())
+            .filter_map(Maybe::into_option)
+            .collect()
+    });
 
     ResolverInstallerOptions {
         index: default_index.combine(index),
@@ -372,13 +404,13 @@ pub fn resolver_installer_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: flag(upgrade, no_upgrade),
+        upgrade: flag(upgrade, no_upgrade, "upgrade"),
         upgrade_package: if upgrade_package.is_empty() {
             None
         } else {
             Some(upgrade_package)
         },
-        reinstall: flag(reinstall, no_reinstall),
+        reinstall: flag(reinstall, no_reinstall, "reinstall"),
         reinstall_package: if reinstall_package.is_empty() {
             None
         } else {
@@ -392,10 +424,11 @@ pub fn resolver_installer_options(
         } else {
             prerelease
         },
+        fork_strategy,
         dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
-        no_build_isolation: flag(no_build_isolation, build_isolation),
+        no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
         no_build_isolation_package: if no_build_isolation_package.is_empty() {
             None
         } else {
@@ -403,14 +436,14 @@ pub fn resolver_installer_options(
         },
         exclude_newer,
         link_mode,
-        compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
-        no_build: flag(no_build, build),
+        compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
+        no_build: flag(no_build, build, "build"),
         no_build_package: if no_build_package.is_empty() {
             None
         } else {
             Some(no_build_package)
         },
-        no_binary: flag(no_binary, binary),
+        no_binary: flag(no_binary, binary, "binary"),
         no_binary_package: if no_binary_package.is_empty() {
             None
         } else {

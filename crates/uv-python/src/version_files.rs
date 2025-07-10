@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use fs_err as fs;
 use itertools::Itertools;
 use tracing::debug;
+use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
+use uv_warnings::warn_user_once;
 
 use crate::PythonRequest;
 
@@ -35,11 +37,14 @@ pub enum FilePreference {
 pub struct DiscoveryOptions<'a> {
     /// The path to stop discovery at.
     stop_discovery_at: Option<&'a Path>,
-    /// When `no_config` is set, Python version files will be ignored.
+    /// Ignore Python version files.
     ///
     /// Discovery will still run in order to display a log about the ignored file.
     no_config: bool,
+    /// Whether `.python-version` or `.python-versions` should be preferred.
     preference: FilePreference,
+    /// Whether to ignore local version files, and only search for a global one.
+    no_local: bool,
 }
 
 impl<'a> DiscoveryOptions<'a> {
@@ -60,6 +65,11 @@ impl<'a> DiscoveryOptions<'a> {
             ..self
         }
     }
+
+    #[must_use]
+    pub fn with_no_local(self, no_local: bool) -> Self {
+        Self { no_local, ..self }
+    }
 }
 
 impl PythonVersionFile {
@@ -68,7 +78,37 @@ impl PythonVersionFile {
         working_directory: impl AsRef<Path>,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Option<Self>, std::io::Error> {
-        let Some(path) = Self::find_nearest(working_directory, options) else {
+        let allow_local = !options.no_local;
+        let Some(path) = allow_local.then(|| {
+            // First, try to find a local version file.
+            let local = Self::find_nearest(&working_directory, options);
+            if local.is_none() {
+                // Log where we searched for the file, if not found
+                if let Some(stop_discovery_at) = options.stop_discovery_at {
+                    if stop_discovery_at == working_directory.as_ref() {
+                        debug!(
+                            "No Python version file found in workspace: {}",
+                            working_directory.as_ref().display()
+                        );
+                    } else {
+                        debug!(
+                            "No Python version file found between working directory `{}` and workspace root `{}`",
+                            working_directory.as_ref().display(),
+                            stop_discovery_at.display()
+                        );
+                    }
+                } else {
+                    debug!(
+                        "No Python version file found in ancestors of working directory: {}",
+                        working_directory.as_ref().display()
+                    );
+                }
+            }
+            local
+        }).flatten().or_else(|| {
+            // Search for a global config
+            Self::find_global(options)
+        }) else {
             return Ok(None);
         };
 
@@ -82,6 +122,11 @@ impl PythonVersionFile {
 
         // Uses `try_from_path` instead of `from_path` to avoid TOCTOU failures.
         Self::try_from_path(path).await
+    }
+
+    fn find_global(options: &DiscoveryOptions<'_>) -> Option<PathBuf> {
+        let user_config_dir = user_uv_config_dir()?;
+        Self::find_in_directory(&user_config_dir, options)
     }
 
     fn find_nearest(path: impl AsRef<Path>, options: &DiscoveryOptions<'_>) -> Option<PathBuf> {
@@ -129,6 +174,17 @@ impl PythonVersionFile {
                     })
                     .map(ToString::to_string)
                     .map(|version| PythonRequest::parse(&version))
+                    .filter(|request| {
+                        if let PythonRequest::ExecutableName(name) = request {
+                            warn_user_once!(
+                                "Ignoring unsupported Python request `{name}` in version file: {}",
+                                path.display()
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    })
                     .collect();
                 Ok(Some(Self { path, versions }))
             }

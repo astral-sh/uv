@@ -1,12 +1,9 @@
-use std::path::{Path, PathBuf};
-
-use anyhow::{anyhow, Result};
+use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
-use uv_pep508::VerbatimUrl;
-use uv_pypi_types::{HashDigest, ParsedDirectoryUrl};
+use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::{
     BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
@@ -15,6 +12,7 @@ use crate::{
 
 /// A built distribution (wheel) that exists in the local cache.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum CachedDist {
     /// The distribution exists in a registry, like `PyPI`.
     Registry(CachedRegistryDist),
@@ -25,19 +23,17 @@ pub enum CachedDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CachedRegistryDist {
     pub filename: WheelFilename,
-    pub path: PathBuf,
-    pub hashes: Vec<HashDigest>,
+    pub path: Box<Path>,
+    pub hashes: HashDigests,
     pub cache_info: CacheInfo,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CachedDirectUrlDist {
     pub filename: WheelFilename,
-    pub url: VerbatimUrl,
-    pub path: PathBuf,
-    pub editable: bool,
-    pub r#virtual: bool,
-    pub hashes: Vec<HashDigest>,
+    pub url: VerbatimParsedUrl,
+    pub path: Box<Path>,
+    pub hashes: HashDigests,
     pub cache_info: CacheInfo,
 }
 
@@ -46,9 +42,9 @@ impl CachedDist {
     pub fn from_remote(
         remote: Dist,
         filename: WheelFilename,
-        hashes: Vec<HashDigest>,
+        hashes: HashDigests,
         cache_info: CacheInfo,
-        path: PathBuf,
+        path: Box<Path>,
     ) -> Self {
         match remote {
             Dist::Built(BuiltDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
@@ -59,21 +55,23 @@ impl CachedDist {
             }),
             Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: dist.url,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
                 hashes,
                 cache_info,
                 path,
-                editable: false,
-                r#virtual: false,
             }),
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: dist.url,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
                 hashes,
                 cache_info,
                 path,
-                editable: false,
-                r#virtual: false,
             }),
             Dist::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
                 filename,
@@ -83,39 +81,43 @@ impl CachedDist {
             }),
             Dist::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: dist.url,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
                 hashes,
                 cache_info,
                 path,
-                editable: false,
-                r#virtual: false,
             }),
             Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: dist.url,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
                 hashes,
                 cache_info,
                 path,
-                editable: false,
-                r#virtual: false,
             }),
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: dist.url,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
                 hashes,
                 cache_info,
                 path,
-                editable: false,
-                r#virtual: false,
             }),
             Dist::Source(SourceDist::Directory(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
-                url: dist.url,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
                 hashes,
                 cache_info,
                 path,
-                editable: dist.editable,
-                r#virtual: dist.r#virtual,
             }),
         }
     }
@@ -137,26 +139,10 @@ impl CachedDist {
     }
 
     /// Return the [`ParsedUrl`] of the distribution, if it exists.
-    pub fn parsed_url(&self) -> Result<Option<ParsedUrl>> {
+    pub fn parsed_url(&self) -> Option<&ParsedUrl> {
         match self {
-            Self::Registry(_) => Ok(None),
-            Self::Url(dist) => {
-                if dist.editable {
-                    assert_eq!(dist.url.scheme(), "file", "{}", dist.url);
-                    let path = dist
-                        .url
-                        .to_file_path()
-                        .map_err(|()| anyhow!("Invalid path in file URL"))?;
-                    Ok(Some(ParsedUrl::Directory(ParsedDirectoryUrl {
-                        url: dist.url.raw().clone(),
-                        install_path: path,
-                        editable: dist.editable,
-                        r#virtual: dist.r#virtual,
-                    })))
-                } else {
-                    Ok(Some(ParsedUrl::try_from(dist.url.to_url())?))
-                }
-            }
+            Self::Registry(_) => None,
+            Self::Url(dist) => Some(&dist.url.parsed_url),
         }
     }
 
@@ -171,28 +157,7 @@ impl CachedDist {
 
 impl Hashed for CachedRegistryDist {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
-    }
-}
-
-impl CachedDirectUrlDist {
-    /// Initialize a [`CachedDirectUrlDist`] from a [`WheelFilename`], [`url::Url`], and [`Path`].
-    pub fn from_url(
-        filename: WheelFilename,
-        url: VerbatimUrl,
-        hashes: Vec<HashDigest>,
-        cache_info: CacheInfo,
-        path: PathBuf,
-    ) -> Self {
-        Self {
-            filename,
-            url,
-            hashes,
-            cache_info,
-            path,
-            editable: false,
-            r#virtual: false,
-        }
+        self.hashes.as_slice()
     }
 }
 
@@ -225,7 +190,7 @@ impl DistributionMetadata for CachedRegistryDist {
 
 impl DistributionMetadata for CachedDirectUrlDist {
     fn version_or_url(&self) -> VersionOrUrlRef {
-        VersionOrUrlRef::Url(&self.url)
+        VersionOrUrlRef::Url(&self.url.verbatim)
     }
 }
 
@@ -246,7 +211,7 @@ impl InstalledMetadata for CachedRegistryDist {
 
 impl InstalledMetadata for CachedDirectUrlDist {
     fn installed_version(&self) -> InstalledVersion {
-        InstalledVersion::Url(&self.url, &self.filename.version)
+        InstalledVersion::Url(&self.url.verbatim, &self.filename.version)
     }
 }
 

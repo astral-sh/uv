@@ -22,6 +22,10 @@
 # This file must be used with "source bin/activate" *from bash*
 # you cannot run it directly
 
+if ! [ -z "${SCRIPT_PATH+_}" ] ; then
+    _OLD_SCRIPT_PATH="$SCRIPT_PATH"
+fi
+
 # Get script path (only used if environment is relocatable).
 if [ -n "${BASH_VERSION:+x}" ] ; then
     SCRIPT_PATH="${BASH_SOURCE[0]}"
@@ -80,14 +84,24 @@ if ([ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]) && $(command -v cygpath 
 fi
 export VIRTUAL_ENV
 
+# Unset the `SCRIPT_PATH` variable, now that the `VIRTUAL_ENV` variable
+# has been set. This is important for relocatable environments.
+if ! [ -z "${_OLD_SCRIPT_PATH+_}" ] ; then
+    SCRIPT_PATH="$_OLD_SCRIPT_PATH"
+    export SCRIPT_PATH
+    unset _OLD_SCRIPT_PATH
+else
+    unset SCRIPT_PATH
+fi
+
 _OLD_VIRTUAL_PATH="$PATH"
 PATH="$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH"
 export PATH
 
 if [ "x{{ VIRTUAL_PROMPT }}" != x ] ; then
-    VIRTUAL_ENV_PROMPT="({{ VIRTUAL_PROMPT }}) "
+    VIRTUAL_ENV_PROMPT="{{ VIRTUAL_PROMPT }}"
 else
-    VIRTUAL_ENV_PROMPT="($(basename "$VIRTUAL_ENV")) "
+    VIRTUAL_ENV_PROMPT=$(basename "$VIRTUAL_ENV")
 fi
 export VIRTUAL_ENV_PROMPT
 
@@ -99,7 +113,7 @@ fi
 
 if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
     _OLD_VIRTUAL_PS1="${PS1-}"
-    PS1="${VIRTUAL_ENV_PROMPT}${PS1-}"
+    PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
     export PS1
 fi
 

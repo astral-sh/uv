@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{Args, ValueEnum};
 
 use uv_warnings::warn_user;
@@ -13,7 +13,6 @@ pub trait CompatArgs {
 /// For example, users often pass `--allow-unsafe`, which is unnecessary with uv. But it's a
 /// nice user experience to warn, rather than fail, when users pass `--allow-unsafe`.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipCompileCompatArgs {
     #[clap(long, hide = true)]
     allow_unsafe: bool,
@@ -75,7 +74,9 @@ impl CompatArgs for PipCompileCompatArgs {
         }
 
         if self.no_allow_unsafe {
-            warn_user!("pip-compile's `--no-allow-unsafe` has no effect (uv can safely pin `pip` and other packages)");
+            warn_user!(
+                "pip-compile's `--no-allow-unsafe` has no effect (uv can safely pin `pip` and other packages)"
+            );
         }
 
         if self.reuse_hashes {
@@ -133,12 +134,6 @@ impl CompatArgs for PipCompileCompatArgs {
             ));
         }
 
-        if self.no_config {
-            warn_user!(
-                "pip-compile's `--no-config` has no effect (uv does not use a configuration file)"
-            );
-        }
-
         if self.emit_options {
             return Err(anyhow!(
                 "pip-compile's `--emit-options` is unsupported (uv never emits options)"
@@ -163,7 +158,6 @@ impl CompatArgs for PipCompileCompatArgs {
 ///
 /// These represent a subset of the `pip list` interface that uv supports by default.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipListCompatArgs {
     #[clap(long, hide = true)]
     disable_pip_version_check: bool,
@@ -188,7 +182,6 @@ impl CompatArgs for PipListCompatArgs {
 ///
 /// These represent a subset of the `pip-sync` interface that uv supports by default.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipSyncCompatArgs {
     #[clap(short, long, hide = true)]
     ask: bool,
@@ -252,12 +245,6 @@ impl CompatArgs for PipSyncCompatArgs {
             ));
         }
 
-        if self.no_config {
-            warn_user!(
-                "pip-sync's `--no-config` has no effect (uv does not use a configuration file)"
-            );
-        }
-
         if self.pip_args.is_some() {
             return Err(anyhow!(
                 "pip-sync's `--pip-args` is unsupported (try passing arguments to uv directly)"
@@ -278,7 +265,6 @@ enum Resolver {
 ///
 /// These represent a subset of the `virtualenv` interface that uv supports by default.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct VenvCompatArgs {
     #[clap(long, hide = true)]
     clear: bool,
@@ -337,7 +323,6 @@ impl CompatArgs for VenvCompatArgs {
 ///
 /// These represent a subset of the `pip install` interface that uv supports by default.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipInstallCompatArgs {
     #[clap(long, hide = true)]
     disable_pip_version_check: bool,
@@ -371,7 +356,6 @@ impl CompatArgs for PipInstallCompatArgs {
 ///
 /// These represent a subset of the `pip` interface that exists on all commands.
 #[derive(Args)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PipGlobalCompatArgs {
     #[clap(long, hide = true)]
     disable_pip_version_check: bool,

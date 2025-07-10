@@ -2,16 +2,18 @@ use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
-use url::Url;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::WheelFilenameError;
+use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashAlgorithm, HashDigest, ParsedUrlError};
+use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_redacted::DisplaySafeUrl;
+use uv_types::AnyErrorBuild;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -19,16 +21,12 @@ pub enum Error {
     NoBuild,
 
     // Network error
-    #[error("Failed to parse URL: {0}")]
-    Url(String, #[source] url::ParseError),
     #[error("Expected an absolute path, but received: {}", _0.user_display())]
     RelativePath(PathBuf),
     #[error(transparent)]
-    ParsedUrl(#[from] ParsedUrlError),
-    #[error(transparent)]
-    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
+    InvalidUrl(#[from] uv_distribution_types::ToUrlError),
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(Url),
+    NonFileUrl(DisplaySafeUrl),
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
@@ -52,32 +50,44 @@ pub enum Error {
 
     // Build error
     #[error(transparent)]
-    Build(anyhow::Error),
+    Build(AnyErrorBuild),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
-    NameMismatch {
+    WheelMetadataNameMismatch {
         given: PackageName,
         metadata: PackageName,
     },
     #[error("Package metadata version `{metadata}` does not match given version `{given}`")]
-    VersionMismatch { given: Version, metadata: Version },
+    WheelMetadataVersionMismatch { given: Version, metadata: Version },
+    #[error(
+        "Package metadata name `{metadata}` does not match `{filename}` from the wheel filename"
+    )]
+    WheelFilenameNameMismatch {
+        filename: PackageName,
+        metadata: PackageName,
+    },
+    #[error(
+        "Package metadata version `{metadata}` does not match `{filename}` from the wheel filename"
+    )]
+    WheelFilenameVersionMismatch {
+        filename: Version,
+        metadata: Version,
+    },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
     #[error("Failed to read metadata: `{}`", _0.user_display())]
     WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
+    #[error("Failed to read metadata from installed package `{0}`")]
+    ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
-    #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
-    DirWithoutEntrypoint(PathBuf),
-    #[error("Failed to extract archive")]
-    Extract(#[from] uv_extract::Error),
+    #[error("Failed to extract archive: {0}")]
+    Extract(String, #[source] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
-    #[error("The source distribution is missing an `egg-info` directory")]
-    MissingEggInfo,
-    #[error("The source distribution is missing a `requires.txt` file")]
-    MissingRequiresTxt,
+    #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
+    MissingSubdirectory(DisplaySafeUrl, PathBuf),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("Failed to extract metadata from `requires.txt`")]
@@ -91,11 +101,13 @@ pub enum Error {
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
-    NotFound(Url),
-    #[error("Attempted to re-extract the source distribution for `{0}`, but the {1} hash didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
+    NotFound(DisplaySafeUrl),
+    #[error("Attempted to re-extract the source distribution for `{}`, but the {} hash didn't match. Run `{}` to clear the cache.", _0, _1, "uv cache clean".green())]
     CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]
     RequiresPython(VersionSpecifiers, Version),
+    #[error("Failed to identify base Python interpreter")]
+    BaseInterpreter(#[source] std::io::Error),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.
@@ -122,13 +134,17 @@ pub enum Error {
     )]
     MissingHashes { distribution: String },
 
-    #[error("Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}")]
+    #[error(
+        "Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}"
+    )]
     MissingActualHashes {
         distribution: String,
         expected: String,
     },
 
-    #[error("Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}")]
+    #[error(
+        "Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}"
+    )]
     MissingExpectedHashes {
         distribution: String,
         actual: String,
@@ -154,6 +170,15 @@ impl From<reqwest_middleware::Error> for Error {
             reqwest_middleware::Error::Reqwest(error) => {
                 Self::Reqwest(WrappedReqwestError::from(error))
             }
+        }
+    }
+}
+
+impl IsBuildBackendError for Error {
+    fn is_build_backend_error(&self) -> bool {
+        match self {
+            Self::Build(err) => err.is_build_backend_error(),
+            _ => false,
         }
     }
 }

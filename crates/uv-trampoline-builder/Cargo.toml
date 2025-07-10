@@ -31,6 +31,6 @@ zip = { workspace = true }
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }
 assert_fs = { version = "1.1.2" }
-anyhow = { version = "1.0.89" }
+anyhow = { workspace = true }
 fs-err = { workspace = true }
 which = { workspace = true }

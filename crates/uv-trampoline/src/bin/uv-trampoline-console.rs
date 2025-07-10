@@ -3,7 +3,7 @@
 
 // Named according to https://docs.microsoft.com/en-us/cpp/build/reference/entry-entry-point-symbol
 // This avoids having to define a custom /ENTRY:entry_fn in build.rs
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn mainCRTStartup() -> ! {
     uv_trampoline::bounce::bounce(false)
 }

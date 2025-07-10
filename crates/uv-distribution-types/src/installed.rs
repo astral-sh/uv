@@ -1,9 +1,10 @@
 use std::borrow::Cow;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context, Result};
 use fs_err as fs;
+use thiserror::Error;
 use tracing::warn;
 use url::Url;
 
@@ -12,9 +13,51 @@ use uv_distribution_filename::EggInfoFilename;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::DirectUrl;
+use uv_pypi_types::{DirectUrl, MetadataError};
+use uv_redacted::DisplaySafeUrl;
 
 use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
+
+#[derive(Error, Debug)]
+pub enum InstalledDistError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    UrlParse(#[from] url::ParseError),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    EggInfoParse(#[from] uv_distribution_filename::EggInfoFilenameError),
+
+    #[error(transparent)]
+    VersionParse(#[from] uv_pep440::VersionParseError),
+
+    #[error(transparent)]
+    PackageNameParse(#[from] uv_normalize::InvalidNameError),
+
+    #[error("Invalid .egg-link path: `{}`", _0.user_display())]
+    InvalidEggLinkPath(PathBuf),
+
+    #[error("Invalid .egg-link target: `{}`", _0.user_display())]
+    InvalidEggLinkTarget(PathBuf),
+
+    #[error("Failed to parse METADATA file: `{}`", path.user_display())]
+    MetadataParse {
+        path: PathBuf,
+        #[source]
+        err: Box<MetadataError>,
+    },
+
+    #[error("Failed to parse `PKG-INFO` file: `{}`", path.user_display())]
+    PkgInfoParse {
+        path: PathBuf,
+        #[source]
+        err: Box<MetadataError>,
+    },
+}
 
 /// A built distribution (wheel) that is installed in a virtual environment.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -35,7 +78,7 @@ pub enum InstalledDist {
 pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
 }
 
@@ -44,9 +87,9 @@ pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
     pub direct_url: Box<DirectUrl>,
-    pub url: Url,
+    pub url: DisplaySafeUrl,
     pub editable: bool,
-    pub path: PathBuf,
+    pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
 }
 
@@ -54,31 +97,31 @@ pub struct InstalledDirectUrlDist {
 pub struct InstalledEggInfoFile {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledLegacyEditable {
     pub name: PackageName,
     pub version: Version,
-    pub egg_link: PathBuf,
-    pub target: PathBuf,
-    pub target_url: Url,
-    pub egg_info: PathBuf,
+    pub egg_link: Box<Path>,
+    pub target: Box<Path>,
+    pub target_url: DisplaySafeUrl,
+    pub egg_info: Box<Path>,
 }
 
 impl InstalledDist {
     /// Try to parse a distribution from a `.dist-info` directory name (like `django-5.0a1.dist-info`).
     ///
     /// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#recording-installed-packages>
-    pub fn try_from_path(path: &Path) -> Result<Option<Self>> {
+    pub fn try_from_path(path: &Path) -> Result<Option<Self>, InstalledDistError> {
         // Ex) `cffi-1.16.0.dist-info`
         if path.extension().is_some_and(|ext| ext == "dist-info") {
             let Some(file_stem) = path.file_stem() else {
@@ -92,7 +135,7 @@ impl InstalledDist {
             };
 
             let name = PackageName::from_str(name)?;
-            let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
+            let version = Version::from_str(version)?;
             let cache_info = Self::cache_info(path)?;
 
             return if let Some(direct_url) = Self::direct_url(path)? {
@@ -102,8 +145,8 @@ impl InstalledDist {
                         version,
                         editable: matches!(&direct_url, DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
                         direct_url: Box::new(direct_url),
-                        url,
-                        path: path.to_path_buf(),
+                        url: DisplaySafeUrl::from(url),
+                        path: path.to_path_buf().into_boxed_path(),
                         cache_info,
                     }))),
                     Err(err) => {
@@ -111,7 +154,7 @@ impl InstalledDist {
                         Ok(Some(Self::Registry(InstalledRegistryDist {
                             name,
                             version,
-                            path: path.to_path_buf(),
+                            path: path.to_path_buf().into_boxed_path(),
                             cache_info,
                         })))
                     }
@@ -120,7 +163,7 @@ impl InstalledDist {
                 Ok(Some(Self::Registry(InstalledRegistryDist {
                     name,
                     version,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                     cache_info,
                 })))
             };
@@ -149,7 +192,7 @@ impl InstalledDist {
                     return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                         name: file_name.name,
                         version,
-                        path: path.to_path_buf(),
+                        path: path.to_path_buf().into_boxed_path(),
                     })));
                 }
 
@@ -157,10 +200,10 @@ impl InstalledDist {
                     return Ok(Some(Self::EggInfoFile(InstalledEggInfoFile {
                         name: file_name.name,
                         version,
-                        path: path.to_path_buf(),
+                        path: path.to_path_buf().into_boxed_path(),
                     })));
                 }
-            };
+            }
 
             if metadata.is_dir() {
                 let Some(egg_metadata) = read_metadata(&path.join("PKG-INFO")) else {
@@ -169,7 +212,7 @@ impl InstalledDist {
                 return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                     name: file_name.name,
                     version: Version::from_str(&egg_metadata.version)?,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                 })));
             }
 
@@ -180,7 +223,7 @@ impl InstalledDist {
                 return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                     name: file_name.name,
                     version: Version::from_str(&egg_metadata.version)?,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                 })));
             }
         }
@@ -212,13 +255,13 @@ impl InstalledDist {
             // Match pip, but note setuptools only puts absolute paths in `.egg-link` files.
             let target = path
                 .parent()
-                .ok_or_else(|| anyhow!("Invalid `.egg-link` path: {}", path.user_display()))?
+                .ok_or_else(|| InstalledDistError::InvalidEggLinkPath(path.to_path_buf()))?
                 .join(target);
 
             // Normalisation comes from `pkg_resources.to_filename`.
             let egg_info = target.join(file_stem.replace('-', "_") + ".egg-info");
             let url = Url::from_file_path(&target)
-                .map_err(|()| anyhow!("Invalid `.egg-link` target: {}", target.user_display()))?;
+                .map_err(|()| InstalledDistError::InvalidEggLinkTarget(path.to_path_buf()))?;
 
             // Mildly unfortunate that we must read metadata to get the version.
             let Some(egg_metadata) = read_metadata(&egg_info.join("PKG-INFO")) else {
@@ -228,10 +271,10 @@ impl InstalledDist {
             return Ok(Some(Self::LegacyEditable(InstalledLegacyEditable {
                 name: egg_metadata.name,
                 version: Version::from_str(&egg_metadata.version)?,
-                egg_link: path.to_path_buf(),
-                target,
-                target_url: url,
-                egg_info,
+                egg_link: path.to_path_buf().into_boxed_path(),
+                target: target.into_boxed_path(),
+                target_url: DisplaySafeUrl::from(url),
+                egg_info: egg_info.into_boxed_path(),
             })));
         }
 
@@ -239,7 +282,7 @@ impl InstalledDist {
     }
 
     /// Return the [`Path`] at which the distribution is stored on-disk.
-    pub fn path(&self) -> &Path {
+    pub fn install_path(&self) -> &Path {
         match self {
             Self::Registry(dist) => &dist.path,
             Self::Url(dist) => &dist.path,
@@ -261,66 +304,68 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    pub fn direct_url(path: &Path) -> Result<Option<DirectUrl>> {
+    pub fn direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
         let path = path.join("direct_url.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
+        let direct_url =
+            serde_json::from_reader::<BufReader<fs_err::File>, DirectUrl>(BufReader::new(file))?;
         Ok(Some(direct_url))
     }
 
     /// Read the `uv_cache.json` file from a `.dist-info` directory.
-    pub fn cache_info(path: &Path) -> Result<Option<CacheInfo>> {
+    pub fn cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
         let path = path.join("uv_cache.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let cache_info = serde_json::from_reader::<fs_err::File, CacheInfo>(file)?;
+        let cache_info =
+            serde_json::from_reader::<BufReader<fs_err::File>, CacheInfo>(BufReader::new(file))?;
         Ok(Some(cache_info))
     }
 
     /// Read the `METADATA` file from a `.dist-info` directory.
-    pub fn metadata(&self) -> Result<uv_pypi_types::ResolutionMetadata> {
+    pub fn metadata(&self) -> Result<uv_pypi_types::ResolutionMetadata, InstalledDistError> {
         match self {
             Self::Registry(_) | Self::Url(_) => {
-                let path = self.path().join("METADATA");
+                let path = self.install_path().join("METADATA");
                 let contents = fs::read(&path)?;
                 // TODO(zanieb): Update this to use thiserror so we can unpack parse errors downstream
-                uv_pypi_types::ResolutionMetadata::parse_metadata(&contents).with_context(|| {
-                    format!(
-                        "Failed to parse `METADATA` file at: {}",
-                        path.user_display()
-                    )
+                uv_pypi_types::ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                    InstalledDistError::MetadataParse {
+                        path: path.clone(),
+                        err: Box::new(err),
+                    }
                 })
             }
             Self::EggInfoFile(_) | Self::EggInfoDirectory(_) | Self::LegacyEditable(_) => {
                 let path = match self {
-                    Self::EggInfoFile(dist) => Cow::Borrowed(&dist.path),
+                    Self::EggInfoFile(dist) => Cow::Borrowed(&*dist.path),
                     Self::EggInfoDirectory(dist) => Cow::Owned(dist.path.join("PKG-INFO")),
                     Self::LegacyEditable(dist) => Cow::Owned(dist.egg_info.join("PKG-INFO")),
                     _ => unreachable!(),
                 };
                 let contents = fs::read(path.as_ref())?;
-                uv_pypi_types::ResolutionMetadata::parse_metadata(&contents).with_context(|| {
-                    format!(
-                        "Failed to parse `PKG-INFO` file at: {}",
-                        path.user_display()
-                    )
+                uv_pypi_types::ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
+                    InstalledDistError::PkgInfoParse {
+                        path: path.to_path_buf(),
+                        err: Box::new(err),
+                    }
                 })
             }
         }
     }
 
     /// Return the `INSTALLER` of the distribution.
-    pub fn installer(&self) -> Result<Option<String>> {
-        let path = self.path().join("INSTALLER");
+    pub fn installer(&self) -> Result<Option<String>, InstalledDistError> {
+        let path = self.install_path().join("INSTALLER");
         match fs::read_to_string(path) {
-            Ok(installer) => Ok(Some(installer)),
+            Ok(installer) => Ok(Some(installer.trim().to_owned())),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
         }

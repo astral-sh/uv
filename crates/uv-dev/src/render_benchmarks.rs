@@ -2,10 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::Parser;
 use poloto::build;
-use resvg::usvg_text_layout::{fontdb, TreeTextToPath};
+use resvg::usvg_text_layout::{TreeTextToPath, fontdb};
 use serde::Deserialize;
 use tagu::prelude::*;
 

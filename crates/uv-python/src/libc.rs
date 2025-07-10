@@ -16,7 +16,9 @@ use uv_fs::Simplified;
 
 #[derive(Debug, Error)]
 pub enum LibcDetectionError {
-    #[error("Could not detect either glibc version nor musl libc version, at least one of which is required")]
+    #[error(
+        "Could not detect either glibc version nor musl libc version, at least one of which is required"
+    )]
     NoLibcFound,
     #[error("Failed to get base name of symbolic link path {0}")]
     MissingBasePath(PathBuf),
@@ -29,12 +31,14 @@ pub enum LibcDetectionError {
         #[source]
         err: io::Error,
     },
-    #[error("Could not find glibc version in output of: `ldd --version`")]
-    InvalidLddOutputGnu,
+    #[error("Could not find glibc version in output of: `{0} --version`")]
+    InvalidLdSoOutputGnu(PathBuf),
     #[error("Could not find musl version in output of: `{0}`")]
-    InvalidLddOutputMusl(PathBuf),
+    InvalidLdSoOutputMusl(PathBuf),
     #[error("Could not read ELF interpreter from any of the following paths: {0}")]
     CoreBinaryParsing(String),
+    #[error("Failed to find any common binaries to determine libc from: {0}")]
+    NoCommonBinariesFound(String),
     #[error("Failed to determine libc")]
     Io(#[from] io::Error),
 }
@@ -55,7 +59,7 @@ pub(crate) enum LibcVersion {
 /// inspecting core binaries.
 pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     let ld_path = find_ld_path()?;
-    trace!("ld path: {}", ld_path.user_display());
+    trace!("Found `ld` path: {}", ld_path.user_display());
 
     match detect_musl_version(&ld_path) {
         Ok(os) => return Ok(os),
@@ -66,52 +70,60 @@ pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     match detect_linux_libc_from_ld_symlink(&ld_path) {
         Ok(os) => return Ok(os),
         Err(err) => {
-            trace!("Tried to find libc version from possible symlink at {ld_path:?}, but failed: {err}");
+            trace!(
+                "Tried to find libc version from possible symlink at {ld_path:?}, but failed: {err}"
+            );
         }
     }
-    match detect_glibc_version_from_ldd(&ld_path) {
+    match detect_glibc_version_from_ld(&ld_path) {
         Ok(os_version) => return Ok(os_version),
         Err(err) => {
-            trace!("Tried to find glibc version from `ldd --version`, but failed: {err}");
+            trace!(
+                "Tried to find glibc version from `{} --version`, but failed: {}",
+                ld_path.simplified_display(),
+                err
+            );
         }
     }
     Err(LibcDetectionError::NoLibcFound)
 }
 
 // glibc version is taken from `std/sys/unix/os.rs`.
-fn detect_glibc_version_from_ldd(ldd: &Path) -> Result<LibcVersion, LibcDetectionError> {
-    let output = Command::new(ldd)
+fn detect_glibc_version_from_ld(ld_so: &Path) -> Result<LibcVersion, LibcDetectionError> {
+    let output = Command::new(ld_so)
         .args(["--version"])
         .output()
         .map_err(|err| LibcDetectionError::FailedToRun {
             libc: "glibc",
-            program: format!("{} --version", ldd.user_display()),
+            program: format!("{} --version", ld_so.user_display()),
             err,
         })?;
-    if let Some(os) = glibc_ldd_output_to_version("stdout", &output.stdout) {
+    if let Some(os) = glibc_ld_output_to_version("stdout", &output.stdout) {
         return Ok(os);
     }
-    if let Some(os) = glibc_ldd_output_to_version("stderr", &output.stderr) {
+    if let Some(os) = glibc_ld_output_to_version("stderr", &output.stderr) {
         return Ok(os);
     }
-    Err(LibcDetectionError::InvalidLddOutputGnu)
+    Err(LibcDetectionError::InvalidLdSoOutputGnu(
+        ld_so.to_path_buf(),
+    ))
 }
 
-/// Parse `ldd --version` output.
+/// Parse output `/lib64/ld-linux-x86-64.so.2 --version` and equivalent ld.so files.
 ///
 /// Example: `ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.`.
-fn glibc_ldd_output_to_version(kind: &str, output: &[u8]) -> Option<LibcVersion> {
+fn glibc_ld_output_to_version(kind: &str, output: &[u8]) -> Option<LibcVersion> {
     static RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"ld.so \(.+\) .* ([0-9]+\.[0-9]+)").unwrap());
 
     let output = String::from_utf8_lossy(output);
-    trace!("{kind} output from `ldd --version`: {output:?}");
+    trace!("{kind} output from `ld.so --version`: {output:?}");
     let (_, [version]) = RE.captures(output.as_ref()).map(|c| c.extract())?;
     // Parse the input as "x.y" glibc version.
     let mut parsed_ints = version.split('.').map(str::parse).fuse();
     let major = parsed_ints.next()?.ok()?;
     let minor = parsed_ints.next()?.ok()?;
-    trace!("Found manylinux {major}.{minor} in {kind} of `ldd --version`");
+    trace!("Found manylinux {major}.{minor} in {kind} of ld.so version");
     Some(LibcVersion::Manylinux { major, minor })
 }
 
@@ -162,7 +174,7 @@ fn detect_musl_version(ld_path: impl AsRef<Path>) -> Result<LibcVersion, LibcDet
     if let Some(os) = musl_ld_output_to_version("stderr", &output.stderr) {
         return Ok(os);
     }
-    Err(LibcDetectionError::InvalidLddOutputMusl(
+    Err(LibcDetectionError::InvalidLdSoOutputMusl(
         ld_path.to_path_buf(),
     ))
 }
@@ -197,12 +209,24 @@ fn find_ld_path() -> Result<PathBuf, LibcDetectionError> {
     // See: https://github.com/astral-sh/uv/issues/1810
     // See: https://github.com/astral-sh/uv/issues/4242#issuecomment-2306164449
     let attempts = ["/bin/sh", "/usr/bin/env", "/bin/dash", "/bin/ls"];
+    let mut found_anything = false;
     for path in attempts {
-        if let Some(ld_path) = find_ld_path_at(path) {
-            return Ok(ld_path);
+        if std::fs::exists(path).ok() == Some(true) {
+            found_anything = true;
+            if let Some(ld_path) = find_ld_path_at(path) {
+                return Ok(ld_path);
+            }
         }
     }
-    Err(LibcDetectionError::CoreBinaryParsing(attempts.join(", ")))
+    let attempts_string = attempts.join(", ");
+    if !found_anything {
+        // Known failure cases here include running the distroless Docker images directly
+        // (depending on what subcommand you use) and certain Nix setups. See:
+        // https://github.com/astral-sh/uv/issues/8635
+        Err(LibcDetectionError::NoCommonBinariesFound(attempts_string))
+    } else {
+        Err(LibcDetectionError::CoreBinaryParsing(attempts_string))
+    }
 }
 
 /// Attempt to find the path to the `ld` executable by
@@ -235,4 +259,45 @@ fn find_ld_path_at(path: impl AsRef<Path>) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    use indoc::indoc;
+
+    #[test]
+    fn parse_ld_so_output() {
+        let ver_str = glibc_ld_output_to_version(
+            "stdout",
+            indoc! {br"ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.
+            Copyright (C) 2024 Free Software Foundation, Inc.
+            This is free software; see the source for copying conditions.
+            There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
+            PARTICULAR PURPOSE.
+        "},
+        )
+        .unwrap();
+        assert_eq!(
+            ver_str,
+            LibcVersion::Manylinux {
+                major: 2,
+                minor: 39
+            }
+        );
+    }
+
+    #[test]
+    fn parse_musl_ld_output() {
+        // This output was generated by running `/lib/ld-musl-x86_64.so.1`
+        // in an Alpine Docker image. The Alpine version:
+        //
+        // # cat /etc/alpine-release
+        // 3.19.1
+        let output = b"\
+musl libc (x86_64)
+Version 1.2.4_git20230717
+Dynamic Program Loader
+Usage: /lib/ld-musl-x86_64.so.1 [options] [--] pathname [args]\
+    ";
+        let got = musl_ld_output_to_version("stderr", output).unwrap();
+        assert_eq!(got, LibcVersion::Musllinux { major: 1, minor: 2 });
+    }
+}
