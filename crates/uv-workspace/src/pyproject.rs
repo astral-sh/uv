@@ -6,6 +6,8 @@
 //!
 //! Then lowers them into a dependency specification.
 
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::ops::Deref;
@@ -17,18 +19,19 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
 use thiserror::Error;
-use url::Url;
 use uv_build_backend::BuildBackendSettings;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
+use uv_redacted::DisplaySafeUrl;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -353,6 +356,24 @@ pub struct ToolUv {
     )]
     pub default_groups: Option<DefaultGroups>,
 
+    /// Additional settings for `dependency-groups`.
+    ///
+    /// Currently this can only be used to add `requires-python` constraints
+    /// to dependency groups (typically to inform uv that your dev tooling
+    /// has a higher python requirement than your actual project).
+    ///
+    /// This cannot be used to define dependency groups, use the top-level
+    /// `[dependency-groups]` table for that.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [tool.uv.dependency-groups]
+            my-group = {requires-python = ">=3.12"}
+        "#
+    )]
+    pub dependency_groups: Option<ToolUvDependencyGroups>,
+
     /// The project's development dependencies.
     ///
     /// Development dependencies will be installed by default in `uv run` and `uv sync`, but will
@@ -591,7 +612,7 @@ pub struct ToolUv {
     /// Note that those settings only apply when using the `uv_build` backend, other build backends
     /// (such as hatchling) have their own configuration.
     #[option_group]
-    pub build_backend: Option<BuildBackendSettings>,
+    pub build_backend: Option<BuildBackendSettingsSchema>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -651,6 +672,77 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
 
         deserializer.deserialize_map(SourcesVisitor)
     }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ToolUvDependencyGroups(BTreeMap<GroupName, DependencyGroupSettings>);
+
+impl ToolUvDependencyGroups {
+    /// Returns the underlying `BTreeMap` of group names to settings.
+    pub fn inner(&self) -> &BTreeMap<GroupName, DependencyGroupSettings> {
+        &self.0
+    }
+
+    /// Convert the [`ToolUvDependencyGroups`] into its inner `BTreeMap`.
+    #[must_use]
+    pub fn into_inner(self) -> BTreeMap<GroupName, DependencyGroupSettings> {
+        self.0
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SourcesVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
+            type Value = ToolUvDependencyGroups;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map with unique keys")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut groups = BTreeMap::new();
+                while let Some((key, value)) =
+                    access.next_entry::<GroupName, DependencyGroupSettings>()?
+                {
+                    match groups.entry(key) {
+                        std::collections::btree_map::Entry::Occupied(entry) => {
+                            return Err(serde::de::Error::custom(format!(
+                                "duplicate settings for dependency group `{}`",
+                                entry.key()
+                            )));
+                        }
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(value);
+                        }
+                    }
+                }
+                Ok(ToolUvDependencyGroups(groups))
+            }
+        }
+
+        deserializer.deserialize_map(SourcesVisitor)
+    }
+}
+
+#[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub struct DependencyGroupSettings {
+    /// Version of python to require when installing this group
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
+    pub requires_python: Option<VersionSpecifiers>,
 }
 
 #[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
@@ -724,12 +816,12 @@ impl<'de> serde::Deserialize<'de> for SerdePattern {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerdePattern {
-    fn schema_name() -> String {
-        <String as schemars::JsonSchema>::schema_name()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("SerdePattern")
     }
 
-    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        <String as schemars::JsonSchema>::json_schema(r#gen)
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        <String as schemars::JsonSchema>::json_schema(generator)
     }
 }
 
@@ -891,7 +983,7 @@ pub enum Source {
     /// ```
     Git {
         /// The repository URL (without the `git+` prefix).
-        git: Url,
+        git: DisplaySafeUrl,
         /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
         subdirectory: Option<PortablePathBuf>,
         // Only one of the three may be used; we'll validate this later and emit a custom error.
@@ -915,7 +1007,7 @@ pub enum Source {
     /// flask = { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl" }
     /// ```
     Url {
-        url: Url,
+        url: DisplaySafeUrl,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
@@ -989,12 +1081,12 @@ impl<'de> Deserialize<'de> for Source {
         #[derive(Deserialize, Debug, Clone)]
         #[serde(rename_all = "kebab-case", deny_unknown_fields)]
         struct CatchAll {
-            git: Option<Url>,
+            git: Option<DisplaySafeUrl>,
             subdirectory: Option<PortablePathBuf>,
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
-            url: Option<Url>,
+            url: Option<DisplaySafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
             package: Option<bool>,
@@ -1083,7 +1175,7 @@ impl<'de> Deserialize<'de> for Source {
 
             // If the user prefixed the URL with `git+`, strip it.
             let git = if let Some(git) = git.as_str().strip_prefix("git+") {
-                Url::parse(git).map_err(serde::de::Error::custom)?
+                DisplaySafeUrl::parse(git).map_err(serde::de::Error::custom)?
             } else {
                 git
             };
@@ -1593,4 +1685,45 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct BuildBackendSettingsSchema;
+
+impl<'de> Deserialize<'de> for BuildBackendSettingsSchema {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(BuildBackendSettingsSchema)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for BuildBackendSettingsSchema {
+    fn schema_name() -> Cow<'static, str> {
+        BuildBackendSettings::schema_name()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        BuildBackendSettings::json_schema(generator)
+    }
+}
+
+impl OptionsMetadata for BuildBackendSettingsSchema {
+    fn record(visit: &mut dyn Visit) {
+        BuildBackendSettings::record(visit);
+    }
+
+    fn documentation() -> Option<&'static str> {
+        BuildBackendSettings::documentation()
+    }
+
+    fn metadata() -> OptionSet
+    where
+        Self: Sized + 'static,
+    {
+        BuildBackendSettings::metadata()
+    }
 }

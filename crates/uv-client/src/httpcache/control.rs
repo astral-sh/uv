@@ -21,7 +21,6 @@ use crate::rkyvutil::OwnedArchive;
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
-#[allow(clippy::struct_excessive_bools)]
 pub struct CacheControl {
     // directives for requests and responses
     /// * <https://www.rfc-editor.org/rfc/rfc9111.html#name-max-age>

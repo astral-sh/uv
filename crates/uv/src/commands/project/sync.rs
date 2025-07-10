@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -57,7 +58,7 @@ pub(crate) async fn sync(
     all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -116,23 +117,24 @@ pub(crate) async fn sync(
         SyncTarget::Project(project)
     };
 
-    // Determine the default groups to include.
+    // Determine the groups and extras to include.
     let default_groups = match &target {
         SyncTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         SyncTarget::Script(..) => DefaultGroups::default(),
     };
-
-    // Determine the default extras to include.
     let default_extras = match &target {
         SyncTarget::Project(_project) => DefaultExtras::default(),
         SyncTarget::Script(..) => DefaultExtras::default(),
     };
+    let groups = groups.with_defaults(default_groups);
+    let extras = extras.with_defaults(default_extras);
 
     // Discover or create the virtual environment.
     let environment = match &target {
         SyncTarget::Project(project) => SyncEnvironment::Project(
             ProjectEnvironment::get_or_init(
                 project.workspace(),
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &network_settings,
@@ -144,6 +146,7 @@ pub(crate) async fn sync(
                 cache,
                 dry_run,
                 printer,
+                preview,
             )
             .await?,
         ),
@@ -161,10 +164,19 @@ pub(crate) async fn sync(
                 cache,
                 dry_run,
                 printer,
+                preview,
             )
             .await?,
         ),
     };
+
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Notify the user of any environment changes.
     match &environment {
@@ -319,7 +331,7 @@ pub(crate) async fn sync(
                 installer_metadata,
                 concurrency,
                 cache,
-                workspace_cache,
+                workspace_cache.clone(),
                 dry_run,
                 printer,
                 preview,
@@ -366,6 +378,7 @@ pub(crate) async fn sync(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -435,8 +448,8 @@ pub(crate) async fn sync(
     match do_sync(
         sync_target,
         &environment,
-        &extras.with_defaults(default_extras),
-        &dev.with_defaults(default_groups),
+        &extras,
+        &groups,
         editable,
         install_options,
         modifications,
@@ -447,6 +460,7 @@ pub(crate) async fn sync(
         installer_metadata,
         concurrency,
         cache,
+        workspace_cache,
         dry_run,
         printer,
         preview,
@@ -571,7 +585,7 @@ pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
-    dev: &DependencyGroupsWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -582,6 +596,7 @@ pub(super) async fn do_sync(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
@@ -622,11 +637,11 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(target.lock(), extras, dev)?;
+    detect_conflicts(target.lock(), extras, groups)?;
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(extras)?;
-    target.validate_groups(dev)?;
+    target.validate_groups(groups)?;
 
     // Determine the markers to use for resolution.
     let marker_env = venv.interpreter().resolver_marker_environment();
@@ -663,7 +678,7 @@ pub(super) async fn do_sync(
         &marker_env,
         tags,
         extras,
-        dev,
+        groups,
         build_options,
         &install_options,
     )?;
@@ -674,16 +689,7 @@ pub(super) async fn do_sync(
     // If necessary, convert editable to non-editable distributions.
     let resolution = apply_editable_mode(resolution, editable);
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Populate credentials from the target.
     store_credentials_from_target(target);
@@ -743,7 +749,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer,
         sources,
-        WorkspaceCache::default(),
+        workspace_cache.clone(),
         concurrency,
         preview,
     );

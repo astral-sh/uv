@@ -3,11 +3,11 @@ use std::fmt::Write;
 use anyhow::Result;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{DryRun, KeyringProviderType};
+use uv_configuration::{DryRun, KeyringProviderType, PreviewMode};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
@@ -37,6 +37,7 @@ pub(crate) async fn pip_uninstall(
     network_settings: &NetworkSettings,
     dry_run: DryRun,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -57,6 +58,7 @@ pub(crate) async fn pip_uninstall(
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
         &cache,
+        preview,
     )?;
 
     report_target_environment(&environment, &cache, printer)?;
@@ -98,7 +100,13 @@ pub(crate) async fn pip_uninstall(
         }
     }
 
-    let _lock = environment.lock().await?;
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_environment(&environment)?;

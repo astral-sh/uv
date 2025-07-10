@@ -14,6 +14,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, MetadataError};
+use uv_redacted::DisplaySafeUrl;
 
 use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
 
@@ -86,7 +87,7 @@ pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
     pub direct_url: Box<DirectUrl>,
-    pub url: Url,
+    pub url: DisplaySafeUrl,
     pub editable: bool,
     pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
@@ -112,7 +113,7 @@ pub struct InstalledLegacyEditable {
     pub version: Version,
     pub egg_link: Box<Path>,
     pub target: Box<Path>,
-    pub target_url: Url,
+    pub target_url: DisplaySafeUrl,
     pub egg_info: Box<Path>,
 }
 
@@ -144,7 +145,7 @@ impl InstalledDist {
                         version,
                         editable: matches!(&direct_url, DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
                         direct_url: Box::new(direct_url),
-                        url,
+                        url: DisplaySafeUrl::from(url),
                         path: path.to_path_buf().into_boxed_path(),
                         cache_info,
                     }))),
@@ -272,7 +273,7 @@ impl InstalledDist {
                 version: Version::from_str(&egg_metadata.version)?,
                 egg_link: path.to_path_buf().into_boxed_path(),
                 target: target.into_boxed_path(),
-                target_url: url,
+                target_url: DisplaySafeUrl::from(url),
                 egg_info: egg_info.into_boxed_path(),
             })));
         }
@@ -364,7 +365,7 @@ impl InstalledDist {
     pub fn installer(&self) -> Result<Option<String>, InstalledDistError> {
         let path = self.install_path().join("INSTALLER");
         match fs::read_to_string(path) {
-            Ok(installer) => Ok(Some(installer)),
+            Ok(installer) => Ok(Some(installer.trim().to_owned())),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
         }

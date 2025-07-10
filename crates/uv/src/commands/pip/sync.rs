@@ -1,10 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -157,6 +156,7 @@ pub(crate) async fn pip_sync(
             EnvironmentPreference::from_system_flag(system, false),
             python_preference,
             &cache,
+            preview,
         )?;
         report_interpreter(&installation, true, printer)?;
         PythonEnvironment::from_installation(installation)
@@ -168,6 +168,7 @@ pub(crate) async fn pip_sync(
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
             &cache,
+            preview,
         )?;
         report_target_environment(&environment, &cache, printer)?;
         environment
@@ -210,7 +211,13 @@ pub(crate) async fn pip_sync(
         }
     }
 
-    let _lock = environment.lock().await?;
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     let interpreter = environment.interpreter();
 
@@ -265,32 +272,21 @@ pub(crate) async fn pip_sync(
         no_index,
     );
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Determine the PyTorch backend.
-    let torch_backend = torch_backend.map(|mode| {
-        if preview.is_disabled() {
-            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
-        }
-
-        TorchStrategy::from_mode(
-            mode,
-            python_platform
-                .map(TargetTriple::platform)
-                .as_ref()
-                .unwrap_or(interpreter.platform())
-                .os(),
-        )
-    }).transpose()?;
+    let torch_backend = torch_backend
+        .map(|mode| {
+            TorchStrategy::from_mode(
+                mode,
+                python_platform
+                    .map(TargetTriple::platform)
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -416,6 +412,7 @@ pub(crate) async fn pip_sync(
             Some(&tags),
             ResolverEnvironment::specific(marker_env.clone()),
             python_requirement,
+            interpreter.markers(),
             Conflicts::empty(),
             &client,
             &flat_index,

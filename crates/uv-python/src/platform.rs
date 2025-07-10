@@ -18,7 +18,7 @@ pub enum Error {
 }
 
 /// Architecture variants, e.g., with support for different instruction sets
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub enum ArchVariant {
     /// Targets 64-bit Intel/AMD CPUs newer than Nehalem (2008).
     /// Includes SSE3, SSE4 and other post-2003 CPU instructions.
@@ -35,6 +35,54 @@ pub enum ArchVariant {
 pub struct Arch {
     pub(crate) family: target_lexicon::Architecture,
     pub(crate) variant: Option<ArchVariant>,
+}
+
+impl Ord for Arch {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.family == other.family {
+            return self.variant.cmp(&other.variant);
+        }
+
+        // For the time being, manually make aarch64 windows disfavored
+        // on its own host platform, because most packages don't have wheels for
+        // aarch64 windows, making emulation more useful than native execution!
+        //
+        // The reason we do this in "sorting" and not "supports" is so that we don't
+        // *refuse* to use an aarch64 windows pythons if they happen to be installed
+        // and nothing else is available.
+        //
+        // Similarly if someone manually requests an aarch64 windows install, we
+        // should respect that request (this is the way users should "override"
+        // this behaviour).
+        let preferred = if cfg!(all(windows, target_arch = "aarch64")) {
+            Arch {
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            }
+        } else {
+            // Prefer native architectures
+            Arch::from_env()
+        };
+
+        match (
+            self.family == preferred.family,
+            other.family == preferred.family,
+        ) {
+            (true, true) => unreachable!(),
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (false, false) => {
+                // Both non-preferred, fallback to lexicographic order
+                self.family.to_string().cmp(&other.family.to_string())
+            }
+        }
+    }
+}
+
+impl PartialOrd for Arch {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
@@ -116,7 +164,12 @@ impl Arch {
         // TODO: Implement `variant` support checks
 
         // Windows ARM64 runs emulated x86_64 binaries transparently
-        if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
+        // Similarly, macOS aarch64 runs emulated x86_64 binaries transparently if you have Rosetta
+        // installed. We don't try to be clever and check if that's the case here, we just assume
+        // that if x86_64 distributions are available, they're usable.
+        if (cfg!(windows) || cfg!(target_os = "macos"))
+            && matches!(self.family, target_lexicon::Architecture::Aarch64(_))
+        {
             return other.family == target_lexicon::Architecture::X86_64;
         }
 
@@ -316,6 +369,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 ),
                 variant: None,
             },
+            uv_platform_tags::Arch::Wasm32 => Self {
+                family: target_lexicon::Architecture::Wasm32,
+                variant: None,
+            },
         }
     }
 }
@@ -348,6 +405,9 @@ impl From<&uv_platform_tags::Os> for Os {
             uv_platform_tags::Os::NetBsd { .. } => Self(target_lexicon::OperatingSystem::Netbsd),
             uv_platform_tags::Os::OpenBsd { .. } => Self(target_lexicon::OperatingSystem::Openbsd),
             uv_platform_tags::Os::Windows => Self(target_lexicon::OperatingSystem::Windows),
+            uv_platform_tags::Os::Pyodide { .. } => {
+                Self(target_lexicon::OperatingSystem::Emscripten)
+            }
         }
     }
 }

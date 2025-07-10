@@ -60,5 +60,18 @@ need to be explicitly defined using
 
 ## Dependabot
 
-Support for uv is not yet available. Progress can be tracked at
-[dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478).
+Dependabot has announced support for uv, but there are some use cases that are not yet working. See
+[astral-sh/uv#2512](https://github.com/astral-sh/uv/issues/2512) for updates.
+
+Dependabot supports updating `uv.lock` files. To enable it, add the uv `package-ecosystem` to your
+`updates` list in the `dependabot.yml`:
+
+```yaml title="dependabot.yml"
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+```

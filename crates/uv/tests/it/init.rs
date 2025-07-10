@@ -929,6 +929,65 @@ fn init_script_file_conflicts() -> Result<()> {
     Ok(())
 }
 
+// Init script should not trash an existing shebang.
+#[test]
+fn init_script_shebang() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script_path = context.temp_dir.child("script.py");
+
+    let contents = "#! /usr/bin/env python3\nprint(\"Hello, world!\")";
+    fs_err::write(&script_path, contents)?;
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: If you execute script.py directly, it might ignore its inline metadata.
+    Consider replacing its shebang with: #!/usr/bin/env -S uv run --script
+    Initialized script at `script.py`
+    ");
+    let resulting_script = fs_err::read_to_string(&script_path)?;
+    assert_snapshot!(resulting_script, @r#"
+    #! /usr/bin/env python3
+    #
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    print("Hello, world!")
+    "#
+    );
+
+    // If the shebang already contains `uv`, the result is the same, but we suppress the warning.
+    let contents = "#!/usr/bin/env -S uv run --script\nprint(\"Hello, world!\")";
+    fs_err::write(&script_path, contents)?;
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `script.py`
+    ");
+    let resulting_script = fs_err::read_to_string(&script_path)?;
+    assert_snapshot!(resulting_script, @r#"
+    #!/usr/bin/env -S uv run --script
+    #
+    # /// script
+    # requires-python = ">=3.12"
+    # dependencies = []
+    # ///
+
+    print("Hello, world!")
+    "#
+    );
+
+    Ok(())
+}
+
 /// Run `uv init --lib` with an existing py.typed file
 #[test]
 fn init_py_typed_exists() -> Result<()> {
@@ -2365,7 +2424,7 @@ fn init_requires_python_version() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("3.8"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("3.9"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2380,15 +2439,15 @@ fn init_requires_python_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -2397,7 +2456,7 @@ fn init_requires_python_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            python_version, @"3.8"
+            python_version, @"3.9"
         );
     });
 
@@ -2408,7 +2467,7 @@ fn init_requires_python_version() -> Result<()> {
 /// specifiers verbatim.
 #[test]
 fn init_requires_python_specifiers() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2424,7 +2483,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.8.*"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.9.*"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2445,7 +2504,7 @@ fn init_requires_python_specifiers() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = "==3.8.*"
+        requires-python = "==3.9.*"
         dependencies = []
         "###
         );
@@ -2456,7 +2515,7 @@ fn init_requires_python_specifiers() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            python_version, @"3.8"
+            python_version, @"3.9"
         );
     });
 
@@ -2466,9 +2525,9 @@ fn init_requires_python_specifiers() -> Result<()> {
 /// Run `uv init`, inferring the `requires-python` from the `.python-version` file.
 #[test]
 fn init_requires_python_version_file() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
-    context.temp_dir.child(".python-version").write_str("3.8")?;
+    context.temp_dir.child(".python-version").write_str("3.9")?;
 
     let child = context.temp_dir.join("foo");
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
@@ -2485,15 +2544,15 @@ fn init_requires_python_version_file() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -2503,7 +2562,7 @@ fn init_requires_python_version_file() -> Result<()> {
 /// Run `uv init`, inferring the Python version from an existing `.venv`
 #[test]
 fn init_existing_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -2552,7 +2611,7 @@ fn init_existing_environment() -> Result<()> {
 /// Run `uv init`, it should ignore a the Python version from a parent `.venv`
 #[test]
 fn init_existing_environment_parent() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     // Create a new virtual environment in the parent directory
     uv_snapshot!(context.filters(), context.venv().current_dir(&context.temp_dir).arg("--python").arg("3.12"), @r###"
@@ -2588,7 +2647,7 @@ fn init_existing_environment_parent() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
         "###
         );

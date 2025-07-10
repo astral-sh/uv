@@ -1,6 +1,6 @@
 use std::collections::Bound;
 
-use pubgrub::Range;
+use version_ranges::Ranges;
 
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{
@@ -66,15 +66,8 @@ impl RequiresPython {
     ) -> Option<Self> {
         // Convert to PubGrub range and perform an intersection.
         let range = specifiers
-            .into_iter()
-            .map(|specifier| release_specifiers_to_ranges(specifier.clone()))
-            .fold(None, |range: Option<Range<Version>>, requires_python| {
-                if let Some(range) = range {
-                    Some(range.intersection(&requires_python))
-                } else {
-                    Some(requires_python)
-                }
-            })?;
+            .map(|specs| release_specifiers_to_ranges(specs.clone()))
+            .reduce(|acc, r| acc.intersection(&r))?;
 
         // If the intersection is empty, return `None`.
         if range.is_empty() {
@@ -97,12 +90,12 @@ impl RequiresPython {
     pub fn split(&self, bound: Bound<Version>) -> Option<(Self, Self)> {
         let RequiresPythonRange(.., upper) = &self.range;
 
-        let upper = Range::from_range_bounds((bound, upper.clone().into()));
+        let upper = Ranges::from_range_bounds((bound, upper.clone().into()));
         let lower = upper.complement();
 
         // Intersect left and right with the existing range.
-        let lower = lower.intersection(&Range::from(self.range.clone()));
-        let upper = upper.intersection(&Range::from(self.range.clone()));
+        let lower = lower.intersection(&Ranges::from(self.range.clone()));
+        let upper = upper.intersection(&Ranges::from(self.range.clone()));
 
         if lower.is_empty() || upper.is_empty() {
             None
@@ -353,7 +346,7 @@ impl RequiresPython {
     /// a lock file are deserialized and turned into a `ResolutionGraph`, the
     /// markers are "complexified" to put the `requires-python` assumption back
     /// into the marker explicitly.
-    pub(crate) fn simplify_markers(&self, marker: MarkerTree) -> MarkerTree {
+    pub fn simplify_markers(&self, marker: MarkerTree) -> MarkerTree {
         let (lower, upper) = (self.range().lower(), self.range().upper());
         marker.simplify_python_versions(lower.as_ref(), upper.as_ref())
     }
@@ -373,7 +366,7 @@ impl RequiresPython {
     /// ```text
     /// python_full_version >= '3.8' and python_full_version < '3.12'
     /// ```
-    pub(crate) fn complexify_markers(&self, marker: MarkerTree) -> MarkerTree {
+    pub fn complexify_markers(&self, marker: MarkerTree) -> MarkerTree {
         let (lower, upper) = (self.range().lower(), self.range().upper());
         marker.complexify_python_versions(lower.as_ref(), upper.as_ref())
     }
@@ -537,7 +530,7 @@ pub struct RequiresPythonRange(LowerBound, UpperBound);
 
 impl RequiresPythonRange {
     /// Initialize a [`RequiresPythonRange`] from a [`Range`].
-    pub fn from_range(range: &Range<Version>) -> Self {
+    pub fn from_range(range: &Ranges<Version>) -> Self {
         let (lower, upper) = range
             .bounding_range()
             .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
@@ -575,9 +568,9 @@ impl Default for RequiresPythonRange {
     }
 }
 
-impl From<RequiresPythonRange> for Range<Version> {
+impl From<RequiresPythonRange> for Ranges<Version> {
     fn from(value: RequiresPythonRange) -> Self {
-        Range::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
+        Ranges::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
             value.0.into(),
             value.1.into(),
         ))
@@ -592,21 +585,18 @@ impl From<RequiresPythonRange> for Range<Version> {
 /// a simplified marker, one must re-contextualize it by adding the
 /// `requires-python` constraint back to the marker.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
-pub(crate) struct SimplifiedMarkerTree(MarkerTree);
+pub struct SimplifiedMarkerTree(MarkerTree);
 
 impl SimplifiedMarkerTree {
     /// Simplifies the given markers by assuming the given `requires-python`
     /// bound is true.
-    pub(crate) fn new(
-        requires_python: &RequiresPython,
-        marker: MarkerTree,
-    ) -> SimplifiedMarkerTree {
+    pub fn new(requires_python: &RequiresPython, marker: MarkerTree) -> SimplifiedMarkerTree {
         SimplifiedMarkerTree(requires_python.simplify_markers(marker))
     }
 
     /// Complexifies the given markers by adding the given `requires-python` as
     /// a constraint to these simplified markers.
-    pub(crate) fn into_marker(self, requires_python: &RequiresPython) -> MarkerTree {
+    pub fn into_marker(self, requires_python: &RequiresPython) -> MarkerTree {
         requires_python.complexify_markers(self.0)
     }
 
@@ -614,12 +604,12 @@ impl SimplifiedMarkerTree {
     ///
     /// This only returns `None` when the underlying marker is always true,
     /// i.e., it matches all possible marker environments.
-    pub(crate) fn try_to_string(self) -> Option<String> {
+    pub fn try_to_string(self) -> Option<String> {
         self.0.try_to_string()
     }
 
     /// Returns the underlying marker tree without re-complexifying them.
-    pub(crate) fn as_simplified_marker_tree(self) -> MarkerTree {
+    pub fn as_simplified_marker_tree(self) -> MarkerTree {
         self.0
     }
 }

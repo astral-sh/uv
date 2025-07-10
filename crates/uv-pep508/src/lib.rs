@@ -16,6 +16,8 @@
 
 #![warn(missing_docs)]
 
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
@@ -144,23 +146,50 @@ impl<T: Pep508Url> Requirement<T> {
             self.version_or_url = None;
         }
     }
+
+    /// Returns a [`Display`] implementation that doesn't mask credentials.
+    pub fn displayable_with_credentials(&self) -> impl Display {
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: true,
+        }
+    }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)?;
-        if !self.extras.is_empty() {
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: false,
+        }
+        .fmt(f)
+    }
+}
+
+struct RequirementDisplay<'a, T>
+where
+    T: Pep508Url + Display,
+{
+    requirement: &'a Requirement<T>,
+    display_credentials: bool,
+}
+
+impl<T: Pep508Url + Display> Display for RequirementDisplay<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.requirement.name)?;
+        if !self.requirement.extras.is_empty() {
             write!(
                 f,
                 "[{}]",
-                self.extras
+                self.requirement
+                    .extras
                     .iter()
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(",")
             )?;
         }
-        if let Some(version_or_url) = &self.version_or_url {
+        if let Some(version_or_url) = &self.requirement.version_or_url {
             match version_or_url {
                 VersionOrUrl::VersionSpecifier(version_specifier) => {
                     let version_specifier: Vec<String> =
@@ -168,12 +197,17 @@ impl<T: Pep508Url + Display> Display for Requirement<T> {
                     write!(f, "{}", version_specifier.join(","))?;
                 }
                 VersionOrUrl::Url(url) => {
+                    let url_string = if self.display_credentials {
+                        url.displayable_with_credentials().to_string()
+                    } else {
+                        url.to_string()
+                    };
                     // We add the space for markers later if necessary
-                    write!(f, " @ {url}")?;
+                    write!(f, " @ {url_string}")?;
                 }
             }
         }
-        if let Some(marker) = self.marker.contents() {
+        if let Some(marker) = self.requirement.marker.contents() {
             write!(f, " ; {marker}")?;
         }
         Ok(())
@@ -255,6 +289,9 @@ pub trait Pep508Url: Display + Debug + Sized {
 
     /// Parse a url from `name @ <url>`. Defaults to [`Url::parse_url`].
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err>;
+
+    /// Returns a [`Display`] implementation that doesn't mask credentials.
+    fn displayable_with_credentials(&self) -> impl Display;
 }
 
 impl Pep508Url for Url {
@@ -262,6 +299,10 @@ impl Pep508Url for Url {
 
     fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
         Url::parse(url)
+    }
+
+    fn displayable_with_credentials(&self) -> impl Display {
+        self
     }
 }
 
@@ -295,22 +336,15 @@ impl Reporter for TracingReporter {
 
 #[cfg(feature = "schemars")]
 impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
-    fn schema_name() -> String {
-        "Requirement".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Requirement")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`".to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`"
+        })
     }
 }
 

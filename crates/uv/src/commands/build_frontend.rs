@@ -3,7 +3,6 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{fmt, io};
 
 use anyhow::{Context, Result};
@@ -16,13 +15,16 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
+    PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
+use uv_distribution_types::{
+    DependencyMetadata, Index, IndexLocations, RequiresPython, SourceDist,
+};
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
@@ -33,7 +35,7 @@ use uv_python::{
     VersionRequest,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
@@ -185,15 +187,6 @@ async fn build_impl(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<BuildResult> {
-    if list && preview.is_disabled() {
-        // We need the direct build for list and that is preview only.
-        writeln!(
-            printer.stderr(),
-            "The `--list` option is only available in preview mode; add the `--preview` flag to use `--list`"
-        )?;
-        return Ok(BuildResult::Failure);
-    }
-
     // Extract the resolver settings.
     let ResolverSettings {
         index_locations,
@@ -471,7 +464,8 @@ async fn build_package(
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
-            interpreter_request = find_requires_python(workspace)?
+            let groups = DependencyGroupsWithDefaults::none();
+            interpreter_request = find_requires_python(workspace, &groups)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
@@ -495,20 +489,12 @@ async fn build_package(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await?
     .into_interpreter();
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Read build constraints.
     let build_constraints =
@@ -610,10 +596,7 @@ async fn build_package(
         }
 
         BuildAction::List
-    } else if preview.is_enabled()
-        && !force_pep517
-        && check_direct_build(source.path(), source.path().user_display())
-    {
+    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display()) {
         BuildAction::DirectBuild
     } else {
         BuildAction::Pep517

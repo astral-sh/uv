@@ -35,6 +35,7 @@ use uv_fs::{CWD, Simplified};
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
+use uv_python::PythonRequest;
 use uv_requirements::RequirementsSource;
 use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -347,9 +348,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (duration_layer, _duration_guard) = logging::setup_duration()?;
+    let (durations_layer, _duration_guard) = logging::setup_durations()?;
     #[cfg(not(feature = "tracing-durations-export"))]
-    let duration_layer = None::<tracing_subscriber::layer::Identity>;
+    let durations_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
         match globals.verbose {
             0 => logging::Level::Off,
@@ -357,7 +358,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             2 => logging::Level::TraceUv,
             3.. => logging::Level::TraceAll,
         },
-        duration_layer,
+        durations_layer,
         globals.color,
     )?;
 
@@ -399,7 +400,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     }))?;
 
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
-    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::SeqCst);
+    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 
     debug!("uv {}", uv_cli::version::uv_self_version());
 
@@ -793,6 +794,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.network_settings,
                 args.dry_run,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -814,6 +816,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.paths,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -845,6 +848,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -866,6 +870,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.files,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -897,6 +902,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -915,6 +921,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Cache(CacheNamespace {
@@ -1016,10 +1023,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 }
             });
 
+            let python_request: Option<PythonRequest> =
+                args.settings.python.as_deref().map(PythonRequest::parse);
+
             commands::venv(
                 &project_dir,
                 args.path,
-                args.settings.python.as_deref(),
+                python_request,
                 args.settings.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1067,7 +1077,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                     dry_run,
                 }),
-        }) => commands::self_update(target_version, token, dry_run, printer).await,
+        }) => {
+            commands::self_update(
+                target_version,
+                token,
+                dry_run,
+                printer,
+                globals.network_settings,
+            )
+            .await
+        }
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
@@ -1280,6 +1299,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_paths,
                 args.show_version_specifiers,
                 args.show_with,
+                args.show_extras,
                 &cache,
                 printer,
             )
@@ -1360,6 +1380,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1369,12 +1390,43 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonInstallSettings::resolve(args, filesystem);
             show_settings!(args);
+            // TODO(john): If we later want to support `--upgrade`, we need to replace this.
+            let upgrade = false;
 
             commands::python_install(
                 &project_dir,
                 args.install_dir,
                 args.targets,
                 args.reinstall,
+                upgrade,
+                args.force,
+                args.python_install_mirror,
+                args.pypy_install_mirror,
+                args.python_downloads_json_url,
+                globals.network_settings,
+                args.default,
+                globals.python_downloads,
+                cli.top_level.no_config,
+                globals.preview,
+                printer,
+            )
+            .await
+        }
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::Upgrade(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonUpgradeSettings::resolve(args, filesystem);
+            show_settings!(args);
+            let reinstall = false;
+            let upgrade = true;
+
+            commands::python_install(
+                &project_dir,
+                args.install_dir,
+                args.targets,
+                reinstall,
+                upgrade,
                 args.force,
                 args.python_install_mirror,
                 args.pypy_install_mirror,
@@ -1423,6 +1475,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     cli.top_level.no_config,
                     &cache,
                     printer,
+                    globals.preview,
                 )
                 .await
             } else {
@@ -1436,6 +1489,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     globals.python_preference,
                     &cache,
                     printer,
+                    globals.preview,
                 )
                 .await
             }
@@ -1454,10 +1508,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.resolved,
                 globals.python_preference,
+                globals.python_downloads,
                 args.no_project,
                 args.global,
+                args.rm,
+                args.install_mirrors,
+                globals.network_settings,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1690,7 +1749,7 @@ async fn run_project(
                 args.no_project,
                 no_config,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
                 args.modifications,
                 args.python,
@@ -1738,7 +1797,7 @@ async fn run_project(
                 args.all_packages,
                 args.package,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
                 args.install_options,
                 args.modifications,
@@ -1898,6 +1957,7 @@ async fn run_project(
                 args.editable,
                 args.dependency_type,
                 args.raw,
+                args.bounds,
                 args.indexes,
                 args.rev,
                 args.tag,
@@ -1905,6 +1965,7 @@ async fn run_project(
                 args.extras,
                 args.package,
                 args.python,
+                args.workspace,
                 args.install_mirrors,
                 args.settings,
                 globals.network_settings,
@@ -2028,7 +2089,7 @@ async fn run_project(
 
             Box::pin(commands::tree(
                 project_dir,
-                args.dev,
+                args.groups,
                 args.locked,
                 args.frozen,
                 args.universal,
@@ -2080,7 +2141,7 @@ async fn run_project(
                 args.install_options,
                 args.output_file,
                 args.extras,
-                args.dev,
+                args.groups,
                 args.editable,
                 args.locked,
                 args.frozen,

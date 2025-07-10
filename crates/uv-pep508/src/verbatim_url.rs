@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -13,15 +13,21 @@ use url::{ParseError, Url};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
+use uv_redacted::DisplaySafeUrl;
 
 use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
+///
+/// The original string is not preserved after serialization/deserialization.
 #[derive(Debug, Clone, Eq)]
 pub struct VerbatimUrl {
     /// The parsed URL.
-    url: Url,
+    url: DisplaySafeUrl,
     /// The URL as it was provided by the user.
+    ///
+    /// Even if originally set, this will be [`None`] after
+    /// serialization/deserialization.
     given: Option<ArcStr>,
 }
 
@@ -39,14 +45,17 @@ impl PartialEq for VerbatimUrl {
 
 impl VerbatimUrl {
     /// Create a [`VerbatimUrl`] from a [`Url`].
-    pub fn from_url(url: Url) -> Self {
+    pub fn from_url(url: DisplaySafeUrl) -> Self {
         Self { url, given: None }
     }
 
     /// Parse a URL from a string.
     pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
         let url = Url::parse(given.as_ref())?;
-        Ok(Self { url, given: None })
+        Ok(Self {
+            url: DisplaySafeUrl::from(url),
+            given: None,
+        })
     }
 
     /// Parse a URL from an absolute or relative path.
@@ -72,7 +81,7 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone())
+        let mut url = DisplaySafeUrl::from_file_path(path.clone())
             .map_err(|()| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
 
         // Set the fragment, if it exists.
@@ -102,7 +111,7 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone())
+        let mut url = DisplaySafeUrl::from_file_path(path.clone())
             .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
@@ -130,8 +139,10 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(path);
 
         // Convert to a URL.
-        let mut url = Url::from_file_path(path.clone())
-            .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
+        let mut url = DisplaySafeUrl::from(
+            Url::from_file_path(path.clone())
+                .unwrap_or_else(|()| panic!("path is absolute: {}", path.display())),
+        );
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
@@ -155,18 +166,18 @@ impl VerbatimUrl {
         self.given.as_deref()
     }
 
-    /// Return the underlying [`Url`].
-    pub fn raw(&self) -> &Url {
+    /// Return the underlying [`DisplaySafeUrl`].
+    pub fn raw(&self) -> &DisplaySafeUrl {
         &self.url
     }
 
-    /// Convert a [`VerbatimUrl`] into a [`Url`].
-    pub fn to_url(&self) -> Url {
+    /// Convert a [`VerbatimUrl`] into a [`DisplaySafeUrl`].
+    pub fn to_url(&self) -> DisplaySafeUrl {
         self.url.clone()
     }
 
-    /// Convert a [`VerbatimUrl`] into a [`Url`].
-    pub fn into_url(self) -> Url {
+    /// Convert a [`VerbatimUrl`] into a [`DisplaySafeUrl`].
+    pub fn into_url(self) -> DisplaySafeUrl {
         self.url
     }
 
@@ -206,7 +217,7 @@ impl std::fmt::Display for VerbatimUrl {
 }
 
 impl Deref for VerbatimUrl {
-    type Target = Url;
+    type Target = DisplaySafeUrl;
 
     fn deref(&self) -> &Self::Target {
         &self.url
@@ -215,7 +226,19 @@ impl Deref for VerbatimUrl {
 
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
+        VerbatimUrl::from_url(DisplaySafeUrl::from(url))
+    }
+}
+
+impl From<DisplaySafeUrl> for VerbatimUrl {
+    fn from(url: DisplaySafeUrl) -> Self {
         VerbatimUrl::from_url(url)
+    }
+}
+
+impl From<VerbatimUrl> for Url {
+    fn from(url: VerbatimUrl) -> Self {
+        Url::from(url.url)
     }
 }
 
@@ -235,7 +258,7 @@ impl<'de> serde::Deserialize<'de> for VerbatimUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        let url = Url::deserialize(deserializer)?;
+        let url = DisplaySafeUrl::deserialize(deserializer)?;
         Ok(VerbatimUrl::from_url(url))
     }
 }
@@ -313,6 +336,10 @@ impl Pep508Url for VerbatimUrl {
             #[cfg(not(feature = "non-pep508-extensions"))]
             Err(Self::Err::NotAUrl(expanded.to_string()))
         }
+    }
+
+    fn displayable_with_credentials(&self) -> impl Display {
+        self.url.displayable_with_credentials()
     }
 }
 

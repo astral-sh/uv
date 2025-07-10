@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::OnceLock;
+use std::{env, io};
 
 use configparser::ini::Ini;
 use fs_err as fs;
@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{PythonExt, Simplified, write_atomic_sync};
+use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -26,6 +26,7 @@ use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
+use crate::managed::ManagedPythonInstallations;
 use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
@@ -168,7 +169,7 @@ impl Interpreter {
             Ok(path) => path,
             Err(err) => {
                 warn!("Failed to find base Python executable: {err}");
-                uv_fs::canonicalize_executable(base_executable)?
+                canonicalize_executable(base_executable)?
             }
         };
         Ok(base_python)
@@ -261,6 +262,21 @@ impl Interpreter {
     /// Returns `true` if the environment is a `--prefix` environment.
     pub fn is_prefix(&self) -> bool {
         self.prefix.is_some()
+    }
+
+    /// Returns `true` if this interpreter is managed by uv.
+    ///
+    /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
+    pub fn is_managed(&self) -> bool {
+        let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
+            return false;
+        };
+
+        installations
+            .find_all()
+            .into_iter()
+            .flatten()
+            .any(|install| install.path() == self.sys_base_prefix)
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -483,8 +499,17 @@ impl Interpreter {
     /// `python-build-standalone`.
     ///
     /// See: <https://github.com/astral-sh/python-build-standalone/issues/382>
+    #[cfg(unix)]
     pub fn is_standalone(&self) -> bool {
         self.standalone
+    }
+
+    /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
+    // TODO(john): Replace this approach with patching sysconfig on Windows to
+    // set `PYTHON_BUILD_STANDALONE=1`.`
+    #[cfg(windows)]
+    pub fn is_standalone(&self) -> bool {
+        self.standalone || (self.is_managed() && self.markers().implementation_name() == "cpython")
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -581,6 +606,54 @@ impl Interpreter {
             .into_iter()
             .any(|default_name| name == default_name.to_string())
     }
+
+    /// Grab a file lock for the environment to prevent concurrent writes across processes.
+    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+        if let Some(target) = self.target() {
+            // If we're installing into a `--target`, use a target-specific lockfile.
+            LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
+        } else if let Some(prefix) = self.prefix() {
+            // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
+            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display()).await
+        } else if self.is_virtualenv() {
+            // If the environment a virtualenv, use a virtualenv-specific lockfile.
+            LockedFile::acquire(
+                self.sys_prefix.join(".lock"),
+                self.sys_prefix.user_display(),
+            )
+            .await
+        } else {
+            // Otherwise, use a global lockfile.
+            LockedFile::acquire(
+                env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
+                self.sys_prefix.user_display(),
+            )
+            .await
+        }
+    }
+}
+
+/// Calls `fs_err::canonicalize` on Unix. On Windows, avoids attempting to resolve symlinks
+/// but will resolve junctions if they are part of a trampoline target.
+pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+    let path = path.as_ref();
+    debug_assert!(
+        path.is_absolute(),
+        "path must be absolute: {}",
+        path.display()
+    );
+
+    #[cfg(windows)]
+    {
+        if let Ok(Some(launcher)) = uv_trampoline_builder::Launcher::try_from_path(path) {
+            Ok(dunce::canonicalize(launcher.python_path)?)
+        } else {
+            Ok(path.to_path_buf())
+        }
+    }
+
+    #[cfg(unix)]
+    fs_err::canonicalize(path)
 }
 
 /// The `EXTERNALLY-MANAGED` file in a Python installation.
@@ -757,6 +830,8 @@ pub enum InterpreterInfoError {
         python_major: usize,
         python_minor: usize,
     },
+    #[error("Only Pyodide is support for Emscripten Python")]
+    EmscriptenNotPyodide,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -892,6 +967,31 @@ impl InterpreterInfo {
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
+        // Provide a better error message if the link is broken or the file does not exist. Since
+        // `canonicalize_executable` does not resolve the file on Windows, we must re-use this logic
+        // for the subsequent metadata read as we may not have actually resolved the path.
+        let handle_io_error = |err: io::Error| -> Error {
+            if err.kind() == io::ErrorKind::NotFound {
+                // Check if it looks like a venv interpreter where the underlying Python
+                // installation was removed.
+                if absolute
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.is_symlink())
+                {
+                    Error::BrokenSymlink(BrokenSymlink {
+                        path: executable.to_path_buf(),
+                        venv: uv_fs::is_virtualenv_executable(executable),
+                    })
+                } else {
+                    Error::NotFound(executable.to_path_buf())
+                }
+            } else {
+                err.into()
+            }
+        };
+
+        let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -902,38 +1002,18 @@ impl InterpreterInfo {
                 sys_info::os_release().unwrap_or_default(),
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
-            // paths. But we don't to query the executable with symbolic links resolved.
-            format!("{}.msgpack", cache_digest(&absolute)),
+            // paths. But we don't want to query the executable with symbolic links resolved because
+            // that can change reported values, e.g., `sys.executable`. We include the canonical
+            // path in the cache entry as well, otherwise we can have cache collisions if an
+            // absolute path refers to different interpreters with matching ctimes, e.g., if you
+            // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+            // modified at the same time.
+            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
-        let modified = uv_fs::canonicalize_executable(&absolute)
-            .and_then(Timestamp::from_path)
-            .map_err(|err| {
-                if err.kind() == io::ErrorKind::NotFound {
-                    // Check if it looks like a venv interpreter where the underlying Python
-                    // installation was removed.
-                    if absolute
-                        .symlink_metadata()
-                        .is_ok_and(|metadata| metadata.is_symlink())
-                    {
-                        let venv = executable
-                            .parent()
-                            .and_then(Path::parent)
-                            .map(|path| path.join("pyvenv.cfg").is_file())
-                            .unwrap_or(false);
-                        Error::BrokenSymlink(BrokenSymlink {
-                            path: executable.to_path_buf(),
-                            venv,
-                        })
-                    } else {
-                        Error::NotFound(executable.to_path_buf())
-                    }
-                } else {
-                    err.into()
-                }
-            })?;
+        let modified = Timestamp::from_path(canonical).map_err(handle_io_error)?;
 
         // Read from the cache.
         if cache
@@ -945,7 +1025,7 @@ impl InterpreterInfo {
                     Ok(cached) => {
                         if cached.timestamp == modified {
                             trace!(
-                                "Cached interpreter info for Python {}, skipping probing: {}",
+                                "Found cached interpreter info for Python {}, skipping query of: {}",
                                 cached.data.markers.python_full_version(),
                                 executable.user_display()
                             );

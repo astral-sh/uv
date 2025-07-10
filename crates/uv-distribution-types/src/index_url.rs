@@ -11,10 +11,13 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_redacted::DisplaySafeUrl;
+use uv_warnings::warn_user;
 
 use crate::{Index, IndexStatusCodeStrategy, Verbatim};
 
-static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
+static PYPI_URL: LazyLock<DisplaySafeUrl> =
+    LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
@@ -69,7 +72,7 @@ impl IndexUrl {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root(&self) -> Option<Url> {
+    pub fn root(&self) -> Option<DisplaySafeUrl> {
         let mut segments = self.url().path_segments()?;
         let last = match segments.next_back()? {
             // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
@@ -77,7 +80,8 @@ impl IndexUrl {
             segment => segment,
         };
 
-        if !last.eq_ignore_ascii_case("simple") {
+        // We also handle `/+simple` as it's used in devpi
+        if !(last.eq_ignore_ascii_case("simple") || last.eq_ignore_ascii_case("+simple")) {
             return None;
         }
 
@@ -89,26 +93,21 @@ impl IndexUrl {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for IndexUrl {
-    fn schema_name() -> String {
-        "IndexUrl".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("IndexUrl")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path.".to_string()),
-              ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path."
+        })
     }
 }
 
 impl IndexUrl {
     /// Return the raw URL for the index.
-    pub fn url(&self) -> &Url {
+    pub fn url(&self) -> &DisplaySafeUrl {
         match self {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),
@@ -116,8 +115,8 @@ impl IndexUrl {
         }
     }
 
-    /// Convert the index URL into a [`Url`].
-    pub fn into_url(self) -> Url {
+    /// Convert the index URL into a [`DisplaySafeUrl`].
+    pub fn into_url(self) -> DisplaySafeUrl {
         match self {
             Self::Pypi(url) => url.to_url(),
             Self::Url(url) => url.to_url(),
@@ -126,7 +125,7 @@ impl IndexUrl {
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
-    pub fn redacted(&self) -> Cow<'_, Url> {
+    pub fn without_credentials(&self) -> Cow<'_, DisplaySafeUrl> {
         let url = self.url();
         if url.username().is_empty() && url.password().is_none() {
             Cow::Borrowed(url)
@@ -135,6 +134,30 @@ impl IndexUrl {
             let _ = url.set_username("");
             let _ = url.set_password(None);
             Cow::Owned(url)
+        }
+    }
+
+    /// Warn user if the given URL was provided as an ambiguous relative path.
+    ///
+    /// This is a temporary warning. Ambiguous values will not be
+    /// accepted in the future.
+    pub fn warn_on_disambiguated_relative_path(&self) {
+        let Self::Path(verbatim_url) = &self else {
+            return;
+        };
+
+        if let Some(path) = verbatim_url.given() {
+            if !is_disambiguated_path(path) {
+                if cfg!(windows) {
+                    warn_user!(
+                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `.\\{path}` or `./{path}`). Support for ambiguous values will be removed in the future"
+                    );
+                } else {
+                    warn_user!(
+                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./{path}`). Support for ambiguous values will be removed in the future"
+                    );
+                }
+            }
         }
     }
 }
@@ -157,6 +180,28 @@ impl Verbatim for IndexUrl {
             Self::Path(url) => url.verbatim(),
         }
     }
+}
+
+/// Checks if a path is disambiguated.
+///
+/// Disambiguated paths are absolute paths, paths with valid schemes,
+/// and paths starting with "./" or "../" on Unix or ".\\", "..\\",
+/// "./", or "../" on Windows.
+fn is_disambiguated_path(path: &str) -> bool {
+    if cfg!(windows) {
+        if path.starts_with(".\\") || path.starts_with("..\\") || path.starts_with('/') {
+            return true;
+        }
+    }
+    if path.starts_with("./") || path.starts_with("../") || Path::new(path).is_absolute() {
+        return true;
+    }
+    // Check if the path has a scheme (like `file://`)
+    if let Some((scheme, _)) = split_scheme(path) {
+        return Scheme::parse(scheme).is_some();
+    }
+    // This is an ambiguous relative path
+    false
 }
 
 /// An error that can occur when parsing an [`IndexUrl`].
@@ -222,7 +267,7 @@ impl From<VerbatimUrl> for IndexUrl {
     }
 }
 
-impl From<IndexUrl> for Url {
+impl From<IndexUrl> for DisplaySafeUrl {
     fn from(index: IndexUrl) -> Self {
         match index {
             IndexUrl::Pypi(url) => url.to_url(),
@@ -408,6 +453,19 @@ impl<'a> IndexLocations {
             indexes
         }
     }
+
+    /// Add all authenticated sources to the cache.
+    pub fn cache_index_credentials(&self) {
+        for index in self.allowed_indexes() {
+            if let Some(credentials) = index.credentials() {
+                let credentials = Arc::new(credentials);
+                uv_auth::store_credentials(index.raw_url(), credentials.clone());
+                if let Some(root_url) = index.root_url() {
+                    uv_auth::store_credentials(&root_url, credentials.clone());
+                }
+            }
+        }
+    }
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
@@ -508,30 +566,23 @@ impl<'a> IndexUrls {
     /// iterator.
     pub fn defined_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
-            Either::Left(std::iter::empty())
-        } else {
-            Either::Right(
-                {
-                    let mut seen = FxHashSet::default();
-                    self.indexes
-                        .iter()
-                        .filter(move |index| {
-                            index.name.as_ref().is_none_or(|name| seen.insert(name))
-                        })
-                        .filter(|index| !index.default)
-                }
-                .chain({
-                    let mut seen = FxHashSet::default();
-                    self.indexes
-                        .iter()
-                        .filter(move |index| {
-                            index.name.as_ref().is_none_or(|name| seen.insert(name))
-                        })
-                        .find(|index| index.default)
-                        .into_iter()
-                }),
-            )
+            return Either::Left(std::iter::empty());
         }
+
+        let mut seen = FxHashSet::default();
+        let (non_default, default) = self
+            .indexes
+            .iter()
+            .filter(move |index| {
+                if let Some(name) = &index.name {
+                    seen.insert(name)
+                } else {
+                    true
+                }
+            })
+            .partition::<Vec<_>, _>(|index| !index.default);
+
+        Either::Right(non_default.into_iter().chain(default))
     }
 
     /// Return the `--no-index` flag.
@@ -627,5 +678,43 @@ impl IndexCapabilities {
             .entry(index_url)
             .or_insert(Flags::empty())
             .insert(Flags::FORBIDDEN);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_index_url_parse_valid_paths() {
+        // Absolute path
+        assert!(is_disambiguated_path("/absolute/path"));
+        // Relative path
+        assert!(is_disambiguated_path("./relative/path"));
+        assert!(is_disambiguated_path("../../relative/path"));
+        if cfg!(windows) {
+            // Windows absolute path
+            assert!(is_disambiguated_path("C:/absolute/path"));
+            // Windows relative path
+            assert!(is_disambiguated_path(".\\relative\\path"));
+            assert!(is_disambiguated_path("..\\..\\relative\\path"));
+        }
+    }
+
+    #[test]
+    fn test_index_url_parse_ambiguous_paths() {
+        // Test single-segment ambiguous path
+        assert!(!is_disambiguated_path("index"));
+        // Test multi-segment ambiguous path
+        assert!(!is_disambiguated_path("relative/path"));
+    }
+
+    #[test]
+    fn test_index_url_parse_with_schemes() {
+        assert!(is_disambiguated_path("file:///absolute/path"));
+        assert!(is_disambiguated_path("https://registry.com/simple/"));
+        assert!(is_disambiguated_path(
+            "git+https://github.com/example/repo.git"
+        ));
     }
 }

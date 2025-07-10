@@ -12,7 +12,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -29,7 +29,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -69,7 +69,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -86,7 +86,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -126,7 +126,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -143,7 +143,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -183,7 +183,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -200,7 +200,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -240,7 +240,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -257,7 +257,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -290,7 +290,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -307,7 +307,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -340,7 +340,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -357,7 +357,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -390,7 +390,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
+                                url: DisplaySafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -407,7 +407,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
+                            url: DisplaySafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",

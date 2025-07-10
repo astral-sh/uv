@@ -1,13 +1,14 @@
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
 use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 /// Error converting [`uv_pypi_types::File`] to [`distribution_type::File`].
@@ -56,10 +57,7 @@ impl File {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: match split_scheme(&file.url) {
-                Some(..) => FileLocation::AbsoluteUrl(UrlString::new(file.url)),
-                None => FileLocation::RelativeUrl(base.clone(), file.url),
-            },
+            url: FileLocation::new(file.url, base),
             yanked: file.yanked,
         })
     }
@@ -76,6 +74,17 @@ pub enum FileLocation {
 }
 
 impl FileLocation {
+    /// Parse a relative or absolute URL on a page with a base URL.
+    ///
+    /// This follows the HTML semantics where a link on a page is resolved relative to the URL of
+    /// that page.
+    pub fn new(url: SmallString, base: &SmallString) -> Self {
+        match split_scheme(&url) {
+            Some(..) => FileLocation::AbsoluteUrl(UrlString::new(url)),
+            None => FileLocation::RelativeUrl(base.clone(), url),
+        }
+    }
+
     /// Convert this location to a URL.
     ///
     /// A relative URL has its base joined to the path. An absolute URL is
@@ -87,13 +96,14 @@ impl FileLocation {
     /// This returns an error if any of the URL parsing fails, or if, for
     /// example, the location is a path and the path isn't valid UTF-8.
     /// (Because URLs must be valid UTF-8.)
-    pub fn to_url(&self) -> Result<Url, ToUrlError> {
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
         match *self {
             FileLocation::RelativeUrl(ref base, ref path) => {
-                let base_url = Url::parse(base).map_err(|err| ToUrlError::InvalidBase {
-                    base: base.to_string(),
-                    err,
-                })?;
+                let base_url =
+                    DisplaySafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
+                        base: base.to_string(),
+                        err,
+                    })?;
                 let joined = base_url.join(path).map_err(|err| ToUrlError::InvalidJoin {
                     base: base.to_string(),
                     path: path.to_string(),
@@ -142,9 +152,9 @@ impl UrlString {
         Self(url)
     }
 
-    /// Converts a [`UrlString`] to a [`Url`].
-    pub fn to_url(&self) -> Result<Url, ToUrlError> {
-        Url::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
+    /// Converts a [`UrlString`] to a [`DisplaySafeUrl`].
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
+        DisplaySafeUrl::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
             absolute: self.0.to_string(),
             err,
         })
@@ -159,16 +169,13 @@ impl UrlString {
             .unwrap_or(self.as_ref())
     }
 
-    /// Return the [`UrlString`] with any fragments removed.
+    /// Return the [`UrlString`] (as a [`Cow`]) with any fragments removed.
     #[must_use]
-    pub fn without_fragment(&self) -> Self {
-        Self(
-            self.as_ref()
-                .split_once('#')
-                .map(|(path, _)| path)
-                .map(SmallString::from)
-                .unwrap_or_else(|| self.0.clone()),
-        )
+    pub fn without_fragment(&self) -> Cow<'_, Self> {
+        self.as_ref()
+            .split_once('#')
+            .map(|(path, _)| Cow::Owned(UrlString(SmallString::from(path))))
+            .unwrap_or(Cow::Borrowed(self))
     }
 }
 
@@ -178,14 +185,14 @@ impl AsRef<str> for UrlString {
     }
 }
 
-impl From<Url> for UrlString {
-    fn from(value: Url) -> Self {
+impl From<DisplaySafeUrl> for UrlString {
+    fn from(value: DisplaySafeUrl) -> Self {
         Self(value.as_str().into())
     }
 }
 
-impl From<&Url> for UrlString {
-    fn from(value: &Url) -> Self {
+impl From<&DisplaySafeUrl> for UrlString {
+    fn from(value: &DisplaySafeUrl) -> Self {
         Self(value.as_str().into())
     }
 }
@@ -251,16 +258,17 @@ mod tests {
 
     #[test]
     fn without_fragment() {
+        // Borrows a URL without a fragment
+        let url = UrlString("https://example.com/path".into());
+        assert_eq!(&*url.without_fragment(), &url);
+        assert!(matches!(url.without_fragment(), Cow::Borrowed(_)));
+
+        // Removes the fragment if present on the URL
         let url = UrlString("https://example.com/path?query#fragment".into());
         assert_eq!(
-            url.without_fragment(),
-            UrlString("https://example.com/path?query".into())
+            &*url.without_fragment(),
+            &UrlString("https://example.com/path?query".into())
         );
-
-        let url = UrlString("https://example.com/path#fragment".into());
-        assert_eq!(url.base_str(), "https://example.com/path");
-
-        let url = UrlString("https://example.com/path".into());
-        assert_eq!(url.base_str(), "https://example.com/path");
+        assert!(matches!(url.without_fragment(), Cow::Owned(_)));
     }
 }

@@ -20,6 +20,7 @@ use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
+use uv_redacted::DisplaySafeUrl;
 use zip::ZipArchive;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
@@ -31,8 +32,8 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
-    PathSourceUrl, SourceDist, SourceUrl,
+    BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, PathSourceUrl,
+    SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
@@ -42,7 +43,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
-use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
+use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
@@ -121,12 +122,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .join(dist.version.to_string()),
                 );
 
-                let url = match &dist.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        uv_pypi_types::base_url_join_relative(base, url)?
-                    }
-                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
-                };
+                let url = dist.file.url.to_url()?;
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -270,12 +266,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .join(dist.version.to_string()),
                 );
 
-                let url = match &dist.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        uv_pypi_types::base_url_join_relative(base, url)?
-                    }
-                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
-                };
+                let url = dist.file.url.to_url()?;
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -386,7 +377,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data Url,
+        url: &'data DisplaySafeUrl,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
@@ -582,7 +573,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = subdirectory {
             if !source_dist_entry.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    url.clone(),
+                    DisplaySafeUrl::from(url.clone()),
                     subdirectory.to_path_buf(),
                 ));
             }
@@ -715,7 +706,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
         };
-        let req = Self::request(url.clone(), client.unmanaged)?;
+        let req = Self::request(DisplaySafeUrl::from(url.clone()), client.unmanaged)?;
         let revision = client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -727,8 +718,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             })
             .await
             .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => err,
+                CachedClientError::Client { err, .. } => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, force a refresh.
@@ -740,14 +731,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
-                            Self::request(url.clone(), client)?,
+                            Self::request(DisplaySafeUrl::from(url.clone()), client)?,
                             &cache_entry,
                             download,
                         )
                         .await
                         .map_err(|err| match err {
-                            CachedClientError::Callback(err) => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Callback { err, .. } => err,
+                            CachedClientError::Client { err, .. } => Error::Client(err),
                         })
                 })
                 .await
@@ -1582,7 +1573,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .unmanaged
                         .uncached_client(resource.git.repository())
-                        .clone(),
+                        .raw_client(),
                 )
                 .await
             {
@@ -1859,13 +1850,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         };
 
+        // If the URL is already precise, return it.
+        if self.build_context.git().get_precise(git).is_some() {
+            debug!("Precise commit already known: {source}");
+            return Ok(());
+        }
+
         // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
         if self
             .build_context
             .git()
             .github_fast_path(
                 git,
-                client.unmanaged.uncached_client(git.repository()).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(git.repository())
+                    .raw_client(),
             )
             .await?
             .is_some()
@@ -2077,14 +2077,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 client
                     .cached_client()
                     .skip_cache_with_retry(
-                        Self::request(url.clone(), client)?,
+                        Self::request(DisplaySafeUrl::from(url.clone()), client)?,
                         &cache_entry,
                         download,
                     )
                     .await
                     .map_err(|err| match err {
-                        CachedClientError::Callback(err) => err,
-                        CachedClientError::Client(err) => Error::Client(err),
+                        CachedClientError::Callback { err, .. } => err,
+                        CachedClientError::Client { err, .. } => Error::Client(err),
                     })
             })
             .await
@@ -2135,7 +2135,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Extract the top-level directory.
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
-            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
+            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.keep(),
             Err(err) => {
                 return Err(Error::Extract(
                     temp_dir.path().to_string_lossy().into_owned(),
@@ -2266,6 +2266,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs::create_dir_all(&cache_shard)
             .await
             .map_err(Error::CacheWrite)?;
+
         // Try a direct build if that isn't disabled and the uv build backend is used.
         let disk_filename = if let Some(name) = self
             .build_context
@@ -2286,27 +2287,73 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
         } else {
-            self.build_context
-                .setup_build(
-                    source_root,
-                    subdirectory,
-                    source_root,
-                    Some(&source.to_string()),
-                    source.as_dist(),
-                    source_strategy,
-                    if source.is_editable() {
-                        BuildKind::Editable
-                    } else {
-                        BuildKind::Wheel
-                    },
-                    BuildOutput::Debug,
-                    self.build_stack.cloned().unwrap_or_default(),
-                )
-                .await
-                .map_err(|err| Error::Build(err.into()))?
-                .wheel(temp_dir.path())
-                .await
-                .map_err(Error::Build)?
+            // Identify the base Python interpreter to use in the cache key.
+            let base_python = if cfg!(unix) {
+                self.build_context
+                    .interpreter()
+                    .find_base_python()
+                    .map_err(Error::BaseInterpreter)?
+            } else {
+                self.build_context
+                    .interpreter()
+                    .to_base_python()
+                    .map_err(Error::BaseInterpreter)?
+            };
+
+            let build_kind = if source.is_editable() {
+                BuildKind::Editable
+            } else {
+                BuildKind::Wheel
+            };
+
+            let build_key = BuildKey {
+                base_python: base_python.into_boxed_path(),
+                source_root: source_root.to_path_buf().into_boxed_path(),
+                subdirectory: subdirectory
+                    .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
+                source_strategy,
+                build_kind,
+            };
+
+            if let Some(builder) = self.build_context.build_arena().remove(&build_key) {
+                debug!("Creating build environment for: {source}");
+                let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+
+                // Store the build context.
+                self.build_context.build_arena().insert(build_key, builder);
+
+                wheel
+            } else {
+                debug!("Reusing existing build environment for: {source}");
+
+                let builder = self
+                    .build_context
+                    .setup_build(
+                        source_root,
+                        subdirectory,
+                        source_root,
+                        Some(&source.to_string()),
+                        source.as_dist(),
+                        source_strategy,
+                        if source.is_editable() {
+                            BuildKind::Editable
+                        } else {
+                            BuildKind::Wheel
+                        },
+                        BuildOutput::Debug,
+                        self.build_stack.cloned().unwrap_or_default(),
+                    )
+                    .await
+                    .map_err(|err| Error::Build(err.into()))?;
+
+                // Build the wheel.
+                let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
+
+                // Store the build context.
+                self.build_context.build_arena().insert(build_key, builder);
+
+                wheel
+            }
         };
 
         // Read the metadata from the wheel.
@@ -2361,6 +2408,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Identify the base Python interpreter to use in the cache key.
+        let base_python = if cfg!(unix) {
+            self.build_context
+                .interpreter()
+                .find_base_python()
+                .map_err(Error::BaseInterpreter)?
+        } else {
+            self.build_context
+                .interpreter()
+                .to_base_python()
+                .map_err(Error::BaseInterpreter)?
+        };
+
+        // Determine whether this is an editable or non-editable build.
+        let build_kind = if source.is_editable() {
+            BuildKind::Editable
+        } else {
+            BuildKind::Wheel
+        };
+
         // Set up the builder.
         let mut builder = self
             .build_context
@@ -2371,11 +2438,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&source.to_string()),
                 source.as_dist(),
                 source_strategy,
-                if source.is_editable() {
-                    BuildKind::Editable
-                } else {
-                    BuildKind::Wheel
-                },
+                build_kind,
                 BuildOutput::Debug,
                 self.build_stack.cloned().unwrap_or_default(),
             )
@@ -2384,6 +2447,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Build the metadata.
         let dist_info = builder.metadata().await.map_err(Error::Build)?;
+
+        // Store the build context.
+        self.build_context.build_arena().insert(
+            BuildKey {
+                base_python: base_python.into_boxed_path(),
+                source_root: source_root.to_path_buf().into_boxed_path(),
+                subdirectory: subdirectory
+                    .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
+                source_strategy,
+                build_kind,
+            },
+            builder,
+        );
+
+        // Return the `.dist-info` directory, if it exists.
         let Some(dist_info) = dist_info else {
             return Ok(None);
         };
@@ -2402,10 +2480,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(url: Url, client: &RegistryClient) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(
+        url: DisplaySafeUrl,
+        client: &RegistryClient,
+    ) -> Result<reqwest::Request, reqwest::Error> {
         client
             .uncached_client(&url)
-            .get(url)
+            .get(Url::from(url))
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading

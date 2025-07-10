@@ -3,6 +3,8 @@ use petgraph::{
     graph::{DiGraph, NodeIndex},
 };
 use rustc_hash::{FxHashMap, FxHashSet};
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::{collections::BTreeSet, hash::Hash, rc::Rc};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
@@ -638,12 +640,12 @@ pub struct SchemaConflictItem {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SchemaConflictItem {
-    fn schema_name() -> String {
-        "SchemaConflictItem".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("SchemaConflictItem")
     }
 
-    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        <ConflictItemWire as schemars::JsonSchema>::json_schema(r#gen)
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        <ConflictItemWire as schemars::JsonSchema>::json_schema(generator)
     }
 }
 

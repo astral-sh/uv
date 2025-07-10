@@ -3,7 +3,6 @@ use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use itertools::Itertools;
@@ -21,7 +20,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Origin, Requirement, UnresolvedRequirementSpecification, Verbatim,
+    Origin, Requirement, RequiresPython, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -38,8 +37,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, RequiresPython,
-    ResolutionMode, ResolverEnvironment,
+    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
+    ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
@@ -271,7 +270,13 @@ pub(crate) async fn pip_compile(
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(&request, environment_preference, python_preference, &cache)
+        PythonInstallation::find(
+            &request,
+            environment_preference,
+            python_preference,
+            &cache,
+            preview,
+        )
     } else {
         // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
         // be able to use `PythonInstallation::find(...)` here.
@@ -281,7 +286,13 @@ pub(crate) async fn pip_compile(
         } else {
             PythonRequest::default()
         };
-        PythonInstallation::find_best(&request, environment_preference, python_preference, &cache)
+        PythonInstallation::find_best(
+            &request,
+            environment_preference,
+            python_preference,
+            &cache,
+            preview,
+        )
     }?
     .into_interpreter();
 
@@ -326,13 +337,12 @@ pub(crate) async fn pip_compile(
 
     // Determine the Python requirement, if the user requested a specific version.
     let python_requirement = if universal {
-        let requires_python = RequiresPython::greater_than_equal_version(
-            if let Some(python_version) = python_version.as_ref() {
-                &python_version.version
-            } else {
-                interpreter.python_version()
-            },
-        );
+        let requires_python = if let Some(python_version) = python_version.as_ref() {
+            RequiresPython::greater_than_equal_version(&python_version.version)
+        } else {
+            let version = interpreter.python_minor_version();
+            RequiresPython::greater_than_equal_version(&version)
+        };
         PythonRequirement::from_requires_python(&interpreter, requires_python)
     } else if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(&interpreter, python_version)
@@ -376,32 +386,21 @@ pub(crate) async fn pip_compile(
         no_index,
     );
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Determine the PyTorch backend.
-    let torch_backend = torch_backend.map(|mode| {
-        if preview.is_disabled() {
-            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
-        }
-
-        TorchStrategy::from_mode(
-            mode,
-            python_platform
-                .map(TargetTriple::platform)
-                .as_ref()
-                .unwrap_or(interpreter.platform())
-                .os(),
-        )
-    }).transpose()?;
+    let torch_backend = torch_backend
+        .map(|mode| {
+            TorchStrategy::from_mode(
+                mode,
+                python_platform
+                    .map(TargetTriple::platform)
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -517,6 +516,7 @@ pub(crate) async fn pip_compile(
         tags.as_deref(),
         resolver_env.clone(),
         python_requirement,
+        interpreter.markers(),
         Conflicts::empty(),
         &client,
         &flat_index,

@@ -11,7 +11,8 @@ use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
     HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility, WheelCompatibility,
+    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
+    WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -21,7 +22,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{ExcludeNewer, RequiresPython, yanks::AllowedYanks};
+use crate::{ExcludeNewer, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -344,7 +345,6 @@ struct VersionMapEager {
 /// avoiding another conversion step into a fully filled out `VersionMap` can
 /// provide substantial savings in some cases.
 #[derive(Debug)]
-#[allow(clippy::struct_excessive_bools)]
 struct VersionMapLazy {
     /// A map from version to possibly-initialized distribution.
     map: BTreeMap<Version, LazyPrioritizedDist>,

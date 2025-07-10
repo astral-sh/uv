@@ -33,6 +33,7 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
+uv-redacted = { workspace = true }
 uv-requirements-txt = { workspace = true }
 uv-small-str = { workspace = true }
 uv-static = { workspace = true }
