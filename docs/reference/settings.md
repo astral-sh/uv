@@ -202,6 +202,28 @@ environments = ["sys_platform == 'darwin'"]
 
 ---
 
+### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
+
+Additional build dependencies for dependencies.
+
+This is intended for enabling more packages to be built with
+build-isolation, by adding dependencies that they ambiently
+assume to exist (`setuptools` and `pip` being common).
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.extra-build-dependencies]
+pytest = ["pip"]
+```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The indexes to use when resolving dependencies.
@@ -1070,6 +1092,36 @@ behave consistently across timezones.
 
     ```toml
     exclude-newer = "2006-12-02T02:07:43Z"
+    ```
+
+---
+
+### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
+
+Additional build dependencies for dependencies.
+
+This is intended for enabling more packages to be built with
+build-isolation, by adding dependencies that they ambiently
+assume to exist (`setuptools` and `pip` being common).
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    [extra-build-dependencies] 
+    pytest = ["setuptools"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [extra-build-dependencies] 
+    pytest = ["setuptools"]
     ```
 
 ---
@@ -2504,6 +2556,38 @@ Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     ```toml
     [pip]
     extra = ["dev", "docs"]
+    ```
+
+---
+
+#### [`extra-build-dependencies`](#pip_extra-build-dependencies) {: #pip_extra-build-dependencies }
+<span id="extra-build-dependencies"></span>
+
+Additional build dependencies for dependencies.
+
+This is intended for enabling more packages to be built with
+build-isolation, by adding dependencies that they ambiently
+assume to exist (`setuptools` and `pip` being common).
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    [extra-build-dependencies]
+    pytest = ["setuptools"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    [extra-build-dependencies]
+    pytest = ["setuptools"]
     ```
 
 ---
