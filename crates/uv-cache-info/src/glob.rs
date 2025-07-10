@@ -162,7 +162,7 @@ pub(crate) fn cluster_globs(patterns: &[impl AsRef<str>]) -> Vec<(PathBuf, Vec<S
 
 #[cfg(test)]
 mod tests {
-    use super::{cluster_globs, split_glob, GlobParts};
+    use super::{GlobParts, cluster_globs, split_glob};
 
     fn windowsify(path: &str) -> String {
         if cfg!(windows) {
