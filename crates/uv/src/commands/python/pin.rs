@@ -129,7 +129,8 @@ pub(crate) async fn pin(
     {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
-        Err(uv_python::Error::MissingPython(err)) if !resolved => {
+        Err(uv_python::Error::MissingPython(err, ..)) if !resolved => {
+            // N.B. We omit the hint and just show the inner error message
             warn_user_once!("{err}");
             None
         }
