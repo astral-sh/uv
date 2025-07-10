@@ -102,6 +102,10 @@ Equivalent to the `--token` argument for self update. A GitHub token for authent
 
 Enables fetching files stored in Git LFS when installing a package from a Git repository.
 
+### `UV_HTTP_RETRIES`
+
+The number of retries for HTTP requests. (default: 3)
+
 ### `UV_HTTP_TIMEOUT`
 
 Timeout (in seconds) for HTTP requests. (default: 30 s)

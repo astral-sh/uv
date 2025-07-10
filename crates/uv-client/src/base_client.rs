@@ -127,7 +127,18 @@ impl BaseClientBuilder<'_> {
             allow_insecure_host: vec![],
             native_tls: false,
             connectivity: Connectivity::Online,
-            retries: DEFAULT_RETRIES,
+            retries: env::var_os(EnvVars::UV_HTTP_RETRIES)
+                .and_then(|value| {
+                    if let Some(value) = value.to_str() {
+                        value.parse::<u32>().inspect_err(|err|
+                            warn_user_once!("`UV_HTTP_RETRIES={value}` is not a valid integer and will be ignored: {err}")
+                        ).inspect(|value| debug!("Using `UV_HTTP_RETRIES={value}`")).ok()
+                    } else {
+                        warn_user_once!("`UV_HTTP_RETRIES={value:?}` is not valid UTF-8 and will be ignored");
+                        None
+                    }
+                })
+                .unwrap_or(DEFAULT_RETRIES),
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
@@ -238,7 +249,11 @@ impl<'a> BaseClientBuilder<'a> {
 
     /// Create a [`RetryPolicy`] for the client.
     fn retry_policy(&self) -> ExponentialBackoff {
-        ExponentialBackoff::builder().build_with_max_retries(self.retries)
+        let mut builder = ExponentialBackoff::builder();
+        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
+        }
+        builder.build_with_max_retries(self.retries)
     }
 
     pub fn build(&self) -> BaseClient {
