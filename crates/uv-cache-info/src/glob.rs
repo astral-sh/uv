@@ -297,5 +297,22 @@ mod tests {
                 ("/b", &["*"]),
             ],
         );
+
+        if cfg!(windows) {
+            check(
+                &[
+                    r"\\foo\bar\shared/a/[abc].png",
+                    r"\\foo\bar\shared/a/b/*",
+                    r"\\foo\bar/shared/b/c/?x/d",
+                    r"D:\docs\important/*.{doc,xls}",
+                    r"D:\docs/important/very/*",
+                ],
+                &[
+                    (r"\\foo\bar\shared\a", &["[abc].png", r"b\*"]),
+                    (r"\\foo\bar\shared\b\c", &[r"?x\d"]),
+                    (r"D:\docs\important", &["*.{doc,xls}", r"very\*"]),
+                ],
+            );
+        }
     }
 }
