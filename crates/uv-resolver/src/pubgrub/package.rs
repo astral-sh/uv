@@ -2,14 +2,14 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerTree, MarkerTreeContents};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItemRef;
 
 use crate::python_requirement::PythonRequirement;
 
 /// [`Arc`] wrapper around [`PubGrubPackageInner`] to make cloning (inside PubGrub) cheap.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) struct PubGrubPackage(Arc<PubGrubPackageInner>);
+pub struct PubGrubPackage(Arc<PubGrubPackageInner>);
 
 impl Deref for PubGrubPackage {
     type Target = PubGrubPackageInner;
@@ -39,11 +39,13 @@ impl From<PubGrubPackageInner> for PubGrubPackage {
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) enum PubGrubPackageInner {
+pub enum PubGrubPackageInner {
     /// The root package, which is used to start the resolution process.
     Root(Option<PackageName>),
     /// A Python version.
     Python(PubGrubPython),
+    /// A system package, which is used to represent a non-Python package.
+    System(PackageName),
     /// A Python package.
     ///
     /// Note that it is guaranteed that `extra` and `dev` are never both
@@ -52,7 +54,7 @@ pub(crate) enum PubGrubPackageInner {
         name: PackageName,
         extra: Option<ExtraName>,
         dev: Option<GroupName>,
-        marker: Option<MarkerTreeContents>,
+        marker: MarkerTree,
     },
     /// A proxy package to represent a dependency with an extra (e.g., `black[colorama]`).
     ///
@@ -70,7 +72,7 @@ pub(crate) enum PubGrubPackageInner {
     Extra {
         name: PackageName,
         extra: ExtraName,
-        marker: Option<MarkerTreeContents>,
+        marker: MarkerTree,
     },
     /// A proxy package to represent an enabled "dependency group" (e.g., development dependencies).
     ///
@@ -80,7 +82,7 @@ pub(crate) enum PubGrubPackageInner {
     Dev {
         name: PackageName,
         dev: GroupName,
-        marker: Option<MarkerTreeContents>,
+        marker: MarkerTree,
     },
     /// A proxy package for a base package with a marker (e.g., `black; python_version >= "3.6"`).
     ///
@@ -98,6 +100,7 @@ impl PubGrubPackage {
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
         marker: MarkerTree,
     ) -> Self {
         // Remove all extra expressions from the marker, since we track extras
@@ -105,16 +108,17 @@ impl PubGrubPackage {
         // extras end up having two distinct marker expressions, which in turn
         // makes them two distinct packages. This results in PubGrub being
         // unable to unify version constraints across such packages.
-        let tree = marker.simplify_extras_with(|_| true);
-        let marker = tree.contents();
+        let marker = marker.simplify_extras_with(|_| true);
         if let Some(extra) = extra {
             Self(Arc::new(PubGrubPackageInner::Extra {
                 name,
                 extra,
                 marker,
             }))
-        } else if marker.is_some() {
-            Self(Arc::new(PubGrubPackageInner::Marker { name, marker: tree }))
+        } else if let Some(dev) = group {
+            Self(Arc::new(PubGrubPackageInner::Dev { name, dev, marker }))
+        } else if !marker.is_true() {
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
         } else {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
@@ -132,6 +136,7 @@ impl PubGrubPackage {
             // package is never returned by `get_dependencies`. So these cases never occur.
             PubGrubPackageInner::Root(None) | PubGrubPackageInner::Python(_) => None,
             PubGrubPackageInner::Root(Some(name))
+            | PubGrubPackageInner::System(name)
             | PubGrubPackageInner::Package { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Dev { name, .. }
@@ -139,11 +144,13 @@ impl PubGrubPackage {
         }
     }
 
-    /// Returns the name of this PubGrub package, if it is not the root package or a Python version
-    /// constraint.
+    /// Returns the name of this PubGrub package, if it is not the root package, a Python version
+    /// constraint, or a system package.
     pub(crate) fn name_no_root(&self) -> Option<&PackageName> {
         match &**self {
-            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => None,
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::System(_) => None,
             PubGrubPackageInner::Package { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Dev { name, .. }
@@ -153,17 +160,17 @@ impl PubGrubPackage {
 
     /// Returns the marker expression associated with this PubGrub package, if
     /// it has one.
-    pub(crate) fn marker(&self) -> Option<&MarkerTree> {
+    pub(crate) fn marker(&self) -> MarkerTree {
         match &**self {
             // A root can never be a dependency of another package, and a `Python` pubgrub
             // package is never returned by `get_dependencies`. So these cases never occur.
-            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => None,
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::System(_) => MarkerTree::TRUE,
             PubGrubPackageInner::Package { marker, .. }
             | PubGrubPackageInner::Extra { marker, .. }
-            | PubGrubPackageInner::Dev { marker, .. } => {
-                marker.as_ref().map(MarkerTreeContents::as_ref)
-            }
-            PubGrubPackageInner::Marker { marker, .. } => Some(marker),
+            | PubGrubPackageInner::Dev { marker, .. } => *marker,
+            PubGrubPackageInner::Marker { marker, .. } => *marker,
         }
     }
 
@@ -177,14 +184,14 @@ impl PubGrubPackage {
             // package is never returned by `get_dependencies`. So these cases never occur.
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::System(_)
             | PubGrubPackageInner::Package { extra: None, .. }
             | PubGrubPackageInner::Dev { .. }
             | PubGrubPackageInner::Marker { .. } => None,
             PubGrubPackageInner::Package {
-                extra: Some(ref extra),
-                ..
+                extra: Some(extra), ..
             }
-            | PubGrubPackageInner::Extra { ref extra, .. } => Some(extra),
+            | PubGrubPackageInner::Extra { extra, .. } => Some(extra),
         }
     }
 
@@ -198,25 +205,23 @@ impl PubGrubPackage {
             // package is never returned by `get_dependencies`. So these cases never occur.
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::System(_)
             | PubGrubPackageInner::Package { dev: None, .. }
             | PubGrubPackageInner::Extra { .. }
             | PubGrubPackageInner::Marker { .. } => None,
-            PubGrubPackageInner::Package {
-                dev: Some(ref dev), ..
-            }
-            | PubGrubPackageInner::Dev { ref dev, .. } => Some(dev),
+            PubGrubPackageInner::Package { dev: Some(dev), .. }
+            | PubGrubPackageInner::Dev { dev, .. } => Some(dev),
         }
     }
 
     /// Extracts a possible conflicting item from this package.
     ///
-    /// If this package can't possibly be classified as a conflicting, then
+    /// If this package can't possibly be classified as conflicting, then
     /// this returns `None`.
     pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
         let package = self.name_no_root()?;
         match (self.extra(), self.dev()) {
-            // (None, None) => Some(ConflictItemRef::from(package)),
-            (None, None) => None,
+            (None, None) => Some(ConflictItemRef::from(package)),
             (Some(extra), None) => Some(ConflictItemRef::from((package, extra))),
             (None, Some(group)) => Some(ConflictItemRef::from((package, group))),
             (Some(extra), Some(group)) => {
@@ -227,6 +232,11 @@ impl PubGrubPackage {
                 )
             }
         }
+    }
+
+    /// Returns `true` if this PubGrub package is the root package.
+    pub(crate) fn is_root(&self) -> bool {
+        matches!(&**self, PubGrubPackageInner::Root(_))
     }
 
     /// Returns `true` if this PubGrub package is a proxy package.
@@ -252,18 +262,14 @@ impl PubGrubPackage {
     /// reporting where this routine is used.
     pub(crate) fn simplify_markers(&mut self, python_requirement: &PythonRequirement) {
         match *Arc::make_mut(&mut self.0) {
-            PubGrubPackageInner::Root(_) | PubGrubPackageInner::Python(_) => {}
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::System(_) => {}
             PubGrubPackageInner::Package { ref mut marker, .. }
             | PubGrubPackageInner::Extra { ref mut marker, .. }
-            | PubGrubPackageInner::Dev { ref mut marker, .. } => {
-                let Some(contents) = marker.as_mut() else {
-                    return;
-                };
-                let tree = MarkerTree::from(contents.clone());
-                *marker = python_requirement.simplify_markers(tree).contents();
-            }
-            PubGrubPackageInner::Marker { ref mut marker, .. } => {
-                *marker = python_requirement.simplify_markers(marker.clone());
+            | PubGrubPackageInner::Dev { ref mut marker, .. }
+            | PubGrubPackageInner::Marker { ref mut marker, .. } => {
+                *marker = python_requirement.simplify_markers(*marker);
             }
         }
     }
@@ -274,16 +280,22 @@ impl PubGrubPackage {
         match &**self {
             PubGrubPackageInner::Root(_) => "root",
             PubGrubPackageInner::Python(_) => "python",
+            PubGrubPackageInner::System(_) => "system",
             PubGrubPackageInner::Package { .. } => "package",
             PubGrubPackageInner::Extra { .. } => "extra",
             PubGrubPackageInner::Dev { .. } => "dev",
             PubGrubPackageInner::Marker { .. } => "marker",
         }
     }
+
+    /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
+    pub(crate) fn base(name: &PackageName) -> Self {
+        Self::from_package(name.clone(), None, None, MarkerTree::TRUE)
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
-pub(crate) enum PubGrubPython {
+pub enum PubGrubPython {
     /// The Python version installed in the current environment.
     Installed,
     /// The Python version for which dependencies are being resolved.
@@ -301,47 +313,42 @@ impl std::fmt::Display for PubGrubPackageInner {
                 }
             }
             Self::Python(_) => write!(f, "Python"),
+            Self::System(name) => write!(f, "system:{name}"),
             Self::Package {
                 name,
                 extra: None,
-                marker: None,
+                marker,
                 dev: None,
-            } => write!(f, "{name}"),
+            } => {
+                if let Some(marker) = marker.contents() {
+                    write!(f, "{name}{{{marker}}}")
+                } else {
+                    write!(f, "{name}")
+                }
+            }
             Self::Package {
                 name,
                 extra: Some(extra),
-                marker: None,
+                marker,
                 dev: None,
             } => {
-                write!(f, "{name}[{extra}]")
+                if let Some(marker) = marker.contents() {
+                    write!(f, "{name}[{extra}]{{{marker}}}")
+                } else {
+                    write!(f, "{name}[{extra}]")
+                }
             }
             Self::Package {
                 name,
                 extra: None,
-                marker: Some(marker),
-                dev: None,
-            } => write!(f, "{name}{{{marker}}}"),
-            Self::Package {
-                name,
-                extra: Some(extra),
-                marker: Some(marker),
-                dev: None,
-            } => {
-                write!(f, "{name}[{extra}]{{{marker}}}")
-            }
-            Self::Package {
-                name,
-                extra: None,
-                marker: None,
-                dev: Some(dev),
-            } => write!(f, "{name}:{dev}"),
-            Self::Package {
-                name,
-                extra: None,
-                marker: Some(marker),
+                marker,
                 dev: Some(dev),
             } => {
-                write!(f, "{name}[{dev}]{{{marker}}}")
+                if let Some(marker) = marker.contents() {
+                    write!(f, "{name}:{dev}{{{marker}}}")
+                } else {
+                    write!(f, "{name}:{dev}")
+                }
             }
             Self::Marker { name, marker, .. } => {
                 if let Some(marker) = marker.contents() {
@@ -360,5 +367,11 @@ impl std::fmt::Display for PubGrubPackageInner {
                 dev: Some(_),
             } => unreachable!(),
         }
+    }
+}
+
+impl From<&PubGrubPackage> for PubGrubPackage {
+    fn from(package: &PubGrubPackage) -> Self {
+        package.clone()
     }
 }

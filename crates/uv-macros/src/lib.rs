@@ -2,7 +2,7 @@ mod options_metadata;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Attribute, DeriveInput, ImplItem, ItemImpl, LitStr};
+use syn::{Attribute, DeriveInput, ImplItem, ItemImpl, LitStr, parse_macro_input};
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, doc, option_group))]
 pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
@@ -38,7 +38,7 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
         }
     });
 
-    let gen = quote! {
+    let stream = quote! {
         impl crate::Combine for #name {
             fn combine(self, other: #name) -> #name {
                 #name {
@@ -47,7 +47,7 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
             }
         }
     };
-    gen.into()
+    stream.into()
 }
 
 fn get_doc_comment(attrs: &[Attribute]) -> String {

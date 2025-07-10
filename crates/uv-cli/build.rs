@@ -55,7 +55,7 @@ fn commit_info(workspace_root: &Path) {
         .arg("-1")
         .arg("--date=short")
         .arg("--abbrev=9")
-        .arg("--format=%H %h %cd %(describe)")
+        .arg("--format=%H %h %cd %(describe:tags)")
         .output()
     {
         Ok(output) if output.status.success() => output,

@@ -14,6 +14,8 @@ use uv_pep440::{Version, VersionParseError};
     Debug,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Serialize,
     Deserialize,
     rkyv::Archive,
@@ -36,14 +38,14 @@ impl SourceDistFilename {
         package_name: &PackageName,
     ) -> Result<Self, SourceDistFilenameError> {
         // Drop the extension (e.g., given `tar.gz`, drop `.tar.gz`).
-        if filename.len() <= extension.to_string().len() + 1 {
+        if filename.len() <= extension.name().len() + 1 {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Extension,
             });
         }
 
-        let stem = &filename[..(filename.len() - (extension.to_string().len() + 1))];
+        let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
 
         if stem.len() <= package_name.as_ref().len() + "-".len() {
             return Err(SourceDistFilenameError {
@@ -56,7 +58,7 @@ impl SourceDistFilename {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::PackageName(err),
             })?;
-        if &actual_package_name != package_name {
+        if actual_package_name != *package_name {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
@@ -92,14 +94,14 @@ impl SourceDistFilename {
         };
 
         // Drop the extension (e.g., given `tar.gz`, drop `.tar.gz`).
-        if filename.len() <= extension.to_string().len() + 1 {
+        if filename.len() <= extension.name().len() + 1 {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Extension,
             });
         }
 
-        let stem = &filename[..(filename.len() - (extension.to_string().len() + 1))];
+        let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
 
         let Some((package_name, version)) = stem.rsplit_once('-') else {
             return Err(SourceDistFilenameError {
@@ -170,4 +172,67 @@ enum SourceDistFilenameErrorKind {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::str::FromStr;
+
+    use uv_normalize::PackageName;
+
+    use crate::{SourceDistExtension, SourceDistFilename};
+
+    /// Only test already normalized names since the parsing is lossy
+    ///
+    /// <https://packaging.python.org/en/latest/specifications/source-distribution-format/#source-distribution-file-name>
+    /// <https://packaging.python.org/en/latest/specifications/binary-distribution-format/#escaping-and-unicode>
+    #[test]
+    fn roundtrip() {
+        for normalized in [
+            "foo_lib-1.2.3.zip",
+            "foo_lib-1.2.3a3.zip",
+            "foo_lib-1.2.3.tar.gz",
+            "foo_lib-1.2.3.tar.bz2",
+            "foo_lib-1.2.3.tar.zst",
+            "foo_lib-1.2.3.tar.xz",
+            "foo_lib-1.2.3.tar.lz",
+            "foo_lib-1.2.3.tar.lzma",
+            "foo_lib-1.2.3.tgz",
+            "foo_lib-1.2.3.tbz",
+            "foo_lib-1.2.3.tlz",
+            "foo_lib-1.2.3.txz",
+        ] {
+            let ext = SourceDistExtension::from_path(normalized).unwrap();
+            assert_eq!(
+                SourceDistFilename::parse(
+                    normalized,
+                    ext,
+                    &PackageName::from_str("foo_lib").unwrap()
+                )
+                .unwrap()
+                .to_string(),
+                normalized
+            );
+        }
+    }
+
+    #[test]
+    fn errors() {
+        for invalid in ["b-1.2.3.zip", "a-1.2.3-gamma.3.zip"] {
+            let ext = SourceDistExtension::from_path(invalid).unwrap();
+            assert!(
+                SourceDistFilename::parse(invalid, ext, &PackageName::from_str("a").unwrap())
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn name_too_long() {
+        assert!(
+            SourceDistFilename::parse(
+                "foo.zip",
+                SourceDistExtension::Zip,
+                &PackageName::from_str("foo-lib").unwrap()
+            )
+            .is_err()
+        );
+    }
+}

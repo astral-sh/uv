@@ -1,0 +1,8 @@
+[bans]
+multiple-versions = "allow"
+deny = [
+  { crate = "rustls", reason = "The build backend does not need network access" },
+  { crate = "openssl", reason = "The build backend does not need network access" },
+  { crate = "reqwest", reason = "The build backend does not need network access" },
+  { crate = "schemars", reason = "JSON Schema generation is a development feature, not a runtime feature" },
+]

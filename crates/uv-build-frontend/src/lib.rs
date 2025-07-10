@@ -4,13 +4,6 @@
 
 mod error;
 
-use fs_err as fs;
-use indoc::formatdoc;
-use itertools::Itertools;
-use owo_colors::OwoColorize;
-use rustc_hash::FxHashMap;
-use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
-use serde::{de, Deserialize, Deserializer};
 use std::ffi::OsString;
 use std::fmt::Formatter;
 use std::fmt::Write;
@@ -21,22 +14,34 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, iter};
+
+use fs_err as fs;
+use indoc::formatdoc;
+use itertools::Itertools;
+use rustc_hash::FxHashMap;
+use serde::de::{IntoDeserializer, SeqAccess, Visitor, value};
+use serde::{Deserialize, Deserializer, de};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{debug, info_span, instrument, Instrument};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
-use uv_distribution::RequiresDist;
-use uv_distribution_types::{IndexLocations, Resolution};
+use uv_cache_key::cache_digest;
+use uv_configuration::PreviewMode;
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_distribution::BuildRequires;
+use uv_distribution_types::{IndexLocations, Requirement, Resolution};
+use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
-use uv_pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
-use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
+use uv_warnings::warn_user_once;
+use uv_workspace::WorkspaceCache;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -50,20 +55,22 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
 });
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct PyProjectToml {
     /// Build-related data
     build_system: Option<BuildSystem>,
     /// Project metadata
     project: Option<Project>,
+    /// Tool configuration
+    tool: Option<Tool>,
 }
 
 /// The `[project]` section of a pyproject.toml as specified in PEP 621.
 ///
 /// This representation only includes a subset of the fields defined in PEP 621 necessary for
 /// informing wheel builds.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project
@@ -76,7 +83,7 @@ struct Project {
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
@@ -85,6 +92,18 @@ struct BuildSystem {
     build_backend: Option<String>,
     /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
     backend_path: Option<BackendPath>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct Tool {
+    uv: Option<ToolUv>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct ToolUv {
+    workspace: Option<de::IgnoredAny>,
 }
 
 impl BackendPath {
@@ -184,6 +203,11 @@ impl Pep517Backend {
             {import}
         "#, backend_path = backend_path_encoded}
     }
+
+    fn is_setuptools(&self) -> bool {
+        // either `setuptools.build_meta` or `setuptools.build_meta:__legacy__`
+        self.backend.split(':').next() == Some("setuptools.build_meta")
+    }
 }
 
 /// Uses an [`Rc`] internally, clone freely.
@@ -251,15 +275,18 @@ impl SourceBuild {
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        version_id: Option<String>,
+        version_id: Option<&str>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
+        build_stack: &BuildStack,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        preview: PreviewMode,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
 
@@ -278,6 +305,7 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             source_strategy,
+            workspace_cache,
             &default_backend,
         )
         .await
@@ -306,6 +334,8 @@ impl SourceBuild {
                 false,
                 false,
                 false,
+                false,
+                preview,
             )?
         };
 
@@ -319,13 +349,14 @@ impl SourceBuild {
                 source_build_context,
                 &default_backend,
                 &pep517_backend,
+                build_stack,
             )
             .await?;
 
             build_context
-                .install(&resolved_requirements, &venv)
+                .install(&resolved_requirements, &venv, build_stack)
                 .await
-                .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err))?;
+                .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err.into()))?;
         } else {
             debug!("Proceeding without build isolation");
         }
@@ -376,9 +407,11 @@ impl SourceBuild {
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
-                version_id.as_deref(),
+                version_id,
                 locations,
                 source_strategy,
+                workspace_cache,
+                build_stack,
                 build_kind,
                 level,
                 &config_settings,
@@ -401,11 +434,36 @@ impl SourceBuild {
             metadata_directory: None,
             package_name,
             package_version,
-            version_id,
+            version_id: version_id.map(ToString::to_string),
             environment_variables,
             modified_path,
             runner,
         })
+    }
+
+    /// Acquire a lock on the source tree, if necessary.
+    async fn acquire_lock(&self) -> Result<Option<LockedFile>, Error> {
+        // Depending on the command, setuptools puts `*.egg-info`, `build/`, and `dist/` in the
+        // source tree, and concurrent invocations of setuptools using the same source dir can
+        // stomp on each other. We need to lock something to fix that, but we don't want to dump a
+        // `.lock` file into the source tree that the user will need to .gitignore. Take a global
+        // proxy lock instead.
+        let mut source_tree_lock = None;
+        if self.pep517_backend.is_setuptools() {
+            debug!("Locking the source tree for setuptools");
+            let canonical_source_path = self.source_tree.canonicalize()?;
+            let lock_path = env::temp_dir().join(format!(
+                "uv-setuptools-{}.lock",
+                cache_digest(&canonical_source_path)
+            ));
+            source_tree_lock = LockedFile::acquire(lock_path, self.source_tree.to_string_lossy())
+                .await
+                .inspect_err(|err| {
+                    warn!("Failed to acquire build lock: {err}");
+                })
+                .ok();
+        }
+        Ok(source_tree_lock)
     }
 
     async fn get_resolved_requirements(
@@ -413,6 +471,7 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         default_backend: &Pep517Backend,
         pep517_backend: &Pep517Backend,
+        build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
             if pep517_backend.requirements == default_backend.requirements {
@@ -421,17 +480,21 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&default_backend.requirements)
+                        .resolve(&default_backend.requirements, build_stack)
                         .await
-                        .map_err(|err| Error::RequirementsResolve("`setup.py` build", err))?;
+                        .map_err(|err| {
+                            Error::RequirementsResolve("`setup.py` build", err.into())
+                        })?;
                     *resolution = Some(resolved_requirements.clone());
                     resolved_requirements
                 }
             } else {
                 build_context
-                    .resolve(&pep517_backend.requirements)
+                    .resolve(&pep517_backend.requirements, build_stack)
                     .await
-                    .map_err(|err| Error::RequirementsResolve("`build-system.requires`", err))?
+                    .map_err(|err| {
+                        Error::RequirementsResolve("`build-system.requires`", err.into())
+                    })?
             },
         )
     }
@@ -443,6 +506,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        workspace_cache: &WorkspaceCache,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
@@ -464,24 +528,20 @@ impl SourceBuild {
                                 .map(|project| &project.name)
                                 .or(package_name)
                             {
-                                // TODO(charlie): Add a type to lower requirements without providing
-                                // empty extras.
-                                let requires_dist = uv_pypi_types::RequiresDist {
-                                    name: name.clone(),
+                                let build_requires = uv_pypi_types::BuildRequires {
+                                    name: Some(name.clone()),
                                     requires_dist: build_system.requires,
-                                    provides_extras: vec![],
                                 };
-                                let requires_dist = RequiresDist::from_project_maybe_workspace(
-                                    requires_dist,
+                                let build_requires = BuildRequires::from_project_maybe_workspace(
+                                    build_requires,
                                     install_path,
-                                    None,
                                     locations,
                                     source_strategy,
-                                    LowerBound::Allow,
+                                    workspace_cache,
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
-                                requires_dist.requires_dist
+                                build_requires.requires_dist
                             } else {
                                 build_system
                                     .requires
@@ -512,8 +572,40 @@ impl SourceBuild {
                         requirements,
                     }
                 } else {
-                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
-                    // a PEP 517 build using the default backend, to match `pip` and `build`.
+                    // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed
+                    // with a PEP 517 build using the default backend (`setuptools`), to match `pip`
+                    // and `build`.
+                    //
+                    // If there is no build system defined and there is no metadata source for
+                    // `setuptools`, warn. The build will succeed, but the metadata will be
+                    // incomplete (for example, the package name will be `UNKNOWN`).
+                    if pyproject_toml.project.is_none()
+                        && !source_tree.join("setup.py").is_file()
+                        && !source_tree.join("setup.cfg").is_file()
+                    {
+                        // Give a specific hint for `uv pip install .` in a workspace root.
+                        let looks_like_workspace_root = pyproject_toml
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.uv.as_ref())
+                            .and_then(|tool| tool.workspace.as_ref())
+                            .is_some();
+                        if looks_like_workspace_root {
+                            warn_user_once!(
+                                "`{}` appears to be a workspace root without a Python project; \
+                                consider using `uv sync` to install the workspace, or add a \
+                                `[build-system]` table to `pyproject.toml`",
+                                source_tree.simplified_display().cyan(),
+                            );
+                        } else {
+                            warn_user_once!(
+                                "`{}` does not appear to be a Python project, as the `pyproject.toml` \
+                                does not include a `[build-system]` table, and neither `setup.py` \
+                                nor `setup.cfg` are present in the directory",
+                                source_tree.simplified_display().cyan(),
+                            );
+                        }
+                    }
                     default_backend.clone()
                 };
                 Ok((backend, pyproject_toml.project))
@@ -543,6 +635,9 @@ impl SourceBuild {
         if let Some(metadata_dir) = &self.metadata_directory {
             return Ok(Some(metadata_dir.clone()));
         }
+
+        // Lock the source tree, if necessary.
+        let _lock = self.acquire_lock().await?;
 
         // Hatch allows for highly dynamic customization of metadata via hooks. In such cases, Hatch
         // can't uphold the PEP 517 contract, in that the metadata Hatch would return by
@@ -626,8 +721,8 @@ impl SourceBuild {
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to determine metadata through `{}`",
-                    format!("prepare_metadata_for_build_{}", self.build_kind).green()
+                    "Call to `{}.prepare_metadata_for_build_{}` failed",
+                    self.pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
@@ -656,16 +751,15 @@ impl SourceBuild {
     pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = std::path::absolute(wheel_dir)?;
-        let filename = self.pep517_build(&wheel_dir, &self.pep517_backend).await?;
+        let filename = self.pep517_build(&wheel_dir).await?;
         Ok(filename)
     }
 
     /// Perform a PEP 517 build for a wheel or source distribution (sdist).
-    async fn pep517_build(
-        &self,
-        output_dir: &Path,
-        pep517_backend: &Pep517Backend,
-    ) -> Result<String, Error> {
+    async fn pep517_build(&self, output_dir: &Path) -> Result<String, Error> {
+        // Lock the source tree, if necessary.
+        let _lock = self.acquire_lock().await?;
+
         // Write the hook output to a file so that we can read it back reliably.
         let outfile = self
             .temp_dir
@@ -677,7 +771,7 @@ impl SourceBuild {
             BuildKind::Sdist => {
                 debug!(
                     r#"Calling `{}.build_{}("{}", {})`"#,
-                    pep517_backend.backend,
+                    self.pep517_backend.backend,
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -690,7 +784,7 @@ impl SourceBuild {
                     with open("{}", "w") as fp:
                         fp.write(sdist_filename)
                     "#,
-                    pep517_backend.backend_import(),
+                    self.pep517_backend.backend_import(),
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -706,7 +800,7 @@ impl SourceBuild {
                     });
                 debug!(
                     r#"Calling `{}.build_{}("{}", {}, {})`"#,
-                    pep517_backend.backend,
+                    self.pep517_backend.backend,
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -720,7 +814,7 @@ impl SourceBuild {
                     with open("{}", "w") as fp:
                         fp.write(wheel_filename)
                     "#,
-                    pep517_backend.backend_import(),
+                    self.pep517_backend.backend_import(),
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -749,9 +843,8 @@ impl SourceBuild {
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to build {} through `{}`",
-                    self.build_kind,
-                    format!("build_{}", self.build_kind).green(),
+                    "Call to `{}.build_{}` failed",
+                    self.pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
@@ -765,8 +858,8 @@ impl SourceBuild {
         if !output_dir.join(&distribution_filename).is_file() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to produce {} through `{}`: `{distribution_filename}` not found",
-                    self.build_kind, format!("build_{}", self.build_kind).green(),
+                    "Call to `{}.build_{}` failed",
+                    self.pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
@@ -780,11 +873,11 @@ impl SourceBuild {
 }
 
 impl SourceBuildTrait for SourceBuild {
-    async fn metadata(&mut self) -> anyhow::Result<Option<PathBuf>> {
+    async fn metadata(&mut self) -> Result<Option<PathBuf>, AnyErrorBuild> {
         Ok(self.get_metadata_without_build().await?)
     }
 
-    async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
+    async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> Result<String, AnyErrorBuild> {
         Ok(self.build(wheel_dir).await?)
     }
 }
@@ -808,6 +901,8 @@ async fn create_pep517_build_environment(
     version_id: Option<&str>,
     locations: &IndexLocations,
     source_strategy: SourceStrategy,
+    workspace_cache: &WorkspaceCache,
+    build_stack: &BuildStack,
     build_kind: BuildKind,
     level: BuildOutput,
     config_settings: &ConfigSettings,
@@ -862,8 +957,8 @@ async fn create_pep517_build_environment(
     if !output.status.success() {
         return Err(Error::from_command_output(
             format!(
-                "Build backend failed to determine requirements with `{}`",
-                format!("build_{build_kind}()").green()
+                "Call to `{}.build_{}` failed",
+                pep517_backend.backend, build_kind
             ),
             &output,
             level,
@@ -873,63 +968,45 @@ async fn create_pep517_build_environment(
         ));
     }
 
-    // Read the requirements from the output file.
-    let contents = fs_err::read(&outfile).map_err(|err| {
-        Error::from_command_output(
-            format!(
-                "Build backend failed to read requirements from `{}`: {err}",
-                format!("get_requires_for_build_{build_kind}").green(),
-            ),
-            &output,
-            level,
-            package_name,
-            package_version,
-            version_id,
-        )
-    })?;
-
-    // Deserialize the requirements from the output file.
-    let extra_requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> =
-        serde_json::from_slice::<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>(&contents)
-            .map_err(|err| {
-                Error::from_command_output(
-                    format!(
-                        "Build backend failed to return requirements from `{}`: {err}",
-                        format!("get_requires_for_build_{build_kind}").green(),
-                    ),
-                    &output,
-                    level,
-                    package_name,
-                    package_version,
-                    version_id,
-                )
-            })?;
+    // Read and deserialize the requirements from the output file.
+    let read_requires_result = fs_err::read(&outfile)
+        .map_err(|err| err.to_string())
+        .and_then(|contents| serde_json::from_slice(&contents).map_err(|err| err.to_string()));
+    let extra_requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> = match read_requires_result
+    {
+        Ok(extra_requires) => extra_requires,
+        Err(err) => {
+            return Err(Error::from_command_output(
+                format!(
+                    "Call to `{}.get_requires_for_build_{}` failed: {}",
+                    pep517_backend.backend, build_kind, err
+                ),
+                &output,
+                level,
+                package_name,
+                package_version,
+                version_id,
+            ));
+        }
+    };
 
     // If necessary, lower the requirements.
     let extra_requires = match source_strategy {
         SourceStrategy::Enabled => {
-            if let Some(package_name) = package_name {
-                // TODO(charlie): Add a type to lower requirements without providing
-                // empty extras.
-                let requires_dist = uv_pypi_types::RequiresDist {
-                    name: package_name.clone(),
-                    requires_dist: extra_requires,
-                    provides_extras: vec![],
-                };
-                let requires_dist = RequiresDist::from_project_maybe_workspace(
-                    requires_dist,
-                    install_path,
-                    None,
-                    locations,
-                    source_strategy,
-                    LowerBound::Allow,
-                )
-                .await
-                .map_err(Error::Lowering)?;
-                requires_dist.requires_dist
-            } else {
-                extra_requires.into_iter().map(Requirement::from).collect()
-            }
+            let build_requires = uv_pypi_types::BuildRequires {
+                name: package_name.cloned(),
+                requires_dist: extra_requires,
+            };
+            let build_requires = BuildRequires::from_project_maybe_workspace(
+                build_requires,
+                install_path,
+                locations,
+                source_strategy,
+                workspace_cache,
+            )
+            .await
+            .map_err(Error::Lowering)?;
+            build_requires.requires_dist
         }
         SourceStrategy::Disabled => extra_requires.into_iter().map(Requirement::from).collect(),
     };
@@ -950,14 +1027,18 @@ async fn create_pep517_build_environment(
             .chain(extra_requires)
             .collect();
         let resolution = build_context
-            .resolve(&requirements)
+            .resolve(&requirements, build_stack)
             .await
-            .map_err(|err| Error::RequirementsResolve("`build-system.requires`", err))?;
+            .map_err(|err| {
+                Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))
+            })?;
 
         build_context
-            .install(&resolution, venv)
+            .install(&resolution, venv, build_stack)
             .await
-            .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err))?;
+            .map_err(|err| {
+                Error::RequirementsInstall("`build-system.requires`", AnyErrorBuild::from(err))
+            })?;
     }
 
     Ok(())
@@ -1055,7 +1136,7 @@ impl PythonRunner {
                 return Err(Error::CommandFailed(
                     venv.python_executable().to_path_buf(),
                     err,
-                ))
+                ));
             }
         }
 

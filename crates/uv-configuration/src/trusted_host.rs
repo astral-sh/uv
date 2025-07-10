@@ -1,4 +1,6 @@
 use serde::{Deserialize, Deserializer};
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::str::FromStr;
 use url::Url;
 
@@ -81,7 +83,7 @@ pub enum TrustedHostError {
     InvalidPort(String),
 }
 
-impl std::str::FromStr for TrustedHost {
+impl FromStr for TrustedHost {
     type Err = TrustedHostError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -143,22 +145,63 @@ impl std::fmt::Display for TrustedHost {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for TrustedHost {
-    fn schema_name() -> String {
-        "TrustedHost".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("TrustedHost")
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A host or host-port pair.".to_string()),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A host or host-port pair."
+        })
     }
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    #[test]
+    fn parse() {
+        assert_eq!(
+            "*".parse::<super::TrustedHost>().unwrap(),
+            super::TrustedHost::Wildcard
+        );
+
+        assert_eq!(
+            "example.com".parse::<super::TrustedHost>().unwrap(),
+            super::TrustedHost::Host {
+                scheme: None,
+                host: "example.com".to_string(),
+                port: None
+            }
+        );
+
+        assert_eq!(
+            "example.com:8080".parse::<super::TrustedHost>().unwrap(),
+            super::TrustedHost::Host {
+                scheme: None,
+                host: "example.com".to_string(),
+                port: Some(8080)
+            }
+        );
+
+        assert_eq!(
+            "https://example.com".parse::<super::TrustedHost>().unwrap(),
+            super::TrustedHost::Host {
+                scheme: Some("https".to_string()),
+                host: "example.com".to_string(),
+                port: None
+            }
+        );
+
+        assert_eq!(
+            "https://example.com/hello/world"
+                .parse::<super::TrustedHost>()
+                .unwrap(),
+            super::TrustedHost::Host {
+                scheme: Some("https".to_string()),
+                host: "example.com".to_string(),
+                port: None
+            }
+        );
+    }
+}

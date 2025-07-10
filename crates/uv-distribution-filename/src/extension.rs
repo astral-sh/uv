@@ -27,13 +27,18 @@ pub enum DistExtension {
 )]
 #[rkyv(derive(Debug))]
 pub enum SourceDistExtension {
-    Zip,
-    TarGz,
+    Tar,
     TarBz2,
+    TarGz,
+    TarLz,
+    TarLzma,
     TarXz,
     TarZst,
-    TarLzma,
-    Tar,
+    Tbz,
+    Tgz,
+    Tlz,
+    Txz,
+    Zip,
 }
 
 impl DistExtension {
@@ -71,38 +76,53 @@ impl SourceDistExtension {
         match extension {
             "zip" => Ok(Self::Zip),
             "tar" => Ok(Self::Tar),
-            "tgz" => Ok(Self::TarGz),
-            "tbz" => Ok(Self::TarBz2),
-            "txz" => Ok(Self::TarXz),
-            "tlz" => Ok(Self::TarLzma),
+            "tgz" => Ok(Self::Tgz),
+            "tbz" => Ok(Self::Tbz),
+            "txz" => Ok(Self::Txz),
+            "tlz" => Ok(Self::Tlz),
             "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
             "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
             "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
-            "lz" | "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
+            "lz" if is_tar(path.as_ref()) => Ok(Self::TarLz),
+            "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
             "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
             _ => Err(ExtensionError::SourceDist),
+        }
+    }
+
+    /// Return the name for the extension.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Tar => "tar",
+            Self::TarBz2 => "tar.bz2",
+            Self::TarGz => "tar.gz",
+            Self::TarLz => "tar.lz",
+            Self::TarLzma => "tar.lzma",
+            Self::TarXz => "tar.xz",
+            Self::TarZst => "tar.zst",
+            Self::Tbz => "tbz",
+            Self::Tgz => "tgz",
+            Self::Tlz => "tlz",
+            Self::Txz => "txz",
+            Self::Zip => "zip",
         }
     }
 }
 
 impl Display for SourceDistExtension {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Zip => f.write_str("zip"),
-            Self::TarGz => f.write_str("tar.gz"),
-            Self::TarBz2 => f.write_str("tar.bz2"),
-            Self::TarXz => f.write_str("tar.xz"),
-            Self::TarZst => f.write_str("tar.zst"),
-            Self::TarLzma => f.write_str("tar.lzma"),
-            Self::Tar => f.write_str("tar"),
-        }
+        f.write_str(self.name())
     }
 }
 
 #[derive(Error, Debug)]
 pub enum ExtensionError {
-    #[error("`.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`")]
+    #[error(
+        "`.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`"
+    )]
     Dist,
-    #[error("`.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`")]
+    #[error(
+        "`.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`"
+    )]
     SourceDist,
 }

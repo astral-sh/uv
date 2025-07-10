@@ -3,33 +3,37 @@ use std::fmt::Write;
 
 use anstream::println;
 use anyhow::Result;
-use futures::stream::FuturesUnordered;
-use futures::TryStreamExt;
+use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
+use tokio::sync::Semaphore;
 use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
-use uv_client::{Connectivity, RegistryClientBuilder};
-use uv_configuration::{IndexStrategy, KeyringProviderType, TrustedHost};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, PreviewMode};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name};
+use uv_distribution_types::{
+    Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
+};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment};
-use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
+use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
-use crate::commands::ExitStatus;
+use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -42,15 +46,15 @@ pub(crate) async fn pip_list(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
-    connectivity: Connectivity,
+    network_settings: &NetworkSettings,
+    concurrency: Concurrency,
     strict: bool,
     exclude_newer: Option<ExcludeNewer>,
     python: Option<&str>,
     system: bool,
-    native_tls: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Disallow `--outdated` with `--format freeze`.
     if outdated && matches!(format, ListFormat::Freeze) {
@@ -62,6 +66,7 @@ pub(crate) async fn pip_list(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
@@ -78,21 +83,24 @@ pub(crate) async fn pip_list(
         .collect_vec();
 
     // Determine the latest version for each package.
-    let latest = if outdated {
+    let latest = if outdated && !results.is_empty() {
         let capabilities = IndexCapabilities::default();
 
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(network_settings.connectivity)
+            .native_tls(network_settings.native_tls)
+            .keyring(keyring_provider)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
         // Initialize the registry client.
-        let client =
-            RegistryClientBuilder::new(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
-                .native_tls(native_tls)
-                .connectivity(connectivity)
-                .index_urls(index_locations.index_urls())
-                .index_strategy(index_strategy)
-                .keyring(keyring_provider)
-                .allow_insecure_host(allow_insecure_host.clone())
-                .markers(environment.interpreter().markers())
-                .platform(environment.interpreter().platform())
-                .build();
+        let client = RegistryClientBuilder::try_from(client_builder)?
+            .cache(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
+            .index_locations(&index_locations)
+            .index_strategy(index_strategy)
+            .markers(environment.interpreter().markers())
+            .platform(environment.interpreter().platform())
+            .build();
+        let download_concurrency = Semaphore::new(concurrency.downloads);
 
         // Determine the platform tags.
         let interpreter = environment.interpreter();
@@ -110,16 +118,29 @@ pub(crate) async fn pip_list(
             requires_python: &requires_python,
         };
 
+        let reporter = LatestVersionReporter::from(printer).with_length(results.len() as u64);
+
         // Fetch the latest version for each package.
-        results
-            .iter()
-            .map(|dist| async {
-                let latest = client.find_latest(dist.name(), None).await?;
+        let mut fetches = futures::stream::iter(&results)
+            .map(async |dist| {
+                let latest = client
+                    .find_latest(dist.name(), None, &download_concurrency)
+                    .await?;
                 Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((dist.name(), latest))
             })
-            .collect::<FuturesUnordered<_>>()
-            .try_collect::<FxHashMap<_, _>>()
-            .await?
+            .buffer_unordered(concurrency.downloads);
+
+        let mut map = FxHashMap::default();
+        while let Some((package, version)) = fetches.next().await.transpose()? {
+            if let Some(version) = version.as_ref() {
+                reporter.on_fetch_version(package, version.version());
+            } else {
+                reporter.on_fetch_progress();
+            }
+            map.insert(package, version);
+        }
+        reporter.on_fetch_complete();
+        map
     } else {
         FxHashMap::default()
     };

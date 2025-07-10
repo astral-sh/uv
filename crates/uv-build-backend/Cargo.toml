@@ -16,17 +16,23 @@ doctest = false
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
 uv-globfilter = { workspace = true }
+uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
+uv-options-metadata = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 
 csv = { workspace = true }
-flate2 = { workspace = true }
+flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true }
 globset = { workspace = true }
 itertools = { workspace = true }
+rustc-hash = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 spdx = { workspace = true }
@@ -41,7 +47,14 @@ zip = { workspace = true }
 [lints]
 workspace = true
 
+[package.metadata.cargo-shear]
+# Imported by the `OptionsMetadata` derive macro
+ignored = ["uv-options-metadata"]
+
+[features]
+schemars = ["dep:schemars", "uv-pypi-types/schemars"]
+
 [dev-dependencies]
-indoc = { version = "2.0.5" }
-insta = { version = "1.40.0" }
-tempfile = { version = "3.12.0" }
+indoc = { workspace = true }
+insta = { version = "1.40.0", features = ["filters"] }
+tempfile = { workspace = true }

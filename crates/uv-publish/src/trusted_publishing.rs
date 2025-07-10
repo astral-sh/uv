@@ -1,6 +1,8 @@
 //! Trusted publishing (via OIDC) with GitHub actions.
 
-use reqwest::{header, StatusCode};
+use base64::Engine;
+use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+use reqwest::{StatusCode, header};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -10,6 +12,7 @@ use std::fmt::Display;
 use thiserror::Error;
 use tracing::{debug, trace};
 use url::Url;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 #[derive(Debug, Error)]
@@ -21,15 +24,18 @@ pub enum TrustedPublishingError {
     #[error(transparent)]
     Url(#[from] url::ParseError),
     #[error("Failed to fetch: `{0}`")]
-    Reqwest(Url, #[source] reqwest::Error),
+    Reqwest(DisplaySafeUrl, #[source] reqwest::Error),
     #[error("Failed to fetch: `{0}`")]
-    ReqwestMiddleware(Url, #[source] reqwest_middleware::Error),
+    ReqwestMiddleware(DisplaySafeUrl, #[source] reqwest_middleware::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(
-        "PyPI returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}"
+        "PyPI returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}\nToken claims, which must match the PyPI configuration: {2:#?}"
     )]
-    Pypi(StatusCode, String),
+    Pypi(StatusCode, String, OidcTokenClaims),
+    /// When trusted publishing is misconfigured, the error above should occur, not this one.
+    #[error("PyPI returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}")]
+    InvalidOidcToken(StatusCode, String),
 }
 
 impl TrustedPublishingError {
@@ -75,9 +81,21 @@ struct PublishToken {
     token: TrustedPublishingToken,
 }
 
+/// The payload of the OIDC token.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct OidcTokenClaims {
+    sub: String,
+    repository: String,
+    repository_owner: String,
+    repository_owner_id: String,
+    job_workflow_ref: String,
+    r#ref: String,
+}
+
 /// Returns the short-lived token to use for uploading.
 pub(crate) async fn get_token(
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // If this fails, we can skip the audience request.
@@ -107,15 +125,16 @@ pub(crate) async fn get_token(
 }
 
 async fn get_audience(
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &ClientWithMiddleware,
 ) -> Result<String, TrustedPublishingError> {
     // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
     // (RFC 3986).
-    let audience_url = Url::parse(&format!("https://{}/_/oidc/audience", registry.authority()))?;
+    let audience_url =
+        DisplaySafeUrl::parse(&format!("https://{}/_/oidc/audience", registry.authority()))?;
     debug!("Querying the trusted publishing audience from {audience_url}");
     let response = client
-        .get(audience_url.clone())
+        .get(Url::from(audience_url.clone()))
         .send()
         .await
         .map_err(|err| TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err))?;
@@ -137,14 +156,14 @@ async fn get_oidc_token(
     let oidc_token_url = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|err| {
         TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL, err)
     })?;
-    let mut oidc_token_url = Url::parse(&oidc_token_url)?;
+    let mut oidc_token_url = DisplaySafeUrl::parse(&oidc_token_url)?;
     oidc_token_url
         .query_pairs_mut()
         .append_pair("audience", audience);
     debug!("Querying the trusted publishing OIDC token from {oidc_token_url}");
     let authorization = format!("bearer {oidc_token_request_token}");
     let response = client
-        .get(oidc_token_url.clone())
+        .get(Url::from(oidc_token_url.clone()))
         .header(header::AUTHORIZATION, authorization)
         .send()
         .await
@@ -158,12 +177,24 @@ async fn get_oidc_token(
     Ok(oidc_token.value)
 }
 
+/// Parse the JSON Web Token that the OIDC token is.
+///
+/// See: <https://github.com/pypa/gh-action-pypi-publish/blob/db8f07d3871a0a180efa06b95d467625c19d5d5f/oidc-exchange.py#L165-L184>
+fn decode_oidc_token(oidc_token: &str) -> Option<OidcTokenClaims> {
+    let token_segments = oidc_token.splitn(3, '.').collect::<Vec<&str>>();
+    let [_header, payload, _signature] = *token_segments.into_boxed_slice() else {
+        return None;
+    };
+    let decoded = BASE64_URL_SAFE_NO_PAD.decode(payload).ok()?;
+    serde_json::from_slice(&decoded).ok()
+}
+
 async fn get_publish_token(
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     oidc_token: &str,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
-    let mint_token_url = Url::parse(&format!(
+    let mint_token_url = DisplaySafeUrl::parse(&format!(
         "https://{}/_/oidc/mint-token",
         registry.authority()
     ))?;
@@ -172,7 +203,7 @@ async fn get_publish_token(
         token: oidc_token.to_string(),
     };
     let response = client
-        .post(mint_token_url.clone())
+        .post(Url::from(mint_token_url.clone()))
         .body(serde_json::to_vec(&mint_token_payload)?)
         .send()
         .await
@@ -189,13 +220,26 @@ async fn get_publish_token(
         let publish_token: PublishToken = serde_json::from_slice(&body)?;
         Ok(publish_token.token)
     } else {
-        // An error here means that something is misconfigured, e.g. a typo in the PyPI
-        // configuration, so we're showing the body for more context, see
-        // https://docs.pypi.org/trusted-publishers/troubleshooting/#token-minting
-        // for what the body can mean.
-        Err(TrustedPublishingError::Pypi(
-            status,
-            String::from_utf8_lossy(&body).to_string(),
-        ))
+        match decode_oidc_token(oidc_token) {
+            Some(claims) => {
+                // An error here means that something is misconfigured, e.g. a typo in the PyPI
+                // configuration, so we're showing the body and the JWT claims for more context, see
+                // https://docs.pypi.org/trusted-publishers/troubleshooting/#token-minting
+                // for what the body can mean.
+                Err(TrustedPublishingError::Pypi(
+                    status,
+                    String::from_utf8_lossy(&body).to_string(),
+                    claims,
+                ))
+            }
+            None => {
+                // This is not a user configuration error, the OIDC token should always have a valid
+                // format.
+                Err(TrustedPublishingError::InvalidOidcToken(
+                    status,
+                    String::from_utf8_lossy(&body).to_string(),
+                ))
+            }
+        }
     }
 }

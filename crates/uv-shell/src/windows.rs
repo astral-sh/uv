@@ -1,19 +1,18 @@
 //! Windows-specific utilities for manipulating the environment.
 //!
-//! Based on rustup's Windows implementation: <https://github.com/rust-lang/rustup/blob/fede22fea7b160868cece632bd213e6d72f8912f/src/cli/self_update/windows.rs>
+//! Based on rustup's Windows implementation: <https://github.com/rust-lang/rustup/commit/bce3ed67d219a2b754857f9e231287794d8c770d>
 
 #![cfg(windows)]
 
-use std::ffi::OsString;
-use std::io;
-use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
-use std::slice;
 
 use anyhow::Context;
+use tracing::warn;
+use windows_registry::{CURRENT_USER, HSTRING};
+use windows_result::HRESULT;
+use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_INVALID_DATA};
+
 use uv_static::EnvVars;
-use winreg::enums::{RegType, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
-use winreg::{RegKey, RegValue};
 
 /// Append the given [`Path`] to the `PATH` environment variable in the Windows registry.
 ///
@@ -24,34 +23,27 @@ pub fn prepend_path(path: &Path) -> anyhow::Result<bool> {
     let windows_path = get_windows_path_var()?;
 
     // Add the new path to the existing `PATH` variable.
-    let windows_path = windows_path.and_then(|windows_path| {
-        prepend_to_path(windows_path, OsString::from(path).encode_wide().collect())
-    });
-
+    let windows_path =
+        windows_path.and_then(|windows_path| prepend_to_path(&windows_path, HSTRING::from(path)));
     // If the path didn't change, then we don't need to do anything.
     let Some(windows_path) = windows_path else {
         return Ok(false);
     };
 
     // Set the `PATH` variable in the registry.
-    apply_windows_path_var(windows_path)?;
+    apply_windows_path_var(&windows_path)?;
 
     Ok(true)
 }
 
 /// Set the windows `PATH` variable in the registry.
-fn apply_windows_path_var(path: Vec<u16>) -> anyhow::Result<()> {
-    let root = RegKey::predef(HKEY_CURRENT_USER);
-    let environment = root.open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)?;
+fn apply_windows_path_var(path: &HSTRING) -> anyhow::Result<()> {
+    let environment = CURRENT_USER.create("Environment")?;
 
     if path.is_empty() {
-        environment.delete_value(EnvVars::PATH)?;
+        environment.remove_value(EnvVars::PATH)?;
     } else {
-        let reg_value = RegValue {
-            bytes: to_winreg_bytes(path),
-            vtype: RegType::REG_EXPAND_SZ,
-        };
-        environment.set_raw_value(EnvVars::PATH, &reg_value)?;
+        environment.set_expand_hstring(EnvVars::PATH, path)?;
     }
 
     Ok(())
@@ -60,23 +52,21 @@ fn apply_windows_path_var(path: Vec<u16>) -> anyhow::Result<()> {
 /// Retrieve the windows `PATH` variable from the registry.
 ///
 /// Returns `Ok(None)` if the `PATH` variable is not a string.
-fn get_windows_path_var() -> anyhow::Result<Option<Vec<u16>>> {
-    let root = RegKey::predef(HKEY_CURRENT_USER);
-    let environment = root
-        .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)
+fn get_windows_path_var() -> anyhow::Result<Option<HSTRING>> {
+    let environment = CURRENT_USER
+        .create("Environment")
         .context("Failed to open `Environment` key")?;
 
-    let reg_value = environment.get_raw_value(EnvVars::PATH);
+    let reg_value = environment.get_hstring(EnvVars::PATH);
     match reg_value {
-        Ok(reg_value) => {
-            if let Some(reg_value) = from_winreg_value(&reg_value) {
-                Ok(Some(reg_value))
-            } else {
-                tracing::warn!("`HKEY_CURRENT_USER\\Environment\\PATH` is a non-string");
-                Ok(None)
-            }
+        Ok(reg_value) => Ok(Some(reg_value)),
+        Err(err) if err.code() == HRESULT::from_win32(ERROR_INVALID_DATA) => {
+            warn!("`HKEY_CURRENT_USER\\Environment\\PATH` is a non-string");
+            Ok(None)
         }
-        Err(ref err) if err.kind() == io::ErrorKind::NotFound => Ok(Some(Vec::new())),
+        Err(err) if err.code() == HRESULT::from_win32(ERROR_FILE_NOT_FOUND) => {
+            Ok(Some(HSTRING::new()))
+        }
         Err(err) => Err(err.into()),
     }
 }
@@ -84,46 +74,15 @@ fn get_windows_path_var() -> anyhow::Result<Option<Vec<u16>>> {
 /// Prepend a path to the `PATH` variable in the Windows registry.
 ///
 /// Returns `Ok(None)` if the given path is already in `PATH`.
-fn prepend_to_path(existing_path: Vec<u16>, path: Vec<u16>) -> Option<Vec<u16>> {
+fn prepend_to_path(existing_path: &HSTRING, path: HSTRING) -> Option<HSTRING> {
     if existing_path.is_empty() {
         Some(path)
-    } else if existing_path.windows(path.len()).any(|p| p == path) {
+    } else if existing_path.windows(path.len()).any(|p| *p == *path) {
         None
     } else {
-        let mut new_path = path;
-        new_path.push(u16::from(b';'));
-        new_path.extend(existing_path);
-        Some(new_path)
-    }
-}
-
-/// Convert a vector UCS-2 chars to a null-terminated UCS-2 string in bytes.
-fn to_winreg_bytes(mut value: Vec<u16>) -> Vec<u8> {
-    value.push(0);
-    #[allow(unsafe_code)]
-    unsafe {
-        slice::from_raw_parts(value.as_ptr().cast::<u8>(), value.len() * 2).to_vec()
-    }
-}
-
-/// Decode the `HKCU\Environment\PATH` value.
-///
-/// If the key is not `REG_SZ` or `REG_EXPAND_SZ`, returns `None`.
-/// The `winreg` library itself does a lossy unicode conversion.
-fn from_winreg_value(val: &RegValue) -> Option<Vec<u16>> {
-    match val.vtype {
-        RegType::REG_SZ | RegType::REG_EXPAND_SZ => {
-            #[allow(unsafe_code)]
-            let mut words = unsafe {
-                #[allow(clippy::cast_ptr_alignment)]
-                slice::from_raw_parts(val.bytes.as_ptr().cast::<u16>(), val.bytes.len() / 2)
-                    .to_owned()
-            };
-            while words.last() == Some(&0) {
-                words.pop();
-            }
-            Some(words)
-        }
-        _ => None,
+        let mut new_path = path.to_os_string();
+        new_path.push(";");
+        new_path.push(existing_path.to_os_string());
+        Some(HSTRING::from(new_path))
     }
 }

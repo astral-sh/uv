@@ -1,18 +1,19 @@
 pub use dependency_mode::DependencyMode;
-pub use error::{NoSolutionError, NoSolutionHeader, ResolveError};
+pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
+pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    InstallTarget, Lock, LockError, LockVersion, PackageMap, RequirementsTxtExport,
-    ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
+    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
+    PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
+    VERSION,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
 pub use python_requirement::PythonRequirement;
-pub use requires_python::{RequiresPython, RequiresPythonRange};
 pub use resolution::{
     AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,
 };
@@ -22,6 +23,7 @@ pub use resolver::{
     PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
     ResolverProvider, VersionsResponse, WheelMetadataResult,
 };
+pub use universal_marker::{ConflictMarker, UniversalMarker};
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 
@@ -32,9 +34,9 @@ pub use yanks::AllowedYanks;
 /// `ConflictItemRef`. i.e., We can avoid allocs on lookups.
 type FxHashbrownSet<T> = hashbrown::HashSet<T, rustc_hash::FxBuildHasher>;
 
-mod bare;
-mod candidate_selector;
+type FxHashbrownMap<K, V> = hashbrown::HashMap<K, V, rustc_hash::FxBuildHasher>;
 
+mod candidate_selector;
 mod dependency_mode;
 mod dependency_provider;
 mod error;
@@ -42,6 +44,7 @@ mod exclude_newer;
 mod exclusions;
 mod flat_index;
 mod fork_indexes;
+mod fork_strategy;
 mod fork_urls;
 mod graph_ops;
 mod lock;
@@ -51,12 +54,12 @@ mod options;
 mod pins;
 mod preferences;
 mod prerelease;
-mod pubgrub;
+pub mod pubgrub;
 mod python_requirement;
 mod redirect;
-mod requires_python;
 mod resolution;
 mod resolution_mode;
 mod resolver;
+mod universal_marker;
 mod version_map;
 mod yanks;

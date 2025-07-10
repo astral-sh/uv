@@ -4,7 +4,7 @@ use anyhow::Result;
 use indoc::indoc;
 use insta::assert_snapshot;
 
-use crate::common::{make_project, uv_snapshot, TestContext};
+use crate::common::{TestContext, make_project, uv_snapshot};
 
 /// The root package has diverging URLs for disjoint markers:
 /// ```toml
@@ -14,6 +14,7 @@ use crate::common::{make_project, uv_snapshot, TestContext};
 /// ]
 /// ```
 #[test]
+#[cfg(feature = "pypi")]
 fn branching_urls_disjoint() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -47,6 +48,7 @@ fn branching_urls_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
+#[cfg(feature = "pypi")]
 fn branching_urls_overlapping() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -83,6 +85,7 @@ fn branching_urls_overlapping() -> Result<()> {
 /// a -> b -> b2 -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
 #[test]
+#[cfg(feature = "pypi")]
 fn root_package_splits_but_transitive_conflict() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -131,7 +134,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version < '3.12'`:
+    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version >= '3.12'`:
     - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
     - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
     "###
@@ -151,6 +154,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
 /// a -> b -> b2 ; python_version >= '3.12' -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
 #[test]
+#[cfg(feature = "pypi")]
 fn root_package_splits_transitive_too() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -203,12 +207,13 @@ fn root_package_splits_transitive_too() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(context.read("uv.lock"), @r###"
+    assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
+    revision = 2
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
-        "python_full_version < '3.12'",
         "python_full_version >= '3.12'",
+        "python_full_version < '3.12'",
     ]
 
     [options]
@@ -242,9 +247,9 @@ fn root_package_splits_transitive_too() -> Result<()> {
         { name = "idna", marker = "python_full_version < '3.12'" },
         { name = "sniffio", marker = "python_full_version < '3.12'" },
     ]
-    sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770 }
+    sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770, upload-time = "2023-12-16T17:06:57.709Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/bf/cd/d6d9bb1dadf73e7af02d18225cbd2c93f8552e13130484f1c8dcfece292b/anyio-4.2.0-py3-none-any.whl", hash = "sha256:745843b39e829e108e518c489b31dc757de7d2131d53fac32bd8df268227bfee", size = 85481 },
+        { url = "https://files.pythonhosted.org/packages/bf/cd/d6d9bb1dadf73e7af02d18225cbd2c93f8552e13130484f1c8dcfece292b/anyio-4.2.0-py3-none-any.whl", hash = "sha256:745843b39e829e108e518c489b31dc757de7d2131d53fac32bd8df268227bfee", size = 85481, upload-time = "2023-12-16T17:06:55.989Z" },
     ]
 
     [[package]]
@@ -258,9 +263,9 @@ fn root_package_splits_transitive_too() -> Result<()> {
         { name = "idna", marker = "python_full_version >= '3.12'" },
         { name = "sniffio", marker = "python_full_version >= '3.12'" },
     ]
-    sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+    sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
     ]
 
     [[package]]
@@ -304,9 +309,9 @@ fn root_package_splits_transitive_too() -> Result<()> {
     name = "idna"
     version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -335,11 +340,11 @@ fn root_package_splits_transitive_too() -> Result<()> {
     name = "sniffio"
     version = "1.3.1"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
     ]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -355,6 +360,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 /// a -> b2 ; python_version >= '3.12' -> iniconfig==2.0.0
 /// ```
 #[test]
+#[cfg(feature = "pypi")]
 fn root_package_splits_other_dependencies_too() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -398,12 +404,13 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(context.read("uv.lock"), @r###"
+    assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
+    revision = 2
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
-        "python_full_version < '3.12'",
         "python_full_version >= '3.12'",
+        "python_full_version < '3.12'",
     ]
 
     [options]
@@ -439,9 +446,9 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
         { name = "idna", marker = "python_full_version < '3.12'" },
         { name = "sniffio", marker = "python_full_version < '3.12'" },
     ]
-    sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770 }
+    sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770, upload-time = "2023-12-16T17:06:57.709Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/bf/cd/d6d9bb1dadf73e7af02d18225cbd2c93f8552e13130484f1c8dcfece292b/anyio-4.2.0-py3-none-any.whl", hash = "sha256:745843b39e829e108e518c489b31dc757de7d2131d53fac32bd8df268227bfee", size = 85481 },
+        { url = "https://files.pythonhosted.org/packages/bf/cd/d6d9bb1dadf73e7af02d18225cbd2c93f8552e13130484f1c8dcfece292b/anyio-4.2.0-py3-none-any.whl", hash = "sha256:745843b39e829e108e518c489b31dc757de7d2131d53fac32bd8df268227bfee", size = 85481, upload-time = "2023-12-16T17:06:55.989Z" },
     ]
 
     [[package]]
@@ -455,9 +462,9 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
         { name = "idna", marker = "python_full_version >= '3.12'" },
         { name = "sniffio", marker = "python_full_version >= '3.12'" },
     ]
-    sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+    sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+        { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
     ]
 
     [[package]]
@@ -486,9 +493,9 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     name = "idna"
     version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -498,9 +505,9 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     resolution-markers = [
         "python_full_version < '3.12'",
     ]
-    sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
+    sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104, upload-time = "2020-10-14T10:20:18.572Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
+        { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990, upload-time = "2020-10-16T17:37:23.05Z" },
     ]
 
     [[package]]
@@ -510,20 +517,20 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     resolution-markers = [
         "python_full_version >= '3.12'",
     ]
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
     ]
 
     [[package]]
     name = "sniffio"
     version = "1.3.1"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
     ]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -537,6 +544,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 /// ]
 /// ```
 #[test]
+#[cfg(feature = "pypi")]
 fn branching_between_registry_and_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -559,12 +567,13 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
-    assert_snapshot!(context.read("uv.lock"), @r###"
+    assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
+    revision = 2
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
-        "python_full_version < '3.12'",
         "python_full_version >= '3.12'",
+        "python_full_version < '3.12'",
     ]
 
     [options]
@@ -592,9 +601,9 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     resolution-markers = [
         "python_full_version < '3.12'",
     ]
-    sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104 }
+    sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104, upload-time = "2020-10-14T10:20:18.572Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990 },
+        { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3", size = 4990, upload-time = "2020-10-16T17:37:23.05Z" },
     ]
 
     [[package]]
@@ -607,7 +616,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     wheels = [
         { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
     ]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -621,6 +630,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
 /// ]
 /// ```
 #[test]
+#[cfg(all(feature = "git", feature = "pypi"))]
 fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -644,12 +654,13 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
-    assert_snapshot!(context.read("uv.lock"), @r###"
+    assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
+    revision = 2
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
-        "python_full_version < '3.12'",
         "python_full_version >= '3.12'",
+        "python_full_version < '3.12'",
     ]
 
     [options]
@@ -667,7 +678,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     [package.metadata]
     requires-dist = [
         { name = "iniconfig", marker = "python_full_version < '3.12'", url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" },
-        { name = "iniconfig", marker = "python_full_version >= '3.12'", git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" },
+        { name = "iniconfig", marker = "python_full_version >= '3.12'", git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" },
     ]
 
     [[package]]
@@ -688,7 +699,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     resolution-markers = [
         "python_full_version >= '3.12'",
     ]
-    "###);
+    "#);
 
     Ok(())
 }
@@ -703,6 +714,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
+#[cfg(all(feature = "git", feature = "pypi"))]
 fn branching_urls_of_different_sources_conflict() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -771,8 +783,9 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     "###
     );
 
-    assert_snapshot!(context.read("uv.lock"), @r###"
+    assert_snapshot!(context.read("uv.lock"), @r#"
     version = 1
+    revision = 2
     requires-python = ">=3.11, <3.13"
 
     [options]
@@ -808,7 +821,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     name = "c"
     version = "0.1.0"
     source = { directory = "c" }
-    "###);
+    "#);
 
     Ok(())
 }

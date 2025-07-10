@@ -3,9 +3,9 @@ use std::fmt::{Display, Formatter};
 
 use uv_normalize::ExtraName;
 use uv_pep508::{MarkerEnvironment, UnnamedRequirement};
-use uv_pypi_types::{Hashes, ParsedUrl, Requirement, RequirementSource};
+use uv_pypi_types::Hashes;
 
-use crate::VerbatimParsedUrl;
+use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
 
 /// An [`UnresolvedRequirement`] with additional metadata from `requirements.txt`, currently only
 /// hashes but in the future also editable and similar information.
@@ -69,8 +69,8 @@ impl UnresolvedRequirement {
     /// Returns the extras for the requirement.
     pub fn extras(&self) -> &[ExtraName] {
         match self {
-            Self::Named(requirement) => requirement.extras.as_slice(),
-            Self::Unnamed(requirement) => requirement.extras.as_slice(),
+            Self::Named(requirement) => &requirement.extras,
+            Self::Unnamed(requirement) => &requirement.extras,
         }
     }
 
@@ -98,10 +98,7 @@ impl UnresolvedRequirement {
         match self {
             Self::Named(requirement) => requirement.hashes(),
             Self::Unnamed(requirement) => {
-                let ParsedUrl::Archive(ref url) = requirement.url.parsed_url else {
-                    return None;
-                };
-                let fragment = url.url.fragment()?;
+                let fragment = requirement.url.verbatim.fragment()?;
                 Hashes::parse_fragment(fragment).ok()
             }
         }

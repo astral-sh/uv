@@ -12,6 +12,7 @@ license.workspace = true
 
 [dependencies]
 globset = { workspace = true }
+owo-colors = { workspace = true }
 regex = { workspace = true }
 regex-automata = { workspace = true }
 thiserror = { workspace = true }
@@ -19,9 +20,10 @@ tracing = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
-fs-err = "2.11.0"
+anstream = { workspace = true }
+fs-err = { workspace = true }
 insta = "1.41.1"
-tempfile = "3.14.0"
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

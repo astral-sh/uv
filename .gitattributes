@@ -1,3 +1,4 @@
 * text=auto eol=lf
+*.inc linguist-language=Rust
 
 uv.schema.json linguist-generated=true text=auto eol=lf

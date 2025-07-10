@@ -3,9 +3,9 @@ use std::borrow::Cow;
 use either::Either;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
+use uv_distribution_types::Requirement;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
-use uv_pypi_types::Requirement;
 
 /// A set of overrides for a set of requirements.
 #[derive(Debug, Default, Clone)]
@@ -42,7 +42,12 @@ impl Overrides {
         &'a self,
         requirements: impl IntoIterator<Item = &'a Requirement>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        requirements.into_iter().flat_map(|requirement| {
+        if self.0.is_empty() {
+            // Fast path: There are no overrides.
+            return Either::Left(requirements.into_iter().map(Cow::Borrowed));
+        }
+
+        Either::Right(requirements.into_iter().flat_map(|requirement| {
             let Some(overrides) = self.get(&requirement.name) else {
                 // Case 1: No override(s).
                 return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
@@ -63,13 +68,13 @@ impl Overrides {
                 move |override_requirement| {
                     // Add the extra to the override marker.
                     let mut joint_marker = MarkerTree::expression(extra_expression.clone());
-                    joint_marker.and(override_requirement.marker.clone());
+                    joint_marker.and(override_requirement.marker);
                     Cow::Owned(Requirement {
                         marker: joint_marker,
                         ..override_requirement.clone()
                     })
                 },
             )))
-        })
+        }))
     }
 }

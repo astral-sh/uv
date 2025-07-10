@@ -1,37 +1,38 @@
 #![allow(clippy::disallowed_types)]
-use std::ffi::{c_void, CString};
+use std::ffi::{CString, c_void};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
-use windows::core::{s, PSTR};
+use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
     Foundation::{
-        CloseHandle, SetHandleInformation, BOOL, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
-        TRUE,
+        CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
     System::Console::{
-        GetStdHandle, SetConsoleCtrlHandler, SetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler, SetStdHandle,
     },
     System::Environment::GetCommandLineA,
     System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectA, JobObjectExtendedLimitInformation,
-        QueryInformationJobObject, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
+        AssignProcessToJobObject, CreateJobObjectA, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
     },
     System::Threading::{
-        CreateProcessA, GetExitCodeProcess, GetStartupInfoA, WaitForInputIdle, WaitForSingleObject,
-        INFINITE, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA,
+        CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE, PROCESS_CREATION_FLAGS,
+        PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA, WaitForInputIdle,
+        WaitForSingleObject,
     },
     UI::WindowsAndMessaging::{
-        CreateWindowExA, DestroyWindow, GetMessageA, PeekMessageA, PostMessageA, HWND_MESSAGE, MSG,
-        PEEK_MESSAGE_REMOVE_TYPE, WINDOW_EX_STYLE, WINDOW_STYLE,
+        CreateWindowExA, DestroyWindow, GetMessageA, HWND_MESSAGE, MSG, PEEK_MESSAGE_REMOVE_TYPE,
+        PeekMessageA, PostMessageA, WINDOW_EX_STYLE, WINDOW_STYLE,
     },
 };
+use windows::core::{BOOL, PSTR, s};
 
-use crate::{eprintln, format};
+use crate::{error, format, warn};
 
 const PATH_LEN_SIZE: usize = size_of::<u32>();
 const MAX_PATH_LEN: u32 = 32 * 1024;
@@ -67,8 +68,7 @@ impl TrampolineKind {
 /// depending on the [`TrampolineKind`].
 fn make_child_cmdline() -> CString {
     let executable_name = std::env::current_exe().unwrap_or_else(|_| {
-        eprintln!("Failed to get executable name");
-        exit_with_status(1);
+        error_and_exit("Failed to get executable name");
     });
     let (kind, python_exe) = read_trampoline_metadata(executable_name.as_ref());
     let mut child_cmdline = Vec::<u8>::new();
@@ -78,7 +78,34 @@ fn make_child_cmdline() -> CString {
 
     // Only execute the trampoline again if it's a script, otherwise, just invoke Python.
     match kind {
-        TrampolineKind::Python => {}
+        TrampolineKind::Python => {
+            // SAFETY: `std::env::set_var` is safe to call on Windows, and
+            // this code only ever runs on Windows.
+            unsafe {
+                // Setting this env var will cause `getpath.py` to set
+                // `executable` to the path to this trampoline. This is
+                // the approach taken by CPython for Python Launchers
+                // (in `launcher.c`). This allows virtual environments to
+                // be correctly detected when using trampolines.
+                std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+
+                // If this is not a virtual environment and `PYTHONHOME` has
+                // not been set, then set `PYTHONHOME` to the parent directory of
+                // the executable. This ensures that the correct installation
+                // directories are added to `sys.path` when running with a junction
+                // trampoline.
+                let python_home_set =
+                    std::env::var("PYTHONHOME").is_ok_and(|home| !home.is_empty());
+                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
+                    std::env::set_var(
+                        "PYTHONHOME",
+                        python_exe
+                            .parent()
+                            .expect("Python executable should have a parent directory"),
+                    );
+                }
+            }
+        }
         TrampolineKind::Script => {
             // Use the full executable name because CMD only passes the name of the executable (but not the path)
             // when e.g. invoking `black` instead of `<PATH_TO_VENV>/Scripts/black` and Python then fails
@@ -93,15 +120,14 @@ fn make_child_cmdline() -> CString {
     child_cmdline.push(b'\0');
 
     // Helpful when debugging trampoline issues
-    // eprintln!(
+    // warn!(
     //     "executable_name: '{}'\nnew_cmdline: {}",
     //     &*executable_name.to_string_lossy(),
     //     std::str::from_utf8(child_cmdline.as_slice()).unwrap()
     // );
 
     CString::from_vec_with_nul(child_cmdline).unwrap_or_else(|_| {
-        eprintln!("Child command line is not correctly null terminated");
-        exit_with_status(1);
+        error_and_exit("Child command line is not correctly null terminated");
     })
 }
 
@@ -117,6 +143,20 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
         }
     }
     command.extend(br#"""#);
+}
+
+/// Checks if the given executable is part of a virtual environment
+///
+/// Checks if a `pyvenv.cfg` file exists in grandparent directory of the given executable.
+/// PEP 405 specifies a more robust procedure (checking both the parent and grandparent
+/// directory and then scanning for a `home` key), but in practice we have found this to
+/// be unnecessary.
+fn is_virtualenv(executable: &Path) -> bool {
+    executable
+        .parent()
+        .and_then(Path::parent)
+        .map(|path| path.join("pyvenv.cfg").is_file())
+        .unwrap_or(false)
 }
 
 /// Reads the executable binary from the back to find:
@@ -174,8 +214,9 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         buffer.truncate(read_bytes);
 
         let Some(inner_kind) = TrampolineKind::from_buffer(&buffer) else {
-            eprintln!("Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?");
-            exit_with_status(1);
+            error_and_exit(
+                "Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?",
+            );
         };
         kind = inner_kind;
 
@@ -185,21 +226,23 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         let path_len = match buffer.get(buffer.len() - PATH_LEN_SIZE..) {
             Some(path_len) => {
                 let path_len = u32::from_le_bytes(path_len.try_into().unwrap_or_else(|_| {
-                    eprintln!("Slice length is not equal to 4 bytes");
-                    exit_with_status(1);
+                    error_and_exit("Slice length is not equal to 4 bytes");
                 }));
 
                 if path_len > MAX_PATH_LEN {
-                    eprintln!("Only paths with a length up to 32KBs are supported but the python path has a length of {}", path_len);
-                    exit_with_status(1);
+                    error_and_exit(&format!(
+                        "Only paths with a length up to 32KBs are supported but the python path has a length of {}",
+                        path_len
+                    ));
                 }
 
                 // SAFETY: path len is guaranteed to be less than 32KBs
                 path_len as usize
             }
             None => {
-                eprintln!("Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?");
-                exit_with_status(1);
+                error_and_exit(
+                    "Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?",
+                );
             }
         };
 
@@ -210,8 +253,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
             buffer.drain(..path_offset);
 
             break String::from_utf8(buffer).unwrap_or_else(|_| {
-                eprintln!("Python executable path is not a valid UTF-8 encoded path");
-                exit_with_status(1);
+                error_and_exit("Python executable path is not a valid UTF-8 encoded path");
             });
         } else {
             // SAFETY: Casting to u32 is safe because `path_len` is guaranteed to be less than 32KBs,
@@ -219,8 +261,9 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
             bytes_to_read = (path_len + kind.magic_number().len() + PATH_LEN_SIZE) as u32;
 
             if u64::from(bytes_to_read) > file_size {
-                eprintln!("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian");
-                exit_with_status(1);
+                error_and_exit(
+                    "The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian",
+                );
             }
         }
     };
@@ -232,18 +275,24 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         let parent_dir = match executable_name.parent() {
             Some(parent) => parent,
             None => {
-                eprintln!("Executable path has no parent directory");
-                exit_with_status(1);
+                error_and_exit("Executable path has no parent directory");
             }
         };
         parent_dir.join(path)
     };
 
-    // NOTICE: dunce adds 5kb~
-    let path = dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
-        eprintln!("Failed to canonicalize script path");
-        exit_with_status(1);
-    });
+    let path = if !path.is_absolute() || matches!(kind, TrampolineKind::Script) {
+        // NOTICE: dunce adds 5kb~
+        // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
+        // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
+        dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
+            error_and_exit("Failed to canonicalize script path");
+        })
+    } else {
+        // For Python trampolines with absolute paths, we skip `dunce::canonicalize` to
+        // avoid resolving junctions.
+        path
+    };
 
     (kind, path)
 }
@@ -297,7 +346,7 @@ fn make_job_object() -> HANDLE {
     let mut retlen = 0u32;
     if unsafe {
         QueryInformationJobObject(
-            job,
+            Some(job),
             JobObjectExtendedLimitInformation,
             &mut job_info as *mut _ as *mut c_void,
             size_of_val(&job_info) as u32,
@@ -330,11 +379,11 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
     if (si.dwFlags & STARTF_USESTDHANDLES).0 != 0 {
         // ignore errors, if the handles are not inheritable/valid, then nothing we can do
         unsafe { SetHandleInformation(si.hStdInput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stdin inheritable failed"));
+            .unwrap_or_else(|_| warn!("Making stdin inheritable failed"));
         unsafe { SetHandleInformation(si.hStdOutput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stdout inheritable failed"));
+            .unwrap_or_else(|_| warn!("Making stdout inheritable failed"));
         unsafe { SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| eprintln!("Making stderr inheritable failed"));
+            .unwrap_or_else(|_| warn!("Making stderr inheritable failed"));
     }
     let mut child_process_info = PROCESS_INFORMATION::default();
     unsafe {
@@ -342,7 +391,7 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
             None,
             // Why does this have to be mutable? Who knows. But it's not a mistake --
             // MS explicitly documents that this buffer might be mutated by CreateProcess.
-            PSTR::from_raw(child_cmdline.as_ptr() as *mut _),
+            Some(PSTR::from_raw(child_cmdline.as_ptr() as *mut _)),
             None,
             None,
             true,
@@ -369,14 +418,14 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
 fn close_handles(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
-    // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain eprintln!
+    // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE] {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
-                eprintln!("Failed to close standard device handle {}", handle.0 as u32);
+                warn!("Failed to close standard device handle {}", handle.0 as u32);
             });
             unsafe { SetStdHandle(std_handle, INVALID_HANDLE_VALUE) }.unwrap_or_else(|_| {
-                eprintln!("Failed to modify standard device handle {}", std_handle.0);
+                warn!("Failed to modify standard device handle {}", std_handle.0);
             });
         }
     }
@@ -400,7 +449,7 @@ fn close_handles(si: &STARTUPINFOA) {
             continue;
         }
         unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
-            eprintln!("Failed to close child file descriptors at {}", i);
+            warn!("Failed to close child file descriptors at {}", i);
         });
     }
 }
@@ -428,15 +477,15 @@ fn clear_app_starting_state(child_handle: HANDLE) {
     let mut msg = MSG::default();
     unsafe {
         // End the launcher's "app starting" cursor state.
-        PostMessageA(None, 0, None, None).unwrap_or_else(|_| {
-            eprintln!("Failed to post a message to specified window");
+        PostMessageA(None, 0, WPARAM(0), LPARAM(0)).unwrap_or_else(|_| {
+            warn!("Failed to post a message to specified window");
         });
         if GetMessageA(&mut msg, None, 0, 0) != TRUE {
-            eprintln!("Failed to retrieve posted window message");
+            warn!("Failed to retrieve posted window message");
         }
         // Proxy the child's input idle event.
         if WaitForInputIdle(child_handle, INFINITE) != 0 {
-            eprintln!("Failed to wait for input from window");
+            warn!("Failed to wait for input from window");
         }
         // Signal the process input idle event by creating a window and pumping
         // sent messages. The window class isn't important, so just use the
@@ -450,13 +499,13 @@ fn clear_app_starting_state(child_handle: HANDLE) {
             0,
             0,
             0,
-            HWND_MESSAGE,
+            Some(HWND_MESSAGE),
             None,
             None,
             None,
         ) {
             // Process all sent messages and signal input idle.
-            let _ = PeekMessageA(&mut msg, hwnd, 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
+            let _ = PeekMessageA(&mut msg, Some(hwnd), 0, 0, PEEK_MESSAGE_REMOVE_TYPE(0));
             DestroyWindow(hwnd).unwrap_or_else(|_| {
                 print_last_error_and_exit("Failed to destroy temporary window");
             });
@@ -483,7 +532,7 @@ pub fn bounce(is_gui: bool) -> ! {
     // (best effort) Switch to some innocuous directory, so we don't hold the original cwd open.
     // See distlib/PC/launcher.c::switch_working_directory
     if std::env::set_current_dir(std::env::temp_dir()).is_err() {
-        eprintln!("Failed to set cwd to temp dir");
+        warn!("Failed to set cwd to temp dir");
     }
 
     // We want to ignore control-C/control-Break/logout/etc.; the same event will
@@ -509,6 +558,12 @@ pub fn bounce(is_gui: bool) -> ! {
 }
 
 #[cold]
+fn error_and_exit(message: &str) -> ! {
+    error!("{}", message);
+    exit_with_status(1);
+}
+
+#[cold]
 fn print_last_error_and_exit(message: &str) -> ! {
     let err = std::io::Error::last_os_error();
     let err_no_str = err
@@ -517,13 +572,13 @@ fn print_last_error_and_exit(message: &str) -> ! {
         .unwrap_or_default();
     // we can't access sys::os::error_string directly so err.kind().to_string()
     // is the closest we can get to while avoiding bringing in a large chunk of core::fmt
-    eprintln!(
+    let message = format!(
         "(uv internal error) {}: {}.{}",
         message,
         err.kind().to_string(),
         err_no_str
     );
-    exit_with_status(1);
+    error_and_exit(&message);
 }
 
 #[cold]

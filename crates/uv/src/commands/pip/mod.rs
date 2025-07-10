@@ -48,7 +48,7 @@ pub(crate) fn resolution_tags<'env>(
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
-            interpreter.manylinux_compatible(),
+            python_platform.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
         (Some(python_platform), None) => Cow::Owned(Tags::from_env(
@@ -56,7 +56,7 @@ pub(crate) fn resolution_tags<'env>(
             interpreter.python_tuple(),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
-            interpreter.manylinux_compatible(),
+            python_platform.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
         (None, Some(python_version)) => Cow::Owned(Tags::from_env(
@@ -83,7 +83,7 @@ pub(crate) fn resolution_environment(
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
-            interpreter.manylinux_compatible(),
+            python_platform.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
         (Some(python_platform), None) => Cow::Owned(Tags::from_env(
@@ -91,7 +91,7 @@ pub(crate) fn resolution_environment(
             interpreter.python_tuple(),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
-            interpreter.manylinux_compatible(),
+            python_platform.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
         (None, Some(python_version)) => Cow::Owned(Tags::from_env(

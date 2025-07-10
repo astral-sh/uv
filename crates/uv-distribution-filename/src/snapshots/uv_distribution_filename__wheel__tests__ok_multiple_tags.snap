@@ -1,6 +1,6 @@
 ---
 source: crates/uv-distribution-filename/src/wheel.rs
-expression: "WheelFilename::from_str(\"foo-1.2.3-ab.cd.ef-gh-ij.kl.mn.op.qr.st.whl\")"
+expression: "WheelFilename::from_str(\"foo-1.2.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl\")"
 ---
 Ok(
     WheelFilename {
@@ -8,22 +8,38 @@ Ok(
             "foo",
         ),
         version: "1.2.3",
-        build_tag: None,
-        python_tag: [
-            "ab",
-            "cd",
-            "ef",
-        ],
-        abi_tag: [
-            "gh",
-        ],
-        platform_tag: [
-            "ij",
-            "kl",
-            "mn",
-            "op",
-            "qr",
-            "st",
-        ],
+        tags: Large {
+            large: WheelTagLarge {
+                build_tag: None,
+                python_tag: [
+                    CPython {
+                        python_version: (
+                            3,
+                            11,
+                        ),
+                    },
+                ],
+                abi_tag: [
+                    CPython {
+                        gil_disabled: false,
+                        python_version: (
+                            3,
+                            11,
+                        ),
+                    },
+                ],
+                platform_tag: [
+                    Manylinux {
+                        major: 2,
+                        minor: 17,
+                        arch: X86_64,
+                    },
+                    Manylinux2014 {
+                        arch: X86_64,
+                    },
+                ],
+                repr: "cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64",
+            },
+        },
     },
 )

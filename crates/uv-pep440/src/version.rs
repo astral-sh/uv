@@ -1,4 +1,7 @@
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use std::fmt::Formatter;
+use std::num::NonZero;
+use std::ops::Deref;
 use std::sync::LazyLock;
 use std::{
     borrow::Borrow,
@@ -12,7 +15,7 @@ use std::{
 #[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Hash, Clone, Copy)]
 #[cfg_attr(
     feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,)
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 pub enum Operator {
@@ -137,7 +140,7 @@ impl FromStr for Operator {
             other => {
                 return Err(OperatorParseError {
                     got: other.to_string(),
-                })
+                });
             }
         };
         Ok(operator)
@@ -256,7 +259,7 @@ impl std::fmt::Display for OperatorParseError {
 ///
 /// ```rust
 /// use std::str::FromStr;
-/// use pep440_rs::Version;
+/// use uv_pep440::Version;
 ///
 /// let version = Version::from_str("1.19").unwrap();
 /// ```
@@ -267,7 +270,7 @@ impl std::fmt::Display for OperatorParseError {
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 pub struct Version {
-    inner: Arc<VersionInner>,
+    inner: VersionInner,
 }
 
 #[derive(Clone, Debug)]
@@ -278,7 +281,7 @@ pub struct Version {
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 enum VersionInner {
     Small { small: VersionSmall },
-    Full { full: VersionFull },
+    Full { full: Arc<VersionFull> },
 }
 
 impl Version {
@@ -295,9 +298,9 @@ impl Version {
         R: Borrow<u64>,
     {
         Self {
-            inner: Arc::new(VersionInner::Small {
+            inner: VersionInner::Small {
                 small: VersionSmall::new(),
-            }),
+            },
         }
         .with_release(release_numbers)
     }
@@ -344,7 +347,7 @@ impl Version {
     /// Returns the epoch of this version.
     #[inline]
     pub fn epoch(&self) -> u64 {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.epoch(),
             VersionInner::Full { ref full } => full.epoch,
         }
@@ -352,17 +355,44 @@ impl Version {
 
     /// Returns the release number part of the version.
     #[inline]
-    pub fn release(&self) -> &[u64] {
-        match *self.inner {
-            VersionInner::Small { ref small } => small.release(),
-            VersionInner::Full { ref full, .. } => &full.release,
-        }
+    pub fn release(&self) -> Release {
+        let inner = match &self.inner {
+            VersionInner::Small { small } => {
+                // Parse out the version digits.
+                // * Bytes 6 and 7 correspond to the first release segment as a `u16`.
+                // * Bytes 5, 4 and 3 correspond to the second, third and fourth release
+                //   segments, respectively.
+                match small.len {
+                    0 => ReleaseInner::Small0([]),
+                    1 => ReleaseInner::Small1([(small.repr >> 0o60) & 0xFFFF]),
+                    2 => ReleaseInner::Small2([
+                        (small.repr >> 0o60) & 0xFFFF,
+                        (small.repr >> 0o50) & 0xFF,
+                    ]),
+                    3 => ReleaseInner::Small3([
+                        (small.repr >> 0o60) & 0xFFFF,
+                        (small.repr >> 0o50) & 0xFF,
+                        (small.repr >> 0o40) & 0xFF,
+                    ]),
+                    4 => ReleaseInner::Small4([
+                        (small.repr >> 0o60) & 0xFFFF,
+                        (small.repr >> 0o50) & 0xFF,
+                        (small.repr >> 0o40) & 0xFF,
+                        (small.repr >> 0o30) & 0xFF,
+                    ]),
+                    _ => unreachable!("{}", small.len),
+                }
+            }
+            VersionInner::Full { full } => ReleaseInner::Full(&full.release),
+        };
+
+        Release { inner }
     }
 
     /// Returns the pre-release part of this version, if it exists.
     #[inline]
     pub fn pre(&self) -> Option<Prerelease> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.pre(),
             VersionInner::Full { ref full } => full.pre,
         }
@@ -371,7 +401,7 @@ impl Version {
     /// Returns the post-release part of this version, if it exists.
     #[inline]
     pub fn post(&self) -> Option<u64> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.post(),
             VersionInner::Full { ref full } => full.post,
         }
@@ -380,7 +410,7 @@ impl Version {
     /// Returns the dev-release part of this version, if it exists.
     #[inline]
     pub fn dev(&self) -> Option<u64> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.dev(),
             VersionInner::Full { ref full } => full.dev,
         }
@@ -389,7 +419,7 @@ impl Version {
     /// Returns the local segments in this version, if any exist.
     #[inline]
     pub fn local(&self) -> LocalVersionSlice {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.local_slice(),
             VersionInner::Full { ref full } => full.local.as_slice(),
         }
@@ -402,7 +432,7 @@ impl Version {
     /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
     pub fn min(&self) -> Option<u64> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.min(),
             VersionInner::Full { ref full } => full.min,
         }
@@ -415,7 +445,7 @@ impl Version {
     /// like `1.0.post1`, `1.0+local`, etc.
     #[inline]
     pub fn max(&self) -> Option<u64> {
-        match *self.inner {
+        match self.inner {
             VersionInner::Small { ref small } => small.max(),
             VersionInner::Full { ref full } => full.max,
         }
@@ -453,7 +483,7 @@ impl Version {
     /// last number in the release component.
     #[inline]
     fn push_release(&mut self, n: u64) {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { small } = &mut self.inner {
             if small.push_release(n) {
                 return;
             }
@@ -467,10 +497,10 @@ impl Version {
     /// since all versions should have at least one release number.
     #[inline]
     fn clear_release(&mut self) {
-        match Arc::make_mut(&mut self.inner) {
-            VersionInner::Small { ref mut small } => small.clear_release(),
-            VersionInner::Full { ref mut full } => {
-                full.release.clear();
+        match &mut self.inner {
+            VersionInner::Small { small } => small.clear_release(),
+            VersionInner::Full { full } => {
+                Arc::make_mut(full).release.clear();
             }
         }
     }
@@ -479,7 +509,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_epoch(mut self, value: u64) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { small } = &mut self.inner {
             if small.set_epoch(value) {
                 return self;
             }
@@ -492,7 +522,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_pre(mut self, value: Option<Prerelease>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { small } = &mut self.inner {
             if small.set_pre(value) {
                 return self;
             }
@@ -505,7 +535,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_post(mut self, value: Option<u64>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { small } = &mut self.inner {
             if small.set_post(value) {
                 return self;
             }
@@ -518,7 +548,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_dev(mut self, value: Option<u64>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { small } = &mut self.inner {
             if small.set_dev(value) {
                 return self;
             }
@@ -546,7 +576,7 @@ impl Version {
         match value {
             LocalVersion::Segments(segments) => self.with_local_segments(segments),
             LocalVersion::Max => {
-                if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+                if let VersionInner::Small { small } = &mut self.inner {
                     if small.set_local(LocalVersion::Max) {
                         return self;
                     }
@@ -564,7 +594,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn without_local(mut self) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { small } = &mut self.inner {
             if small.set_local(LocalVersion::empty()) {
                 return self;
             }
@@ -580,6 +610,123 @@ impl Version {
         Self::new(self.release().iter().copied())
     }
 
+    /// Return the version with any segments apart from the release removed, with trailing zeroes
+    /// trimmed.
+    #[inline]
+    #[must_use]
+    pub fn only_release_trimmed(&self) -> Self {
+        if let Some(last_non_zero) = self.release().iter().rposition(|segment| *segment != 0) {
+            if last_non_zero == self.release().len() {
+                // Already trimmed.
+                self.clone()
+            } else {
+                Self::new(self.release().iter().take(last_non_zero + 1).copied())
+            }
+        } else {
+            // `0` is a valid version.
+            Self::new([0])
+        }
+    }
+
+    /// Return the version with trailing `.0` release segments removed.
+    ///
+    /// # Panics
+    ///
+    /// When the release is all zero segments.
+    #[inline]
+    #[must_use]
+    pub fn without_trailing_zeros(self) -> Self {
+        let mut release = self.release().to_vec();
+        while let Some(0) = release.last() {
+            release.pop();
+        }
+        self.with_release(release)
+    }
+
+    /// Various "increment the version" operations
+    pub fn bump(&mut self, bump: BumpCommand) {
+        // This code operates on the understanding that the components of a version form
+        // the following hierarchy:
+        //
+        //   major > minor > patch > stable > pre > post > dev
+        //
+        // Any updates to something earlier in the hierarchy should clear all values lower
+        // in the hierarchy. So for instance:
+        //
+        // if you bump `minor`, then clear: patch, pre, post, dev
+        // if you bump `pre`, then clear: post, dev
+        //
+        // ...and so on.
+        //
+        // If you bump a value that doesn't exist, it will be set to "1".
+        //
+        // The special "stable" mode has no value, bumping it clears: pre, post, dev.
+        let full = self.make_full();
+
+        match bump {
+            BumpCommand::BumpRelease { index } => {
+                // Clear all sub-release items
+                full.pre = None;
+                full.post = None;
+                full.dev = None;
+
+                // Use `max` here to try to do 0.2 => 0.3 instead of 0.2 => 0.3.0
+                let old_parts = &full.release;
+                let len = old_parts.len().max(index + 1);
+                let new_release_vec = (0..len)
+                    .map(|i| match i.cmp(&index) {
+                        // Everything before the bumped value is preserved (or is an implicit 0)
+                        Ordering::Less => old_parts.get(i).copied().unwrap_or(0),
+                        // This is the value to bump (could be implicit 0)
+                        Ordering::Equal => old_parts.get(i).copied().unwrap_or(0) + 1,
+                        // Everything after the bumped value becomes 0
+                        Ordering::Greater => 0,
+                    })
+                    .collect::<Vec<u64>>();
+                full.release = new_release_vec;
+            }
+            BumpCommand::MakeStable => {
+                // Clear all sub-release items
+                full.pre = None;
+                full.post = None;
+                full.dev = None;
+            }
+            BumpCommand::BumpPrerelease { kind } => {
+                // Clear all sub-prerelease items
+                full.post = None;
+                full.dev = None;
+
+                // Either bump the matching kind or set to 1
+                if let Some(prerelease) = &mut full.pre {
+                    if prerelease.kind == kind {
+                        prerelease.number += 1;
+                        return;
+                    }
+                }
+                full.pre = Some(Prerelease { kind, number: 1 });
+            }
+            BumpCommand::BumpPost => {
+                // Clear sub-post items
+                full.dev = None;
+
+                // Either bump or set to 1
+                if let Some(post) = &mut full.post {
+                    *post += 1;
+                } else {
+                    full.post = Some(1);
+                }
+            }
+            BumpCommand::BumpDev => {
+                // Either bump or set to 1
+                if let Some(dev) = &mut full.dev {
+                    *dev += 1;
+                } else {
+                    full.dev = Some(1);
+                }
+            }
+        }
+    }
+
     /// Set the min-release component and return the updated version.
     ///
     /// The "min" component is internal-only, and does not exist in PEP 440.
@@ -590,7 +737,7 @@ impl Version {
     pub fn with_min(mut self, value: Option<u64>) -> Self {
         debug_assert!(!self.is_pre(), "min is not allowed on pre-release versions");
         debug_assert!(!self.is_dev(), "min is not allowed on dev versions");
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { small } = &mut self.inner {
             if small.set_min(value) {
                 return self;
             }
@@ -612,7 +759,7 @@ impl Version {
             "max is not allowed on post-release versions"
         );
         debug_assert!(!self.is_dev(), "max is not allowed on dev versions");
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let VersionInner::Small { small } = &mut self.inner {
             if small.set_max(value) {
                 return self;
             }
@@ -624,10 +771,10 @@ impl Version {
     /// Convert this version to a "full" representation in-place and return a
     /// mutable borrow to the full type.
     fn make_full(&mut self) -> &mut VersionFull {
-        if let VersionInner::Small { ref small } = *self.inner {
+        if let VersionInner::Small { ref small } = self.inner {
             let full = VersionFull {
                 epoch: small.epoch(),
-                release: small.release().to_vec(),
+                release: self.release().to_vec(),
                 min: small.min(),
                 max: small.max(),
                 pre: small.pre(),
@@ -636,11 +783,13 @@ impl Version {
                 local: small.local(),
             };
             *self = Self {
-                inner: Arc::new(VersionInner::Full { full }),
+                inner: VersionInner::Full {
+                    full: Arc::new(full),
+                },
             };
         }
-        match Arc::make_mut(&mut self.inner) {
-            VersionInner::Full { ref mut full } => full,
+        match &mut self.inner {
+            VersionInner::Full { full } => Arc::make_mut(full),
             VersionInner::Small { .. } => unreachable!(),
         }
     }
@@ -664,7 +813,7 @@ impl Version {
             }
         }
 
-        match compare_release(self.release(), other.release()) {
+        match compare_release(&self.release(), &other.release()) {
             Ordering::Less => {
                 return Ordering::Less;
             }
@@ -679,14 +828,26 @@ impl Version {
     }
 }
 
-/// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
 impl<'de> Deserialize<'de> for Version {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = Version;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Version::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -703,41 +864,38 @@ impl Serialize for Version {
 /// Shows normalized version
 impl std::fmt::Display for Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let epoch = if self.epoch() == 0 {
-            String::new()
-        } else {
-            format!("{}!", self.epoch())
-        };
-        let release = self
-            .release()
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>()
-            .join(".");
-        let pre = self
-            .pre()
-            .as_ref()
-            .map(|Prerelease { kind, number }| format!("{kind}{number}"))
-            .unwrap_or_default();
-        let post = self
-            .post()
-            .map(|post| format!(".post{post}"))
-            .unwrap_or_default();
-        let dev = self
-            .dev()
-            .map(|dev| format!(".dev{dev}"))
-            .unwrap_or_default();
-        let local = if self.local().is_empty() {
-            String::new()
-        } else {
+        if self.epoch() != 0 {
+            write!(f, "{}!", self.epoch())?;
+        }
+        let release = self.release();
+        let mut release_iter = release.iter();
+        if let Some(first) = release_iter.next() {
+            write!(f, "{first}")?;
+            for n in release_iter {
+                write!(f, ".{n}")?;
+            }
+        }
+
+        if let Some(Prerelease { kind, number }) = self.pre() {
+            write!(f, "{kind}{number}")?;
+        }
+        if let Some(post) = self.post() {
+            write!(f, ".post{post}")?;
+        }
+        if let Some(dev) = self.dev() {
+            write!(f, ".dev{dev}")?;
+        }
+        if !self.local().is_empty() {
             match self.local() {
                 LocalVersionSlice::Segments(_) => {
-                    format!("+{}", self.local())
+                    write!(f, "+{}", self.local())?;
                 }
-                LocalVersionSlice::Max => "+".to_string(),
+                LocalVersionSlice::Max => {
+                    write!(f, "+")?;
+                }
             }
-        };
-        write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
+        }
+        Ok(())
     }
 }
 
@@ -785,7 +943,7 @@ impl Ord for Version {
     /// < 1.0 < 1.0.post456.dev34 < 1.0.post456
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        match (&*self.inner, &*other.inner) {
+        match (&self.inner, &other.inner) {
             (VersionInner::Small { small: small1 }, VersionInner::Small { small: small2 }) => {
                 small1.repr.cmp(&small2.repr)
             }
@@ -805,7 +963,28 @@ impl FromStr for Version {
     }
 }
 
-/// A "small" representation of a version.
+/// Various ways to "bump" a version
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BumpCommand {
+    /// Bump the release component
+    BumpRelease {
+        /// The release component to bump (0 is major, 1 is minor, 2 is patch)
+        index: usize,
+    },
+    /// Bump the prerelease component
+    BumpPrerelease {
+        /// prerelease component to bump
+        kind: PrereleaseKind,
+    },
+    /// Bump to the associated stable release
+    MakeStable,
+    /// Bump the post component
+    BumpPost,
+    /// Bump the dev component
+    BumpDev,
+}
+
+/// A small representation of a version.
 ///
 /// This representation is used for a (very common) subset of versions: the
 /// set of all versions with ~small numbers and no local component. The
@@ -886,35 +1065,15 @@ impl FromStr for Version {
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 struct VersionSmall {
-    /// The representation discussed above.
-    repr: u64,
-    /// The `u64` numbers in the release component.
-    ///
-    /// These are *only* used to implement the public API `Version::release`
-    /// method. This is necessary in order to provide a `&[u64]` to the caller.
-    /// If we didn't need the public API, or could re-work it, then we could
-    /// get rid of this extra storage. (Which is indeed duplicative of what is
-    /// stored in `repr`.) Note that this uses `u64` not because it can store
-    /// bigger numbers than what's in `repr` (it can't), but so that it permits
-    /// us to return a `&[u64]`.
-    ///
-    /// I believe there is only one way to get rid of this extra storage:
-    /// change the public API so that it doesn't return a `&[u64]`. Instead,
-    /// we'd return a new type that conceptually represents a `&[u64]`, but may
-    /// use a different representation based on what kind of `Version` it came
-    /// from. The downside of this approach is that one loses the flexibility
-    /// of a simple `&[u64]`. (Which, at time of writing, is taken advantage of
-    /// in several places via slice patterns.) But, if we needed to change it,
-    /// we could do it without losing expressivity, but losing convenience.
-    release: [u64; 4],
     /// The number of segments in the release component.
     ///
-    /// Strictly speaking, this isn't necessary since `1.2` is considered
-    /// equivalent to `1.2.0.0`. But in practice it's nice to be able
-    /// to truncate the zero components. And always filling out to 4
-    /// places somewhat exposes internal details, since the "full" version
-    /// representation would not do that.
+    /// PEP 440 considers `1.2`  equivalent to `1.2.0.0`, but we want to preserve trailing zeroes
+    /// in roundtrips, as the "full" version representation also does.
     len: u8,
+    /// The representation discussed above.
+    repr: u64,
+    /// Force a niche into the aligned type so the [`Version`] enum is two words instead of three.
+    _force_niche: NonZero<u8>,
 }
 
 impl VersionSmall {
@@ -963,8 +1122,8 @@ impl VersionSmall {
     #[inline]
     fn new() -> Self {
         Self {
+            _force_niche: NonZero::<u8>::MIN,
             repr: Self::SUFFIX_NONE << Self::SUFFIX_VERSION_BIT_LEN,
-            release: [0, 0, 0, 0],
             len: 0,
         }
     }
@@ -985,14 +1144,8 @@ impl VersionSmall {
     }
 
     #[inline]
-    fn release(&self) -> &[u64] {
-        &self.release[..usize::from(self.len)]
-    }
-
-    #[inline]
     fn clear_release(&mut self) {
         self.repr &= !Self::SUFFIX_RELEASE_MASK;
-        self.release = [0, 0, 0, 0];
         self.len = 0;
     }
 
@@ -1003,7 +1156,6 @@ impl VersionSmall {
                 return false;
             }
             self.repr |= n << 48;
-            self.release[0] = n;
             self.len = 1;
             true
         } else {
@@ -1015,7 +1167,6 @@ impl VersionSmall {
             }
             let shift = 48 - (usize::from(self.len) * 8);
             self.repr |= n << shift;
-            self.release[usize::from(self.len)] = n;
             self.len += 1;
             true
         }
@@ -1401,11 +1552,46 @@ impl FromStr for VersionPattern {
     }
 }
 
+/// Release digits of a [`Version`].
+///
+/// Lifetime and indexing workaround to allow accessing the release as `&[u64]` even though the
+/// digits may be stored in a compressed representation.
+pub struct Release<'a> {
+    inner: ReleaseInner<'a>,
+}
+
+enum ReleaseInner<'a> {
+    // The small versions unpacked into larger u64 values.
+    // We're storing at most 4 u64 plus determinant for the duration of the release call on the
+    // stack, without heap allocation.
+    Small0([u64; 0]),
+    Small1([u64; 1]),
+    Small2([u64; 2]),
+    Small3([u64; 3]),
+    Small4([u64; 4]),
+    Full(&'a [u64]),
+}
+
+impl Deref for Release<'_> {
+    type Target = [u64];
+
+    fn deref(&self) -> &Self::Target {
+        match &self.inner {
+            ReleaseInner::Small0(v) => v,
+            ReleaseInner::Small1(v) => v,
+            ReleaseInner::Small2(v) => v,
+            ReleaseInner::Small3(v) => v,
+            ReleaseInner::Small4(v) => v,
+            ReleaseInner::Full(v) => v,
+        }
+    }
+}
+
 /// An optional pre-release modifier and number applied to a version.
 #[derive(PartialEq, Eq, Debug, Hash, Clone, Copy, Ord, PartialOrd)]
 #[cfg_attr(
     feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,)
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 pub struct Prerelease {
@@ -1421,7 +1607,7 @@ pub struct Prerelease {
 #[derive(PartialEq, Eq, Debug, Hash, Clone, Copy, Ord, PartialOrd)]
 #[cfg_attr(
     feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,)
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 pub enum PrereleaseKind {
@@ -1550,7 +1736,7 @@ impl LocalVersionSlice<'_> {
 
     /// Returns `true` if the local version is empty.
     pub fn is_empty(&self) -> bool {
-        matches!(self, Self::Segments(&[]))
+        matches!(self, &Self::Segments(&[]))
     }
 }
 
@@ -1563,7 +1749,7 @@ impl LocalVersionSlice<'_> {
 /// > should be considered an integer for comparison purposes and if a segment contains any ASCII
 /// > letters then that segment is compared lexicographically with case insensitivity. When
 /// > comparing a numeric and lexicographic segment, the numeric section always compares as greater
-/// > than the lexicographic segment. Additionally a local version with a great number of segments
+/// > than the lexicographic segment. Additionally, a local version with a great number of segments
 /// > will always compare as greater than a local version with fewer segments, as long as the
 /// > shorter local version’s segments match the beginning of the longer local version’s segments
 /// > exactly.
@@ -1748,20 +1934,16 @@ impl<'a> Parser<'a> {
         *release.get_mut(usize::from(len))? = cur;
         len += 1;
         let small = VersionSmall {
+            _force_niche: NonZero::<u8>::MIN,
             repr: (u64::from(release[0]) << 48)
                 | (u64::from(release[1]) << 40)
                 | (u64::from(release[2]) << 32)
                 | (u64::from(release[3]) << 24)
                 | (VersionSmall::SUFFIX_NONE << VersionSmall::SUFFIX_VERSION_BIT_LEN),
-            release: [
-                u64::from(release[0]),
-                u64::from(release[1]),
-                u64::from(release[2]),
-                u64::from(release[3]),
-            ],
+
             len,
         };
-        let inner = Arc::new(VersionInner::Small { small });
+        let inner = VersionInner::Small { small };
         let version = Version { inner };
         Some(VersionPattern {
             version,
@@ -2564,4 +2746,1753 @@ pub static MIN_VERSION: LazyLock<Version> =
     LazyLock::new(|| Version::from_str("0a0.dev0").unwrap());
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::str::FromStr;
+
+    use crate::VersionSpecifier;
+
+    use super::*;
+
+    /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L24-L81>
+    #[test]
+    fn test_packaging_versions() {
+        let versions = [
+            // Implicit epoch of 0
+            ("1.0.dev456", Version::new([1, 0]).with_dev(Some(456))),
+            (
+                "1.0a1",
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 1,
+                })),
+            ),
+            (
+                "1.0a2.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
+                        number: 2,
+                    }))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1.0a12.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
+                        number: 12,
+                    }))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1.0a12",
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 12,
+                })),
+            ),
+            (
+                "1.0b1.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 1,
+                    }))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1.0b2",
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Beta,
+                    number: 2,
+                })),
+            ),
+            (
+                "1.0b2.post345.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 2,
+                    }))
+                    .with_dev(Some(456))
+                    .with_post(Some(345)),
+            ),
+            (
+                "1.0b2.post345",
+                Version::new([1, 0])
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 2,
+                    }))
+                    .with_post(Some(345)),
+            ),
+            (
+                "1.0b2-346",
+                Version::new([1, 0])
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 2,
+                    }))
+                    .with_post(Some(346)),
+            ),
+            (
+                "1.0c1.dev456",
+                Version::new([1, 0])
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
+                        number: 1,
+                    }))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1.0c1",
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 1,
+                })),
+            ),
+            (
+                "1.0rc2",
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 2,
+                })),
+            ),
+            (
+                "1.0c3",
+                Version::new([1, 0]).with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 3,
+                })),
+            ),
+            ("1.0", Version::new([1, 0])),
+            (
+                "1.0.post456.dev34",
+                Version::new([1, 0]).with_post(Some(456)).with_dev(Some(34)),
+            ),
+            ("1.0.post456", Version::new([1, 0]).with_post(Some(456))),
+            ("1.1.dev1", Version::new([1, 1]).with_dev(Some(1))),
+            (
+                "1.2+123abc",
+                Version::new([1, 2])
+                    .with_local_segments(vec![LocalSegment::String("123abc".to_string())]),
+            ),
+            (
+                "1.2+123abc456",
+                Version::new([1, 2])
+                    .with_local_segments(vec![LocalSegment::String("123abc456".to_string())]),
+            ),
+            (
+                "1.2+abc",
+                Version::new([1, 2])
+                    .with_local_segments(vec![LocalSegment::String("abc".to_string())]),
+            ),
+            (
+                "1.2+abc123",
+                Version::new([1, 2])
+                    .with_local_segments(vec![LocalSegment::String("abc123".to_string())]),
+            ),
+            (
+                "1.2+abc123def",
+                Version::new([1, 2])
+                    .with_local_segments(vec![LocalSegment::String("abc123def".to_string())]),
+            ),
+            (
+                "1.2+1234.abc",
+                Version::new([1, 2]).with_local_segments(vec![
+                    LocalSegment::Number(1234),
+                    LocalSegment::String("abc".to_string()),
+                ]),
+            ),
+            (
+                "1.2+123456",
+                Version::new([1, 2]).with_local_segments(vec![LocalSegment::Number(123_456)]),
+            ),
+            (
+                "1.2.r32+123456",
+                Version::new([1, 2])
+                    .with_post(Some(32))
+                    .with_local_segments(vec![LocalSegment::Number(123_456)]),
+            ),
+            (
+                "1.2.rev33+123456",
+                Version::new([1, 2])
+                    .with_post(Some(33))
+                    .with_local_segments(vec![LocalSegment::Number(123_456)]),
+            ),
+            // Explicit epoch of 1
+            (
+                "1!1.0.dev456",
+                Version::new([1, 0]).with_epoch(1).with_dev(Some(456)),
+            ),
+            (
+                "1!1.0a1",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
+                        number: 1,
+                    })),
+            ),
+            (
+                "1!1.0a2.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
+                        number: 2,
+                    }))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0a12.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
+                        number: 12,
+                    }))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0a12",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Alpha,
+                        number: 12,
+                    })),
+            ),
+            (
+                "1!1.0b1.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 1,
+                    }))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0b2",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 2,
+                    })),
+            ),
+            (
+                "1!1.0b2.post345.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 2,
+                    }))
+                    .with_post(Some(345))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0b2.post345",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 2,
+                    }))
+                    .with_post(Some(345)),
+            ),
+            (
+                "1!1.0b2-346",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Beta,
+                        number: 2,
+                    }))
+                    .with_post(Some(346)),
+            ),
+            (
+                "1!1.0c1.dev456",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
+                        number: 1,
+                    }))
+                    .with_dev(Some(456)),
+            ),
+            (
+                "1!1.0c1",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
+                        number: 1,
+                    })),
+            ),
+            (
+                "1!1.0rc2",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
+                        number: 2,
+                    })),
+            ),
+            (
+                "1!1.0c3",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_pre(Some(Prerelease {
+                        kind: PrereleaseKind::Rc,
+                        number: 3,
+                    })),
+            ),
+            ("1!1.0", Version::new([1, 0]).with_epoch(1)),
+            (
+                "1!1.0.post456.dev34",
+                Version::new([1, 0])
+                    .with_epoch(1)
+                    .with_post(Some(456))
+                    .with_dev(Some(34)),
+            ),
+            (
+                "1!1.0.post456",
+                Version::new([1, 0]).with_epoch(1).with_post(Some(456)),
+            ),
+            (
+                "1!1.1.dev1",
+                Version::new([1, 1]).with_epoch(1).with_dev(Some(1)),
+            ),
+            (
+                "1!1.2+123abc",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local_segments(vec![LocalSegment::String("123abc".to_string())]),
+            ),
+            (
+                "1!1.2+123abc456",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local_segments(vec![LocalSegment::String("123abc456".to_string())]),
+            ),
+            (
+                "1!1.2+abc",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local_segments(vec![LocalSegment::String("abc".to_string())]),
+            ),
+            (
+                "1!1.2+abc123",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local_segments(vec![LocalSegment::String("abc123".to_string())]),
+            ),
+            (
+                "1!1.2+abc123def",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local_segments(vec![LocalSegment::String("abc123def".to_string())]),
+            ),
+            (
+                "1!1.2+1234.abc",
+                Version::new([1, 2]).with_epoch(1).with_local_segments(vec![
+                    LocalSegment::Number(1234),
+                    LocalSegment::String("abc".to_string()),
+                ]),
+            ),
+            (
+                "1!1.2+123456",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_local_segments(vec![LocalSegment::Number(123_456)]),
+            ),
+            (
+                "1!1.2.r32+123456",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_post(Some(32))
+                    .with_local_segments(vec![LocalSegment::Number(123_456)]),
+            ),
+            (
+                "1!1.2.rev33+123456",
+                Version::new([1, 2])
+                    .with_epoch(1)
+                    .with_post(Some(33))
+                    .with_local_segments(vec![LocalSegment::Number(123_456)]),
+            ),
+            (
+                "98765!1.2.rev33+123456",
+                Version::new([1, 2])
+                    .with_epoch(98765)
+                    .with_post(Some(33))
+                    .with_local_segments(vec![LocalSegment::Number(123_456)]),
+            ),
+        ];
+        for (string, structured) in versions {
+            match Version::from_str(string) {
+                Err(err) => {
+                    unreachable!(
+                        "expected {string:?} to parse as {structured:?}, but got {err:?}",
+                        structured = structured.as_bloated_debug(),
+                    )
+                }
+                Ok(v) => assert!(
+                    v == structured,
+                    "for {string:?}, expected {structured:?} but got {v:?}",
+                    structured = structured.as_bloated_debug(),
+                    v = v.as_bloated_debug(),
+                ),
+            }
+            let spec = format!("=={string}");
+            match VersionSpecifier::from_str(&spec) {
+                Err(err) => {
+                    unreachable!(
+                        "expected version in {spec:?} to parse as {structured:?}, but got {err:?}",
+                        structured = structured.as_bloated_debug(),
+                    )
+                }
+                Ok(v) => assert!(
+                    v.version() == &structured,
+                    "for {string:?}, expected {structured:?} but got {v:?}",
+                    structured = structured.as_bloated_debug(),
+                    v = v.version.as_bloated_debug(),
+                ),
+            }
+        }
+    }
+
+    /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L91-L100>
+    #[test]
+    fn test_packaging_failures() {
+        let versions = [
+            // Versions with invalid local versions
+            "1.0+a+",
+            "1.0++",
+            "1.0+_foobar",
+            "1.0+foo&asd",
+            "1.0+1+1",
+            // Nonsensical versions should also be invalid
+            "french toast",
+            "==french toast",
+        ];
+        for version in versions {
+            assert!(Version::from_str(version).is_err());
+            assert!(VersionSpecifier::from_str(&format!("=={version}")).is_err());
+        }
+    }
+
+    #[test]
+    fn test_equality_and_normalization() {
+        let versions = [
+            // Various development release incarnations
+            ("1.0dev", "1.0.dev0"),
+            ("1.0.dev", "1.0.dev0"),
+            ("1.0dev1", "1.0.dev1"),
+            ("1.0dev", "1.0.dev0"),
+            ("1.0-dev", "1.0.dev0"),
+            ("1.0-dev1", "1.0.dev1"),
+            ("1.0DEV", "1.0.dev0"),
+            ("1.0.DEV", "1.0.dev0"),
+            ("1.0DEV1", "1.0.dev1"),
+            ("1.0DEV", "1.0.dev0"),
+            ("1.0.DEV1", "1.0.dev1"),
+            ("1.0-DEV", "1.0.dev0"),
+            ("1.0-DEV1", "1.0.dev1"),
+            // Various alpha incarnations
+            ("1.0a", "1.0a0"),
+            ("1.0.a", "1.0a0"),
+            ("1.0.a1", "1.0a1"),
+            ("1.0-a", "1.0a0"),
+            ("1.0-a1", "1.0a1"),
+            ("1.0alpha", "1.0a0"),
+            ("1.0.alpha", "1.0a0"),
+            ("1.0.alpha1", "1.0a1"),
+            ("1.0-alpha", "1.0a0"),
+            ("1.0-alpha1", "1.0a1"),
+            ("1.0A", "1.0a0"),
+            ("1.0.A", "1.0a0"),
+            ("1.0.A1", "1.0a1"),
+            ("1.0-A", "1.0a0"),
+            ("1.0-A1", "1.0a1"),
+            ("1.0ALPHA", "1.0a0"),
+            ("1.0.ALPHA", "1.0a0"),
+            ("1.0.ALPHA1", "1.0a1"),
+            ("1.0-ALPHA", "1.0a0"),
+            ("1.0-ALPHA1", "1.0a1"),
+            // Various beta incarnations
+            ("1.0b", "1.0b0"),
+            ("1.0.b", "1.0b0"),
+            ("1.0.b1", "1.0b1"),
+            ("1.0-b", "1.0b0"),
+            ("1.0-b1", "1.0b1"),
+            ("1.0beta", "1.0b0"),
+            ("1.0.beta", "1.0b0"),
+            ("1.0.beta1", "1.0b1"),
+            ("1.0-beta", "1.0b0"),
+            ("1.0-beta1", "1.0b1"),
+            ("1.0B", "1.0b0"),
+            ("1.0.B", "1.0b0"),
+            ("1.0.B1", "1.0b1"),
+            ("1.0-B", "1.0b0"),
+            ("1.0-B1", "1.0b1"),
+            ("1.0BETA", "1.0b0"),
+            ("1.0.BETA", "1.0b0"),
+            ("1.0.BETA1", "1.0b1"),
+            ("1.0-BETA", "1.0b0"),
+            ("1.0-BETA1", "1.0b1"),
+            // Various release candidate incarnations
+            ("1.0c", "1.0rc0"),
+            ("1.0.c", "1.0rc0"),
+            ("1.0.c1", "1.0rc1"),
+            ("1.0-c", "1.0rc0"),
+            ("1.0-c1", "1.0rc1"),
+            ("1.0rc", "1.0rc0"),
+            ("1.0.rc", "1.0rc0"),
+            ("1.0.rc1", "1.0rc1"),
+            ("1.0-rc", "1.0rc0"),
+            ("1.0-rc1", "1.0rc1"),
+            ("1.0C", "1.0rc0"),
+            ("1.0.C", "1.0rc0"),
+            ("1.0.C1", "1.0rc1"),
+            ("1.0-C", "1.0rc0"),
+            ("1.0-C1", "1.0rc1"),
+            ("1.0RC", "1.0rc0"),
+            ("1.0.RC", "1.0rc0"),
+            ("1.0.RC1", "1.0rc1"),
+            ("1.0-RC", "1.0rc0"),
+            ("1.0-RC1", "1.0rc1"),
+            // Various post release incarnations
+            ("1.0post", "1.0.post0"),
+            ("1.0.post", "1.0.post0"),
+            ("1.0post1", "1.0.post1"),
+            ("1.0post", "1.0.post0"),
+            ("1.0-post", "1.0.post0"),
+            ("1.0-post1", "1.0.post1"),
+            ("1.0POST", "1.0.post0"),
+            ("1.0.POST", "1.0.post0"),
+            ("1.0POST1", "1.0.post1"),
+            ("1.0POST", "1.0.post0"),
+            ("1.0r", "1.0.post0"),
+            ("1.0rev", "1.0.post0"),
+            ("1.0.POST1", "1.0.post1"),
+            ("1.0.r1", "1.0.post1"),
+            ("1.0.rev1", "1.0.post1"),
+            ("1.0-POST", "1.0.post0"),
+            ("1.0-POST1", "1.0.post1"),
+            ("1.0-5", "1.0.post5"),
+            ("1.0-r5", "1.0.post5"),
+            ("1.0-rev5", "1.0.post5"),
+            // Local version case insensitivity
+            ("1.0+AbC", "1.0+abc"),
+            // Integer Normalization
+            ("1.01", "1.1"),
+            ("1.0a05", "1.0a5"),
+            ("1.0b07", "1.0b7"),
+            ("1.0c056", "1.0rc56"),
+            ("1.0rc09", "1.0rc9"),
+            ("1.0.post000", "1.0.post0"),
+            ("1.1.dev09000", "1.1.dev9000"),
+            ("00!1.2", "1.2"),
+            ("0100!0.0", "100!0.0"),
+            // Various other normalizations
+            ("v1.0", "1.0"),
+            ("   v1.0\t\n", "1.0"),
+        ];
+        for (version_str, normalized_str) in versions {
+            let version = Version::from_str(version_str).unwrap();
+            let normalized = Version::from_str(normalized_str).unwrap();
+            // Just test version parsing again
+            assert_eq!(version, normalized, "{version_str} {normalized_str}");
+            // Test version normalization
+            assert_eq!(
+                version.to_string(),
+                normalized.to_string(),
+                "{version_str} {normalized_str}"
+            );
+        }
+    }
+
+    /// <https://github.com/pypa/packaging/blob/237ff3aa348486cf835a980592af3a59fccd6101/tests/test_version.py#L229-L277>
+    #[test]
+    fn test_equality_and_normalization2() {
+        let versions = [
+            ("1.0.dev456", "1.0.dev456"),
+            ("1.0a1", "1.0a1"),
+            ("1.0a2.dev456", "1.0a2.dev456"),
+            ("1.0a12.dev456", "1.0a12.dev456"),
+            ("1.0a12", "1.0a12"),
+            ("1.0b1.dev456", "1.0b1.dev456"),
+            ("1.0b2", "1.0b2"),
+            ("1.0b2.post345.dev456", "1.0b2.post345.dev456"),
+            ("1.0b2.post345", "1.0b2.post345"),
+            ("1.0rc1.dev456", "1.0rc1.dev456"),
+            ("1.0rc1", "1.0rc1"),
+            ("1.0", "1.0"),
+            ("1.0.post456.dev34", "1.0.post456.dev34"),
+            ("1.0.post456", "1.0.post456"),
+            ("1.0.1", "1.0.1"),
+            ("0!1.0.2", "1.0.2"),
+            ("1.0.3+7", "1.0.3+7"),
+            ("0!1.0.4+8.0", "1.0.4+8.0"),
+            ("1.0.5+9.5", "1.0.5+9.5"),
+            ("1.2+1234.abc", "1.2+1234.abc"),
+            ("1.2+123456", "1.2+123456"),
+            ("1.2+123abc", "1.2+123abc"),
+            ("1.2+123abc456", "1.2+123abc456"),
+            ("1.2+abc", "1.2+abc"),
+            ("1.2+abc123", "1.2+abc123"),
+            ("1.2+abc123def", "1.2+abc123def"),
+            ("1.1.dev1", "1.1.dev1"),
+            ("7!1.0.dev456", "7!1.0.dev456"),
+            ("7!1.0a1", "7!1.0a1"),
+            ("7!1.0a2.dev456", "7!1.0a2.dev456"),
+            ("7!1.0a12.dev456", "7!1.0a12.dev456"),
+            ("7!1.0a12", "7!1.0a12"),
+            ("7!1.0b1.dev456", "7!1.0b1.dev456"),
+            ("7!1.0b2", "7!1.0b2"),
+            ("7!1.0b2.post345.dev456", "7!1.0b2.post345.dev456"),
+            ("7!1.0b2.post345", "7!1.0b2.post345"),
+            ("7!1.0rc1.dev456", "7!1.0rc1.dev456"),
+            ("7!1.0rc1", "7!1.0rc1"),
+            ("7!1.0", "7!1.0"),
+            ("7!1.0.post456.dev34", "7!1.0.post456.dev34"),
+            ("7!1.0.post456", "7!1.0.post456"),
+            ("7!1.0.1", "7!1.0.1"),
+            ("7!1.0.2", "7!1.0.2"),
+            ("7!1.0.3+7", "7!1.0.3+7"),
+            ("7!1.0.4+8.0", "7!1.0.4+8.0"),
+            ("7!1.0.5+9.5", "7!1.0.5+9.5"),
+            ("7!1.1.dev1", "7!1.1.dev1"),
+        ];
+        for (version_str, normalized_str) in versions {
+            let version = Version::from_str(version_str).unwrap();
+            let normalized = Version::from_str(normalized_str).unwrap();
+            assert_eq!(version, normalized, "{version_str} {normalized_str}");
+            // Test version normalization
+            assert_eq!(
+                version.to_string(),
+                normalized_str,
+                "{version_str} {normalized_str}"
+            );
+            // Since we're already at it
+            assert_eq!(
+                version.to_string(),
+                normalized.to_string(),
+                "{version_str} {normalized_str}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_star_fixed_version() {
+        let result = Version::from_str("0.9.1.*");
+        assert_eq!(result.unwrap_err(), ErrorKind::Wildcard.into());
+    }
+
+    #[test]
+    fn test_invalid_word() {
+        let result = Version::from_str("blergh");
+        assert_eq!(result.unwrap_err(), ErrorKind::NoLeadingNumber.into());
+    }
+
+    #[test]
+    fn test_from_version_star() {
+        let p = |s: &str| -> Result<VersionPattern, _> { s.parse() };
+        assert!(!p("1.2.3").unwrap().is_wildcard());
+        assert!(p("1.2.3.*").unwrap().is_wildcard());
+        assert_eq!(
+            p("1.2.*.4.*").unwrap_err(),
+            PatternErrorKind::WildcardNotTrailing.into(),
+        );
+        assert_eq!(
+            p("1.0-dev1.*").unwrap_err(),
+            ErrorKind::UnexpectedEnd {
+                version: "1.0-dev1".to_string(),
+                remaining: ".*".to_string()
+            }
+            .into(),
+        );
+        assert_eq!(
+            p("1.0a1.*").unwrap_err(),
+            ErrorKind::UnexpectedEnd {
+                version: "1.0a1".to_string(),
+                remaining: ".*".to_string()
+            }
+            .into(),
+        );
+        assert_eq!(
+            p("1.0.post1.*").unwrap_err(),
+            ErrorKind::UnexpectedEnd {
+                version: "1.0.post1".to_string(),
+                remaining: ".*".to_string()
+            }
+            .into(),
+        );
+        assert_eq!(
+            p("1.0+lolwat.*").unwrap_err(),
+            ErrorKind::LocalEmpty { precursor: '.' }.into(),
+        );
+    }
+
+    // Tests the valid cases of our version parser. These were written
+    // in tandem with the parser.
+    //
+    // They are meant to be additional (but in some cases likely redundant)
+    // with some of the above tests.
+    #[test]
+    fn parse_version_valid() {
+        let p = |s: &str| match Parser::new(s.as_bytes()).parse() {
+            Ok(v) => v,
+            Err(err) => unreachable!("expected valid version, but got error: {err:?}"),
+        };
+
+        // release-only tests
+        assert_eq!(p("5"), Version::new([5]));
+        assert_eq!(p("5.6"), Version::new([5, 6]));
+        assert_eq!(p("5.6.7"), Version::new([5, 6, 7]));
+        assert_eq!(p("512.623.734"), Version::new([512, 623, 734]));
+        assert_eq!(p("1.2.3.4"), Version::new([1, 2, 3, 4]));
+        assert_eq!(p("1.2.3.4.5"), Version::new([1, 2, 3, 4, 5]));
+
+        // epoch tests
+        assert_eq!(p("4!5"), Version::new([5]).with_epoch(4));
+        assert_eq!(p("4!5.6"), Version::new([5, 6]).with_epoch(4));
+
+        // pre-release tests
+        assert_eq!(
+            p("5a1"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5alpha1"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5b1"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Beta,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5beta1"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Beta,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5rc1"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5c1"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5preview1"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5pre1"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5.6.7pre1"),
+            Version::new([5, 6, 7]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Rc,
+                number: 1
+            }))
+        );
+        assert_eq!(
+            p("5alpha789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5.alpha789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5-alpha789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5_alpha789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5alpha.789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5alpha-789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5alpha_789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5ALPHA789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5aLpHa789"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 789
+            }))
+        );
+        assert_eq!(
+            p("5alpha"),
+            Version::new([5]).with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 0
+            }))
+        );
+
+        // post-release tests
+        assert_eq!(p("5post2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5rev2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5r2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.post2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5-post2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5_post2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.post.2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.post-2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.post_2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(
+            p("5.6.7.post_2"),
+            Version::new([5, 6, 7]).with_post(Some(2))
+        );
+        assert_eq!(p("5-2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5.6.7-2"), Version::new([5, 6, 7]).with_post(Some(2)));
+        assert_eq!(p("5POST2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5PoSt2"), Version::new([5]).with_post(Some(2)));
+        assert_eq!(p("5post"), Version::new([5]).with_post(Some(0)));
+
+        // dev-release tests
+        assert_eq!(p("5dev2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.dev2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5-dev2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5_dev2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.dev.2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.dev-2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.dev_2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5.6.7.dev_2"), Version::new([5, 6, 7]).with_dev(Some(2)));
+        assert_eq!(p("5DEV2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5dEv2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5DeV2"), Version::new([5]).with_dev(Some(2)));
+        assert_eq!(p("5dev"), Version::new([5]).with_dev(Some(0)));
+
+        // local tests
+        assert_eq!(
+            p("5+2"),
+            Version::new([5]).with_local_segments(vec![LocalSegment::Number(2)])
+        );
+        assert_eq!(
+            p("5+a"),
+            Version::new([5]).with_local_segments(vec![LocalSegment::String("a".to_string())])
+        );
+        assert_eq!(
+            p("5+abc.123"),
+            Version::new([5]).with_local_segments(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+            ])
+        );
+        assert_eq!(
+            p("5+123.abc"),
+            Version::new([5]).with_local_segments(vec![
+                LocalSegment::Number(123),
+                LocalSegment::String("abc".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5+18446744073709551615.abc"),
+            Version::new([5]).with_local_segments(vec![
+                LocalSegment::Number(18_446_744_073_709_551_615),
+                LocalSegment::String("abc".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5+18446744073709551616.abc"),
+            Version::new([5]).with_local_segments(vec![
+                LocalSegment::String("18446744073709551616".to_string()),
+                LocalSegment::String("abc".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5+ABC.123"),
+            Version::new([5]).with_local_segments(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+            ])
+        );
+        assert_eq!(
+            p("5+ABC-123.4_5_xyz-MNO"),
+            Version::new([5]).with_local_segments(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+                LocalSegment::Number(4),
+                LocalSegment::Number(5),
+                LocalSegment::String("xyz".to_string()),
+                LocalSegment::String("mno".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5.6.7+abc-00123"),
+            Version::new([5, 6, 7]).with_local_segments(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+            ])
+        );
+        assert_eq!(
+            p("5.6.7+abc-foo00123"),
+            Version::new([5, 6, 7]).with_local_segments(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::String("foo00123".to_string()),
+            ])
+        );
+        assert_eq!(
+            p("5.6.7+abc-00123a"),
+            Version::new([5, 6, 7]).with_local_segments(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::String("00123a".to_string()),
+            ])
+        );
+
+        // {pre-release, post-release} tests
+        assert_eq!(
+            p("5a2post3"),
+            Version::new([5])
+                .with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 2
+                }))
+                .with_post(Some(3))
+        );
+        assert_eq!(
+            p("5.a-2_post-3"),
+            Version::new([5])
+                .with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 2
+                }))
+                .with_post(Some(3))
+        );
+        assert_eq!(
+            p("5a2-3"),
+            Version::new([5])
+                .with_pre(Some(Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 2
+                }))
+                .with_post(Some(3))
+        );
+
+        // Ignoring a no-op 'v' prefix.
+        assert_eq!(p("v5"), Version::new([5]));
+        assert_eq!(p("V5"), Version::new([5]));
+        assert_eq!(p("v5.6.7"), Version::new([5, 6, 7]));
+
+        // Ignoring leading and trailing whitespace.
+        assert_eq!(p("  v5  "), Version::new([5]));
+        assert_eq!(p("  5  "), Version::new([5]));
+        assert_eq!(
+            p("  5.6.7+abc.123.xyz  "),
+            Version::new([5, 6, 7]).with_local_segments(vec![
+                LocalSegment::String("abc".to_string()),
+                LocalSegment::Number(123),
+                LocalSegment::String("xyz".to_string())
+            ])
+        );
+        assert_eq!(p("  \n5\n \t"), Version::new([5]));
+
+        // min tests
+        assert!(Parser::new("1.min0".as_bytes()).parse().is_err());
+    }
+
+    // Tests the error cases of our version parser.
+    //
+    // I wrote these with the intent to cover every possible error
+    // case.
+    //
+    // They are meant to be additional (but in some cases likely redundant)
+    // with some of the above tests.
+    #[test]
+    fn parse_version_invalid() {
+        let p = |s: &str| match Parser::new(s.as_bytes()).parse() {
+            Err(err) => err,
+            Ok(v) => unreachable!(
+                "expected version parser error, but got: {v:?}",
+                v = v.as_bloated_debug()
+            ),
+        };
+
+        assert_eq!(p(""), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("a"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("v 5"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("V 5"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("x 5"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(
+            p("18446744073709551616"),
+            ErrorKind::NumberTooBig {
+                bytes: b"18446744073709551616".to_vec()
+            }
+            .into()
+        );
+        assert_eq!(p("5!"), ErrorKind::NoLeadingReleaseNumber.into());
+        assert_eq!(
+            p("5.6./"),
+            ErrorKind::UnexpectedEnd {
+                version: "5.6".to_string(),
+                remaining: "./".to_string()
+            }
+            .into()
+        );
+        assert_eq!(
+            p("5.6.-alpha2"),
+            ErrorKind::UnexpectedEnd {
+                version: "5.6".to_string(),
+                remaining: ".-alpha2".to_string()
+            }
+            .into()
+        );
+        assert_eq!(
+            p("1.2.3a18446744073709551616"),
+            ErrorKind::NumberTooBig {
+                bytes: b"18446744073709551616".to_vec()
+            }
+            .into()
+        );
+        assert_eq!(p("5+"), ErrorKind::LocalEmpty { precursor: '+' }.into());
+        assert_eq!(p("5+ "), ErrorKind::LocalEmpty { precursor: '+' }.into());
+        assert_eq!(p("5+abc."), ErrorKind::LocalEmpty { precursor: '.' }.into());
+        assert_eq!(p("5+abc-"), ErrorKind::LocalEmpty { precursor: '-' }.into());
+        assert_eq!(p("5+abc_"), ErrorKind::LocalEmpty { precursor: '_' }.into());
+        assert_eq!(
+            p("5+abc. "),
+            ErrorKind::LocalEmpty { precursor: '.' }.into()
+        );
+        assert_eq!(
+            p("5.6-"),
+            ErrorKind::UnexpectedEnd {
+                version: "5.6".to_string(),
+                remaining: "-".to_string()
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn parse_version_pattern_valid() {
+        let p = |s: &str| match Parser::new(s.as_bytes()).parse_pattern() {
+            Ok(v) => v,
+            Err(err) => unreachable!("expected valid version, but got error: {err:?}"),
+        };
+
+        assert_eq!(p("5.*"), VersionPattern::wildcard(Version::new([5])));
+        assert_eq!(p("5.6.*"), VersionPattern::wildcard(Version::new([5, 6])));
+        assert_eq!(
+            p("2!5.6.*"),
+            VersionPattern::wildcard(Version::new([5, 6]).with_epoch(2))
+        );
+    }
+
+    #[test]
+    fn parse_version_pattern_invalid() {
+        let p = |s: &str| match Parser::new(s.as_bytes()).parse_pattern() {
+            Err(err) => err,
+            Ok(vpat) => unreachable!("expected version pattern parser error, but got: {vpat:?}"),
+        };
+
+        assert_eq!(p("*"), ErrorKind::NoLeadingNumber.into());
+        assert_eq!(p("2!*"), ErrorKind::NoLeadingReleaseNumber.into());
+    }
+
+    // Tests that the ordering between versions is correct.
+    //
+    // The ordering example used here was taken from PEP 440:
+    // https://packaging.python.org/en/latest/specifications/version-specifiers/#summary-of-permitted-suffixes-and-relative-ordering
+    #[test]
+    fn ordering() {
+        let versions = &[
+            "1.dev0",
+            "1.0.dev456",
+            "1.0a1",
+            "1.0a2.dev456",
+            "1.0a12.dev456",
+            "1.0a12",
+            "1.0b1.dev456",
+            "1.0b2",
+            "1.0b2.post345.dev456",
+            "1.0b2.post345",
+            "1.0rc1.dev456",
+            "1.0rc1",
+            "1.0",
+            "1.0+abc.5",
+            "1.0+abc.7",
+            "1.0+5",
+            "1.0.post456.dev34",
+            "1.0.post456",
+            "1.0.15",
+            "1.1.dev1",
+        ];
+        for (i, v1) in versions.iter().enumerate() {
+            for v2 in &versions[i + 1..] {
+                let less = v1.parse::<Version>().unwrap();
+                let greater = v2.parse::<Version>().unwrap();
+                assert_eq!(
+                    less.cmp(&greater),
+                    Ordering::Less,
+                    "less: {:?}\ngreater: {:?}",
+                    less.as_bloated_debug(),
+                    greater.as_bloated_debug()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn local_sentinel_version() {
+        let sentinel = Version::new([1, 0]).with_local(LocalVersion::Max);
+
+        // Ensure that the "max local version" sentinel is less than the following versions.
+        let versions = &["1.0.post0", "1.1"];
+
+        for greater in versions {
+            let greater = greater.parse::<Version>().unwrap();
+            assert_eq!(
+                sentinel.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                greater.as_bloated_debug(),
+                sentinel.as_bloated_debug(),
+            );
+        }
+
+        // Ensure that the "max local version" sentinel is greater than the following versions.
+        let versions = &["1.0", "1.0.a0", "1.0+local"];
+
+        for less in versions {
+            let less = less.parse::<Version>().unwrap();
+            assert_eq!(
+                sentinel.cmp(&less),
+                Ordering::Greater,
+                "less: {:?}\ngreater: {:?}",
+                sentinel.as_bloated_debug(),
+                less.as_bloated_debug()
+            );
+        }
+    }
+
+    #[test]
+    fn min_version() {
+        // Ensure that the `.min` suffix precedes all other suffixes.
+        let less = Version::new([1, 0]).with_min(Some(0));
+
+        let versions = &[
+            "1.dev0",
+            "1.0.dev456",
+            "1.0a1",
+            "1.0a2.dev456",
+            "1.0a12.dev456",
+            "1.0a12",
+            "1.0b1.dev456",
+            "1.0b2",
+            "1.0b2.post345.dev456",
+            "1.0b2.post345",
+            "1.0rc1.dev456",
+            "1.0rc1",
+            "1.0",
+            "1.0+abc.5",
+            "1.0+abc.7",
+            "1.0+5",
+            "1.0.post456.dev34",
+            "1.0.post456",
+            "1.0.15",
+            "1.1.dev1",
+        ];
+
+        for greater in versions {
+            let greater = greater.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+    }
+
+    #[test]
+    fn max_version() {
+        // Ensure that the `.max` suffix succeeds all other suffixes.
+        let greater = Version::new([1, 0]).with_max(Some(0));
+
+        let versions = &[
+            "1.dev0",
+            "1.0.dev456",
+            "1.0a1",
+            "1.0a2.dev456",
+            "1.0a12.dev456",
+            "1.0a12",
+            "1.0b1.dev456",
+            "1.0b2",
+            "1.0b2.post345.dev456",
+            "1.0b2.post345",
+            "1.0rc1.dev456",
+            "1.0rc1",
+            "1.0",
+            "1.0+abc.5",
+            "1.0+abc.7",
+            "1.0+5",
+            "1.0.post456.dev34",
+            "1.0.post456",
+            "1.0",
+        ];
+
+        for less in versions {
+            let less = less.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+
+        // Ensure that the `.max` suffix plays nicely with pre-release versions.
+        let greater = Version::new([1, 0])
+            .with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }))
+            .with_max(Some(0));
+
+        let versions = &["1.0a1", "1.0a1+local", "1.0a1.post1"];
+
+        for less in versions {
+            let less = less.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+
+        // Ensure that the `.max` suffix plays nicely with pre-release versions.
+        let less = Version::new([1, 0])
+            .with_pre(Some(Prerelease {
+                kind: PrereleaseKind::Alpha,
+                number: 1,
+            }))
+            .with_max(Some(0));
+
+        let versions = &["1.0b1", "1.0b1+local", "1.0b1.post1", "1.0"];
+
+        for greater in versions {
+            let greater = greater.parse::<Version>().unwrap();
+            assert_eq!(
+                less.cmp(&greater),
+                Ordering::Less,
+                "less: {:?}\ngreater: {:?}",
+                less.as_bloated_debug(),
+                greater.as_bloated_debug()
+            );
+        }
+    }
+
+    // Tests our bespoke u64 decimal integer parser.
+    #[test]
+    fn parse_number_u64() {
+        let p = |s: &str| parse_u64(s.as_bytes());
+        assert_eq!(p("0"), Ok(0));
+        assert_eq!(p("00"), Ok(0));
+        assert_eq!(p("1"), Ok(1));
+        assert_eq!(p("01"), Ok(1));
+        assert_eq!(p("9"), Ok(9));
+        assert_eq!(p("10"), Ok(10));
+        assert_eq!(p("18446744073709551615"), Ok(18_446_744_073_709_551_615));
+        assert_eq!(p("018446744073709551615"), Ok(18_446_744_073_709_551_615));
+        assert_eq!(
+            p("000000018446744073709551615"),
+            Ok(18_446_744_073_709_551_615)
+        );
+
+        assert_eq!(p("10a"), Err(ErrorKind::InvalidDigit { got: b'a' }.into()));
+        assert_eq!(p("10["), Err(ErrorKind::InvalidDigit { got: b'[' }.into()));
+        assert_eq!(p("10/"), Err(ErrorKind::InvalidDigit { got: b'/' }.into()));
+        assert_eq!(
+            p("18446744073709551616"),
+            Err(ErrorKind::NumberTooBig {
+                bytes: b"18446744073709551616".to_vec()
+            }
+            .into())
+        );
+        assert_eq!(
+            p("18446744073799551615abc"),
+            Err(ErrorKind::NumberTooBig {
+                bytes: b"18446744073799551615abc".to_vec()
+            }
+            .into())
+        );
+        assert_eq!(
+            parse_u64(b"18446744073799551615\xFF"),
+            Err(ErrorKind::NumberTooBig {
+                bytes: b"18446744073799551615\xFF".to_vec()
+            }
+            .into())
+        );
+    }
+
+    /// Wraps a `Version` and provides a more "bloated" debug but standard
+    /// representation.
+    ///
+    /// We don't do this by default because it takes up a ton of space, and
+    /// just printing out the display version of the version is quite a bit
+    /// simpler.
+    ///
+    /// Nevertheless, when *testing* version parsing, you really want to
+    /// be able to peek at all of its constituent parts. So we use this in
+    /// assertion failure messages.
+    struct VersionBloatedDebug<'a>(&'a Version);
+
+    impl std::fmt::Debug for VersionBloatedDebug<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("Version")
+                .field("epoch", &self.0.epoch())
+                .field("release", &&*self.0.release())
+                .field("pre", &self.0.pre())
+                .field("post", &self.0.post())
+                .field("dev", &self.0.dev())
+                .field("local", &self.0.local())
+                .field("min", &self.0.min())
+                .field("max", &self.0.max())
+                .finish()
+        }
+    }
+
+    impl Version {
+        pub(crate) fn as_bloated_debug(&self) -> impl std::fmt::Debug + '_ {
+            VersionBloatedDebug(self)
+        }
+    }
+
+    /// This explicitly tests that we preserve trailing zeros in a version
+    /// string. i.e., Both `1.2` and `1.2.0` round-trip, with the former
+    /// lacking a trailing zero and the latter including it.
+    #[test]
+    fn preserve_trailing_zeros() {
+        let v1: Version = "1.2.0".parse().unwrap();
+        assert_eq!(&*v1.release(), &[1, 2, 0]);
+        assert_eq!(v1.to_string(), "1.2.0");
+
+        let v2: Version = "1.2".parse().unwrap();
+        assert_eq!(&*v2.release(), &[1, 2]);
+        assert_eq!(v2.to_string(), "1.2");
+    }
+
+    #[test]
+    fn type_size() {
+        assert_eq!(size_of::<VersionSmall>(), size_of::<usize>() * 2);
+        assert_eq!(size_of::<Version>(), size_of::<usize>() * 2);
+    }
+
+    /// Test major bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_major() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "2.0");
+
+        // three digit (zero major)
+        let mut version = "0.1.2".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "1.0.0");
+
+        // three digit (non-zero major)
+        let mut version = "1.2.3".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "2.0.0");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "2.0.0.0");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "5!2.0.0.0+local");
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "5!3.0.0.0+local");
+    }
+
+    /// Test minor bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_minor() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "0.1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "1.6");
+
+        // three digit (non-zero major)
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "5.4.0");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "1.3.0.0");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "5!1.8.0.0+local");
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "5!1.9.0.0+local");
+    }
+
+    /// Test patch bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_patch() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "0.0.1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "1.5.1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "5.3.7");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "1.2.4.0");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "5!1.7.4.0+local");
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "5!1.7.5.0+local");
+    }
+
+    /// Test alpha bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_alpha() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "0a1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "1.5a1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "5.3.6a1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "1.2.3.4a1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5a1+local");
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5a2+local");
+    }
+
+    /// Test beta bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_beta() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "0b1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "1.5b1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "5.3.6b1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "1.2.3.4b1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5a2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5b1+local");
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2+local");
+    }
+
+    /// Test rc bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_rc() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "0rc1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "1.5rc1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "5.3.6rc1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "1.2.3.4rc1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5rc1+local");
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5rc2+local");
+    }
+
+    /// Test post bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_post() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "0.post1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "1.5.post1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "5.3.6.post1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "1.2.3.4.post1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.dev123+local".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2.post1+local");
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2.post2+local");
+    }
+
+    /// Test dev bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_dev() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(version.to_string().as_str(), "0.dev1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(version.to_string().as_str(), "1.5.dev1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(version.to_string().as_str(), "5.3.6.dev1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(version.to_string().as_str(), "1.2.3.4.dev1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345+local".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(
+            version.to_string().as_str(),
+            "5!1.7.3.5b2.post345.dev1+local"
+        );
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(
+            version.to_string().as_str(),
+            "5!1.7.3.5b2.post345.dev2+local"
+        );
+    }
+
+    /// Test stable setting
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn make_stable() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "0");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "1.5");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "5.3.6");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "1.2.3.4");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345+local".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5+local");
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5+local");
+    }
+}

@@ -443,9 +443,9 @@ class Poetry(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         poetry_lock = os.path.join(cwd, "poetry.lock")
-        assert not os.path.exists(
-            poetry_lock
-        ), f"Lockfile already exists at: {poetry_lock}"
+        assert not os.path.exists(poetry_lock), (
+            f"Lockfile already exists at: {poetry_lock}"
+        )
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -499,9 +499,9 @@ class Poetry(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         poetry_lock = os.path.join(cwd, "poetry.lock")
-        assert not os.path.exists(
-            poetry_lock
-        ), f"Lockfile already exists at: {poetry_lock}"
+        assert not os.path.exists(poetry_lock), (
+            f"Lockfile already exists at: {poetry_lock}"
+        )
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -536,9 +536,9 @@ class Poetry(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         poetry_lock = os.path.join(cwd, "poetry.lock")
-        assert not os.path.exists(
-            poetry_lock
-        ), f"Lockfile already exists at: {poetry_lock}"
+        assert not os.path.exists(poetry_lock), (
+            f"Lockfile already exists at: {poetry_lock}"
+        )
 
         # Run a resolution, to ensure that the lockfile exists.
         # TODO(charlie): Make this a `setup`.
@@ -581,9 +581,9 @@ class Poetry(Suite):
         self.setup(requirements_file, cwd=cwd)
 
         poetry_lock = os.path.join(cwd, "poetry.lock")
-        assert not os.path.exists(
-            poetry_lock
-        ), f"Lockfile already exists at: {poetry_lock}"
+        assert not os.path.exists(poetry_lock), (
+            f"Lockfile already exists at: {poetry_lock}"
+        )
 
         # Run a resolution, to ensure that the lockfile exists.
         subprocess.check_call(

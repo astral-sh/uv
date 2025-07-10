@@ -1,20 +1,24 @@
-use std::{borrow::Cow, future::Future, path::Path};
+use std::time::{Duration, SystemTime};
+use std::{borrow::Cow, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
+use reqwest_retry::RetryPolicy;
 use rkyv::util::AlignedVec;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 
 use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::BaseClient;
+use crate::base_client::is_extended_transient_error;
 use crate::{
+    Error, ErrorKind,
     httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
     rkyvutil::OwnedArchive,
-    Error, ErrorKind,
 };
 
 /// A trait the generalizes (de)serialization at a high level.
@@ -36,12 +40,12 @@ pub trait Cacheable: Sized {
     ///
     /// Typical use of this is for wrapper types used to provide blanket trait
     /// impls without hitting overlapping impl problems.
-    type Target;
+    type Target: Send + 'static;
 
     /// Deserialize a value from bytes aligned to a 16-byte boundary.
-    fn from_aligned_bytes(bytes: AlignedVec) -> Result<Self::Target, crate::Error>;
+    fn from_aligned_bytes(bytes: AlignedVec) -> Result<Self::Target, Error>;
     /// Serialize bytes to a possibly owned byte buffer.
-    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, crate::Error>;
+    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, Error>;
     /// Convert this type into its final form.
     fn into_target(self) -> Self::Target;
 }
@@ -54,7 +58,7 @@ pub(crate) struct SerdeCacheable<T> {
     inner: T,
 }
 
-impl<T: Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
+impl<T: Serialize + DeserializeOwned + Send + 'static> Cacheable for SerdeCacheable<T> {
     type Target = T;
 
     fn from_aligned_bytes(bytes: AlignedVec) -> Result<T, Error> {
@@ -75,10 +79,7 @@ impl<T: Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
 /// All `OwnedArchive` values are cacheable.
 impl<A> Cacheable for OwnedArchive<A>
 where
-    // A: rkyv::Archive + rkyv::Serialize<crate::rkyvutil::Serializer<4096>>,
-    // A::Archived: for<'a> rkyv::bytecheck::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
-    // + rkyv::Deserialize<A, rkyv::de::deserializers::SharedDeserializeMap>,
-    A: rkyv::Archive + for<'a> rkyv::Serialize<crate::rkyvutil::Serializer<'a>>,
+    A: rkyv::Archive + for<'a> rkyv::Serialize<crate::rkyvutil::Serializer<'a>> + Send + 'static,
     A::Archived: rkyv::Portable
         + rkyv::Deserialize<A, crate::rkyvutil::Deserializer>
         + for<'a> rkyv::bytecheck::CheckBytes<crate::rkyvutil::Validator<'a>>,
@@ -98,30 +99,98 @@ where
     }
 }
 
-/// Either a cached client error or a (user specified) error from the callback
-#[derive(Debug)]
-pub enum CachedClientError<CallbackError> {
-    Client(Error),
-    Callback(CallbackError),
+/// Dispatch type: Either a cached client error or a (user specified) error from the callback
+pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
+    Client {
+        retries: Option<u32>,
+        err: Error,
+    },
+    Callback {
+        retries: Option<u32>,
+        err: CallbackError,
+    },
 }
 
-impl<CallbackError> From<Error> for CachedClientError<CallbackError> {
+impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError> {
+    /// Attach the number of retries to the error context.
+    ///
+    /// Adds to existing errors if any, in case different layers retried.
+    fn with_retries(self, retries: u32) -> Self {
+        match self {
+            CachedClientError::Client {
+                retries: existing_retries,
+                err,
+            } => CachedClientError::Client {
+                retries: Some(existing_retries.unwrap_or_default() + retries),
+                err,
+            },
+            CachedClientError::Callback {
+                retries: existing_retries,
+                err,
+            } => CachedClientError::Callback {
+                retries: Some(existing_retries.unwrap_or_default() + retries),
+                err,
+            },
+        }
+    }
+
+    fn retries(&self) -> Option<u32> {
+        match self {
+            CachedClientError::Client { retries, .. } => *retries,
+            CachedClientError::Callback { retries, .. } => *retries,
+        }
+    }
+
+    fn error(&self) -> &dyn std::error::Error {
+        match self {
+            CachedClientError::Client { err, .. } => err,
+            CachedClientError::Callback { err, .. } => err,
+        }
+    }
+}
+
+impl<CallbackError: std::error::Error + 'static> From<Error> for CachedClientError<CallbackError> {
     fn from(error: Error) -> Self {
-        Self::Client(error)
+        Self::Client {
+            retries: None,
+            err: error,
+        }
     }
 }
 
-impl<CallbackError> From<ErrorKind> for CachedClientError<CallbackError> {
+impl<CallbackError: std::error::Error + 'static> From<ErrorKind>
+    for CachedClientError<CallbackError>
+{
     fn from(error: ErrorKind) -> Self {
-        Self::Client(error.into())
+        Self::Client {
+            retries: None,
+            err: error.into(),
+        }
     }
 }
 
-impl<E: Into<Self>> From<CachedClientError<E>> for Error {
+impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for Error {
+    /// Attach retry error context, if there were retries.
     fn from(error: CachedClientError<E>) -> Self {
         match error {
-            CachedClientError::Client(error) => error,
-            CachedClientError::Callback(error) => error.into(),
+            CachedClientError::Client {
+                retries: Some(retries),
+                err,
+            } => ErrorKind::RequestWithRetries {
+                source: Box::new(err.into_kind()),
+                retries,
+            }
+            .into(),
+            CachedClientError::Client { retries: None, err } => err,
+            CachedClientError::Callback {
+                retries: Some(retries),
+                err,
+            } => ErrorKind::RequestWithRetries {
+                source: Box::new(err.into().into_kind()),
+                retries,
+            }
+            .into(),
+            CachedClientError::Callback { retries: None, err } => err.into(),
         }
     }
 }
@@ -183,23 +252,18 @@ impl CachedClient {
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
     pub async fn get_serde<
-        Payload: Serialize + DeserializeOwned + 'static,
-        CallBackError,
-        Callback,
-        CallbackReturn,
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
         response_callback: Callback,
-    ) -> Result<Payload, CachedClientError<CallBackError>>
-    where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
-    {
+    ) -> Result<Payload, CachedClientError<CallBackError>> {
         let payload = self
-            .get_cacheable(req, cache_entry, cache_control, move |resp| async {
+            .get_cacheable(req, cache_entry, cache_control, async |resp| {
                 let payload = response_callback(resp).await?;
                 Ok(SerdeCacheable { inner: payload })
             })
@@ -220,17 +284,17 @@ impl CachedClient {
     /// only the result is cached and returned. The `response_callback` is
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
-    pub async fn get_cacheable<Payload: Cacheable, CallBackError, Callback, CallbackReturn>(
+    pub async fn get_cacheable<
+        Payload: Cacheable,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+    >(
         &self,
         req: Request,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
         response_callback: Callback,
-    ) -> Result<Payload::Target, CachedClientError<CallBackError>>
-    where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
-    {
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
         let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
             self.send_cached(req, cache_control, cached)
@@ -306,24 +370,19 @@ impl CachedClient {
 
     /// Make a request without checking whether the cache is fresh.
     pub async fn skip_cache<
-        Payload: Serialize + DeserializeOwned + 'static,
-        CallBackError,
-        Callback,
-        CallbackReturn,
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
     >(
         &self,
         req: Request,
         cache_entry: &CacheEntry,
         response_callback: Callback,
-    ) -> Result<Payload, CachedClientError<CallBackError>>
-    where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
-    {
+    ) -> Result<Payload, CachedClientError<CallBackError>> {
         let (response, cache_policy) = self.fresh_request(req).await?;
 
         let payload = self
-            .run_response_callback(cache_entry, cache_policy, response, move |resp| async {
+            .run_response_callback(cache_entry, cache_policy, response, async |resp| {
                 let payload = response_callback(resp).await?;
                 Ok(SerdeCacheable { inner: payload })
             })
@@ -332,38 +391,38 @@ impl CachedClient {
         Ok(payload)
     }
 
-    async fn resend_and_heal_cache<Payload: Cacheable, CallBackError, Callback, CallbackReturn>(
+    async fn resend_and_heal_cache<
+        Payload: Cacheable,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
+    >(
         &self,
         req: Request,
         cache_entry: &CacheEntry,
         response_callback: Callback,
-    ) -> Result<Payload::Target, CachedClientError<CallBackError>>
-    where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
-    {
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let _ = fs_err::tokio::remove_file(&cache_entry.path()).await;
         let (response, cache_policy) = self.fresh_request(req).await?;
         self.run_response_callback(cache_entry, cache_policy, response, response_callback)
             .await
     }
 
-    async fn run_response_callback<Payload: Cacheable, CallBackError, Callback, CallbackReturn>(
+    async fn run_response_callback<
+        Payload: Cacheable,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFnOnce(Response) -> Result<Payload, CallBackError>,
+    >(
         &self,
         cache_entry: &CacheEntry,
         cache_policy: Option<Box<CachePolicy>>,
         response: Response,
         response_callback: Callback,
-    ) -> Result<Payload::Target, CachedClientError<CallBackError>>
-    where
-        Callback: FnOnce(Response) -> CallbackReturn,
-        CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
-    {
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
         let new_cache = info_span!("new_cache", file = %cache_entry.path().display());
         let data = response_callback(response)
             .boxed_local()
             .await
-            .map_err(|err| CachedClientError::Callback(err))?;
+            .map_err(|err| CachedClientError::Callback { retries: None, err })?;
         let Some(cache_policy) = cache_policy else {
             return Ok(data.into_target());
         };
@@ -460,11 +519,10 @@ impl CachedClient {
         cached: DataWithCachePolicy,
         new_cache_policy_builder: CachePolicyBuilder,
     ) -> Result<CachedResponse, Error> {
-        let url = req.url().clone();
+        let url = DisplaySafeUrl::from(req.url().clone());
         debug!("Sending revalidation request for: {url}");
         let response = self
             .0
-            .for_host(req.url())
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
@@ -500,17 +558,28 @@ impl CachedClient {
         &self,
         req: Request,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
-        let url = req.url().clone();
+        let url = DisplaySafeUrl::from(req.url().clone());
         trace!("Sending fresh {} request for {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let response = self
             .0
-            .for_host(&url)
             .execute(req)
             .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
-            .error_for_status()
-            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+
+        let retry_count = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value());
+
+        if let Err(status_error) = response.error_for_status_ref() {
+            return Err(CachedClientError::<Error>::Client {
+                retries: retry_count,
+                err: ErrorKind::from_reqwest(url, status_error).into(),
+            }
+            .into());
+        }
+
         let cache_policy = cache_policy_builder.build(&response);
         let cache_policy = if cache_policy.to_archived().is_storable() {
             Some(Box::new(cache_policy))
@@ -518,6 +587,144 @@ impl CachedClient {
             None
         };
         Ok((response, cache_policy))
+    }
+
+    /// Perform a [`CachedClient::get_serde`] request with a default retry strategy.
+    #[instrument(skip_all)]
+    pub async fn get_serde_with_retry<
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload, CachedClientError<CallBackError>> {
+        let payload = self
+            .get_cacheable_with_retry(req, cache_entry, cache_control, async |resp| {
+                let payload = response_callback(resp).await?;
+                Ok(SerdeCacheable { inner: payload })
+            })
+            .await?;
+        Ok(payload)
+    }
+
+    /// Perform a [`CachedClient::get_cacheable`] request with a default retry strategy.
+    ///
+    /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
+    #[instrument(skip_all)]
+    pub async fn get_cacheable_with_retry<
+        Payload: Cacheable,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        cache_control: CacheControl,
+        response_callback: Callback,
+    ) -> Result<Payload::Target, CachedClientError<CallBackError>> {
+        let mut past_retries = 0;
+        let start_time = SystemTime::now();
+        let retry_policy = self.uncached().retry_policy();
+        loop {
+            let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
+            let result = self
+                .get_cacheable(fresh_req, cache_entry, cache_control, &response_callback)
+                .await;
+
+            // Check if the middleware already performed retries
+            let middleware_retries = match &result {
+                Err(err) => err.retries().unwrap_or_default(),
+                Ok(_) => 0,
+            };
+
+            if result
+                .as_ref()
+                .is_err_and(|err| is_extended_transient_error(err.error()))
+            {
+                // If middleware already retried, consider that in our retry budget
+                let total_retries = past_retries + middleware_retries;
+                let retry_decision = retry_policy.should_retry(start_time, total_retries);
+                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                    debug!(
+                        "Transient failure while handling response from {}; retrying...",
+                        req.url(),
+                    );
+                    let duration = execute_after
+                        .duration_since(SystemTime::now())
+                        .unwrap_or_else(|_| Duration::default());
+                    tokio::time::sleep(duration).await;
+                    past_retries += 1;
+                    continue;
+                }
+            }
+
+            if past_retries > 0 {
+                return result.map_err(|err| err.with_retries(past_retries));
+            }
+
+            return result;
+        }
+    }
+
+    /// Perform a [`CachedClient::skip_cache`] request with a default retry strategy.
+    ///
+    /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
+    pub async fn skip_cache_with_retry<
+        Payload: Serialize + DeserializeOwned + Send + 'static,
+        CallBackError: std::error::Error + 'static,
+        Callback: AsyncFn(Response) -> Result<Payload, CallBackError>,
+    >(
+        &self,
+        req: Request,
+        cache_entry: &CacheEntry,
+        response_callback: Callback,
+    ) -> Result<Payload, CachedClientError<CallBackError>> {
+        let mut past_retries = 0;
+        let start_time = SystemTime::now();
+        let retry_policy = self.uncached().retry_policy();
+        loop {
+            let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
+            let result = self
+                .skip_cache(fresh_req, cache_entry, &response_callback)
+                .await;
+
+            // Check if the middleware already performed retries
+            let middleware_retries = match &result {
+                Err(err) => err.retries().unwrap_or_default(),
+                _ => 0,
+            };
+
+            if result
+                .as_ref()
+                .err()
+                .is_some_and(|err| is_extended_transient_error(err.error()))
+            {
+                let total_retries = past_retries + middleware_retries;
+                let retry_decision = retry_policy.should_retry(start_time, total_retries);
+                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                    debug!(
+                        "Transient failure while handling response from {}; retrying...",
+                        req.url(),
+                    );
+                    let duration = execute_after
+                        .duration_since(SystemTime::now())
+                        .unwrap_or_else(|_| Duration::default());
+                    tokio::time::sleep(duration).await;
+                    past_retries += 1;
+                    continue;
+                }
+            }
+
+            if past_retries > 0 {
+                return result.map_err(|err| err.with_retries(past_retries));
+            }
+
+            return result;
+        }
     }
 }
 
@@ -641,7 +848,7 @@ impl DataWithCachePolicy {
     /// If the given byte buffer is not in a valid format or if the reader
     /// fails, then this returns an error.
     pub fn from_reader(mut rdr: impl std::io::Read) -> Result<Self, Error> {
-        let mut aligned_bytes = rkyv::util::AlignedVec::new();
+        let mut aligned_bytes = AlignedVec::new();
         aligned_bytes
             .extend_from_reader(&mut rdr)
             .map_err(ErrorKind::Io)?;

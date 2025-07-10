@@ -1,6 +1,7 @@
 use rustc_hash::FxHashMap;
+
+use uv_distribution_types::Requirement;
 use uv_pep508::{MarkerTree, PackageName};
-use uv_pypi_types::Requirement;
 
 use crate::ResolverEnvironment;
 
@@ -29,7 +30,7 @@ impl<T> ForkMap<T> {
     pub(crate) fn add(&mut self, requirement: &Requirement, value: T) {
         let entry = Entry {
             value,
-            marker: requirement.marker.clone(),
+            marker: requirement.marker,
         };
 
         self.0
@@ -60,7 +61,7 @@ impl<T> ForkMap<T> {
         };
         values
             .iter()
-            .filter(|entry| env.included_by_marker(&entry.marker))
+            .filter(|entry| env.included_by_marker(entry.marker))
             .map(|entry| &entry.value)
             .collect()
     }

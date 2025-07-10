@@ -1,16 +1,19 @@
-use uv_client::{RegistryClient, VersionFiles};
+use tokio::sync::Semaphore;
+use tracing::debug;
+
+use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl, RequiresPython};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
-use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
+use uv_resolver::{ExcludeNewer, PrereleaseMode};
 use uv_warnings::warn_user_once;
 
 /// A client to fetch the latest version of a package from an index.
 ///
 /// The returned distribution is guaranteed to be compatible with the provided tags and Python
 /// requirement.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,
@@ -20,14 +23,26 @@ pub(crate) struct LatestClient<'env> {
     pub(crate) requires_python: &'env RequiresPython,
 }
 
-impl<'env> LatestClient<'env> {
+impl LatestClient<'_> {
     /// Find the latest version of a package from an index.
     pub(crate) async fn find_latest(
         &self,
         package: &PackageName,
         index: Option<&IndexUrl>,
+        download_concurrency: &Semaphore,
     ) -> anyhow::Result<Option<DistFilename>, uv_client::Error> {
-        let archives = match self.client.simple(package, index, self.capabilities).await {
+        debug!("Fetching latest version of: `{package}`");
+
+        let archives = match self
+            .client
+            .package_metadata(
+                package,
+                index.map(IndexMetadataRef::from),
+                self.capabilities,
+                download_concurrency,
+            )
+            .await
+        {
             Ok(archives) => archives,
             Err(err) => {
                 return match err.into_kind() {
@@ -35,12 +50,16 @@ impl<'env> LatestClient<'env> {
                     uv_client::ErrorKind::NoIndex(_) => Ok(None),
                     uv_client::ErrorKind::Offline(_) => Ok(None),
                     kind => Err(kind.into()),
-                }
+                };
             }
         };
 
         let mut latest: Option<DistFilename> = None;
         for (_, archive) in archives {
+            let MetadataFormat::Simple(archive) = archive else {
+                continue;
+            };
+
             for datum in archive.iter().rev() {
                 // Find the first compatible distribution.
                 let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)

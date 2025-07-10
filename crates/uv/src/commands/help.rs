@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::{fmt::Display, fmt::Write};
 
-use anstream::{stream::IsTerminal, ColorChoice};
-use anyhow::{anyhow, Result};
+use anstream::{ColorChoice, stream::IsTerminal};
+use anyhow::{Result, anyhow};
 use clap::CommandFactory;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
@@ -140,7 +140,7 @@ impl PagerKind {
     }
 }
 
-impl std::fmt::Display for PagerKind {
+impl Display for PagerKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Less => write!(f, "less"),

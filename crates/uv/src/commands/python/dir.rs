@@ -3,7 +3,7 @@ use anyhow::Context;
 use owo_colors::OwoColorize;
 
 use uv_fs::Simplified;
-use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
+use uv_python::managed::{ManagedPythonInstallations, python_executable_dir};
 
 /// Show the Python installation directory.
 pub(crate) fn dir(bin: bool) -> anyhow::Result<()> {
@@ -11,7 +11,7 @@ pub(crate) fn dir(bin: bool) -> anyhow::Result<()> {
         let bin = python_executable_dir()?;
         println!("{}", bin.simplified_display().cyan());
     } else {
-        let installed_toolchains = ManagedPythonInstallations::from_settings()
+        let installed_toolchains = ManagedPythonInstallations::from_settings(None)
             .context("Failed to initialize toolchain settings")?;
         println!(
             "{}",

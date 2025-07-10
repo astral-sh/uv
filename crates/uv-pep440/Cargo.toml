@@ -11,11 +11,6 @@ documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 
-[lib]
-name = "uv_pep440"
-crate-type = ["rlib", "cdylib"]
-doctest = false
-
 [lints]
 workspace = true
 
@@ -29,7 +24,7 @@ unscanny = { workspace = true }
 version-ranges = { workspace = true, optional = true }
 
 [dev-dependencies]
-indoc = { version = "2.0.5" }
+indoc = { workspace = true }
 tracing = { workspace = true }
 
 [features]

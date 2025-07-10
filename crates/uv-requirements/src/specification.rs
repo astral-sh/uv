@@ -27,29 +27,30 @@
 //! * `setup.py` or `setup.cfg` instead of `pyproject.toml`: Directory is an entry in
 //!   `source_trees`.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
+
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{NoBinary, NoBuild};
+use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
+use uv_distribution_types::Requirement;
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use uv_fs::{Simplified, CWD};
-use uv_normalize::{ExtraName, PackageName};
-use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
-use uv_pypi_types::Requirement;
-use uv_pypi_types::VerbatimParsedUrl;
+use uv_fs::{CWD, Simplified};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::PyProjectToml;
 
 use crate::RequirementsSource;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RequirementsSpecification {
     /// The name of the project specifying requirements.
     pub project: Option<PackageName>,
@@ -59,8 +60,12 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The `pylock.toml` file from which to extract the resolution.
+    pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
     pub source_trees: Vec<PathBuf>,
+    /// The groups to use for `source_trees`
+    pub groups: BTreeMap<PathBuf, DependencyGroups>,
     /// The extras used to collect requirements.
     pub extras: FxHashSet<ExtraName>,
     /// The index URL to use for fetching packages.
@@ -85,24 +90,18 @@ impl RequirementsSpecification {
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         Ok(match source {
-            RequirementsSource::Package(name) => {
-                let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-                    .with_context(|| format!("Failed to parse: `{name}`"))?;
-                Self {
-                    requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
-                    ..Self::default()
-                }
-            }
-            RequirementsSource::Editable(name) => {
-                let requirement = RequirementsTxtRequirement::parse(name, &*CWD, true)
-                    .with_context(|| format!("Failed to parse: `{name}`"))?;
-                Self {
-                    requirements: vec![UnresolvedRequirementSpecification::from(
-                        requirement.into_editable()?,
-                    )],
-                    ..Self::default()
-                }
-            }
+            RequirementsSource::Package(requirement) => Self {
+                requirements: vec![UnresolvedRequirementSpecification::from(
+                    requirement.clone(),
+                )],
+                ..Self::default()
+            },
+            RequirementsSource::Editable(requirement) => Self {
+                requirements: vec![UnresolvedRequirementSpecification::from(
+                    requirement.clone().into_editable()?,
+                )],
+                ..Self::default()
+            },
             RequirementsSource::RequirementsTxt(path) => {
                 if !(path == Path::new("-")
                     || path.starts_with("http://")
@@ -113,6 +112,18 @@ impl RequirementsSpecification {
                 }
 
                 let requirements_txt = RequirementsTxt::parse(path, &*CWD, client_builder).await?;
+
+                if requirements_txt == RequirementsTxt::default() {
+                    if path == Path::new("-") {
+                        warn_user!("No dependencies found in stdin");
+                    } else {
+                        warn_user!(
+                            "Requirements file `{}` does not contain any dependencies",
+                            path.user_display()
+                        );
+                    }
+                }
+
                 Self {
                     requirements: requirements_txt
                         .requirements
@@ -180,27 +191,21 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
-            RequirementsSource::SourceTree(path) => {
-                if !path.is_dir() {
-                    return Err(anyhow::anyhow!(
-                        "Directory not found: `{}`",
-                        path.user_display()
-                    ));
+            RequirementsSource::PylockToml(path) => {
+                if !path.is_file() {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
                 Self {
-                    project: None,
-                    requirements: vec![UnresolvedRequirementSpecification {
-                        requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                            url: VerbatimParsedUrl::parse_absolute_path(path)?,
-                            extras: vec![],
-                            marker: MarkerTree::TRUE,
-                            origin: None,
-                        }),
-                        hashes: vec![],
-                    }],
+                    pylock: Some(path.clone()),
                     ..Self::default()
                 }
+            }
+            RequirementsSource::EnvironmentYml(path) => {
+                return Err(anyhow::anyhow!(
+                    "Conda environment files (i.e., `{}`) are not supported",
+                    path.user_display()
+                ));
             }
         })
     }
@@ -210,20 +215,117 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
+        groups: BTreeMap<PathBuf, Vec<GroupName>>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
 
+        // Disallow `pylock.toml` files as constraints.
+        if let Some(pylock_toml) = constraints.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as a constraint file",
+                pylock_toml.user_display()
+            ));
+        }
+
+        // Disallow `pylock.toml` files as overrides.
+        if let Some(pylock_toml) = overrides.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as an override file",
+                pylock_toml.user_display()
+            ));
+        }
+
+        // If we have a `pylock.toml`, don't allow additional requirements, constraints, or
+        // overrides.
+        if requirements
+            .iter()
+            .any(|source| matches!(source, RequirementsSource::PylockToml(..)))
+        {
+            if requirements
+                .iter()
+                .any(|source| !matches!(source, RequirementsSource::PylockToml(..)))
+            {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify additional requirements alongside a `pylock.toml` file",
+                ));
+            }
+            if !constraints.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify additional requirements with a `pylock.toml` file"
+                ));
+            }
+            if !overrides.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify constraints with a `pylock.toml` file"
+                ));
+            }
+            if !groups.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify groups with a `pylock.toml` file"
+                ));
+            }
+        }
+
+        // Resolve sources into specifications so we know their `source_tree`.
+        let mut requirement_sources = Vec::new();
+        for source in requirements {
+            let source = Self::from_source(source, client_builder).await?;
+            requirement_sources.push(source);
+        }
+
+        // pip `--group` flags specify their own sources, which we need to process here
+        if !groups.is_empty() {
+            let mut group_specs = BTreeMap::new();
+            for (path, groups) in groups {
+                let group_spec = DependencyGroups::from_args(
+                    false,
+                    false,
+                    false,
+                    Vec::new(),
+                    Vec::new(),
+                    false,
+                    groups,
+                    false,
+                );
+                group_specs.insert(path, group_spec);
+            }
+            spec.groups = group_specs;
+        }
+
         // Read all requirements, and keep track of all requirements _and_ constraints.
         // A `requirements.txt` can contain a `-c constraints.txt` directive within it, so reading
         // a requirements file can also add constraints.
-        for source in requirements {
-            let source = Self::from_source(source, client_builder).await?;
+        for source in requirement_sources {
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
             spec.source_trees.extend(source.source_trees);
+
+            // Allow at most one `pylock.toml`.
+            if let Some(pylock) = source.pylock {
+                if let Some(existing) = spec.pylock {
+                    return Err(anyhow::anyhow!(
+                        "Multiple `pylock.toml` files specified: `{}` vs. `{}`",
+                        existing.user_display(),
+                        pylock.user_display()
+                    ));
+                }
+                spec.pylock = Some(pylock);
+            }
 
             // Use the first project name discovered.
             if spec.project.is_none() {
@@ -324,13 +426,53 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], client_builder).await
+        Self::from_sources(requirements, &[], &[], BTreeMap::default(), client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints.
+    pub fn from_constraints(requirements: Vec<Requirement>, constraints: Vec<Requirement>) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints and overrides.
+    pub fn from_overrides(
+        requirements: Vec<Requirement>,
+        constraints: Vec<Requirement>,
+        overrides: Vec<Requirement>,
+    ) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            overrides: overrides
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from)
                 .collect(),

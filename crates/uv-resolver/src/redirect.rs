@@ -1,7 +1,7 @@
-use url::Url;
-use uv_git::{GitReference, GitResolver};
+use uv_git::GitResolver;
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_redacted::DisplaySafeUrl;
 
 /// Map a URL to a precise URL, if possible.
 pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> VerbatimParsedUrl {
@@ -14,19 +14,18 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
     };
 
     let Some(new_git_url) = git.precise(git_url.clone()) else {
-        debug_assert!(
-            matches!(git_url.reference(), GitReference::FullCommit(_)),
-            "Unseen Git URL: {}, {git_url:?}",
-            url.verbatim,
-        );
-        return url;
+        if cfg!(debug_assertions) {
+            panic!("Unresolved Git URL: {}, {git_url:?}", url.verbatim);
+        } else {
+            return url;
+        }
     };
 
     let new_parsed_url = ParsedGitUrl {
         url: new_git_url,
         subdirectory: subdirectory.clone(),
     };
-    let new_url = Url::from(new_parsed_url.clone());
+    let new_url = DisplaySafeUrl::from(new_parsed_url.clone());
     let new_verbatim_url = apply_redirect(&url.verbatim, new_url);
     VerbatimParsedUrl {
         parsed_url: ParsedUrl::Git(new_parsed_url),
@@ -36,7 +35,7 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
 
 /// Given a [`VerbatimUrl`] and a redirect, apply the redirect to the URL while preserving as much
 /// of the verbatim representation as possible.
-fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
+fn apply_redirect(url: &VerbatimUrl, redirect: DisplaySafeUrl) -> VerbatimUrl {
     let redirect = VerbatimUrl::from_url(redirect);
 
     // The redirect should be the "same" URL, but with a specific commit hash added after the `@`.
@@ -84,4 +83,68 @@ fn apply_redirect(url: &VerbatimUrl, redirect: Url) -> VerbatimUrl {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use uv_pep508::VerbatimUrl;
+    use uv_redacted::DisplaySafeUrl;
+
+    use crate::redirect::apply_redirect;
+
+    #[test]
+    fn test_apply_redirect() -> Result<(), url::ParseError> {
+        // If there's no `@` in the original representation, we can just append the precise suffix
+        // to the given representation.
+        let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git")?
+            .with_given("git+https://github.com/flask.git");
+        let redirect = DisplaySafeUrl::parse(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
+        )?;
+
+        let expected = VerbatimUrl::parse_url(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
+        )?
+        .with_given("https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe");
+        assert_eq!(apply_redirect(&verbatim, redirect), expected);
+
+        // If there's an `@` in the original representation, and it's stable between the parsed and
+        // given representations, we preserve everything that precedes the `@` in the precise
+        // representation.
+        let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git@main")?
+            .with_given("git+https://${DOMAIN}.com/flask.git@main");
+        let redirect = DisplaySafeUrl::parse(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
+        )?;
+
+        let expected = VerbatimUrl::parse_url(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
+        )?
+        .with_given("https://${DOMAIN}.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe");
+        assert_eq!(apply_redirect(&verbatim, redirect), expected);
+
+        // If there's a conflict after the `@`, discard the original representation.
+        let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git@main")?
+            .with_given("git+https://github.com/flask.git@${TAG}");
+        let redirect = DisplaySafeUrl::parse(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
+        )?;
+
+        let expected = VerbatimUrl::parse_url(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe",
+        )?;
+        assert_eq!(apply_redirect(&verbatim, redirect), expected);
+
+        // We should preserve subdirectory fragments.
+        let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git#subdirectory=src")?
+            .with_given("git+https://github.com/flask.git#subdirectory=src");
+        let redirect = DisplaySafeUrl::parse(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src",
+        )?;
+
+        let expected = VerbatimUrl::parse_url(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src",
+        )?.with_given("git+https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src");
+
+        assert_eq!(apply_redirect(&verbatim, redirect), expected);
+
+        Ok(())
+    }
+}

@@ -1,0 +1,7 @@
+# Run with:
+# ```
+# uv pip compile scripts/requirements/airflow2-req.in -c scripts/requirements/airflow2-constraints.txt --universal --python-version 3.8
+# ```
+apache-airflow[amazon,async,google,google_auth,grpc,hashicorp,http,ldap,mysql,odbc,pandas,postgres,redis,sftp,slack,ssh,statsd,virtualenv]==2.3.4
+alembic>=1.8.1
+ipython>=8.4.0
