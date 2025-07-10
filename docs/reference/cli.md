@@ -787,11 +787,18 @@ uv version [OPTIONS] [VALUE]
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
 <p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-version--bump"><a href="#uv-version--bump"><code>--bump</code></a> <i>bump</i></dt><dd><p>Update the project version using the given semantics</p>
+<p>This flag can be passed multiple times.</p>
 <p>Possible values:</p>
 <ul>
-<li><code>major</code>:  Increase the major version (1.2.3 =&gt; 2.0.0)</li>
-<li><code>minor</code>:  Increase the minor version (1.2.3 =&gt; 1.3.0)</li>
-<li><code>patch</code>:  Increase the patch version (1.2.3 =&gt; 1.2.4)</li>
+<li><code>major</code>:  Increase the major version (e.g., 1.2.3 =&gt; 2.0.0)</li>
+<li><code>minor</code>:  Increase the minor version (e.g., 1.2.3 =&gt; 1.3.0)</li>
+<li><code>patch</code>:  Increase the patch version (e.g., 1.2.3 =&gt; 1.2.4)</li>
+<li><code>stable</code>:  Move from a pre-release to stable version (e.g., 1.2.3b4.post5.dev6 =&gt; 1.2.3)</li>
+<li><code>alpha</code>:  Increase the alpha version (e.g., 1.2.3a4 =&gt; 1.2.3a5)</li>
+<li><code>beta</code>:  Increase the beta version (e.g., 1.2.3b4 =&gt; 1.2.3b5)</li>
+<li><code>rc</code>:  Increase the rc version (e.g., 1.2.3rc4 =&gt; 1.2.3rc5)</li>
+<li><code>post</code>:  Increase the post version (e.g., 1.2.3.post5 =&gt; 1.2.3.post6)</li>
+<li><code>dev</code>:  Increase the dev version (e.g., 1.2.3a4.dev6 =&gt; 1.2.3.dev7)</li>
 </ul></dd><dt id="uv-version--cache-dir"><a href="#uv-version--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
