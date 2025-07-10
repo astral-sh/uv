@@ -20,8 +20,7 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, InstalledDist, Name,
-    SourceDist,
+    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, InstalledDist, Name, SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -179,12 +178,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
-                let url = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        uv_pypi_types::base_url_join_relative(base, url)?
-                    }
-                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
-                };
+                let url = wheel.file.url.to_url()?;
 
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(
@@ -418,15 +412,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        // If the metadata was provided by the user directly, prefer it.
-        if let Some(metadata) = self
-            .build_context
-            .dependency_metadata()
-            .get(dist.name(), Some(dist.version()))
-        {
-            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
-        }
-
         // If hash generation is enabled, and the distribution isn't hosted on a registry, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
         // is hosted on an index, the hashes will be included in the simple metadata response.
@@ -443,12 +428,30 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if hashes.is_generate(dist) {
             let wheel = self.get_wheel(dist, hashes).await?;
-            let metadata = wheel.metadata()?;
+            // If the metadata was provided by the user directly, prefer it.
+            let metadata = if let Some(metadata) = self
+                .build_context
+                .dependency_metadata()
+                .get(dist.name(), Some(dist.version()))
+            {
+                metadata.clone()
+            } else {
+                wheel.metadata()?
+            };
             let hashes = wheel.hashes;
             return Ok(ArchiveMetadata {
                 metadata: Metadata::from_metadata23(metadata),
                 hashes,
             });
+        }
+
+        // If the metadata was provided by the user directly, prefer it.
+        if let Some(metadata) = self
+            .build_context
+            .dependency_metadata()
+            .get(dist.name(), Some(dist.version()))
+        {
+            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
 
         let result = self
@@ -593,7 +596,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let id = self
                     .build_context
                     .cache()
-                    .persist(temp_dir.into_path(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -635,8 +638,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             })
             .await
             .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => err,
+                CachedClientError::Client { err, .. } => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -654,8 +657,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
-                            CachedClientError::Callback(err) => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Callback { err, .. } => err,
+                            CachedClientError::Client { err, .. } => Error::Client(err),
                         })
                 })
                 .await?
@@ -764,7 +767,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let id = self
                     .build_context
                     .cache()
-                    .persist(temp_dir.into_path(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -802,8 +805,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             })
             .await
             .map_err(|err| match err {
-                CachedClientError::Callback(err) => err,
-                CachedClientError::Client(err) => Error::Client(err),
+                CachedClientError::Callback { err, .. } => err,
+                CachedClientError::Client { err, .. } => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -821,8 +824,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
-                            CachedClientError::Callback(err) => err,
-                            CachedClientError::Client(err) => Error::Client(err),
+                            CachedClientError::Callback { err, .. } => err,
+                            CachedClientError::Client { err, .. } => Error::Client(err),
                         })
                 })
                 .await?
@@ -925,7 +928,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let id = self
                 .build_context
                 .cache()
-                .persist(temp_dir.into_path(), wheel_entry.path())
+                .persist(temp_dir.keep(), wheel_entry.path())
                 .await
                 .map_err(Error::CacheWrite)?;
 
@@ -973,7 +976,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let id = self
             .build_context
             .cache()
-            .persist(temp_dir.into_path(), target)
+            .persist(temp_dir.keep(), target)
             .await
             .map_err(Error::CacheWrite)?;
 

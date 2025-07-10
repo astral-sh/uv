@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.7.8"
+version = "0.7.20"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -58,7 +58,7 @@ uv-types = { workspace = true }
 uv-version = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
-uv-workspace = { workspace = true }
+uv-workspace = { workspace = true, features = ["clap"] }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
@@ -70,10 +70,12 @@ clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
 dotenvy = { workspace = true }
+dunce = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
+indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
@@ -112,7 +114,6 @@ assert_cmd = { version = "2.0.16" }
 assert_fs = { version = "1.1.2" }
 base64 = { workspace = true }
 byteorder = { version = "1.5.0" }
-etcetera = { workspace = true }
 filetime = { version = "0.2.25" }
 flate2 = { workspace = true, default-features = false }
 ignore = { version = "0.4.23" }
@@ -124,6 +125,7 @@ reqwest = { workspace = true, features = ["blocking"], default-features = false 
 similar = { version = "2.6.0" }
 tar = { workspace = true }
 tempfile = { workspace = true }
+whoami = { version = "1.6.0" }
 wiremock = { workspace = true }
 zip = { workspace = true }
 
@@ -178,6 +180,12 @@ python-managed = []
 slow-tests = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
+# Build uvw binary on Windows
+windows-gui-bin = []
 
 [package.metadata.dist]
 dist = true
+
+[[bin]]
+name = "uvw"
+required-features = ["windows-gui-bin"]

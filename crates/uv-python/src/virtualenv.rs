@@ -32,7 +32,6 @@ pub struct VirtualEnvironment {
 
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PyVenvConfiguration {
     /// Was the virtual environment created with the `virtualenv` package?
     pub(crate) virtualenv: bool,
@@ -131,14 +130,14 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
 
     for dir in current_dir.ancestors() {
         // If we're _within_ a virtualenv, return it.
-        if dir.join("pyvenv.cfg").is_file() {
+        if uv_fs::is_virtualenv_base(dir) {
             return Ok(Some(dir.to_path_buf()));
         }
 
         // Otherwise, search for a `.venv` directory.
         let dot_venv = dir.join(".venv");
         if dot_venv.is_dir() {
-            if !dot_venv.join("pyvenv.cfg").is_file() {
+            if !uv_fs::is_virtualenv_base(&dot_venv) {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
             return Ok(Some(dot_venv));

@@ -153,9 +153,6 @@ pub enum ErrorKind {
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
 
     #[error(transparent)]
-    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
-
-    #[error(transparent)]
     Flat(#[from] FlatIndexError),
 
     #[error("Expected a file URL, but received: {0}")]
@@ -196,6 +193,13 @@ pub enum ErrorKind {
     /// An error that happened while making a request or in a reqwest middleware.
     #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
+
+    /// Add the number of failed retries to the error.
+    #[error("Request failed after {retries} retries")]
+    RequestWithRetries {
+        source: Box<ErrorKind>,
+        retries: u32,
+    },
 
     #[error("Received some unexpected JSON from {}", url)]
     BadJson {

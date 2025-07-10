@@ -11,6 +11,7 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
+
 use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
@@ -35,8 +36,8 @@ use uv_resolver::{
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
-    InFlight,
+    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
+    HashStrategy, InFlight,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -179,6 +180,10 @@ impl BuildContext for BuildDispatch<'_> {
         &self.shared_state.git
     }
 
+    fn build_arena(&self) -> &BuildArena<SourceBuild> {
+        &self.shared_state.build_arena
+    }
+
     fn capabilities(&self) -> &IndexCapabilities {
         &self.shared_state.capabilities
     }
@@ -226,6 +231,7 @@ impl BuildContext for BuildDispatch<'_> {
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
+            self.interpreter.markers(),
             // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
@@ -432,6 +438,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.build_extra_env_vars.clone(),
             build_output,
             self.concurrency.builds,
+            self.preview,
         )
         .boxed_local()
         .await?;
@@ -446,12 +453,6 @@ impl BuildContext for BuildDispatch<'_> {
         build_kind: BuildKind,
         version_id: Option<&'data str>,
     ) -> Result<Option<DistFilename>, BuildDispatchError> {
-        // Direct builds are a preview feature with the uv build backend.
-        if self.preview.is_disabled() {
-            trace!("Preview is disabled, not checking for direct build");
-            return Ok(None);
-        }
-
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
         } else {
@@ -519,6 +520,8 @@ pub struct SharedState {
     index: InMemoryIndex,
     /// The downloaded distributions.
     in_flight: InFlight,
+    /// Build directories for any PEP 517 builds executed during resolution or installation.
+    build_arena: BuildArena<SourceBuild>,
 }
 
 impl SharedState {
@@ -531,6 +534,7 @@ impl SharedState {
         Self {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
+            build_arena: self.build_arena.clone(),
             ..Default::default()
         }
     }
@@ -553,5 +557,10 @@ impl SharedState {
     /// Return the [`IndexCapabilities`] used by the [`SharedState`].
     pub fn capabilities(&self) -> &IndexCapabilities {
         &self.capabilities
+    }
+
+    /// Return the [`BuildArena`] used by the [`SharedState`].
+    pub fn build_arena(&self) -> &BuildArena<SourceBuild> {
+        &self.build_arena
     }
 }

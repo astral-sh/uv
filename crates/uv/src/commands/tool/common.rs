@@ -7,6 +7,7 @@ use std::{collections::BTreeSet, ffi::OsString};
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_configuration::PreviewMode;
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledDist, Name};
 use uv_fs::Simplified;
@@ -80,6 +81,7 @@ pub(crate) async fn refine_interpreter(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
+    preview: PreviewMode,
 ) -> anyhow::Result<Option<Interpreter>, ProjectError> {
     let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
         err
@@ -151,6 +153,7 @@ pub(crate) async fn refine_interpreter(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await?
     .into_interpreter();
@@ -158,14 +161,18 @@ pub(crate) async fn refine_interpreter(
     Ok(Some(interpreter))
 }
 
-/// Installs tool executables for a given package and handles any conflicts.
-pub(crate) fn install_executables(
+/// Finalizes a tool installation, after creation of an environment.
+///
+/// Installs tool executables for a given package, handling any conflicts.
+///
+/// Adds a receipt for the tool.
+pub(crate) fn finalize_tool_install(
     environment: &PythonEnvironment,
     name: &PackageName,
     installed_tools: &InstalledTools,
     options: ToolOptions,
     force: bool,
-    python: Option<String>,
+    python: Option<PythonRequest>,
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
@@ -211,7 +218,7 @@ pub(crate) fn install_executables(
     if target_entry_points.is_empty() {
         writeln!(
             printer.stdout(),
-            "No executables are provided by `{from}`",
+            "No executables are provided by package `{from}`; removing tool",
             from = name.cyan()
         )?;
 
@@ -347,7 +354,9 @@ fn hint_executable_from_dependency(
             let command = format!("uv tool install {}", package.name());
             writeln!(
                 printer.stdout(),
-                "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
+                "{}{} An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
+                "hint".bold().cyan(),
+                ":".bold(),
                 name.cyan(),
                 package.name().cyan(),
                 command.bold(),
@@ -356,7 +365,9 @@ fn hint_executable_from_dependency(
         packages => {
             writeln!(
                 printer.stdout(),
-                "However, an executable with the name `{}` is available via the following dependencies::",
+                "{}{} An executable with the name `{}` is available via the following dependencies::",
+                "hint".bold().cyan(),
+                ":".bold(),
                 name.cyan(),
             )?;
 
@@ -365,7 +376,7 @@ fn hint_executable_from_dependency(
             }
             writeln!(
                 printer.stdout(),
-                "Did you mean to install one of them instead?"
+                "      Did you mean to install one of them instead?"
             )?;
         }
     }

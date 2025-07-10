@@ -1,14 +1,14 @@
 use std::sync::Arc;
 use tracing::trace;
+use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
-use crate::requires_python::RequiresPythonRange;
 use crate::resolver::ForkState;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{PythonRequirement, RequiresPython, ResolveError};
+use crate::{PythonRequirement, ResolveError};
 
 /// Represents one or more marker environments for a resolution.
 ///
@@ -196,6 +196,14 @@ impl ResolverEnvironment {
             return None;
         };
         crate::marker::requires_python(pep508_marker)
+    }
+
+    /// For a universal resolution, return the markers of the current fork.
+    pub(crate) fn fork_markers(&self) -> Option<MarkerTree> {
+        match self.kind {
+            Kind::Specific { .. } => None,
+            Kind::Universal { markers, .. } => Some(markers),
+        }
     }
 
     /// Narrow this environment given the forking markers.
@@ -620,7 +628,7 @@ mod tests {
     use uv_pep440::{LowerBound, UpperBound, Version};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 
-    use crate::requires_python::{RequiresPython, RequiresPythonRange};
+    use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 
     use super::*;
 

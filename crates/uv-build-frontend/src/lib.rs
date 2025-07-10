@@ -25,11 +25,14 @@ use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{Instrument, debug, info_span, instrument};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 
+use uv_cache_key::cache_digest;
+use uv_configuration::PreviewMode;
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Requirement, Resolution};
+use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -200,6 +203,11 @@ impl Pep517Backend {
             {import}
         "#, backend_path = backend_path_encoded}
     }
+
+    fn is_setuptools(&self) -> bool {
+        // either `setuptools.build_meta` or `setuptools.build_meta:__legacy__`
+        self.backend.split(':').next() == Some("setuptools.build_meta")
+    }
 }
 
 /// Uses an [`Rc`] internally, clone freely.
@@ -278,6 +286,7 @@ impl SourceBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        preview: PreviewMode,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
 
@@ -325,6 +334,8 @@ impl SourceBuild {
                 false,
                 false,
                 false,
+                false,
+                preview,
             )?
         };
 
@@ -428,6 +439,31 @@ impl SourceBuild {
             modified_path,
             runner,
         })
+    }
+
+    /// Acquire a lock on the source tree, if necessary.
+    async fn acquire_lock(&self) -> Result<Option<LockedFile>, Error> {
+        // Depending on the command, setuptools puts `*.egg-info`, `build/`, and `dist/` in the
+        // source tree, and concurrent invocations of setuptools using the same source dir can
+        // stomp on each other. We need to lock something to fix that, but we don't want to dump a
+        // `.lock` file into the source tree that the user will need to .gitignore. Take a global
+        // proxy lock instead.
+        let mut source_tree_lock = None;
+        if self.pep517_backend.is_setuptools() {
+            debug!("Locking the source tree for setuptools");
+            let canonical_source_path = self.source_tree.canonicalize()?;
+            let lock_path = env::temp_dir().join(format!(
+                "uv-setuptools-{}.lock",
+                cache_digest(&canonical_source_path)
+            ));
+            source_tree_lock = LockedFile::acquire(lock_path, self.source_tree.to_string_lossy())
+                .await
+                .inspect_err(|err| {
+                    warn!("Failed to acquire build lock: {err}");
+                })
+                .ok();
+        }
+        Ok(source_tree_lock)
     }
 
     async fn get_resolved_requirements(
@@ -600,6 +636,9 @@ impl SourceBuild {
             return Ok(Some(metadata_dir.clone()));
         }
 
+        // Lock the source tree, if necessary.
+        let _lock = self.acquire_lock().await?;
+
         // Hatch allows for highly dynamic customization of metadata via hooks. In such cases, Hatch
         // can't uphold the PEP 517 contract, in that the metadata Hatch would return by
         // `prepare_metadata_for_build_wheel` isn't guaranteed to match that of the built wheel.
@@ -712,16 +751,15 @@ impl SourceBuild {
     pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = std::path::absolute(wheel_dir)?;
-        let filename = self.pep517_build(&wheel_dir, &self.pep517_backend).await?;
+        let filename = self.pep517_build(&wheel_dir).await?;
         Ok(filename)
     }
 
     /// Perform a PEP 517 build for a wheel or source distribution (sdist).
-    async fn pep517_build(
-        &self,
-        output_dir: &Path,
-        pep517_backend: &Pep517Backend,
-    ) -> Result<String, Error> {
+    async fn pep517_build(&self, output_dir: &Path) -> Result<String, Error> {
+        // Lock the source tree, if necessary.
+        let _lock = self.acquire_lock().await?;
+
         // Write the hook output to a file so that we can read it back reliably.
         let outfile = self
             .temp_dir
@@ -733,7 +771,7 @@ impl SourceBuild {
             BuildKind::Sdist => {
                 debug!(
                     r#"Calling `{}.build_{}("{}", {})`"#,
-                    pep517_backend.backend,
+                    self.pep517_backend.backend,
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -746,7 +784,7 @@ impl SourceBuild {
                     with open("{}", "w") as fp:
                         fp.write(sdist_filename)
                     "#,
-                    pep517_backend.backend_import(),
+                    self.pep517_backend.backend_import(),
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -762,7 +800,7 @@ impl SourceBuild {
                     });
                 debug!(
                     r#"Calling `{}.build_{}("{}", {}, {})`"#,
-                    pep517_backend.backend,
+                    self.pep517_backend.backend,
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -776,7 +814,7 @@ impl SourceBuild {
                     with open("{}", "w") as fp:
                         fp.write(wheel_filename)
                     "#,
-                    pep517_backend.backend_import(),
+                    self.pep517_backend.backend_import(),
                     self.build_kind,
                     output_dir.escape_for_python(),
                     self.config_settings.escape_for_python(),
@@ -806,7 +844,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 format!(
                     "Call to `{}.build_{}` failed",
-                    pep517_backend.backend, self.build_kind
+                    self.pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
@@ -821,7 +859,7 @@ impl SourceBuild {
             return Err(Error::from_command_output(
                 format!(
                     "Call to `{}.build_{}` failed",
-                    pep517_backend.backend, self.build_kind
+                    self.pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,

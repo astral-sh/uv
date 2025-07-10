@@ -133,7 +133,7 @@ fn run_with_python_version() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
-    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.11, <4`
+    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.11, <4` (from `project.requires-python`)
     ");
 
     Ok(())
@@ -1344,7 +1344,7 @@ fn run_with_build_constraints() -> Result<()> {
     })?;
 
     // Installing requests with incompatible build constraints should fail.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1358,12 +1358,11 @@ fn run_with_build_constraints() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    Resolved 1 package in [TIME]
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     // Change the build constraint to be compatible with `requests==1.2`.
     pyproject_toml.write_str(indoc! { r#"
@@ -2732,7 +2731,7 @@ fn run_without_output() -> Result<()> {
 /// Ensure that we can import from the root project when layering `--with` requirements.
 #[test]
 fn run_isolated_python_version() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2766,10 +2765,10 @@ fn run_isolated_python_version() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    (3, 8)
+    (3, 9)
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
@@ -2786,7 +2785,7 @@ fn run_isolated_python_version() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    (3, 8)
+    (3, 9)
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -3136,25 +3135,27 @@ fn run_isolated_incompatible_python() -> Result<()> {
     })?;
 
     // We should reject Python 3.9...
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
-    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. Use `uv python pin` to update the `.python-version` file to a compatible version.
-    "###);
+    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
+    Use `uv python pin` to update the `.python-version` file to a compatible version
+    ");
 
     // ...even if `--isolated` is provided.
-    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. Use `uv python pin` to update the `.python-version` file to a compatible version.
-    "###);
+    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
+    Use `uv python pin` to update the `.python-version` file to a compatible version
+    ");
 
     Ok(())
 }
@@ -3281,7 +3282,7 @@ fn run_exit_code() -> Result<()> {
 
 #[test]
 fn run_invalid_project_table() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.8"]);
+    let context = TestContext::new_with_versions(&["3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4598,6 +4599,265 @@ fn run_default_groups() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_groups_requires_python() -> Result<()> {
+    let context =
+        TestContext::new_with_versions(&["3.11", "3.12", "3.13"]).with_filtered_python_sources();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        foo = {requires-python=">=3.14"}
+        bar = {requires-python=">=3.13"}
+        dev = {requires-python=">=3.12"}
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // With --no-default-groups only the main requires-python should be consulted
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-default-groups")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    // The main requires-python and the default group's requires-python should be consulted
+    // (This should trigger a version bump)
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // The main requires-python and "dev" and "bar" requires-python should be consulted
+    // (This should trigger a version bump)
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--group").arg("bar")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 3 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // TMP: Attempt to catch this flake with verbose output
+    // See https://github.com/astral-sh/uv/issues/14160
+    let output = context
+        .run()
+        .arg("python")
+        .arg("-c")
+        .arg("import typing_extensions")
+        .arg("-vv")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Removed virtual environment"),
+        "{}",
+        stderr
+    );
+
+    // Going back to just "dev" we shouldn't churn the venv needlessly
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 2 packages in [TIME]
+    ");
+
+    // Explicitly requesting an in-range python can downgrade
+    uv_snapshot!(context.filters(), context.run()
+        .arg("-p").arg("3.12")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 6 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Explicitly requesting an out-of-range python fails
+    uv_snapshot!(context.filters(), context.run()
+        .arg("-p").arg("3.11")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `tool.uv.dependency-groups.dev.requires-python`).
+    ");
+
+    // Enabling foo we can't find an interpreter
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--group").arg("foo")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_groups_include_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12", "3.13"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        baz = ["iniconfig"]
+        dev = ["sniffio", {include-group = "foo"}, {include-group = "baz"}]
+
+
+        [tool.uv.dependency-groups]
+        foo = {requires-python="<3.13"}
+        bar = {requires-python=">=3.13"}
+        baz = {requires-python=">=3.12"}
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // With --no-default-groups only the main requires-python should be consulted
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-default-groups")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    // The main requires-python and the default group's requires-python should be consulted
+    // (This should trigger a version bump)
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // The main requires-python and "dev" and "bar" requires-python should be consulted
+    // (This should trigger a conflict)
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--group").arg("bar")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting Python requirements:
+    - project: >=3.11
+    - project:bar: >=3.13
+    - project:dev: >=3.12, <3.13
+    ");
+
+    // Explicitly requesting an out-of-range python fails
+    uv_snapshot!(context.filters(), context.run()
+        .arg("-p").arg("3.13")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `tool.uv.dependency-groups.dev.requires-python`).
+    ");
+    Ok(())
+}
+
 /// Test that a signal n makes the process exit with code 128+n.
 #[cfg(unix)]
 #[test]
@@ -4616,7 +4876,7 @@ fn exit_status_signal() -> Result<()> {
 
 #[test]
 fn run_repeated() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.13"]);
+    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4663,22 +4923,25 @@ fn run_repeated() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    // Re-running as a tool shouldn't require reinstalling `typing-extensions`, since the environment is cached.
+    // Re-running as a tool does require reinstalling `typing-extensions`, since the base venv is
+    // different.
     uv_snapshot!(
         context.filters(),
-        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
         import typing_extensions; import iniconfig
                                   ^^^^^^^^^^^^^^^^
     ModuleNotFoundError: No module named 'iniconfig'
-    "###);
+    "#);
 
     Ok(())
 }
@@ -4719,22 +4982,25 @@ fn run_without_overlay() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    // Import `iniconfig` in the context of a `tool run` command, which should fail.
+    // Import `iniconfig` in the context of a `tool run` command, which should fail. Note that
+    // typing-extensions gets installed again, because the venv is not shared.
     uv_snapshot!(
         context.filters(),
-        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r###"
+        context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
         import typing_extensions; import iniconfig
                                   ^^^^^^^^^^^^^^^^
     ModuleNotFoundError: No module named 'iniconfig'
-    "###);
+    "#);
 
     // Re-running in the context of the project should reset the overlay.
     uv_snapshot!(

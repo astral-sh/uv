@@ -44,12 +44,26 @@ impl ImplementationName {
             Self::GraalPy => "GraalPy",
         }
     }
+
+    pub fn executable_name(self) -> &'static str {
+        match self {
+            Self::CPython => "python",
+            Self::PyPy | Self::GraalPy => self.into(),
+        }
+    }
 }
 
 impl LenientImplementationName {
     pub fn pretty(&self) -> &str {
         match self {
             Self::Known(implementation) => implementation.pretty(),
+            Self::Unknown(name) => name,
+        }
+    }
+
+    pub fn executable_name(&self) -> &str {
+        match self {
+            Self::Known(implementation) => implementation.executable_name(),
             Self::Unknown(name) => name,
         }
     }

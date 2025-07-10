@@ -147,15 +147,15 @@ impl PartialOrd<SmallString> for rkyv::string::ArchivedString {
 /// An [`schemars::JsonSchema`] implementation for [`SmallString`].
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SmallString {
-    fn is_referenceable() -> bool {
-        String::is_referenceable()
+    fn inline_schema() -> bool {
+        true
     }
 
-    fn schema_name() -> String {
+    fn schema_name() -> Cow<'static, str> {
         String::schema_name()
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        String::json_schema(_gen)
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        String::json_schema(generator)
     }
 }

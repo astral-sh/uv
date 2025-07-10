@@ -13,10 +13,9 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_types::InstalledPackagesProvider;
 
-use crate::preferences::{Entry, Preferences};
+use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
-use crate::universal_marker::UniversalMarker;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
@@ -188,7 +187,7 @@ impl CandidateSelector {
                 if index.is_some_and(|index| !entry.index().matches(index)) {
                     return None;
                 }
-                Either::Left(std::iter::once((entry.marker(), entry.pin().version())))
+                Either::Left(std::iter::once((entry.pin().version(), entry.source())))
             }
             [..] => {
                 type Entries<'a> = SmallVec<[&'a Entry; 3]>;
@@ -219,7 +218,7 @@ impl CandidateSelector {
                 Either::Right(
                     preferences
                         .into_iter()
-                        .map(|entry| (entry.marker(), entry.pin().version())),
+                        .map(|entry| (entry.pin().version(), entry.source())),
                 )
             }
         };
@@ -238,7 +237,7 @@ impl CandidateSelector {
     /// Return the first preference that satisfies the current range and is allowed.
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
-        preferences: impl Iterator<Item = (&'a UniversalMarker, &'a Version)>,
+        preferences: impl Iterator<Item = (&'a Version, PreferenceSource)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
@@ -246,7 +245,7 @@ impl CandidateSelector {
         reinstall: bool,
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
-        for (marker, version) in preferences {
+        for (version, source) in preferences {
             // Respect the version range for this requirement.
             if !range.contains(version) {
                 continue;
@@ -290,9 +289,14 @@ impl CandidateSelector {
                 let allow = match self.prerelease_strategy.allows(package_name, env) {
                     AllowPrerelease::Yes => true,
                     AllowPrerelease::No => false,
-                    // If the pre-release is "global" (i.e., provided via a lockfile, rather than
-                    // a fork), accept it unless pre-releases are completely banned.
-                    AllowPrerelease::IfNecessary => marker.is_true(),
+                    // If the pre-release was provided via an existing file, rather than from the
+                    // current solve, accept it unless pre-releases are completely banned.
+                    AllowPrerelease::IfNecessary => match source {
+                        PreferenceSource::Resolver => false,
+                        PreferenceSource::Lock
+                        | PreferenceSource::Environment
+                        | PreferenceSource::RequirementsTxt => true,
+                    },
                 };
                 if !allow {
                     continue;

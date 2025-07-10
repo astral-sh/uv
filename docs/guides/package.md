@@ -31,8 +31,8 @@ the effect of declaring a build system in the
     This setting makes PyPI reject your uploaded package from publishing. It does not affect
     security or privacy settings on alternative registries.
 
-    We also recommend only generating per-project tokens: Without a PyPI token matching the project,
-    it can't be accidentally published.
+    We also recommend only generating [per-project PyPI API tokens](https://pypi.org/help/#apitoken):
+    Without a PyPI token matching the project, it can't be accidentally published.
 
 ## Building your package
 
@@ -93,7 +93,7 @@ explicit = true
 Even though `uv publish` retries failed uploads, it can happen that publishing fails in the middle,
 with some files uploaded and some files still missing. With PyPI, you can retry the exact same
 command, existing identical files will be ignored. With other registries, use
-`--check-url <index url>` with the index URL (not the publish URL) the packages belong to. When
+`--check-url <index url>` with the index URL (not the publishing URL) the packages belong to. When
 using `--index`, the index URL is used as check URL. uv will skip uploading files that are identical
 to files in the registry, and it will also handle raced parallel uploads. Note that existing files
 need to match exactly with those previously uploaded to the registry, this avoids accidentally

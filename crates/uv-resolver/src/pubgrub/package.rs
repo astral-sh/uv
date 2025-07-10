@@ -9,7 +9,7 @@ use crate::python_requirement::PythonRequirement;
 
 /// [`Arc`] wrapper around [`PubGrubPackageInner`] to make cloning (inside PubGrub) cheap.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) struct PubGrubPackage(Arc<PubGrubPackageInner>);
+pub struct PubGrubPackage(Arc<PubGrubPackageInner>);
 
 impl Deref for PubGrubPackage {
     type Target = PubGrubPackageInner;
@@ -39,7 +39,7 @@ impl From<PubGrubPackageInner> for PubGrubPackage {
 ///    package (e.g., `black[colorama]`), and mark it as a dependency of the real package (e.g.,
 ///    `black`). We then discard the virtual packages at the end of the resolution process.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub(crate) enum PubGrubPackageInner {
+pub enum PubGrubPackageInner {
     /// The root package, which is used to start the resolution process.
     Root(Option<PackageName>),
     /// A Python version.
@@ -295,7 +295,7 @@ impl PubGrubPackage {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
-pub(crate) enum PubGrubPython {
+pub enum PubGrubPython {
     /// The Python version installed in the current environment.
     Installed,
     /// The Python version for which dependencies are being resolved.

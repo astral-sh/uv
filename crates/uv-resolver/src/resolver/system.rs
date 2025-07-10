@@ -23,11 +23,17 @@ impl SystemDependency {
     /// For example, given `https://download.pytorch.org/whl/cu124`, returns CUDA 12.4.
     pub(super) fn from_index(index: &DisplaySafeUrl) -> Option<Self> {
         let backend = TorchBackend::from_index(index)?;
-        let cuda_version = backend.cuda_version()?;
-        Some(Self {
-            name: PackageName::from_str("cuda").unwrap(),
-            version: cuda_version,
-        })
+        if let Some(cuda_version) = backend.cuda_version() {
+            Some(Self {
+                name: PackageName::from_str("cuda").unwrap(),
+                version: cuda_version,
+            })
+        } else {
+            backend.rocm_version().map(|rocm_version| Self {
+                name: PackageName::from_str("rocm").unwrap(),
+                version: rocm_version,
+            })
+        }
     }
 }
 
@@ -78,6 +84,12 @@ mod tests {
     #[test]
     fn pytorch_cpu() {
         let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/cpu").unwrap();
+        assert_eq!(SystemDependency::from_index(&url), None);
+    }
+
+    #[test]
+    fn pytorch_xpu() {
+        let url = DisplaySafeUrl::parse("https://download.pytorch.org/whl/xpu").unwrap();
         assert_eq!(SystemDependency::from_index(&url), None);
     }
 }

@@ -13,7 +13,7 @@ use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
-use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictItem, ParsedGitUrl, ParsedUrlError, VerbatimParsedUrl};
 use uv_redacted::DisplaySafeUrl;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
@@ -700,17 +700,23 @@ fn path_source(
     };
     if is_dir {
         if let Some(git_member) = git_member {
+            let git = git_member.git_source.git.clone();
             let subdirectory = uv_fs::relative_to(install_path, git_member.fetch_root)
                 .expect("Workspace member must be relative");
             let subdirectory = uv_fs::normalize_path_buf(subdirectory);
+            let subdirectory = if subdirectory == PathBuf::new() {
+                None
+            } else {
+                Some(subdirectory.into_boxed_path())
+            };
+            let url = DisplaySafeUrl::from(ParsedGitUrl {
+                url: git.clone(),
+                subdirectory: subdirectory.clone(),
+            });
             return Ok(RequirementSource::Git {
-                git: git_member.git_source.git.clone(),
-                subdirectory: if subdirectory == PathBuf::new() {
-                    None
-                } else {
-                    Some(subdirectory.into_boxed_path())
-                },
-                url,
+                git,
+                subdirectory,
+                url: VerbatimUrl::from_url(url),
             });
         }
 

@@ -10,8 +10,8 @@ use uv_cache::Cache;
 use uv_cli::version::VersionInfo;
 use uv_cli::{VersionBump, VersionFormat};
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
+    ExtrasSpecification, InstallOptions, PreviewMode,
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
@@ -285,6 +285,7 @@ async fn print_frozen_version(
     let interpreter = ProjectInterpreter::discover(
         project.workspace(),
         project_dir,
+        &DependencyGroupsWithDefaults::none(),
         python.as_deref().map(PythonRequest::parse),
         &network_settings,
         python_preference,
@@ -295,6 +296,7 @@ async fn print_frozen_version(
         active,
         cache,
         printer,
+        preview,
     )
     .await?
     .into_interpreter();
@@ -313,6 +315,7 @@ async fn print_frozen_version(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -378,12 +381,20 @@ async fn lock_and_sync(
         return Ok(ExitStatus::Success);
     }
 
+    // Determine the groups and extras that should be enabled.
+    let default_groups = default_dependency_groups(project.pyproject_toml())?;
+    let default_extras = DefaultExtras::default();
+    let groups = DependencyGroups::default().with_defaults(default_groups);
+    let extras = ExtrasSpecification::default().with_defaults(default_extras);
+    let install_options = InstallOptions::default();
+
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
     let target = if no_sync {
         // Discover the interpreter.
         let interpreter = ProjectInterpreter::discover(
             project.workspace(),
             project_dir,
+            &groups,
             python.as_deref().map(PythonRequest::parse),
             &network_settings,
             python_preference,
@@ -394,6 +405,7 @@ async fn lock_and_sync(
             active,
             cache,
             printer,
+            preview,
         )
         .await?
         .into_interpreter();
@@ -403,6 +415,7 @@ async fn lock_and_sync(
         // Discover or create the virtual environment.
         let environment = ProjectEnvironment::get_or_init(
             project.workspace(),
+            &groups,
             python.as_deref().map(PythonRequest::parse),
             &install_mirrors,
             &network_settings,
@@ -414,6 +427,7 @@ async fn lock_and_sync(
             cache,
             DryRun::Disabled,
             printer,
+            preview,
         )
         .await?
         .into_environment()?;
@@ -430,6 +444,7 @@ async fn lock_and_sync(
 
     // Initialize any shared state.
     let state = UniversalState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     // Lock and sync the environment, if necessary.
     let lock = match project::lock::LockOperation::new(
@@ -440,6 +455,7 @@ async fn lock_and_sync(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -466,15 +482,6 @@ async fn lock_and_sync(
     };
 
     // Perform a full sync, because we don't know what exactly is affected by the version.
-    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::from_all_extras();
-    let install_options = InstallOptions::default();
-
-    // Determine the default groups to include.
-    let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-    // Determine the default extras to include.
-    let default_extras = DefaultExtras::default();
 
     // Identify the installation target.
     let target = match &project {
@@ -494,8 +501,8 @@ async fn lock_and_sync(
     match project::sync::do_sync(
         target,
         venv,
-        &extras.with_defaults(default_extras),
-        &DependencyGroups::default().with_defaults(default_groups),
+        &extras,
+        &groups,
         EditableMode::Editable,
         install_options,
         Modifications::Sufficient,
@@ -506,6 +513,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
+        workspace_cache,
         DryRun::Disabled,
         printer,
         preview,

@@ -3,6 +3,377 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.20
+
+### Python
+
+- Add Python 3.14.0b4
+- Add zstd support to Python 3.14 on Unix (it already was available on Windows)
+- Add PyPy 7.3.20 (for Python 3.11.13)
+
+See the [PyPy](https://pypy.org/posts/2025/07/pypy-v7320-release.html) and [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone/releases/tag/20250708) release notes for more details.
+
+### Enhancements
+
+- Add `--workspace` flag to `uv add` ([#14496](https://github.com/astral-sh/uv/pull/14496))
+- Add auto-detection for Intel GPUs ([#14386](https://github.com/astral-sh/uv/pull/14386))
+- Drop trailing arguments when writing shebangs ([#14519](https://github.com/astral-sh/uv/pull/14519))
+- Add debug message when skipping Python downloads ([#14509](https://github.com/astral-sh/uv/pull/14509))
+- Add support for declaring multiple modules in namespace packages ([#14460](https://github.com/astral-sh/uv/pull/14460))
+
+### Bug fixes
+
+- Revert normalization of trailing slashes on index URLs ([#14511](https://github.com/astral-sh/uv/pull/14511))
+- Fix forced resolution with all extras in `uv version` ([#14434](https://github.com/astral-sh/uv/pull/14434))
+- Fix handling of pre-releases in preferences ([#14498](https://github.com/astral-sh/uv/pull/14498))
+- Remove transparent variants in `uv-extract` to enable retries ([#14450](https://github.com/astral-sh/uv/pull/14450))
+
+### Rust API
+
+- Add method to get packages involved in a `NoSolutionError` ([#14457](https://github.com/astral-sh/uv/pull/14457))
+- Make `ErrorTree` for `NoSolutionError` public ([#14444](https://github.com/astral-sh/uv/pull/14444))
+
+### Documentation
+
+- Finish incomplete sentence in pip migration guide ([#14432](https://github.com/astral-sh/uv/pull/14432))
+- Remove `cache-dependency-glob` examples for `setup-uv` ([#14493](https://github.com/astral-sh/uv/pull/14493))
+- Remove `uv pip sync` suggestion with `pyproject.toml` ([#14510](https://github.com/astral-sh/uv/pull/14510))
+- Update documentation for GitHub to use `setup-uv@v6` ([#14490](https://github.com/astral-sh/uv/pull/14490))
+
+## 0.7.19
+
+The **[uv build backend](https://docs.astral.sh/uv/concepts/build-backend/) is now stable**, and considered ready for production use.
+
+The uv build backend is a great choice for pure Python projects. It has reasonable defaults, with the goal of requiring zero configuration for most users, but provides flexible configuration to accommodate most Python project structures. It integrates tightly with uv, to improve messaging and user experience. It validates project metadata and structures, preventing common mistakes. And, finally, it's very fast — `uv sync` on a new project (from `uv init`) is 10-30x faster than with other build backends.
+
+To use uv as a build backend in an existing project, add `uv_build` to the `[build-system]` section in your `pyproject.toml`:
+
+```toml
+[build-system]
+requires = ["uv_build>=0.7.19,<0.8.0"]
+build-backend = "uv_build"
+```
+
+In a future release, it will replace `hatchling` as the default in `uv init`. As before, uv will remain compatible with all standards-compliant build backends.
+
+### Python
+
+- Add PGO distributions of Python for aarch64 Linux, which are more optimized for better performance
+
+See the [python-build-standalone release](https://github.com/astral-sh/python-build-standalone/releases/tag/20250702) for more details.
+
+### Enhancements
+
+- Ignore Python patch version for `--universal` pip compile ([#14405](https://github.com/astral-sh/uv/pull/14405))
+- Update the tilde version specifier warning to include more context ([#14335](https://github.com/astral-sh/uv/pull/14335))
+- Clarify behavior and hint on tool install when no executables are available ([#14423](https://github.com/astral-sh/uv/pull/14423))
+
+### Bug fixes
+
+- Make project and interpreter lock acquisition non-fatal ([#14404](https://github.com/astral-sh/uv/pull/14404))
+- Includes `sys.prefix` in cached environment keys to avoid `--with` collisions across projects ([#14403](https://github.com/astral-sh/uv/pull/14403))
+
+### Documentation
+
+- Add a migration guide from pip to uv projects ([#12382](https://github.com/astral-sh/uv/pull/12382))
+
+## 0.7.18
+
+### Python
+
+- Added arm64 Windows Python 3.11, 3.12, 3.13, and 3.14
+  
+  These are not downloaded by default, since x86-64 Python has broader ecosystem support on Windows.
+However, they can be requested with `cpython-<version>-windows-aarch64`.
+
+See the [python-build-standalone release](https://github.com/astral-sh/python-build-standalone/releases/tag/20250630) for more details.
+
+### Enhancements
+
+- Keep track of retries in `ManagedPythonDownload::fetch_with_retry` ([#14378](https://github.com/astral-sh/uv/pull/14378))
+- Reuse build (virtual) environments across resolution and installation ([#14338](https://github.com/astral-sh/uv/pull/14338))
+- Improve trace message for cached Python interpreter query ([#14328](https://github.com/astral-sh/uv/pull/14328))
+- Use parsed URLs for conflicting URL error message ([#14380](https://github.com/astral-sh/uv/pull/14380))
+
+### Preview features
+
+- Ignore invalid build backend settings when not building ([#14372](https://github.com/astral-sh/uv/pull/14372))
+
+### Bug fixes
+
+- Fix equals-star and tilde-equals with `python_version` and `python_full_version` ([#14271](https://github.com/astral-sh/uv/pull/14271))
+- Include the canonical path in the interpreter query cache key ([#14331](https://github.com/astral-sh/uv/pull/14331))
+- Only drop build directories on program exit ([#14304](https://github.com/astral-sh/uv/pull/14304))
+- Error instead of panic on conflict between global and subcommand flags ([#14368](https://github.com/astral-sh/uv/pull/14368))
+- Consistently normalize trailing slashes on URLs with no path segments ([#14349](https://github.com/astral-sh/uv/pull/14349))
+
+### Documentation
+
+- Add instructions for publishing to JFrog's Artifactory ([#14253](https://github.com/astral-sh/uv/pull/14253))
+- Edits to the build backend documentation ([#14376](https://github.com/astral-sh/uv/pull/14376))
+
+## 0.7.17
+
+### Bug fixes
+
+- Apply build constraints when resolving `--with` dependencies ([#14340](https://github.com/astral-sh/uv/pull/14340))
+- Drop trailing slashes when converting index URL from URL ([#14346](https://github.com/astral-sh/uv/pull/14346))
+- Ignore `UV_PYTHON_CACHE_DIR` when empty ([#14336](https://github.com/astral-sh/uv/pull/14336))
+- Fix error message ordering for `pyvenv.cfg` version conflict ([#14329](https://github.com/astral-sh/uv/pull/14329))
+
+## 0.7.16
+
+### Python
+
+- Add Python 3.14.0b3
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250626)
+for more details.
+
+### Enhancements
+
+- Include path or URL when failing to convert in lockfile ([#14292](https://github.com/astral-sh/uv/pull/14292))
+- Warn when `~=` is used as a Python version specifier without a patch version ([#14008](https://github.com/astral-sh/uv/pull/14008))
+
+### Preview features
+
+- Ensure preview default Python installs are upgradeable ([#14261](https://github.com/astral-sh/uv/pull/14261))
+
+### Performance
+
+- Share workspace cache between lock and sync operations ([#14321](https://github.com/astral-sh/uv/pull/14321))
+
+### Bug fixes
+
+- Allow local indexes to reference remote files ([#14294](https://github.com/astral-sh/uv/pull/14294))
+- Avoid rendering desugared prefix matches in error messages ([#14195](https://github.com/astral-sh/uv/pull/14195))
+- Avoid using path URL for workspace Git dependencies in `requirements.txt` ([#14288](https://github.com/astral-sh/uv/pull/14288))
+- Normalize index URLs to remove trailing slash ([#14245](https://github.com/astral-sh/uv/pull/14245))
+- Respect URL-encoded credentials in redirect location ([#14315](https://github.com/astral-sh/uv/pull/14315))
+- Lock the source tree when running setuptools, to protect concurrent builds ([#14174](https://github.com/astral-sh/uv/pull/14174))
+
+### Documentation
+
+- Note that GCP Artifact Registry download URLs must have `/simple` component ([#14251](https://github.com/astral-sh/uv/pull/14251))
+
+## 0.7.15
+
+### Enhancements
+
+- Consistently use `Ordering::Relaxed` for standalone atomic use cases ([#14190](https://github.com/astral-sh/uv/pull/14190))
+- Warn on ambiguous relative paths for `--index` ([#14152](https://github.com/astral-sh/uv/pull/14152))
+- Skip GitHub fast path when rate-limited ([#13033](https://github.com/astral-sh/uv/pull/13033))
+- Preserve newlines in `schema.json` descriptions ([#13693](https://github.com/astral-sh/uv/pull/13693))
+
+### Bug fixes
+
+- Add check for using minor version link when creating a venv on Windows ([#14252](https://github.com/astral-sh/uv/pull/14252))
+- Strip query parameters when parsing source URL ([#14224](https://github.com/astral-sh/uv/pull/14224))
+
+### Documentation
+
+- Add a link to PyPI FAQ to clarify what per-project token is ([#14242](https://github.com/astral-sh/uv/pull/14242))
+
+### Preview features
+
+- Allow symlinks in the build backend ([#14212](https://github.com/astral-sh/uv/pull/14212))
+
+## 0.7.14
+
+### Enhancements
+
+- Add XPU to `--torch-backend` ([#14172](https://github.com/astral-sh/uv/pull/14172))
+- Add ROCm backends to `--torch-backend` ([#14120](https://github.com/astral-sh/uv/pull/14120))
+- Remove preview label from `--torch-backend` ([#14119](https://github.com/astral-sh/uv/pull/14119))
+- Add `[tool.uv.dependency-groups].mygroup.requires-python` ([#13735](https://github.com/astral-sh/uv/pull/13735))
+- Add auto-detection for AMD GPUs ([#14176](https://github.com/astral-sh/uv/pull/14176))
+- Show retries for HTTP status code errors ([#13897](https://github.com/astral-sh/uv/pull/13897))
+- Support transparent Python patch version upgrades ([#13954](https://github.com/astral-sh/uv/pull/13954))
+- Warn on empty index directory ([#13940](https://github.com/astral-sh/uv/pull/13940))
+- Publish to DockerHub ([#14088](https://github.com/astral-sh/uv/pull/14088))
+
+### Performance
+
+- Make cold resolves about 10% faster ([#14035](https://github.com/astral-sh/uv/pull/14035))
+
+### Bug fixes
+
+- Don't use walrus operator in interpreter query script ([#14108](https://github.com/astral-sh/uv/pull/14108))
+- Fix handling of changes to `requires-python` ([#14076](https://github.com/astral-sh/uv/pull/14076))
+- Fix implied `platform_machine` marker for `win_amd64` platform tag ([#14041](https://github.com/astral-sh/uv/pull/14041))
+- Only update existing symlink directories on preview uninstall ([#14179](https://github.com/astral-sh/uv/pull/14179))
+- Serialize Python requests for tools as canonicalized strings ([#14109](https://github.com/astral-sh/uv/pull/14109))
+- Support netrc and same-origin credential propagation on index redirects ([#14126](https://github.com/astral-sh/uv/pull/14126))
+- Support reading `dependency-groups` from pyproject.tomls with no `[project]` ([#13742](https://github.com/astral-sh/uv/pull/13742))
+- Handle an existing shebang in `uv init --script` ([#14141](https://github.com/astral-sh/uv/pull/14141))
+- Prevent concurrent updates of the environment in `uv run` ([#14153](https://github.com/astral-sh/uv/pull/14153))
+- Filter managed Python distributions by platform before querying when included in request ([#13936](https://github.com/astral-sh/uv/pull/13936))
+
+### Documentation
+
+- Replace cuda124 with cuda128 ([#14168](https://github.com/astral-sh/uv/pull/14168))
+- Document the way member sources shadow workspace sources ([#14136](https://github.com/astral-sh/uv/pull/14136))
+- Sync documented PyTorch integration index for CUDA and ROCm versions from PyTorch website ([#14100](https://github.com/astral-sh/uv/pull/14100))
+
+## 0.7.13
+
+### Python
+
+- Add Python 3.14.0b2
+- Add Python 3.13.5
+- Fix stability of `uuid.getnode` on 3.13
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250612)
+for more details.
+
+### Enhancements
+
+- Download versions in `uv python pin` if not found ([#13946](https://github.com/astral-sh/uv/pull/13946))
+- Use TTY detection to determine if SIGINT forwarding is enabled ([#13925](https://github.com/astral-sh/uv/pull/13925))
+- Avoid fetching an exact, cached Git commit, even if it isn't locked ([#13748](https://github.com/astral-sh/uv/pull/13748))
+- Add `zstd` and `deflate` to `Accept-Encoding` ([#13982](https://github.com/astral-sh/uv/pull/13982))
+- Build binaries for riscv64  ([#12688](https://github.com/astral-sh/uv/pull/12688))
+
+### Bug fixes
+
+- Check if relative URL is valid directory before treating as index ([#13917](https://github.com/astral-sh/uv/pull/13917))
+- Ignore Python discovery errors during `uv python pin` ([#13944](https://github.com/astral-sh/uv/pull/13944))
+- Do not allow `uv add --group ... --script` ([#13997](https://github.com/astral-sh/uv/pull/13997))
+
+### Preview changes
+
+- Build backend: Support namespace packages ([#13833](https://github.com/astral-sh/uv/pull/13833))
+
+### Documentation
+
+- Add 3.14 to the supported platform reference ([#13990](https://github.com/astral-sh/uv/pull/13990))
+- Add an `llms.txt` to uv ([#13929](https://github.com/astral-sh/uv/pull/13929))
+- Add supported macOS version to the platform reference ([#13993](https://github.com/astral-sh/uv/pull/13993))
+- Update platform support reference to include Python implementation list ([#13991](https://github.com/astral-sh/uv/pull/13991))
+- Update pytorch.md ([#13899](https://github.com/astral-sh/uv/pull/13899))
+- Update the CLI help and reference to include references to the Python bin directory ([#13978](https://github.com/astral-sh/uv/pull/13978))
+
+## 0.7.12
+
+### Enhancements
+
+- Add `uv python pin --rm` to remove `.python-version` pins ([#13860](https://github.com/astral-sh/uv/pull/13860))
+- Don't hint at versions removed by `excluded-newer` ([#13884](https://github.com/astral-sh/uv/pull/13884))
+- Add hint to use `tool.uv.environments` on resolution error ([#13455](https://github.com/astral-sh/uv/pull/13455))
+- Add hint to use `tool.uv.required-environments` on resolution error ([#13575](https://github.com/astral-sh/uv/pull/13575))
+- Improve `python pin` error messages ([#13862](https://github.com/astral-sh/uv/pull/13862))
+
+### Bug fixes
+
+- Lock environments during `uv sync`, `uv add` and `uv remove` to prevent race conditions ([#13869](https://github.com/astral-sh/uv/pull/13869))
+- Add `--no-editable` to `uv export` for `pylock.toml` ([#13852](https://github.com/astral-sh/uv/pull/13852))
+
+### Documentation
+
+- List `.gitignore` in project init files ([#13855](https://github.com/astral-sh/uv/pull/13855))
+- Move the pip interface documentation into the concepts section ([#13841](https://github.com/astral-sh/uv/pull/13841))
+- Remove the configuration section in favor of concepts / reference ([#13842](https://github.com/astral-sh/uv/pull/13842))
+- Update Git and GitHub Actions docs to mention `gh auth login` ([#13850](https://github.com/astral-sh/uv/pull/13850))
+
+### Preview
+
+- Fix directory glob traversal fallback preventing exclusion of all files ([#13882](https://github.com/astral-sh/uv/pull/13882))
+
+## 0.7.11
+
+### Python
+
+- Add Python 3.14.0b1
+- Add Python 3.13.4
+- Add Python 3.12.11
+- Add Python 3.11.13
+- Add Python 3.10.18
+- Add Python 3.9.23
+
+### Enhancements
+
+- Add Pyodide support ([#12731](https://github.com/astral-sh/uv/pull/12731))
+- Better error message for version specifier with missing operator ([#13803](https://github.com/astral-sh/uv/pull/13803))
+
+### Bug fixes
+
+- Downgrade `reqwest` and `hyper-util` to resolve connection reset errors over IPv6 ([#13835](https://github.com/astral-sh/uv/pull/13835))
+- Prefer `uv`'s binary's version when checking if it's up to date ([#13840](https://github.com/astral-sh/uv/pull/13840))
+
+### Documentation
+
+- Use "terminal driver" instead of "shell" in `SIGINT` docs ([#13787](https://github.com/astral-sh/uv/pull/13787))
+
+## 0.7.10
+
+### Enhancements
+
+- Add `--show-extras` to `uv tool list` ([#13783](https://github.com/astral-sh/uv/pull/13783))
+- Add dynamically generated sysconfig replacement mappings ([#13441](https://github.com/astral-sh/uv/pull/13441))
+- Add data locations to install wheel logs ([#13797](https://github.com/astral-sh/uv/pull/13797))
+
+### Bug fixes
+
+- Avoid redaction of placeholder `git` username when using SSH authentication ([#13799](https://github.com/astral-sh/uv/pull/13799))
+- Propagate credentials to files on devpi indexes ending in `/+simple` ([#13743](https://github.com/astral-sh/uv/pull/13743))
+- Restore retention of credentials for direct URLs in `uv export` ([#13809](https://github.com/astral-sh/uv/pull/13809))
+
+## 0.7.9
+
+### Python
+
+The changes reverted in [0.7.8](#078) have been restored.
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250529)
+for more details.
+
+### Enhancements
+
+- Improve obfuscation of credentials in URLs ([#13560](https://github.com/astral-sh/uv/pull/13560))
+- Allow running non-default Python implementations via `uvx` ([#13583](https://github.com/astral-sh/uv/pull/13583))
+- Add `uvw` as alias for `uv` without console window on Windows ([#11786](https://github.com/astral-sh/uv/pull/11786))
+- Allow discovery of x86-64 managed Python builds on macOS ([#13722](https://github.com/astral-sh/uv/pull/13722))
+- Differentiate between implicit vs explicit architecture requests ([#13723](https://github.com/astral-sh/uv/pull/13723))
+- Implement ordering for Python architectures to prefer native installations ([#13709](https://github.com/astral-sh/uv/pull/13709))
+- Only show the first match per platform (and architecture) by default in `uv python list`  ([#13721](https://github.com/astral-sh/uv/pull/13721))
+- Write the path of the parent environment to an `extends-environment` key in the `pyvenv.cfg` file of an ephemeral environment ([#13598](https://github.com/astral-sh/uv/pull/13598))
+- Improve the error message when libc cannot be found, e.g., when using the distroless containers ([#13549](https://github.com/astral-sh/uv/pull/13549))
+
+### Performance
+
+- Avoid rendering info log level ([#13642](https://github.com/astral-sh/uv/pull/13642))
+- Improve performance of `uv-python` crate's manylinux submodule ([#11131](https://github.com/astral-sh/uv/pull/11131))
+- Optimize `Version` display ([#13643](https://github.com/astral-sh/uv/pull/13643))
+- Reduce number of reference-checks for `uv cache clean` ([#13669](https://github.com/astral-sh/uv/pull/13669))
+
+### Bug fixes
+
+- Avoid reinstalling dependency group members with `--all-packages` ([#13678](https://github.com/astral-sh/uv/pull/13678))
+- Don't fail direct URL hash checking with dependency metadata ([#13736](https://github.com/astral-sh/uv/pull/13736))
+- Exit early on `self update` if global `--offline` is set ([#13663](https://github.com/astral-sh/uv/pull/13663))
+- Fix cases where the uv lock is incorrectly marked as out of date ([#13635](https://github.com/astral-sh/uv/pull/13635))
+- Include pre-release versions in `uv python install --reinstall` ([#13645](https://github.com/astral-sh/uv/pull/13645))
+- Set `LC_ALL=C` for git when checking git worktree ([#13637](https://github.com/astral-sh/uv/pull/13637))
+- Avoid rejecting Windows paths for remote Python download JSON targets ([#13625](https://github.com/astral-sh/uv/pull/13625))
+
+### Preview
+
+- Add `uv add --bounds` to configure version constraints ([#12946](https://github.com/astral-sh/uv/pull/12946))
+
+### Documentation
+
+- Add documentation about Python versions to Tools concept page ([#7673](https://github.com/astral-sh/uv/pull/7673))
+- Add example of enabling Dependabot ([#13692](https://github.com/astral-sh/uv/pull/13692))
+- Fix `exclude-newer` date format for persistent configuration files ([#13706](https://github.com/astral-sh/uv/pull/13706))
+- Quote versions variables in GitLab documentation ([#13679](https://github.com/astral-sh/uv/pull/13679))
+- Update Dependabot support status ([#13690](https://github.com/astral-sh/uv/pull/13690))
+- Explicitly specify to add a new repo entry to the repos list item in the `.pre-commit-config.yaml` ([#10243](https://github.com/astral-sh/uv/pull/10243))
+- Add integration with marimo guide ([#13691](https://github.com/astral-sh/uv/pull/13691))
+- Add pronunciation to README ([#5336](https://github.com/astral-sh/uv/pull/5336))
+
 ## 0.7.8
 
 ### Python

@@ -21,12 +21,48 @@ Using a password or token:
 - `git+https://<token>@<hostname>/...` (e.g., `git+https://github_pat_asdf@github.com/astral-sh/uv`)
 - `git+https://<user>@<hostname>/...` (e.g., `git+https://git@github.com/astral-sh/uv`)
 
-When using a GitHub personal access token, the username is arbitrary. GitHub does not support
-logging in with password directly, although other hosts may. If a username is provided without
-credentials, you will be prompted to enter them.
+When using a GitHub personal access token, the username is arbitrary. GitHub doesn't allow you to
+use your account name and password in URLs like this, although other hosts may.
 
 If there are no credentials present in the URL and authentication is needed, the
-[Git credential helper](https://git-scm.com/doc/credential-helpers) will be queried.
+[Git credential helper](#git-credential-helpers) will be queried.
+
+!!! important
+
+    When using `uv add`, uv _will not_ persist Git credentials to the `pyproject.toml` or `uv.lock`.
+    These files are often included in source control and distributions, so it is generally unsafe
+    to include credentials in them.
+
+    If you have a Git credential helper configured, your credentials may be automatically persisted,
+    resulting in successful subsequent fetches of the dependency. However, if you do not have a Git
+    credential helper or the project is used on a machine without credentials seeded, uv will fail to
+    fetch the dependency.
+
+    You _may_ force uv to persist Git credentials by passing the `--raw` option to `uv add`. However,
+    we strongly recommend setting up a [credential helper](#git-credential-helpers) instead.
+
+### Git credential helpers
+
+Git credential helpers are used to store and retrieve Git credentials. See the
+[Git documentation](https://git-scm.com/doc/credential-helpers) to learn more.
+
+If you're using GitHub, the simplest way to set up a credential helper is to
+[install the `gh` CLI](https://github.com/cli/cli#installation) and use:
+
+```console
+$ gh auth login
+```
+
+See the [`gh auth login`](https://cli.github.com/manual/gh_auth_login) documentation for more
+details.
+
+!!! note
+
+    When using `gh auth login` interactively, the credential helper will be configured automatically.
+    But when using `gh auth login --with-token`, as in the uv
+    [GitHub Actions guide](../guides/integration/github.md#private-repos), the
+    [`gh auth setup-git`](https://cli.github.com/manual/gh_auth_setup-git) command will need to be
+    run afterwards to configure the credential helper.
 
 ## HTTP authentication
 
@@ -61,6 +97,19 @@ authenticating index URLs.
 
 See the [`pip` compatibility guide](../pip/compatibility.md#registry-authentication) for details on
 differences from `pip`.
+
+!!! important
+
+    When using `uv add`, uv _will not_ persist index credentials to the `pyproject.toml` or `uv.lock`.
+    These files are often included in source control and distributions, so it is generally unsafe
+    to include credentials in them. However, uv _will_ persist credentials for direct URLs, i.e.,
+    `package @ https://username:password:example.com/foo.whl`, as there is not currently a way to
+    otherwise provide those credentials.
+
+    If credentials were attached to an index URL during `uv add`, uv may fail to fetch dependencies
+    from indexes which require authentication on subsequent operations. See the
+    [index authentication documentation](./indexes.md#authentication) for details on persistent
+    authentication for indexes.
 
 ## Authentication with alternative package indexes
 

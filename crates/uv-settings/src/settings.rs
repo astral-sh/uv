@@ -20,6 +20,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -40,6 +41,7 @@ pub(crate) struct Tools {
 #[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(from = "OptionsWire", rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(!from))]
 pub struct Options {
     #[serde(flatten)]
     pub globals: GlobalOptions,
@@ -52,6 +54,9 @@ pub struct Options {
 
     #[serde(flatten)]
     pub publish: PublishOptions,
+
+    #[serde(flatten)]
+    pub add: AddOptions,
 
     #[option_group]
     pub pip: Option<PipOptions>,
@@ -135,6 +140,9 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub default_groups: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub dependency_groups: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub managed: Option<serde::de::IgnoredAny>,
@@ -603,16 +611,16 @@ pub struct ResolverInstallerOptions {
     "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
-    /// Limit candidate packages to those that were uploaded prior to the given date.
+    /// Limit candidate packages to those that were uploaded prior to a given point in time.
     ///
-    /// Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-    /// `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-    /// system's configured time zone.
+    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+    /// `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+    /// behave consistently across timezones.
     #[option(
         default = "None",
         value_type = "str",
         example = r#"
-            exclude-newer = "2006-12-02"
+            exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
     pub exclude_newer: Option<ExcludeNewer>,
@@ -1491,7 +1499,7 @@ pub struct PipOptions {
     /// Hash-checking mode introduces a number of additional constraints:
     ///
     /// - Git dependencies are not supported.
-    /// - Editable installs are not supported.
+    /// - Editable installations are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
     #[option(
@@ -1841,6 +1849,10 @@ pub struct OptionsWire {
     trusted_publishing: Option<TrustedPublishing>,
     check_url: Option<IndexUrl>,
 
+    // #[serde(flatten)]
+    // add: AddOptions
+    add_bounds: Option<AddBoundsKind>,
+
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
 
@@ -1862,6 +1874,7 @@ pub struct OptionsWire {
     managed: Option<serde::de::IgnoredAny>,
     r#package: Option<serde::de::IgnoredAny>,
     default_groups: Option<serde::de::IgnoredAny>,
+    dependency_groups: Option<serde::de::IgnoredAny>,
     dev_dependencies: Option<serde::de::IgnoredAny>,
 
     // Build backend
@@ -1926,9 +1939,11 @@ impl From<OptionsWire> for Options {
             workspace,
             sources,
             default_groups,
+            dependency_groups,
             dev_dependencies,
             managed,
             package,
+            add_bounds: bounds,
             // Used by the build backend
             build_backend,
         } = value;
@@ -1996,10 +2011,12 @@ impl From<OptionsWire> for Options {
                 trusted_publishing,
                 check_url,
             },
+            add: AddOptions { add_bounds: bounds },
             workspace,
             sources,
             dev_dependencies,
             default_groups,
+            dependency_groups,
             managed,
             package,
         }
@@ -2056,4 +2073,29 @@ pub struct PublishOptions {
         "#
     )]
     pub check_url: Option<IndexUrl>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct AddOptions {
+    /// The default version specifier when adding a dependency.
+    ///
+    /// When adding a dependency to the project, if no constraint or URL is provided, a constraint
+    /// is added based on the latest compatible version of the package. By default, a lower bound
+    /// constraint is used, e.g., `>=1.2.3`.
+    ///
+    /// When `--frozen` is provided, no resolution is performed, and dependencies are always added
+    /// without constraints.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[option(
+        default = "\"lower\"",
+        value_type = "str",
+        example = r#"
+            add-bounds = "major"
+        "#,
+        possible_values = true
+    )]
+    pub add_bounds: Option<AddBoundsKind>,
 }

@@ -292,6 +292,8 @@ fn help_subcommand() {
     Commands:
       list       List the available Python installations
       install    Download and install Python versions
+      upgrade    Upgrade installed Python versions to the latest supported patch release (requires the
+                 `--preview` flag)
       find       Search for a Python installation
       pin        Pin to a specific Python version
       dir        Show the uv Python installation directory
@@ -468,7 +470,8 @@ fn help_subsubcommand() {
 
     A `python` executable is not made globally available, managed Python versions are only used in uv
     commands or in active virtual environments. There is experimental support for adding Python
-    executables to the `PATH` — use the `--preview` flag to enable this behavior.
+    executables to a directory on the path — use the `--preview` flag to enable this behavior and `uv
+    python dir --bin` to retrieve the target directory.
 
     Multiple Python versions may be requested.
 
@@ -718,6 +721,8 @@ fn help_flag_subcommand() {
     Commands:
       list       List the available Python installations
       install    Download and install Python versions
+      upgrade    Upgrade installed Python versions to the latest supported patch release (requires the
+                 `--preview` flag)
       find       Search for a Python installation
       pin        Pin to a specific Python version
       dir        Show the uv Python installation directory
@@ -914,6 +919,7 @@ fn help_unknown_subsubcommand() {
     error: There is no command `foobar` for `uv python`. Did you mean one of:
         list
         install
+        upgrade
         find
         pin
         dir

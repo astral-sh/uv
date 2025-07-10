@@ -3,15 +3,15 @@ use std::path::{Path, PathBuf};
 
 use itertools::Either;
 
-use uv_configuration::SourceStrategy;
+use uv_configuration::{DependencyGroupsWithDefaults, SourceStrategy};
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{Index, IndexLocations, Requirement};
+use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_resolver::{Lock, LockVersion, RequiresPython, VERSION};
+use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
-use uv_workspace::dependency_groups::DependencyGroupError;
+use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
 use uv_workspace::{Workspace, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
@@ -100,12 +100,9 @@ impl<'lock> LockTarget<'lock> {
     /// attached to any members within the target.
     pub(crate) fn dependency_groups(
         self,
-    ) -> Result<
-        BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-        DependencyGroupError,
-    > {
+    ) -> Result<BTreeMap<GroupName, FlatDependencyGroup>, DependencyGroupError> {
         match self {
-            Self::Workspace(workspace) => workspace.dependency_groups(),
+            Self::Workspace(workspace) => workspace.workspace_dependency_groups(),
             Self::Script(_) => Ok(BTreeMap::new()),
         }
     }
@@ -219,7 +216,11 @@ impl<'lock> LockTarget<'lock> {
     #[allow(clippy::result_large_err)]
     pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
         match self {
-            Self::Workspace(workspace) => find_requires_python(workspace),
+            Self::Workspace(workspace) => {
+                // When locking, don't try to enforce requires-python bounds that appear on groups
+                let groups = DependencyGroupsWithDefaults::none();
+                find_requires_python(workspace, &groups)
+            }
             Self::Script(script) => Ok(script
                 .metadata
                 .requires_python

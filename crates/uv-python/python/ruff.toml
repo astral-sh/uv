@@ -1,0 +1,2 @@
+# It is important retain compatibility when querying interpreters
+target-version = "py37"

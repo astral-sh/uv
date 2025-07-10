@@ -49,7 +49,7 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceSource, ProjectEnvironment, ProjectError,
+    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
     ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_specification, update_environment,
     validate_project_requires_python,
@@ -78,7 +78,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     modifications: Modifications,
     python: Option<String>,
@@ -235,9 +235,18 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 cache,
                 DryRun::Disabled,
                 printer,
+                preview,
             )
             .await?
             .into_environment()?;
+
+            let _lock = environment
+                .lock()
+                .await
+                .inspect_err(|err| {
+                    warn!("Failed to acquire environment lock: {err}");
+                })
+                .ok();
 
             // Determine the lock mode.
             let mode = if frozen {
@@ -261,6 +270,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 concurrency,
                 cache,
+                &workspace_cache,
                 printer,
                 preview,
             )
@@ -291,7 +301,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 target,
                 &environment,
                 &extras.with_defaults(DefaultExtras::default()),
-                &dev.with_defaults(DefaultGroups::default()),
+                &groups.with_defaults(DefaultGroups::default()),
                 editable,
                 install_options,
                 modifications,
@@ -306,6 +316,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 installer_metadata,
                 concurrency,
                 cache,
+                workspace_cache.clone(),
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -359,6 +370,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     cache,
                     DryRun::Disabled,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -379,6 +391,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                                 .map(|constraint| Requirement::from(constraint.clone())),
                         )
                     });
+
+                let _lock = environment
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
 
                 match update_environment(
                     environment,
@@ -401,7 +421,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     concurrency,
                     cache,
-                    workspace_cache,
+                    workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -433,6 +453,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     active.map_or(Some(false), Some),
                     cache,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -446,6 +467,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
+                    false,
+                    preview,
                 )?;
 
                 Some(environment.into_interpreter())
@@ -456,7 +479,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     };
 
     // Discover and sync the base environment.
-    let workspace_cache = WorkspaceCache::default();
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -468,7 +490,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        for flag in dev.history().as_flags_pretty() {
+        for flag in groups.history().as_flags_pretty() {
             warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
         }
         if all_packages {
@@ -543,7 +565,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in extras.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            for flag in dev.history().as_flags_pretty() {
+            for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if locked {
@@ -560,7 +582,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in extras.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            for flag in dev.history().as_flags_pretty() {
+            for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if locked {
@@ -583,6 +605,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     project.workspace().install_path().display()
                 );
             }
+            // Determine the groups and extras to include.
+            let default_groups = default_dependency_groups(project.pyproject_toml())?;
+            let default_extras = DefaultExtras::default();
+            let groups = groups.with_defaults(default_groups);
+            let extras = extras.with_defaults(default_extras);
 
             let venv = if isolated {
                 debug!("Creating isolated virtual environment");
@@ -602,6 +629,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 } = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
+                    &groups,
                     project_dir,
                     no_config,
                 )
@@ -618,6 +646,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
+                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -626,6 +655,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     validate_project_requires_python(
                         &interpreter,
                         Some(project.workspace()),
+                        &groups,
                         requires_python,
                         &source,
                     )?;
@@ -641,12 +671,15 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
+                    false,
+                    preview,
                 )?
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
                 // project.
                 ProjectEnvironment::get_or_init(
                     project.workspace(),
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
                     &network_settings,
@@ -658,6 +691,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     cache,
                     DryRun::Disabled,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_environment()?
@@ -677,13 +711,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
-                // Validate that any referenced dependency groups are defined in the workspace.
-
-                // Determine the default groups to include.
-                let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-                // Determine the default extras to include.
-                let default_extras = DefaultExtras::default();
+                let _lock = venv
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
 
                 // Determine the lock mode.
                 let mode = if frozen {
@@ -706,6 +740,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     concurrency,
                     cache,
+                    &workspace_cache,
                     printer,
                     preview,
                 )
@@ -769,18 +804,15 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 };
 
                 let install_options = InstallOptions::default();
-                let dev = dev.with_defaults(default_groups);
-                let extras = extras.with_defaults(default_extras);
-
                 // Validate that the set of requested extras and development groups are defined in the lockfile.
                 target.validate_extras(&extras)?;
-                target.validate_groups(&dev)?;
+                target.validate_groups(&groups)?;
 
                 match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
-                    &dev,
+                    &groups,
                     editable,
                     install_options,
                     modifications,
@@ -795,6 +827,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     concurrency,
                     cache,
+                    workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -853,6 +886,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
+                    preview,
                 )
                 .await?;
 
@@ -872,6 +906,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
+                    false,
+                    preview,
                 )?;
                 venv.into_interpreter()
             } else {
@@ -922,10 +958,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let spec = EnvironmentSpecification::from(spec).with_preferences(
                 if let Some((lock, install_path)) = base_lock.as_ref() {
                     // If we have a lockfile, use the locked versions as preferences.
-                    PreferenceSource::Lock { lock, install_path }
+                    PreferenceLocation::Lock { lock, install_path }
                 } else {
                     // Otherwise, extract preferences from the base environment.
-                    PreferenceSource::Entries(
+                    PreferenceLocation::Entries(
                         base_site_packages
                             .iter()
                             .filter_map(Preference::from_installed)

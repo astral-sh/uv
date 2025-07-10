@@ -61,7 +61,7 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     locked: bool,
     frozen: bool,
@@ -122,7 +122,7 @@ pub(crate) async fn export(
         ExportTarget::Script(_) => DefaultExtras::default(),
     };
 
-    let dev = dev.with_defaults(default_groups);
+    let groups = groups.with_defaults(default_groups);
     let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
@@ -142,12 +142,14 @@ pub(crate) async fn export(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
             ExportTarget::Project(project) => ProjectInterpreter::discover(
                 project.workspace(),
                 project_dir,
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -158,6 +160,7 @@ pub(crate) async fn export(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -190,6 +193,7 @@ pub(crate) async fn export(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -206,7 +210,7 @@ pub(crate) async fn export(
     };
 
     // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&lock, &extras, &dev)?;
+    detect_conflicts(&lock, &extras, &groups)?;
 
     // Identify the installation target.
     let target = match &target {
@@ -259,7 +263,7 @@ pub(crate) async fn export(
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
-    target.validate_groups(&dev)?;
+    target.validate_groups(&groups)?;
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
@@ -306,7 +310,7 @@ pub(crate) async fn export(
                 &target,
                 &prune,
                 &extras,
-                &dev,
+                &groups,
                 include_annotations,
                 editable,
                 hashes,
@@ -328,8 +332,9 @@ pub(crate) async fn export(
                 &target,
                 &prune,
                 &extras,
-                &dev,
+                &groups,
                 include_annotations,
+                editable,
                 &install_options,
             )?;
 

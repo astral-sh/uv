@@ -10,9 +10,9 @@ use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
-    SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
-    TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
+    PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
+    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
+    ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
@@ -45,6 +45,7 @@ use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::commands::ToolRunCommand;
 use crate::commands::{InitKind, InitProjectKind, pip::operations::Modifications};
@@ -53,7 +54,6 @@ use crate::commands::{InitKind, InitProjectKind, pip::operations::Modifications}
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
 
 /// The resolved global settings to use for any invocation of the CLI.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct GlobalSettings {
     pub(crate) required_version: Option<RequiredVersion>,
@@ -118,16 +118,20 @@ impl GlobalSettings {
             },
             show_settings: args.show_settings,
             preview: PreviewMode::from(
-                flag(args.preview, args.no_preview)
+                flag(args.preview, args.no_preview, "preview")
                     .combine(workspace.and_then(|workspace| workspace.globals.preview))
                     .unwrap_or(false),
             ),
             python_preference,
-            python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
-                .map(PythonDownloads::from)
-                .combine(env(env::UV_PYTHON_DOWNLOADS))
-                .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
-                .unwrap_or_default(),
+            python_downloads: flag(
+                args.allow_python_downloads,
+                args.no_python_downloads,
+                "python-downloads",
+            )
+            .map(PythonDownloads::from)
+            .combine(env(env::UV_PYTHON_DOWNLOADS))
+            .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
+            .unwrap_or_default(),
             // Disable the progress bar with `RUST_LOG` to avoid progress fragments interleaving
             // with log messages.
             no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
@@ -161,7 +165,7 @@ pub(crate) struct NetworkSettings {
 
 impl NetworkSettings {
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
-        let connectivity = if flag(args.offline, args.no_offline)
+        let connectivity = if flag(args.offline, args.no_offline, "offline")
             .combine(workspace.and_then(|workspace| workspace.globals.offline))
             .unwrap_or(false)
         {
@@ -169,7 +173,7 @@ impl NetworkSettings {
         } else {
             Connectivity::Online
         };
-        let native_tls = flag(args.native_tls, args.no_native_tls)
+        let native_tls = flag(args.native_tls, args.no_native_tls, "native-tls")
             .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
             .unwrap_or(false);
         let allow_insecure_host = args
@@ -198,7 +202,6 @@ impl NetworkSettings {
 }
 
 /// The resolved cache settings to use for any invocation of the CLI.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct CacheSettings {
     pub(crate) no_cache: bool,
@@ -221,7 +224,6 @@ impl CacheSettings {
 }
 
 /// The resolved settings to use for a `init` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct InitSettings {
     pub(crate) path: Option<PathBuf>,
@@ -276,8 +278,12 @@ impl InitSettings {
             (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
         };
 
-        let package = flag(package || build_backend.is_some(), no_package || r#virtual)
-            .unwrap_or(kind.packaged_by_default());
+        let package = flag(
+            package || build_backend.is_some(),
+            no_package || r#virtual,
+            "virtual",
+        )
+        .unwrap_or(kind.packaged_by_default());
 
         let install_mirrors = filesystem
             .map(|fs| fs.install_mirrors.clone())
@@ -297,7 +303,7 @@ impl InitSettings {
             build_backend,
             no_readme: no_readme || bare,
             author_from,
-            pin_python: flag(pin_python, no_pin_python).unwrap_or(!bare),
+            pin_python: flag(pin_python, no_pin_python, "pin-python").unwrap_or(!bare),
             no_workspace,
             python: python.and_then(Maybe::into_option),
             install_mirrors,
@@ -306,13 +312,12 @@ impl InitSettings {
 }
 
 /// The resolved settings to use for a `run` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroups,
+    pub(crate) groups: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) modifications: Modifications,
     pub(crate) with: Vec<String>,
@@ -401,9 +406,9 @@ impl RunSettings {
                 false,
                 // TODO(blueraft): support only_extra
                 vec![],
-                flag(all_extras, no_all_extras).unwrap_or_default(),
+                flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
-            dev: DependencyGroups::from_args(
+            groups: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -414,7 +419,7 @@ impl RunSettings {
                 all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
-            modifications: if flag(exact, inexact).unwrap_or(false) {
+            modifications: if flag(exact, inexact, "inexact").unwrap_or(false) {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
@@ -437,7 +442,7 @@ impl RunSettings {
             package,
             no_project,
             no_sync,
-            active: flag(active, no_active),
+            active: flag(active, no_active, "active"),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(
@@ -453,7 +458,6 @@ impl RunSettings {
 }
 
 /// The resolved settings to use for a `tool run` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolRunSettings {
     pub(crate) command: Option<ExternalCommand>,
@@ -585,7 +589,6 @@ impl ToolRunSettings {
 }
 
 /// The resolved settings to use for a `tool install` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolInstallSettings {
     pub(crate) package: String,
@@ -680,7 +683,6 @@ impl ToolInstallSettings {
 }
 
 /// The resolved settings to use for a `tool upgrade` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUpgradeSettings {
     pub(crate) names: Vec<String>,
@@ -775,12 +777,12 @@ impl ToolUpgradeSettings {
 }
 
 /// The resolved settings to use for a `tool list` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolListSettings {
     pub(crate) show_paths: bool,
     pub(crate) show_version_specifiers: bool,
     pub(crate) show_with: bool,
+    pub(crate) show_extras: bool,
 }
 
 impl ToolListSettings {
@@ -791,6 +793,7 @@ impl ToolListSettings {
             show_paths,
             show_version_specifiers,
             show_with,
+            show_extras,
             python_preference: _,
             no_python_downloads: _,
         } = args;
@@ -799,12 +802,12 @@ impl ToolListSettings {
             show_paths,
             show_version_specifiers,
             show_with,
+            show_extras,
         }
     }
 }
 
 /// The resolved settings to use for a `tool uninstall` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUninstallSettings {
     pub(crate) name: Vec<PackageName>,
@@ -823,7 +826,6 @@ impl ToolUninstallSettings {
 }
 
 /// The resolved settings to use for a `tool dir` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolDirSettings {
     pub(crate) bin: bool,
@@ -850,7 +852,6 @@ pub(crate) enum PythonListKinds {
 }
 
 /// The resolved settings to use for a `tool run` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonListSettings {
     pub(crate) request: Option<String>,
@@ -910,7 +911,6 @@ impl PythonListSettings {
 }
 
 /// The resolved settings to use for a `python dir` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonDirSettings {
     pub(crate) bin: bool,
@@ -927,7 +927,6 @@ impl PythonDirSettings {
 }
 
 /// The resolved settings to use for a `python install` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonInstallSettings {
     pub(crate) install_dir: Option<PathBuf>,
@@ -982,8 +981,60 @@ impl PythonInstallSettings {
     }
 }
 
-/// The resolved settings to use for a `python uninstall` invocation.
+/// The resolved settings to use for a `python upgrade` invocation.
 #[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PythonUpgradeSettings {
+    pub(crate) install_dir: Option<PathBuf>,
+    pub(crate) targets: Vec<String>,
+    pub(crate) force: bool,
+    pub(crate) python_install_mirror: Option<String>,
+    pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) python_downloads_json_url: Option<String>,
+    pub(crate) default: bool,
+}
+
+impl PythonUpgradeSettings {
+    /// Resolve the [`PythonUpgradeSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: PythonUpgradeArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let options = filesystem.map(FilesystemOptions::into_options);
+        let (python_mirror, pypy_mirror, python_downloads_json_url) = match options {
+            Some(options) => (
+                options.install_mirrors.python_install_mirror,
+                options.install_mirrors.pypy_install_mirror,
+                options.install_mirrors.python_downloads_json_url,
+            ),
+            None => (None, None, None),
+        };
+        let python_mirror = args.mirror.or(python_mirror);
+        let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
+        let python_downloads_json_url =
+            args.python_downloads_json_url.or(python_downloads_json_url);
+        let force = false;
+        let default = false;
+
+        let PythonUpgradeArgs {
+            install_dir,
+            targets,
+            mirror: _,
+            pypy_mirror: _,
+            python_downloads_json_url: _,
+        } = args;
+
+        Self {
+            install_dir,
+            targets,
+            force,
+            python_install_mirror: python_mirror,
+            pypy_install_mirror: pypy_mirror,
+            python_downloads_json_url,
+            default,
+        }
+    }
+}
+
+/// The resolved settings to use for a `python uninstall` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct PythonUninstallSettings {
     pub(crate) install_dir: Option<PathBuf>,
@@ -1013,7 +1064,6 @@ impl PythonUninstallSettings {
 }
 
 /// The resolved settings to use for a `python find` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
@@ -1039,38 +1089,46 @@ impl PythonFindSettings {
             request,
             show_version,
             no_project,
-            system: flag(system, no_system).unwrap_or_default(),
+            system: flag(system, no_system, "system").unwrap_or_default(),
         }
     }
 }
 
 /// The resolved settings to use for a `python pin` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonPinSettings {
     pub(crate) request: Option<String>,
     pub(crate) resolved: bool,
     pub(crate) no_project: bool,
     pub(crate) global: bool,
+    pub(crate) rm: bool,
+    pub(crate) install_mirrors: PythonInstallMirrors,
 }
 
 impl PythonPinSettings {
     /// Resolve the [`PythonPinSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonPinArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: PythonPinArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PythonPinArgs {
             request,
             no_resolved,
             resolved,
             no_project,
             global,
+            rm,
         } = args;
+
+        let install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
 
         Self {
             request,
-            resolved: flag(resolved, no_resolved).unwrap_or(false),
+            resolved: flag(resolved, no_resolved, "resolved").unwrap_or(false),
             no_project,
             global,
+            rm,
+            install_mirrors,
         }
     }
 }
@@ -1085,7 +1143,7 @@ pub(crate) struct SyncSettings {
     pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroups,
+    pub(crate) groups: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
@@ -1147,7 +1205,7 @@ impl SyncSettings {
             filesystem,
         );
 
-        let check = flag(check, no_check).unwrap_or_default();
+        let check = flag(check, no_check, "check").unwrap_or_default();
         let dry_run = if check {
             DryRun::Check
         } else {
@@ -1160,7 +1218,7 @@ impl SyncSettings {
             frozen,
             dry_run,
             script,
-            active: flag(active, no_active),
+            active: flag(active, no_active, "active"),
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
@@ -1168,9 +1226,9 @@ impl SyncSettings {
                 false,
                 // TODO(blueraft): support only_extra
                 vec![],
-                flag(all_extras, no_all_extras).unwrap_or_default(),
+                flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
-            dev: DependencyGroups::from_args(
+            groups: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1186,7 +1244,7 @@ impl SyncSettings {
                 no_install_workspace,
                 no_install_package,
             ),
-            modifications: if flag(exact, inexact).unwrap_or(true) {
+            modifications: if flag(exact, inexact, "inexact").unwrap_or(true) {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
@@ -1264,12 +1322,14 @@ pub(crate) struct AddSettings {
     pub(crate) editable: Option<bool>,
     pub(crate) extras: Vec<ExtraName>,
     pub(crate) raw: bool,
+    pub(crate) bounds: Option<AddBoundsKind>,
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
+    pub(crate) workspace: bool,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
@@ -1292,6 +1352,7 @@ impl AddSettings {
             no_editable,
             extra,
             raw,
+            bounds,
             rev,
             tag,
             branch,
@@ -1306,6 +1367,7 @@ impl AddSettings {
             package,
             script,
             python,
+            workspace,
         } = args;
 
         let dependency_type = if let Some(extra) = optional {
@@ -1336,6 +1398,12 @@ impl AddSettings {
                     .filter_map(Maybe::into_option),
             )
             .collect::<Vec<_>>();
+
+        // Warn user if an ambiguous relative path was passed as a value for
+        // `--index` or `--default-index`.
+        indexes
+            .iter()
+            .for_each(|index| index.url().warn_on_disambiguated_relative_path());
 
         // If the user passed an `--index-url` or `--extra-index-url`, warn.
         if installer
@@ -1373,14 +1441,16 @@ impl AddSettings {
         }
 
         let install_mirrors = filesystem
-            .clone()
+            .as_ref()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
+
+        let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
 
         Self {
             locked,
             frozen,
-            active: flag(active, no_active),
+            active: flag(active, no_active, "active"),
             no_sync,
             packages,
             requirements,
@@ -1391,13 +1461,15 @@ impl AddSettings {
             marker,
             dependency_type,
             raw,
+            bounds,
             rev,
             tag,
             branch,
             package,
             script,
             python: python.and_then(Maybe::into_option),
-            editable: flag(editable, no_editable),
+            workspace,
+            editable: flag(editable, no_editable, "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
             indexes,
@@ -1473,7 +1545,7 @@ impl RemoveSettings {
         Self {
             locked,
             frozen,
-            active: flag(active, no_active),
+            active: flag(active, no_active, "active"),
             no_sync,
             packages,
             dependency_type,
@@ -1545,7 +1617,7 @@ impl VersionSettings {
             dry_run,
             locked,
             frozen,
-            active: flag(active, no_active),
+            active: flag(active, no_active, "active"),
             no_sync,
             package,
             python: python.and_then(Maybe::into_option),
@@ -1560,10 +1632,9 @@ impl VersionSettings {
 }
 
 /// The resolved settings to use for a `tree` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
-    pub(crate) dev: DependencyGroups,
+    pub(crate) groups: DependencyGroups,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
@@ -1611,7 +1682,7 @@ impl TreeSettings {
             .unwrap_or_default();
 
         Self {
-            dev: DependencyGroups::from_args(
+            groups: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1649,7 +1720,7 @@ pub(crate) struct ExportSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroups,
+    pub(crate) groups: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
@@ -1722,9 +1793,9 @@ impl ExportSettings {
                 false,
                 // TODO(blueraft): support only_extra
                 vec![],
-                flag(all_extras, no_all_extras).unwrap_or_default(),
+                flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
             ),
-            dev: DependencyGroups::from_args(
+            groups: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1735,7 +1806,7 @@ impl ExportSettings {
                 all_groups,
             ),
             editable: EditableMode::from_args(no_editable),
-            hashes: flag(hashes, no_hashes).unwrap_or(true),
+            hashes: flag(hashes, no_hashes, "hashes").unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
                 no_emit_workspace,
@@ -1744,8 +1815,8 @@ impl ExportSettings {
             output_file,
             locked,
             frozen,
-            include_annotations: flag(annotate, no_annotate).unwrap_or(true),
-            include_header: flag(header, no_header).unwrap_or(true),
+            include_annotations: flag(annotate, no_annotate, "annotate").unwrap_or(true),
+            include_header: flag(header, no_header, "header").unwrap_or(true),
             script,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -1756,7 +1827,6 @@ impl ExportSettings {
 }
 
 /// The resolved settings to use for a `pip compile` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
     pub(crate) format: Option<ExportFormat>,
@@ -1899,30 +1969,42 @@ impl PipCompileSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
-                    no_build: flag(no_build, build),
+                    system: flag(system, no_system, "system"),
+                    no_build: flag(no_build, build, "build"),
                     no_binary,
                     only_binary,
                     extra,
-                    all_extras: flag(all_extras, no_all_extras),
-                    no_deps: flag(no_deps, deps),
+                    all_extras: flag(all_extras, no_all_extras, "all-extras"),
+                    no_deps: flag(no_deps, deps, "deps"),
                     group: Some(group),
                     output_file,
-                    no_strip_extras: flag(no_strip_extras, strip_extras),
-                    no_strip_markers: flag(no_strip_markers, strip_markers),
-                    no_annotate: flag(no_annotate, annotate),
-                    no_header: flag(no_header, header),
+                    no_strip_extras: flag(no_strip_extras, strip_extras, "strip-extras"),
+                    no_strip_markers: flag(no_strip_markers, strip_markers, "strip-markers"),
+                    no_annotate: flag(no_annotate, annotate, "annotate"),
+                    no_header: flag(no_header, header, "header"),
                     custom_compile_command,
-                    generate_hashes: flag(generate_hashes, no_generate_hashes),
+                    generate_hashes: flag(generate_hashes, no_generate_hashes, "generate-hashes"),
                     python_version,
                     python_platform,
-                    universal: flag(universal, no_universal),
+                    universal: flag(universal, no_universal, "universal"),
                     no_emit_package,
-                    emit_index_url: flag(emit_index_url, no_emit_index_url),
-                    emit_find_links: flag(emit_find_links, no_emit_find_links),
-                    emit_build_options: flag(emit_build_options, no_emit_build_options),
-                    emit_marker_expression: flag(emit_marker_expression, no_emit_marker_expression),
-                    emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
+                    emit_index_url: flag(emit_index_url, no_emit_index_url, "emit-index-url"),
+                    emit_find_links: flag(emit_find_links, no_emit_find_links, "emit-find-links"),
+                    emit_build_options: flag(
+                        emit_build_options,
+                        no_emit_build_options,
+                        "emit-build-options",
+                    ),
+                    emit_marker_expression: flag(
+                        emit_marker_expression,
+                        no_emit_marker_expression,
+                        "emit-marker-expression",
+                    ),
+                    emit_index_annotation: flag(
+                        emit_index_annotation,
+                        no_emit_index_annotation,
+                        "emit-index-annotation",
+                    ),
                     annotation_style,
                     torch_backend,
                     ..PipOptions::from(resolver)
@@ -1934,7 +2016,6 @@ impl PipCompileSettings {
 }
 
 /// The resolved settings to use for a `pip sync` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
@@ -1995,22 +2076,27 @@ impl PipSyncSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
-                    break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    system: flag(system, no_system, "system"),
+                    break_system_packages: flag(
+                        break_system_packages,
+                        no_break_system_packages,
+                        "break-system-packages",
+                    ),
                     target,
                     prefix,
-                    require_hashes: flag(require_hashes, no_require_hashes),
-                    verify_hashes: flag(verify_hashes, no_verify_hashes),
-                    no_build: flag(no_build, build),
+                    require_hashes: flag(require_hashes, no_require_hashes, "require-hashes"),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes, "verify-hashes"),
+                    no_build: flag(no_build, build, "build"),
                     no_binary,
                     only_binary,
                     allow_empty_requirements: flag(
                         allow_empty_requirements,
                         no_allow_empty_requirements,
+                        "allow-empty-requirements",
                     ),
                     python_version,
                     python_platform,
-                    strict: flag(strict, no_strict),
+                    strict: flag(strict, no_strict, "strict"),
                     torch_backend,
                     ..PipOptions::from(installer)
                 },
@@ -2021,7 +2107,6 @@ impl PipSyncSettings {
 }
 
 /// The resolved settings to use for a `pip install` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipInstallSettings {
     pub(crate) package: Vec<String>,
@@ -2145,7 +2230,7 @@ impl PipInstallSettings {
             constraints_from_workspace,
             overrides_from_workspace,
             build_constraints_from_workspace,
-            modifications: if flag(exact, inexact).unwrap_or(false) {
+            modifications: if flag(exact, inexact, "inexact").unwrap_or(false) {
                 Modifications::Exact
             } else {
                 Modifications::Sufficient
@@ -2154,22 +2239,26 @@ impl PipInstallSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
-                    break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    system: flag(system, no_system, "system"),
+                    break_system_packages: flag(
+                        break_system_packages,
+                        no_break_system_packages,
+                        "break-system-packages",
+                    ),
                     target,
                     prefix,
-                    no_build: flag(no_build, build),
+                    no_build: flag(no_build, build, "build"),
                     no_binary,
                     only_binary,
-                    strict: flag(strict, no_strict),
+                    strict: flag(strict, no_strict, "strict"),
                     extra,
-                    all_extras: flag(all_extras, no_all_extras),
+                    all_extras: flag(all_extras, no_all_extras, "all-extras"),
                     group: Some(group),
-                    no_deps: flag(no_deps, deps),
+                    no_deps: flag(no_deps, deps, "deps"),
                     python_version,
                     python_platform,
-                    require_hashes: flag(require_hashes, no_require_hashes),
-                    verify_hashes: flag(verify_hashes, no_verify_hashes),
+                    require_hashes: flag(require_hashes, no_require_hashes, "require-hashes"),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes, "verify-hashes"),
                     torch_backend,
                     ..PipOptions::from(installer)
                 },
@@ -2180,7 +2269,6 @@ impl PipInstallSettings {
 }
 
 /// The resolved settings to use for a `pip uninstall` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
@@ -2214,8 +2302,12 @@ impl PipUninstallSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
-                    break_system_packages: flag(break_system_packages, no_break_system_packages),
+                    system: flag(system, no_system, "system"),
+                    break_system_packages: flag(
+                        break_system_packages,
+                        no_break_system_packages,
+                        "break-system-packages",
+                    ),
                     target,
                     prefix,
                     keyring_provider,
@@ -2228,7 +2320,6 @@ impl PipUninstallSettings {
 }
 
 /// The resolved settings to use for a `pip freeze` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
     pub(crate) exclude_editable: bool,
@@ -2256,8 +2347,8 @@ impl PipFreezeSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
-                    strict: flag(strict, no_strict),
+                    system: flag(system, no_system, "system"),
+                    strict: flag(strict, no_strict, "strict"),
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -2267,7 +2358,6 @@ impl PipFreezeSettings {
 }
 
 /// The resolved settings to use for a `pip list` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipListSettings {
     pub(crate) editable: Option<bool>,
@@ -2297,15 +2387,15 @@ impl PipListSettings {
         } = args;
 
         Self {
-            editable: flag(editable, exclude_editable),
+            editable: flag(editable, exclude_editable, "exclude-editable"),
             exclude,
             format,
-            outdated: flag(outdated, no_outdated).unwrap_or(false),
+            outdated: flag(outdated, no_outdated, "outdated").unwrap_or(false),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
-                    strict: flag(strict, no_strict),
+                    system: flag(system, no_system, "system"),
+                    strict: flag(strict, no_strict, "strict"),
                     ..PipOptions::from(fetch)
                 },
                 filesystem,
@@ -2315,7 +2405,6 @@ impl PipListSettings {
 }
 
 /// The resolved settings to use for a `pip show` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipShowSettings {
     pub(crate) package: Vec<PackageName>,
@@ -2343,8 +2432,8 @@ impl PipShowSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
-                    strict: flag(strict, no_strict),
+                    system: flag(system, no_system, "system"),
+                    strict: flag(strict, no_strict, "strict"),
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -2354,7 +2443,6 @@ impl PipShowSettings {
 }
 
 /// The resolved settings to use for a `pip tree` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipTreeSettings {
     pub(crate) show_version_specifiers: bool,
@@ -2393,8 +2481,8 @@ impl PipTreeSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
-                    strict: flag(strict, no_strict),
+                    system: flag(system, no_system, "system"),
+                    strict: flag(strict, no_strict, "strict"),
                     ..PipOptions::from(fetch)
                 },
                 filesystem,
@@ -2404,7 +2492,6 @@ impl PipTreeSettings {
 }
 
 /// The resolved settings to use for a `pip check` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCheckSettings {
     pub(crate) settings: PipSettings,
@@ -2423,7 +2510,7 @@ impl PipCheckSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
+                    system: flag(system, no_system, "system"),
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -2433,7 +2520,6 @@ impl PipCheckSettings {
 }
 
 /// The resolved settings to use for a `build` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct BuildSettings {
     pub(crate) src: Option<PathBuf>,
@@ -2491,15 +2577,15 @@ impl BuildSettings {
             sdist,
             wheel,
             list,
-            build_logs: flag(build_logs, no_build_logs).unwrap_or(true),
+            build_logs: flag(build_logs, no_build_logs, "build-logs").unwrap_or(true),
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
             force_pep517,
             hash_checking: HashCheckingMode::from_args(
-                flag(require_hashes, no_require_hashes),
-                flag(verify_hashes, no_verify_hashes),
+                flag(require_hashes, no_require_hashes, "require-hashes"),
+                flag(verify_hashes, no_verify_hashes, "verify-hashes"),
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -2510,7 +2596,6 @@ impl BuildSettings {
 }
 
 /// The resolved settings to use for a `venv` invocation.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct VenvSettings {
     pub(crate) seed: bool,
@@ -2559,7 +2644,7 @@ impl VenvSettings {
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
-                    system: flag(system, no_system),
+                    system: flag(system, no_system, "system"),
                     index_strategy,
                     keyring_provider,
                     exclude_newer,
@@ -2597,7 +2682,6 @@ pub(crate) struct InstallerSettingsRef<'a> {
 ///
 /// Combines the `[tool.uv]` persistent configuration with the command-line arguments
 /// ([`ResolverArgs`], represented as [`ResolverOptions`]).
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResolverSettings {
     pub(crate) build_options: BuildOptions,
@@ -2687,7 +2771,6 @@ impl From<ResolverOptions> for ResolverSettings {
 ///
 /// Represents the shared settings that are used across all uv commands outside the `pip` API.
 /// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResolverInstallerSettings {
     pub(crate) resolver: ResolverSettings,
@@ -2777,7 +2860,6 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
 ///
 /// Represents the shared settings that are used across all `pip` commands. Analogous to the
 /// settings contained in the `[tool.uv.pip]` table.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipSettings {
     pub(crate) index_locations: IndexLocations,
@@ -3154,7 +3236,6 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
 }
 
 /// The resolved settings to use for an invocation of the `uv publish` CLI.
-#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PublishSettings {
     // CLI only, see [`PublishArgs`] for docs.

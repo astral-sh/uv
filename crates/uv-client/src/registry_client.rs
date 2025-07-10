@@ -10,7 +10,6 @@ use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
-use reqwest_middleware::ClientWithMiddleware;
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
@@ -22,8 +21,8 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -35,15 +34,15 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
-    BaseClient, CachedClient, CachedClientError, Error, ErrorKind, FlatIndexClient,
-    FlatIndexEntries,
+    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries,
+    RedirectClientWithMiddleware,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -152,9 +151,23 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
+    /// Allows credentials to be propagated on cross-origin redirects.
+    ///
+    /// WARNING: This should only be available for tests. In production code, propagating credentials
+    /// during cross-origin redirects can lead to security vulnerabilities including credential
+    /// leakage to untrusted domains.
+    #[cfg(test)]
+    #[must_use]
+    pub fn allow_cross_origin_credentials(mut self) -> Self {
+        self.base_client_builder = self.base_client_builder.allow_cross_origin_credentials();
+        self
+    }
+
     pub fn build(self) -> RegistryClient {
         // Build a base client
-        let builder = self.base_client_builder;
+        let builder = self
+            .base_client_builder
+            .redirect(RedirectPolicy::RetriggerMiddleware);
 
         let client = builder.build();
 
@@ -251,7 +264,7 @@ impl RegistryClient {
     }
 
     /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self, url: &DisplaySafeUrl) -> &ClientWithMiddleware {
+    pub fn uncached_client(&self, url: &DisplaySafeUrl) -> &RedirectClientWithMiddleware {
         self.client.uncached().for_host(url)
     }
 
@@ -558,7 +571,7 @@ impl RegistryClient {
         let simple_request = self
             .uncached_client(url)
             .get(Url::from(url.clone()))
-            .header("Accept-Encoding", "gzip")
+            .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::accepts())
             .build()
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
@@ -607,18 +620,16 @@ impl RegistryClient {
             .boxed_local()
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
-        self.cached_client()
+        let simple = self
+            .cached_client()
             .get_cacheable_with_retry(
                 simple_request,
                 cache_entry,
                 cache_control,
                 parse_simple_response,
             )
-            .await
-            .map_err(|err| match err {
-                CachedClientError::Client(err) => err,
-                CachedClientError::Callback(err) => err,
-            })
+            .await?;
+        Ok(simple)
     }
 
     /// Fetch the [`SimpleMetadata`] from a local file, using a PEP 503-compatible directory
@@ -671,30 +682,14 @@ impl RegistryClient {
 
                 let wheel = wheels.best_wheel();
 
-                let location = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        let url = uv_pypi_types::base_url_join_relative(base, url)
-                            .map_err(ErrorKind::JoinRelativeUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
-                    FileLocation::AbsoluteUrl(url) => {
-                        let url = url.to_url().map_err(ErrorKind::InvalidUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
+                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let location = if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+                    WheelLocation::Path(path)
+                } else {
+                    WheelLocation::Url(url)
                 };
 
                 match location {
@@ -900,15 +895,13 @@ impl RegistryClient {
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
-                    let metadata =
-                        ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
-                            Error::from(ErrorKind::MetadataParseError(
-                                filename.clone(),
-                                url.to_string(),
-                                Box::new(err),
-                            ))
-                        })?;
-                    Ok::<ResolutionMetadata, CachedClientError<Error>>(metadata)
+                    ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
+                        Error::from(ErrorKind::MetadataParseError(
+                            filename.clone(),
+                            url.to_string(),
+                            Box::new(err),
+                        ))
+                    })
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -1222,11 +1215,191 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
+    use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{JoinRelativeError, SimpleJson};
+    use uv_pypi_types::SimpleJson;
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
+
+    use crate::RegistryClientBuilder;
+    use uv_cache::Cache;
+    use uv_distribution_types::{FileLocation, ToUrlError};
+    use uv_small_str::SmallString;
+    use wiremock::matchers::{basic_auth, method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    type Error = Box<dyn std::error::Error>;
+
+    async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        server
+    }
+
+    #[tokio::test]
+    async fn test_redirect_to_server_with_credentials() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let auth_server = start_test_server(username, password).await;
+        let auth_base_url = DisplaySafeUrl::parse(&auth_server.uri())?;
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 302 to the auth server
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(302).insert_header("Location", format!("{auth_base_url}")),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
+
+        let cache = Cache::temp()?;
+        let registry_client = RegistryClientBuilder::new(cache)
+            .allow_cross_origin_credentials()
+            .build();
+        let client = registry_client.cached_client().uncached();
+
+        assert_eq!(
+            client
+                .for_host(&redirect_server_url)
+                .get(redirect_server.uri())
+                .send()
+                .await?
+                .status(),
+            401,
+            "Requests should fail if credentials are missing"
+        );
+
+        let mut url = redirect_server_url.clone();
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
+
+        assert_eq!(
+            client
+                .for_host(&redirect_server_url)
+                .get(Url::from(url))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests should succeed if credentials are present"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_root_relative_url() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 307 with a relative URL.
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/"))
+            .respond_with(
+                ResponseTemplate::new(307).insert_header("Location", "/bar/baz/".to_string()),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/bar/baz/"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&redirect_server)
+            .await;
+
+        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
+
+        let cache = Cache::temp()?;
+        let registry_client = RegistryClientBuilder::new(cache)
+            .allow_cross_origin_credentials()
+            .build();
+        let client = registry_client.cached_client().uncached();
+
+        let mut url = redirect_server_url.clone();
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
+
+        assert_eq!(
+            client
+                .for_host(&url)
+                .get(Url::from(url))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests should succeed for relative URL"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_relative_url() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 307 with a relative URL.
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/bar/baz/"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&redirect_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/"))
+            .and(basic_auth(username, password))
+            .respond_with(
+                ResponseTemplate::new(307).insert_header("Location", "bar/baz/".to_string()),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        let cache = Cache::temp()?;
+        let registry_client = RegistryClientBuilder::new(cache)
+            .allow_cross_origin_credentials()
+            .build();
+        let client = registry_client.cached_client().uncached();
+
+        let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
+        let mut url = redirect_server_url.clone();
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
+
+        assert_eq!(
+            client
+                .for_host(&url)
+                .get(Url::from(url))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests should succeed for relative URL"
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn ignore_failing_files() {
@@ -1281,7 +1454,7 @@ mod tests {
     ///
     /// See: <https://github.com/astral-sh/uv/issues/1388>
     #[test]
-    fn relative_urls_code_artifact() -> Result<(), JoinRelativeError> {
+    fn relative_urls_code_artifact() -> Result<(), ToUrlError> {
         let text = r#"
         <!DOCTYPE html>
         <html>
@@ -1304,12 +1477,13 @@ mod tests {
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
+        let base = SmallString::from(base.as_str());
 
         // Test parsing of the file urls
         let urls = files
-            .iter()
-            .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
-            .collect::<Result<Vec<_>, JoinRelativeError>>()?;
+            .into_iter()
+            .map(|file| FileLocation::new(file.url, &base).to_url())
+            .collect::<Result<Vec<_>, _>>()?;
         let urls = urls
             .iter()
             .map(DisplaySafeUrl::to_string)

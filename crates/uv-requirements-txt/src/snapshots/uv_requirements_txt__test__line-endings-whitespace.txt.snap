@@ -39,7 +39,21 @@ RequirementsTxt {
                                 parsed_url: Git(
                                     ParsedGitUrl {
                                         url: GitUrl {
-                                            repository: https://github.com/pandas-dev/pandas.git,
+                                            repository: DisplaySafeUrl {
+                                                scheme: "https",
+                                                cannot_be_a_base: false,
+                                                username: "",
+                                                password: None,
+                                                host: Some(
+                                                    Domain(
+                                                        "github.com",
+                                                    ),
+                                                ),
+                                                port: None,
+                                                path: "/pandas-dev/pandas.git",
+                                                query: None,
+                                                fragment: None,
+                                            },
                                             reference: DefaultBranch,
                                             precise: None,
                                         },
@@ -47,7 +61,21 @@ RequirementsTxt {
                                     },
                                 ),
                                 verbatim: VerbatimUrl {
-                                    url: git+https://github.com/pandas-dev/pandas.git,
+                                    url: DisplaySafeUrl {
+                                        scheme: "git+https",
+                                        cannot_be_a_base: false,
+                                        username: "",
+                                        password: None,
+                                        host: Some(
+                                            Domain(
+                                                "github.com",
+                                            ),
+                                        ),
+                                        port: None,
+                                        path: "/pandas-dev/pandas.git",
+                                        query: None,
+                                        fragment: None,
+                                    },
                                     given: Some(
                                         "git+https://github.com/pandas-dev/pandas.git",
                                     ),
