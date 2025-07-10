@@ -246,7 +246,7 @@ used.</p>
 </dd><dt id="uv-run--upgrade-package"><a href="#uv-run--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-run--verbose"><a href="#uv-run--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
-</dd><dt id="uv-run--with"><a href="#uv-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed.</p>
+</dd><dt id="uv-run--with"><a href="#uv-run--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Run with the given packages installed.</p>
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 </dd><dt id="uv-run--with-editable"><a href="#uv-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode.</p>
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
@@ -1935,7 +1935,7 @@ uv tool run [OPTIONS] [COMMAND]
 </dd><dt id="uv-tool-run--upgrade-package"><a href="#uv-tool-run--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-tool-run--verbose"><a href="#uv-tool-run--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
-</dd><dt id="uv-tool-run--with"><a href="#uv-tool-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed</p>
+</dd><dt id="uv-tool-run--with"><a href="#uv-tool-run--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 </dd><dt id="uv-tool-run--with-editable"><a href="#uv-tool-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
 <p>When used in a project, these dependencies will be layered on top of the uv tool's environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
 </dd><dt id="uv-tool-run--with-requirements"><a href="#uv-tool-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files</p>
@@ -2104,7 +2104,7 @@ uv tool install [OPTIONS] <PACKAGE>
 </dd><dt id="uv-tool-install--upgrade-package"><a href="#uv-tool-install--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-tool-install--verbose"><a href="#uv-tool-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
-</dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a> <i>with</i></dt><dd><p>Include the following additional requirements</p>
+</dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Include the following additional requirements</p>
 </dd><dt id="uv-tool-install--with-editable"><a href="#uv-tool-install--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
 </dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Include all requirements listed in the given <code>requirements.txt</code> files</p>
 </dd></dl>

@@ -3045,7 +3045,7 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of the project environment
     /// in a separate, ephemeral environment. These dependencies are allowed to conflict with those
     /// specified by the project.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode.
@@ -4256,7 +4256,7 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode
@@ -4371,7 +4371,7 @@ pub struct ToolInstallArgs {
     pub from: Option<String>,
 
     /// Include the following additional requirements.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Include all requirements listed in the given `requirements.txt` files.
