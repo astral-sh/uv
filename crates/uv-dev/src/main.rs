@@ -68,6 +68,7 @@ async fn main() -> ExitCode {
     let result = run().await;
     debug!("Took {}ms", start.elapsed().as_millis());
     if let Err(err) = result {
+        debug!("Error trace: {err:?}");
         eprintln!("{}", "uv-dev failed".red().bold());
         for err in err.chain() {
             eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());

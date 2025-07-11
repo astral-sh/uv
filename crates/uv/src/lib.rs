@@ -2279,6 +2279,7 @@ where
     match result {
         Ok(code) => code.into(),
         Err(err) => {
+            debug!("Error trace: {err:?}");
             let mut causes = err.chain();
             eprintln!(
                 "{}: {}",
