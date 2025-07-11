@@ -41,6 +41,15 @@ pub struct DefaultPriorities {
     pub property: FxHashMap<VariantNamespace, FxHashMap<VariantFeature, Vec<VariantProperty>>>,
 }
 
+/// A `namespace :: feature :: property` entry.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct VariantPropertyType {
+    pub namespace: String,
+    pub feature: String,
+    pub property: String,
+}
+
 /// Provider information
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

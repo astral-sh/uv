@@ -17,6 +17,7 @@ use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_variants::VariantProviderOutput;
+use uv_variants::variants_json::VariantPropertyType;
 use uv_workspace::WorkspaceCache;
 
 use crate::BuildArena;
@@ -184,7 +185,10 @@ pub trait SourceBuildTrait {
 }
 
 pub trait VariantsTrait {
-    fn query(&self) -> impl Future<Output = anyhow::Result<VariantProviderOutput>>;
+    fn query(
+        &self,
+        known_properties: &[VariantPropertyType],
+    ) -> impl Future<Output = anyhow::Result<VariantProviderOutput>>;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]

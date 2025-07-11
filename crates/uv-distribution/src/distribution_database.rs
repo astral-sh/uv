@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::io;
 use std::path::Path;
@@ -33,7 +34,7 @@ use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack, VariantsTrait};
 use uv_variants::resolved_variants::ResolvedVariants;
-use uv_variants::variants_json::VariantsJsonContent;
+use uv_variants::variants_json::{VariantPropertyType, VariantsJsonContent};
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -591,6 +592,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 })?
         };
 
+        // Collect all known properties for dynamic providers.
+        let mut known_properties = BTreeSet::default();
+        for variant in variants_json.variants.values() {
+            for (namespace, features) in variant {
+                for (feature, properties) in features {
+                    for property in properties {
+                        known_properties.insert(VariantPropertyType {
+                            namespace: namespace.clone(),
+                            feature: feature.clone(),
+                            property: property.clone(),
+                        });
+                    }
+                }
+            }
+        }
+        let known_properties: Vec<VariantPropertyType> = known_properties.into_iter().collect();
+
         // Compute the set of available variants.
         // Run all providers.
         let mut resolved_priorities = FxHashMap::default();
@@ -603,7 +621,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .build_context
                 .setup_variants(backend_name, provider, BuildOutput::Debug)
                 .await?;
-            let config = builder.query().await?;
+            let config = builder.query(&known_properties).await?;
             trace!(
                 "Found namespace {} with configs {:?}",
                 config.namespace, config
