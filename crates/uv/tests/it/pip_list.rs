@@ -286,20 +286,17 @@ fn list_editable() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + sniffio==1.3.1
-    "###
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+    "
     );
 
     let filters = context
@@ -308,19 +305,16 @@ fn list_editable() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, context.pip_list(), @r###"
+    uv_snapshot!(filters, context.pip_list(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
-    anyio 4.3.0
-    idna 3.6
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
-    sniffio 1.3.1
+    flit-editable 0.1.0 [WORKSPACE]/scripts/packages/flit_editable
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -332,20 +326,17 @@ fn list_editable_only() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + sniffio==1.3.1
-    "###
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+    "
     );
 
     let filters = context
@@ -361,25 +352,20 @@ fn list_editable_only() {
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    flit-editable 0.1.0 [WORKSPACE]/scripts/packages/flit_editable
 
     ----- stderr -----
     "###
     );
 
     uv_snapshot!(filters, context.pip_list()
-        .arg("--exclude-editable"), @r###"
+        .arg("--exclude-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Package Version
-    [UNDERLINE]
-    anyio 4.3.0
-    idna 3.6
-    sniffio 1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
@@ -407,20 +393,17 @@ fn list_exclude() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + sniffio==1.3.1
-    "###
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+    "
     );
 
     let filters = context
@@ -431,53 +414,40 @@ fn list_exclude() {
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
-    .arg("numpy"), @r###"
+    .arg("numpy"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
-    anyio 4.3.0
-    idna 3.6
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
-    sniffio 1.3.1
+    flit-editable 0.1.0 [WORKSPACE]/scripts/packages/flit_editable
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
-    .arg("poetry-editable"), @r###"
+    .arg("flit-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Package Version
-    [UNDERLINE]
-    anyio 4.3.0
-    idna 3.6
-    sniffio 1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("numpy")
     .arg("--exclude")
-    .arg("poetry-editable"), @r###"
+    .arg("flit-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Package Version
-    [UNDERLINE]
-    anyio 4.3.0
-    idna 3.6
-    sniffio 1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -490,20 +460,17 @@ fn list_format_json() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + sniffio==1.3.1
-    "###
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+    "
     );
 
     let filters: Vec<_> = context
@@ -513,14 +480,14 @@ fn list_format_json() {
         .collect();
 
     uv_snapshot!(filters, context.pip_list()
-    .arg("--format=json"), @r###"
+    .arg("--format=json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"flit-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/flit_editable"}]
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(filters, context.pip_list()
@@ -529,7 +496,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"}]
+    [{"name":"flit-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/flit_editable"}]
 
     ----- stderr -----
     "###
@@ -537,14 +504,14 @@ fn list_format_json() {
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
-    .arg("--exclude-editable"), @r###"
+    .arg("--exclude-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"sniffio","version":"1.3.1"}]
+    []
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -557,20 +524,17 @@ fn list_format_freeze() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + sniffio==1.3.1
-    "###
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+    "
     );
 
     let filters = context
@@ -580,17 +544,14 @@ fn list_format_freeze() {
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_list()
-    .arg("--format=freeze"), @r###"
+    .arg("--format=freeze"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    anyio==4.3.0
-    idna==3.6
-    poetry-editable==0.1.0
-    sniffio==1.3.1
+    flit-editable==0.1.0
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
@@ -599,7 +560,7 @@ fn list_format_freeze() {
     success: true
     exit_code: 0
     ----- stdout -----
-    poetry-editable==0.1.0
+    flit-editable==0.1.0
 
     ----- stderr -----
     "###
@@ -607,16 +568,13 @@ fn list_format_freeze() {
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
-    .arg("--exclude-editable"), @r###"
+    .arg("--exclude-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    anyio==4.3.0
-    idna==3.6
-    sniffio==1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -723,20 +681,17 @@ fn list_ignores_quiet_flag_format_freeze() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + sniffio==1.3.1
-    "###
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+    "
     );
 
     let filters = context
@@ -747,17 +702,14 @@ fn list_ignores_quiet_flag_format_freeze() {
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
-    .arg("--quiet"), @r###"
+    .arg("--quiet"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    anyio==4.3.0
-    idna==3.6
-    poetry-editable==0.1.0
-    sniffio==1.3.1
+    flit-editable==0.1.0
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
@@ -767,7 +719,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     success: true
     exit_code: 0
     ----- stdout -----
-    poetry-editable==0.1.0
+    flit-editable==0.1.0
 
     ----- stderr -----
     "###
@@ -776,15 +728,12 @@ fn list_ignores_quiet_flag_format_freeze() {
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--exclude-editable")
-    .arg("--quiet"), @r###"
+    .arg("--quiet"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    anyio==4.3.0
-    idna==3.6
-    sniffio==1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 }
