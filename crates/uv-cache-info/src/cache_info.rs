@@ -232,7 +232,7 @@ impl CacheInfo {
                     };
                     let metadata = if entry.path_is_symlink() {
                         // resolve symlinks for leaf entries without following symlinks while globbing
-                        match std::fs::metadata(entry.path()) {
+                        match entry.path().metadata() {
                             Ok(metadata) => metadata,
                             Err(err) => {
                                 warn!("Failed to resolve symlink for glob entry: {err}");
@@ -390,8 +390,7 @@ mod tests_unix {
             let path = dir.join(path);
             fs::create_dir_all(path.parent().unwrap())?;
             fs::write(&path, "")?;
-            let meta = fs::metadata(&path)?;
-            Ok(Timestamp::from_metadata(&meta))
+            Ok(Timestamp::from_metadata(&path.metadata()?))
         };
 
         let cache_timestamp = || -> Result<_> { Ok(CacheInfo::from_directory(&dir)?.timestamp) };
