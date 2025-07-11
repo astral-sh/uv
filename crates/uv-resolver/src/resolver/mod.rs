@@ -84,6 +84,7 @@ use crate::{
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
 use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::variants_json::VariantPropertyType;
 
 mod availability;
 mod batch_prefetch;
@@ -616,9 +617,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     next_id,
                     next_package,
                     &version,
+                    index.map(IndexMetadata::url),
                     &state.pins,
                     &state.fork_urls,
                     &state.env,
+                    &self.index,
                     &state.python_requirement,
                     &state.pubgrub,
                 )?;
@@ -1467,6 +1470,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let explicit_feature_priorities = default_priorities.feature.get(namespace);
                 let Some(target_variants) = resolved_variants.target_variants.get(namespace) else {
                     // TODO(konsti): Can this even happen?
+                    debug!("missing namespace priority {namespace}");
                     continue;
                 };
                 let feature_priorities = explicit_feature_priorities.into_iter().flatten().chain(
@@ -1869,9 +1873,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
+        index_url: Option<&IndexUrl>,
         pins: &FilePins,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
+        in_memory_index: &InMemoryIndex,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<ForkedDependencies, ResolveError> {
@@ -1879,9 +1885,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             id,
             package,
             version,
+            index_url,
             pins,
             fork_urls,
             env,
+            in_memory_index,
             python_requirement,
             pubgrub,
         );
@@ -1904,9 +1912,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
+        index_url: Option<&IndexUrl>,
         pins: &FilePins,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
+        in_memory_index: &InMemoryIndex,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
@@ -1921,6 +1931,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     None,
                     env,
+                    None,
                     python_requirement,
                 );
 
@@ -1953,6 +1964,64 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None => PubGrubDistribution::from_registry(name, version),
                 };
                 let version_id = dist.version_id();
+
+                // If we're resolving for a specific environment, use the host variants, otherwise resolve
+                // for all variants.
+                // TODO(konsti): Is that the right default?
+                // TODO(konsti): We determine this value in choose version, pass it a parameter
+                //   This is in the hot path!
+                // TODO(konsti): More control for the user.
+                let variants = if env.marker_environment().is_some() {
+                    let resolved_variants = in_memory_index
+                        .variant_priorities()
+                        .get(&(version_id.clone(), index_url.cloned()));
+                    if let Some(resolved_variants) = resolved_variants {
+                        // TODO(konsti): Handle installed dists too
+                        if let Some(variant_label) = pins
+                            .get(name, version)
+                            .unwrap()
+                            .wheel_filename()
+                            .and_then(|filename| filename.variant())
+                        {
+                            // Collect the host properties for marker filtering.
+                            let mut known_properties = BTreeSet::new();
+                            let namespaces = resolved_variants
+                                .variants_json
+                                .variants
+                                .get(variant_label)
+                                .expect("Missing previously select variant label");
+                            for (namespace, features) in namespaces {
+                                for (feature, values) in features {
+                                    for value in values {
+                                        known_properties.insert(VariantPropertyType {
+                                            namespace: namespace.clone(),
+                                            feature: feature.clone(),
+                                            value: value.clone(),
+                                        });
+                                    }
+                                }
+                            }
+                            // TODO(konsti): Use the proper type everywhere
+                            let known_properties: Vec<(String, String, String)> = known_properties
+                                .into_iter()
+                                .map(|known_property| {
+                                    (
+                                        known_property.namespace,
+                                        known_property.feature,
+                                        known_property.value,
+                                    )
+                                })
+                                .collect();
+                            Some(known_properties)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
@@ -2037,6 +2106,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dev.as_ref(),
                     Some(name),
                     env,
+                    variants.as_deref(),
                     python_requirement,
                 );
 
@@ -2138,6 +2208,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
         env: &'a ResolverEnvironment,
+        variants: Option<&'a [(String, String, String)]>,
         python_requirement: &'a PythonRequirement,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let python_marker = python_requirement.to_marker_tree();
@@ -2149,6 +2220,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dev_dependencies.get(dev).into_iter().flatten(),
                 extra,
                 env,
+                variants,
                 python_marker,
                 python_requirement,
             )))
@@ -2161,6 +2233,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dependencies.iter(),
                 extra,
                 env,
+                variants,
                 python_marker,
                 python_requirement,
             )))
@@ -2170,6 +2243,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dependencies.iter(),
                     extra,
                     env,
+                    variants,
                     python_marker,
                     python_requirement,
                 )
@@ -2191,6 +2265,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dependencies,
                     Some(&extra),
                     env,
+                    variants,
                     python_marker,
                     python_requirement,
                 ) {
@@ -2260,6 +2335,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
+        variants: Option<&'parameters [(String, String, String)]>,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
@@ -2273,6 +2349,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     requirement,
                     extra,
                     env,
+                    variants,
                     python_marker,
                     python_requirement,
                 )
@@ -2282,18 +2359,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     requirement,
                     extra,
                     env,
+                    variants,
                     python_marker,
                     python_requirement,
                 ))
             })
     }
 
-    /// Whether a requirement is applicable for the Python version, the markers of this fork and the
-    /// requested extra.
+    /// Whether a requirement is applicable for the Python version, the markers of this fork, the
+    /// host variants if applicable and the requested extra.
     fn is_requirement_applicable(
         requirement: &Requirement,
         extra: Option<&ExtraName>,
         env: &ResolverEnvironment,
+        variants: Option<&[(String, String, String)]>,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
     ) -> bool {
@@ -2301,12 +2380,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         match extra {
             Some(source_extra) => {
                 // Only include requirements that are relevant for the current extra.
-                if requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if requirement.evaluate_markers(env.marker_environment(), variants, &[]) {
                     return false;
                 }
-                if !requirement
-                    .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                {
+                if !requirement.evaluate_markers(
+                    env.marker_environment(),
+                    variants,
+                    slice::from_ref(source_extra),
+                ) {
                     return false;
                 }
                 if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
@@ -2315,7 +2396,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
             None => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if !requirement.evaluate_markers(env.marker_environment(), variants, &[]) {
                     return false;
                 }
             }
@@ -2348,6 +2429,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
+        variants: Option<&'parameters [(String, String, String)]>,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
@@ -2439,7 +2521,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     match extra {
                         Some(source_extra) => {
                             if !constraint
-                                .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
+                                .evaluate_markers(env.marker_environment(), variants, slice::from_ref(source_extra))
                             {
                                 return None;
                             }
@@ -2449,7 +2531,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
                         None => {
-                            if !constraint.evaluate_markers(env.marker_environment(), &[]) {
+                            if !constraint.evaluate_markers(env.marker_environment(), variants, &[]) {
                                 return None;
                             }
                         }

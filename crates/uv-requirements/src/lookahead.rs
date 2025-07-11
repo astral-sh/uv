@@ -91,7 +91,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut queue: VecDeque<_> = self
             .constraints
             .apply(self.overrides.apply(self.requirements))
-            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), None, &[]))
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -110,9 +110,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         .constraints
                         .apply(self.overrides.apply(lookahead.requirements()))
                     {
-                        if requirement
-                            .evaluate_markers(env.marker_environment(), lookahead.extras())
-                        {
+                        if requirement.evaluate_markers(
+                            env.marker_environment(),
+                            None,
+                            lookahead.extras(),
+                        ) {
                             queue.push_back((*requirement).clone());
                         }
                     }

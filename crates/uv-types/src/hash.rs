@@ -134,9 +134,11 @@ impl HashStrategy {
 
         // First, index the constraints by name.
         for (requirement, digests) in constraints {
-            if !requirement
-                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
-            {
+            if !requirement.evaluate_markers(
+                marker_env.map(ResolverMarkerEnvironment::markers),
+                None,
+                &[],
+            ) {
                 continue;
             }
 

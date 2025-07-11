@@ -1021,7 +1021,6 @@ impl MarkerTree {
                     .evaluate_reporter_impl(env, extras, variants, reporter);
             }
             MarkerTreeKind::Variant(marker) => {
-                dbg!(variants.is_some());
                 let Some(variants) = variants else {
                     // If we're not limiting to specific variants, we're solving universally.
                     return true;
@@ -3715,7 +3714,7 @@ mod test {
 
     #[test]
     fn variant_errors() {
-        let err = MarkerExpression::from_str(r#"variant_namespaces in 'gpu'"#)
+        let err = MarkerExpression::from_str(r"variant_namespaces in 'gpu'")
             .unwrap_err()
             .to_string();
         assert_snapshot!(
@@ -3726,7 +3725,7 @@ mod test {
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
         "
         );
-        let err = MarkerExpression::from_str(r#"'gpu :: cuda' == variant_properties"#)
+        let err = MarkerExpression::from_str(r"'gpu :: cuda' == variant_properties")
             .unwrap_err()
             .to_string();
         assert_snapshot!(
