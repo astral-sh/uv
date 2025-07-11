@@ -223,6 +223,9 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
             --features python-patch \
@@ -256,6 +259,9 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
             --no-default-features \
@@ -300,6 +306,8 @@ jobs:
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
           # Avoid permission errors during concurrent tests
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy

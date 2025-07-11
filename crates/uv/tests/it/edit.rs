@@ -11877,7 +11877,9 @@ async fn add_unexpected_error_code() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri()), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri())
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
