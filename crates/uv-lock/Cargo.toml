@@ -1,0 +1,32 @@
+[package]
+name = "uv-lock"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-fs = { workspace = true }
+uv-state = { workspace = true }
+uv-static = { workspace = true }
+uv-cache-key = { workspace = true }
+
+fs-err = { workspace = true }
+fs2 = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, optional = true}
+tracing = { workspace = true }
+
+[features]
+default = []
+tokio = ["dep:tokio", "fs-err/tokio"]

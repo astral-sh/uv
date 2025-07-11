@@ -749,6 +749,7 @@ impl TestContext {
             .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
+            .env_remove(EnvVars::UV_LOCK_DIR)
             .env_remove(EnvVars::XDG_CONFIG_HOME)
             .env_remove(EnvVars::XDG_DATA_HOME)
             .current_dir(self.temp_dir.path());

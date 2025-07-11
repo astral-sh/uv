@@ -20,7 +20,6 @@ dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
-fs2 = { workspace = true }
 path-slash = { workspace = true }
 percent-encoding = { workspace = true }
 same-file = { workspace = true }

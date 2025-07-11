@@ -247,6 +247,9 @@ impl EnvVars {
     /// Specifies the directory where uv stores managed tools.
     pub const UV_TOOL_DIR: &'static str = "UV_TOOL_DIR";
 
+    /// Specifies the directory where uv stores filesystem locks.
+    pub const UV_LOCK_DIR: &'static str = "UV_LOCK_DIR";
+
     /// Specifies the "bin" directory for installing tool executables.
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
 

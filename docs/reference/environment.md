@@ -177,6 +177,10 @@ a link mode.
 Equivalent to the `--locked` command-line argument. If set, uv will assert that the
 `uv.lock` remains unchanged.
 
+### `UV_LOCK_DIR`
+
+Specifies the directory where uv stores filesystem locks.
+
 ### `UV_LOG_CONTEXT`
 
 Add additional context and structure to log messages.
