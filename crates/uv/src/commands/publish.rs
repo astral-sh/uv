@@ -95,6 +95,7 @@ pub(crate) async fn publish(
             false,
         );
         let registry_client_builder = RegistryClientBuilder::new(cache.clone())
+            .retries_from_env()?
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())

@@ -31,6 +31,9 @@ pub enum Error {
     #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
 
+    #[error("Failed to construct HTTP client")]
+    ClientError(#[source] anyhow::Error),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

@@ -402,6 +402,9 @@ impl EnvVars {
     /// Timeout (in seconds) for HTTP requests. (default: 30 s)
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
 
+    /// The number of retries for HTTP requests. (default: 3)
+    pub const UV_HTTP_RETRIES: &'static str = "UV_HTTP_RETRIES";
+
     /// Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
     pub const UV_REQUEST_TIMEOUT: &'static str = "UV_REQUEST_TIMEOUT";
 
@@ -658,6 +661,9 @@ impl EnvVars {
     /// Used to set the vendor links url for tests.
     #[attr_hidden]
     pub const UV_TEST_VENDOR_LINKS_URL: &'static str = "UV_TEST_VENDOR_LINKS_URL";
+
+    /// Used to disable delay for HTTP retries in tests.
+    pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
 
     /// Used to set an index url for tests.
     #[attr_hidden]

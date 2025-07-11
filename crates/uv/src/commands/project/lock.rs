@@ -99,6 +99,7 @@ pub(crate) async fn lock(
     let script = match script {
         Some(ScriptPath::Path(path)) => {
             let client_builder = BaseClientBuilder::new()
+                .retries_from_env()?
                 .connectivity(network_settings.connectivity)
                 .native_tls(network_settings.native_tls)
                 .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -588,6 +589,7 @@ async fn do_lock(
 
     // Initialize the client.
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)

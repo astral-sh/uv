@@ -115,6 +115,11 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
+    pub fn retries_from_env(mut self) -> anyhow::Result<Self> {
+        self.base_client_builder = self.base_client_builder.retries_from_env()?;
+        Ok(self)
+    }
+
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.base_client_builder = self.base_client_builder.native_tls(native_tls);
