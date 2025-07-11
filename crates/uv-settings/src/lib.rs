@@ -201,32 +201,70 @@ fn read_file(path: &Path) -> Result<Options, Error> {
 
 /// Validate that an [`Options`] schema is compatible with `uv.toml`.
 fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
+    let Options {
+        globals: _,
+        top_level: _,
+        install_mirrors: _,
+        publish: _,
+        add: _,
+        pip: _,
+        cache_keys: _,
+        override_dependencies: _,
+        constraint_dependencies: _,
+        build_constraint_dependencies: _,
+        environments: _,
+        required_environments: _,
+        conflicts,
+        workspace,
+        sources,
+        dev_dependencies,
+        default_groups,
+        dependency_groups,
+        managed,
+        package,
+        build_backend,
+    } = options;
     // The `uv.toml` format is not allowed to include any of the following, which are
     // permitted by the schema since they _can_ be included in `pyproject.toml` files
     // (and we want to use `deny_unknown_fields`).
-    if options.workspace.is_some() {
+    if conflicts.is_some() {
+        return Err(Error::PyprojectOnlyField(path.to_path_buf(), "conflicts"));
+    }
+    if workspace.is_some() {
         return Err(Error::PyprojectOnlyField(path.to_path_buf(), "workspace"));
     }
-    if options.sources.is_some() {
+    if sources.is_some() {
         return Err(Error::PyprojectOnlyField(path.to_path_buf(), "sources"));
     }
-    if options.dev_dependencies.is_some() {
+    if dev_dependencies.is_some() {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
             "dev-dependencies",
         ));
     }
-    if options.default_groups.is_some() {
+    if default_groups.is_some() {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
             "default-groups",
         ));
     }
-    if options.managed.is_some() {
+    if dependency_groups.is_some() {
+        return Err(Error::PyprojectOnlyField(
+            path.to_path_buf(),
+            "dependency-groups",
+        ));
+    }
+    if managed.is_some() {
         return Err(Error::PyprojectOnlyField(path.to_path_buf(), "managed"));
     }
-    if options.package.is_some() {
+    if package.is_some() {
         return Err(Error::PyprojectOnlyField(path.to_path_buf(), "package"));
+    }
+    if build_backend.is_some() {
+        return Err(Error::PyprojectOnlyField(
+            path.to_path_buf(),
+            "build-backend",
+        ));
     }
     Ok(())
 }
