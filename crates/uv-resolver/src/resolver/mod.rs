@@ -1477,14 +1477,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 for feature in feature_priorities {
-                    let Some(property_order) = default_priorities
+                    let value_priorities: Vec<String> = default_priorities
                         .property
                         .get(namespace)
                         .and_then(|namespace_features| namespace_features.get(feature))
-                    else {
-                        debug!("missing feature {feature}");
-                        continue;
-                    };
+                        .into_iter()
+                        .flatten()
+                        .map(ToString::to_string)
+                        .chain(
+                            resolved_variants
+                                .target_variants
+                                .get(namespace)
+                                .and_then(|namespace| namespace.features.get(feature).cloned())
+                                .into_iter()
+                                .flatten(),
+                        )
+                        .collect();
+                    if !value_priorities.contains(feature) {
+                        debug!("missing value priority {feature}");
+                    }
                     let Some(wheel_properties) = variants_properties
                         .get(namespace)
                         .and_then(|namespace| namespace.get(feature))
@@ -1495,11 +1506,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     // Determine the highest scoring property
                     // Reversed to give a higher score to earlier entries
-                    let score = property_order.len()
-                        - property_order
+                    let score = value_priorities.len()
+                        - value_priorities
                             .iter()
                             .position(|feature| wheel_properties.contains(feature))
-                            .unwrap_or(property_order.len());
+                            .unwrap_or(value_priorities.len());
                     scores.push(score);
                 }
             }
