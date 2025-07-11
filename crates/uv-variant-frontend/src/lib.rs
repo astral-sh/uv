@@ -179,13 +179,15 @@ impl VariantBuild {
 
                 with open("{in_file}") as fp:
                     known_properties = json.load(fp)
-                known_properties = []
+
+                # Filter to the namespace of the plugin
+                filtered_properties = []
                 for known_property in known_properties:
                     # We don't know the namespace ahead of time, so the frontend passes all properties.
-                    if known_property.namespace != backend.namespace:
+                    if known_property["namespace"] != backend.namespace:
                         continue
-                    known_properties.append(VariantPropertyType(**known_property))
-                known_properties = frozenset(known_properties)
+                    filtered_properties.append(VariantPropertyType(**known_property))
+                known_properties = frozenset(filtered_properties)
             else:
                 known_properties = None
 

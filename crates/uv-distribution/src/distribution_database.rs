@@ -596,12 +596,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let mut known_properties = BTreeSet::default();
         for variant in variants_json.variants.values() {
             for (namespace, features) in variant {
-                for (feature, properties) in features {
-                    for property in properties {
+                for (feature, value) in features {
+                    for value in value {
                         known_properties.insert(VariantPropertyType {
                             namespace: namespace.clone(),
                             feature: feature.clone(),
-                            property: property.clone(),
+                            // TODO(konsti): Be consistent on value vs. property
+                            value: value.clone(),
                         });
                     }
                 }

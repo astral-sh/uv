@@ -47,7 +47,7 @@ pub struct DefaultPriorities {
 pub struct VariantPropertyType {
     pub namespace: String,
     pub feature: String,
-    pub property: String,
+    pub value: String,
 }
 
 /// Provider information
