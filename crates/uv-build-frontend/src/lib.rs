@@ -19,8 +19,8 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use serde::de::{IntoDeserializer, SeqAccess, Visitor, value};
-use serde::{Deserialize, Deserializer, de};
+use serde::de::{self, IntoDeserializer, SeqAccess, Visitor, value};
+use serde::{Deserialize, Deserializer};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
@@ -511,12 +511,10 @@ impl SourceBuild {
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
-                let pyproject_toml: toml_edit::ImDocument<_> =
-                    toml_edit::ImDocument::from_str(&toml)
-                        .map_err(Error::InvalidPyprojectTomlSyntax)?;
-                let pyproject_toml: PyProjectToml =
-                    PyProjectToml::deserialize(pyproject_toml.into_deserializer())
-                        .map_err(Error::InvalidPyprojectTomlSchema)?;
+                let pyproject_toml = toml_edit::Document::from_str(&toml)
+                    .map_err(Error::InvalidPyprojectTomlSyntax)?;
+                let pyproject_toml = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+                    .map_err(Error::InvalidPyprojectTomlSchema)?;
 
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     // If necessary, lower the requirements.
