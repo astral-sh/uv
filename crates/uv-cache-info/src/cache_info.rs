@@ -232,7 +232,7 @@ impl CacheInfo {
                     };
                     let metadata = if entry.path_is_symlink() {
                         // resolve symlinks for leaf entries without following symlinks while globbing
-                        match entry.path().metadata() {
+                        match fs_err::metadata(entry.path()) {
                             Ok(metadata) => metadata,
                             Err(err) => {
                                 warn!("Failed to resolve symlink for glob entry: {err}");
@@ -360,20 +360,18 @@ enum DirectoryTimestamp {
 
 #[cfg(all(test, unix))]
 mod tests_unix {
-    use std::fs;
-
     use anyhow::Result;
 
-    use crate::{CacheInfo, Timestamp};
+    use super::{CacheInfo, Timestamp};
 
     #[test]
     fn test_cache_info_symlink_resolve() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let dir = dir.path().join("dir");
-        fs::create_dir_all(&dir)?;
+        fs_err::create_dir_all(&dir)?;
 
         let write_manifest = |cache_key: &str| {
-            fs::write(
+            fs_err::write(
                 dir.join("pyproject.toml"),
                 format!(
                     r#"
@@ -388,8 +386,8 @@ mod tests_unix {
 
         let touch = |path: &str| -> Result<_> {
             let path = dir.join(path);
-            fs::create_dir_all(path.parent().unwrap())?;
-            fs::write(&path, "")?;
+            fs_err::create_dir_all(path.parent().unwrap())?;
+            fs_err::write(&path, "")?;
             Ok(Timestamp::from_metadata(&path.metadata()?))
         };
 
@@ -404,12 +402,12 @@ mod tests_unix {
 
         // leaf entry symlink should be resolved
         let a = touch("../a")?;
-        std::os::unix::fs::symlink(dir.join("../a"), dir.join("x/a"))?;
+        fs_err::os::unix::fs::symlink(dir.join("../a"), dir.join("x/a"))?;
         assert_eq!(cache_timestamp()?, Some(a));
 
         // symlink directories should not be followed while globbing
         let c = touch("../b/c")?;
-        std::os::unix::fs::symlink(dir.join("../b"), dir.join("x/b"))?;
+        fs_err::os::unix::fs::symlink(dir.join("../b"), dir.join("x/b"))?;
         assert_eq!(cache_timestamp()?, Some(a));
 
         // no globs, should work as expected
