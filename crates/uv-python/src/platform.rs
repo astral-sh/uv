@@ -160,6 +160,14 @@ impl Arch {
         if self == other {
             return true;
         }
+        if other
+            == (Arch {
+                family: target_lexicon::Architecture::Wasm32,
+                variant: None,
+            })
+        {
+            return true;
+        }
 
         // TODO: Implement `variant` support checks
 
@@ -382,6 +390,7 @@ impl From<&uv_platform_tags::Os> for Libc {
         match value {
             uv_platform_tags::Os::Manylinux { .. } => Self::Some(target_lexicon::Environment::Gnu),
             uv_platform_tags::Os::Musllinux { .. } => Self::Some(target_lexicon::Environment::Musl),
+            uv_platform_tags::Os::Pyodide { .. } => Self::Some(target_lexicon::Environment::Musl),
             _ => Self::None,
         }
     }
