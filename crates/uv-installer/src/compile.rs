@@ -1,8 +1,9 @@
+use std::num::ParseIntError;
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use std::{io, panic};
+use std::{env, io, panic};
 
 use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
@@ -16,11 +17,11 @@ use walkdir::WalkDir;
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
-const COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
+const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Error)]
 pub enum CompileError {
@@ -88,6 +89,32 @@ pub async fn compile_tree(
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
+    let timeout: Option<Duration> = env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT)
+        .map(|value| {
+            // 0 indicates no timeout
+            if value == "0" {
+                None
+            } else {
+                Some(value.parse::<u64>()
+                    .map(Duration::from_secs)
+                    .or_else(|_| {
+                        // On parse error, warn and use the default timeout
+                        warn_user_once!("Ignoring invalid value from environment for `UV_COMPILE_BYTECODE_TIMEOUT`. Expected an integer number of seconds, got \"{value}\".");
+                        Ok::<Duration, ParseIntError>(DEFAULT_COMPILE_TIMEOUT)
+                    })
+                    .unwrap_or(DEFAULT_COMPILE_TIMEOUT))
+            }
+        })
+        .unwrap_or(Some(DEFAULT_COMPILE_TIMEOUT));
+    if let Some(duration) = timeout {
+        debug!(
+            "Using bytecode compilation timeout of {}s",
+            duration.as_secs()
+        );
+    } else {
+        debug!("Disabling bytecode compilation timeout");
+    }
+
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::new();
     for _ in 0..worker_count {
@@ -98,6 +125,7 @@ pub async fn compile_tree(
             python_executable.to_path_buf(),
             pip_compileall_py.clone(),
             receiver.clone(),
+            timeout,
         );
 
         // Spawn each worker on a dedicated thread.
@@ -189,6 +217,7 @@ async fn worker(
     interpreter: PathBuf,
     pip_compileall_py: PathBuf,
     receiver: Receiver<PathBuf>,
+    timeout: Option<Duration>,
 ) -> Result<(), CompileError> {
     fs_err::tokio::write(&pip_compileall_py, COMPILEALL_SCRIPT)
         .await
@@ -208,12 +237,17 @@ async fn worker(
             }
         }
     };
+
     // Handle a broken `python` by using a timeout, one that's higher than any compilation
     // should ever take.
     let (mut bytecode_compiler, child_stdin, mut child_stdout, mut child_stderr) =
-        tokio::time::timeout(COMPILE_TIMEOUT, wait_until_ready)
-            .await
-            .map_err(|_| CompileError::StartupTimeout(COMPILE_TIMEOUT))??;
+        if let Some(duration) = timeout {
+            tokio::time::timeout(duration, wait_until_ready)
+                .await
+                .map_err(|_| CompileError::StartupTimeout(timeout.unwrap()))??
+        } else {
+            wait_until_ready.await?
+        };
 
     let stderr_reader = tokio::task::spawn(async move {
         let mut child_stderr_collected: Vec<u8> = Vec::new();
@@ -223,7 +257,7 @@ async fn worker(
         Ok(child_stderr_collected)
     });
 
-    let result = worker_main_loop(receiver, child_stdin, &mut child_stdout).await;
+    let result = worker_main_loop(receiver, child_stdin, &mut child_stdout, timeout).await;
     // Reap the process to avoid zombies.
     let _ = bytecode_compiler.kill().await;
 
@@ -340,6 +374,7 @@ async fn worker_main_loop(
     receiver: Receiver<PathBuf>,
     mut child_stdin: ChildStdin,
     child_stdout: &mut BufReader<ChildStdout>,
+    timeout: Option<Duration>,
 ) -> Result<(), CompileError> {
     let mut out_line = String::new();
     while let Ok(source_file) = receiver.recv().await {
@@ -372,12 +407,16 @@ async fn worker_main_loop(
 
         // Handle a broken `python` by using a timeout, one that's higher than any compilation
         // should ever take.
-        tokio::time::timeout(COMPILE_TIMEOUT, python_handle)
-            .await
-            .map_err(|_| CompileError::CompileTimeout {
-                elapsed: COMPILE_TIMEOUT,
-                source_file: source_file.clone(),
-            })??;
+        if let Some(duration) = timeout {
+            tokio::time::timeout(duration, python_handle)
+                .await
+                .map_err(|_| CompileError::CompileTimeout {
+                    elapsed: duration,
+                    source_file: source_file.clone(),
+                })??;
+        } else {
+            python_handle.await?;
+        }
 
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.

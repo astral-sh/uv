@@ -26,6 +26,10 @@ directory for caching instead of the default cache directory.
 Equivalent to the `--compile-bytecode` command-line argument. If set, uv
 will compile Python source files to bytecode after installation.
 
+### `UV_COMPILE_BYTECODE_TIMEOUT`
+
+Timeout (in seconds) for bytecode compilation.
+
 ### `UV_CONCURRENT_BUILDS`
 
 Sets the maximum number of source distributions that uv will build
