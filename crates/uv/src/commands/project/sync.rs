@@ -13,7 +13,7 @@ use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
-    PreviewMode,
+    PreviewMode, TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
@@ -34,8 +34,9 @@ use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::resolution_markers;
+use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
@@ -63,6 +64,7 @@ pub(crate) async fn sync(
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -453,6 +455,7 @@ pub(crate) async fn sync(
         editable,
         install_options,
         modifications,
+        python_platform.as_ref(),
         (&settings).into(),
         &network_settings,
         &state,
@@ -589,6 +592,7 @@ pub(super) async fn do_sync(
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
+    python_platform: Option<&TargetTriple>,
     settings: InstallerSettingsRef<'_>,
     network_settings: &NetworkSettings,
     state: &PlatformState,
@@ -644,7 +648,7 @@ pub(super) async fn do_sync(
     target.validate_groups(groups)?;
 
     // Determine the markers to use for resolution.
-    let marker_env = venv.interpreter().resolver_marker_environment();
+    let marker_env = resolution_markers(None, python_platform, venv.interpreter());
 
     // Validate that the platform is supported by the lockfile.
     let environments = target.lock().supported_environments();
@@ -670,13 +674,13 @@ pub(super) async fn do_sync(
         }
     }
 
-    // Determine the tags to use for resolution.
-    let tags = venv.interpreter().tags()?;
+    // Determine the tags to use for the resolution.
+    let tags = resolution_tags(None, python_platform, venv.interpreter())?;
 
     // Read the lockfile.
     let resolution = target.to_resolution(
         &marker_env,
-        tags,
+        &tags,
         extras,
         groups,
         build_options,
@@ -728,7 +732,7 @@ pub(super) async fn do_sync(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -768,7 +772,7 @@ pub(super) async fn do_sync(
         index_locations,
         config_setting,
         &hasher,
-        tags,
+        &tags,
         &client,
         state.in_flight(),
         concurrency,
@@ -847,7 +851,7 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
 fn store_credentials_from_target(target: InstallTarget<'_>) {
-    // Iterate over any idnexes in the target.
+    // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
             let credentials = Arc::new(credentials);

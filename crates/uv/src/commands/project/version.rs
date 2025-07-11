@@ -634,6 +634,7 @@ async fn lock_and_sync(
         EditableMode::Editable,
         install_options,
         Modifications::Sufficient,
+        None,
         settings.into(),
         &network_settings,
         &state,

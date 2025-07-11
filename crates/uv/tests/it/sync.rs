@@ -10026,3 +10026,42 @@ fn read_only() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_python_platform() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+        "#,
+    )?;
+
+    // Lock the project
+    context.lock().assert().success();
+
+    // Sync with a specific platform should filter packages
+    uv_snapshot!(context.filters(), context.sync().arg("--python-platform").arg("linux"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    ");
+
+    Ok(())
+}
