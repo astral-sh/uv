@@ -52,6 +52,7 @@ use crate::settings::{
     PublishSettings,
 };
 
+pub(crate) mod child;
 pub(crate) mod commands;
 pub(crate) mod logging;
 pub(crate) mod printer;

@@ -42,6 +42,7 @@ use uv_warnings::warn_user;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
+use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -51,7 +52,6 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
