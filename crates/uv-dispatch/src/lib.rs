@@ -17,8 +17,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PreviewMode, Reinstall,
-    SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PackageConfigSettings,
+    PreviewMode, Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -91,6 +91,7 @@ pub struct BuildDispatch<'a> {
     link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
+    config_settings_package: &'a PackageConfigSettings,
     hasher: &'a HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
@@ -113,6 +114,7 @@ impl<'a> BuildDispatch<'a> {
         shared_state: SharedState,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
+        config_settings_package: &'a PackageConfigSettings,
         build_isolation: BuildIsolation<'a>,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
@@ -134,6 +136,7 @@ impl<'a> BuildDispatch<'a> {
             dependency_metadata,
             index_strategy,
             config_settings,
+            config_settings_package,
             build_isolation,
             link_mode,
             build_options,
@@ -198,6 +201,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn config_settings(&self) -> &ConfigSettings {
         self.config_settings
+    }
+
+    fn config_settings_package(&self) -> &PackageConfigSettings {
+        self.config_settings_package
     }
 
     fn sources(&self) -> SourceStrategy {
@@ -295,6 +302,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.hasher,
             self.index_locations,
             self.config_settings,
+            self.config_settings_package,
             self.cache(),
             venv,
             tags,
@@ -418,6 +426,17 @@ impl BuildContext for BuildDispatch<'_> {
             build_stack.insert(dist.distribution_id());
         }
 
+        // Get package-specific config settings if available; otherwise, use global settings.
+        let config_settings = if let Some(name) = dist_name {
+            if let Some(package_settings) = self.config_settings_package.get(name) {
+                package_settings.clone().merge(self.config_settings.clone())
+            } else {
+                self.config_settings.clone()
+            }
+        } else {
+            self.config_settings.clone()
+        };
+
         let builder = SourceBuild::setup(
             source,
             subdirectory,
@@ -431,7 +450,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.index_locations,
             sources,
             self.workspace_cache(),
-            self.config_settings.clone(),
+            config_settings,
             self.build_isolation,
             &build_stack,
             build_kind,

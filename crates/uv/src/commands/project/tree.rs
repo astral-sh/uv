@@ -200,6 +200,7 @@ pub(crate) async fn tree(
                 fork_strategy: _,
                 dependency_metadata: _,
                 config_setting: _,
+                config_settings_package: _,
                 no_build_isolation: _,
                 no_build_isolation_package: _,
                 exclude_newer: _,
