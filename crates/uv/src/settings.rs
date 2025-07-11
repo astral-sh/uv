@@ -23,9 +23,9 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
-    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, PreviewMode,
+    ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl, Requirement};
 use uv_install_wheel::LinkMode;
@@ -712,6 +712,7 @@ impl ToolUpgradeSettings {
             pre,
             fork_strategy,
             config_setting,
+            config_setting_package: config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
             build_isolation,
@@ -746,6 +747,7 @@ impl ToolUpgradeSettings {
             pre,
             fork_strategy,
             config_setting,
+            config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
             build_isolation,
@@ -2694,6 +2696,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) config_settings_package: &'a PackageConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
     pub(crate) exclude_newer: Option<ExcludeNewer>,
@@ -2712,6 +2715,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
 pub(crate) struct ResolverSettings {
     pub(crate) build_options: BuildOptions,
     pub(crate) config_setting: ConfigSettings,
+    pub(crate) config_settings_package: PackageConfigSettings,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) fork_strategy: ForkStrategy,
@@ -2770,6 +2774,7 @@ impl From<ResolverOptions> for ResolverSettings {
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
+            config_settings_package: value.config_settings_package.unwrap_or_default(),
             no_build_isolation: value.no_build_isolation.unwrap_or_default(),
             no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
@@ -2849,6 +2854,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
                 ),
                 config_setting: value.config_settings.unwrap_or_default(),
+                config_settings_package: value.config_settings_package.unwrap_or_default(),
                 dependency_metadata: DependencyMetadata::from_entries(
                     value.dependency_metadata.into_iter().flatten(),
                 ),
@@ -2918,6 +2924,7 @@ pub(crate) struct PipSettings {
     pub(crate) custom_compile_command: Option<String>,
     pub(crate) generate_hashes: bool,
     pub(crate) config_setting: ConfigSettings,
+    pub(crate) config_settings_package: PackageConfigSettings,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) universal: bool,
@@ -2987,6 +2994,7 @@ impl PipSettings {
             custom_compile_command,
             generate_hashes,
             config_settings,
+            config_settings_package,
             python_version,
             python_platform,
             universal,
@@ -3022,6 +3030,7 @@ impl PipSettings {
             fork_strategy: top_level_fork_strategy,
             dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
+            config_settings_package: top_level_config_settings_package,
             no_build_isolation: top_level_no_build_isolation,
             no_build_isolation_package: top_level_no_build_isolation_package,
             exclude_newer: top_level_exclude_newer,
@@ -3054,6 +3063,8 @@ impl PipSettings {
         let fork_strategy = fork_strategy.combine(top_level_fork_strategy);
         let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
         let config_settings = config_settings.combine(top_level_config_settings);
+        let config_settings_package =
+            config_settings_package.combine(top_level_config_settings_package);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
         let no_build_isolation_package =
             no_build_isolation_package.combine(top_level_no_build_isolation_package);
@@ -3156,6 +3167,10 @@ impl PipSettings {
                 .config_settings
                 .combine(config_settings)
                 .unwrap_or_default(),
+            config_settings_package: args
+                .config_settings_package
+                .combine(config_settings_package)
+                .unwrap_or_default(),
             torch_backend: args.torch_backend.combine(torch_backend),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
@@ -3249,6 +3264,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             keyring_provider: settings.resolver.keyring_provider,
             dependency_metadata: &settings.resolver.dependency_metadata,
             config_setting: &settings.resolver.config_setting,
+            config_settings_package: &settings.resolver.config_settings_package,
             no_build_isolation: settings.resolver.no_build_isolation,
             no_build_isolation_package: &settings.resolver.no_build_isolation_package,
             exclude_newer: settings.resolver.exclude_newer,

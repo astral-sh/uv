@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, PreviewMode, SourceStrategy,
+    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::Requirement;
@@ -269,6 +269,7 @@ pub(crate) async fn venv(
         let build_constraints = Constraints::default();
         let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
+        let config_settings_package = PackageConfigSettings::default();
         let sources = SourceStrategy::Disabled;
 
         // Do not allow builds
@@ -286,6 +287,7 @@ pub(crate) async fn venv(
             state.clone(),
             index_strategy,
             &config_settings,
+            &config_settings_package,
             BuildIsolation::Isolated,
             link_mode,
             &build_options,

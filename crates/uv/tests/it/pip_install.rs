@@ -4054,13 +4054,13 @@ fn config_settings_path() -> Result<()> {
     "###
     );
 
-    // When installed without `--editable_mode=compat`, the `finder.py` file should be present.
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
     let finder = context
         .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Reinstalling with `--editable_mode=compat` should be a no-op; changes in build configuration
+    // Reinstalling with `editable_mode=compat` should be a no-op; changes in build configuration
     // don't invalidate the environment.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -4089,7 +4089,7 @@ fn config_settings_path() -> Result<()> {
      - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
     "###);
 
-    // Install the editable package with `--editable_mode=compat`. We should ignore the cached
+    // Install the editable package with `editable_mode=compat`. We should ignore the cached
     // build configuration and rebuild.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -4109,7 +4109,7 @@ fn config_settings_path() -> Result<()> {
     "###
     );
 
-    // When installed without `--editable_mode=compat`, the `finder.py` file should _not_ be present.
+    // When installed without `editable_mode=compat`, the `finder.py` file should _not_ be present.
     let finder = context
         .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
@@ -11738,4 +11738,115 @@ fn install_python_preference() {
     ----- stderr -----
     Audited 1 package in [TIME]
     ");
+}
+
+#[test]
+fn config_settings_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {}",
+        context
+            .workspace_root
+            .join("scripts/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###
+    );
+
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(finder.exists());
+
+    // Uninstall the package.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("setuptools-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###);
+
+    // Install the editable package with `editable_mode=compat`, scoped to the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--config-settings-package")
+        .arg("setuptools-editable:editable_mode=compat"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "
+    );
+
+    // When installed with `editable_mode=compat`, the `finder.py` file should _not_ be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    // Uninstall the package.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("setuptools-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###);
+
+    // Install the editable package with `editable_mode=compat`, by scoped to a different package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--config-settings-package")
+        .arg("setuptools:editable_mode=compat")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "
+    );
+
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(finder.exists());
+
+    Ok(())
 }
