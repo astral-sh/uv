@@ -15,4 +15,8 @@ pub enum ExportFormat {
     #[serde(rename = "pylock.toml", alias = "pylock-toml")]
     #[cfg_attr(feature = "clap", clap(name = "pylock.toml", alias = "pylock-toml"))]
     PylockToml,
+    /// Export in `pex.lock` format.
+    #[serde(rename = "pex.lock", alias = "pex-lock")]
+    #[cfg_attr(feature = "clap", clap(name = "pex.lock", alias = "pex-lock"))]
+    PexLock,
 }
