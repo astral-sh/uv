@@ -5,9 +5,11 @@ use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+use console::Term;
 use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_configuration::PreviewMode;
@@ -52,7 +54,7 @@ pub(crate) fn create(
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    allow_existing: bool,
+    venv_creation_policy: VenvCreationPolicy,
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
@@ -83,10 +85,19 @@ pub(crate) fn create(
                     format!("File exists at `{}`", location.user_display()),
                 )));
             } else if metadata.is_dir() {
-                if allow_existing {
-                    debug!("Allowing existing directory");
-                } else if uv_fs::is_virtualenv_base(location) {
-                    debug!("Removing existing directory");
+                let confirmed_clear = venv_creation_policy == VenvCreationPolicy::FailIfNotEmpty
+                    && confirm_clear(location)?;
+
+                if venv_creation_policy == VenvCreationPolicy::OverwriteFiles {
+                    debug!("Allowing existing directory due to `--allow-existing`");
+                } else if venv_creation_policy == VenvCreationPolicy::RemoveDirectory
+                    || confirmed_clear
+                {
+                    if venv_creation_policy == VenvCreationPolicy::RemoveDirectory {
+                        debug!("Removing existing directory due to `--clear`");
+                    } else {
+                        debug!("Removing existing directory");
+                    }
 
                     // On Windows, if the current executable is in the directory, guard against
                     // self-deletion.
@@ -110,8 +121,12 @@ pub(crate) fn create(
                     return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
                         format!(
-                            "The directory `{}` exists, but it's not a virtual environment",
-                            location.user_display()
+                            "The directory `{}` exists. \n\n{}{} Use `{}` to remove the directory first or `{}` to write to the directory without clearing",
+                            location.user_display(),
+                            "hint".bold().cyan(),
+                            ":".bold(),
+                            "--clear".green(),
+                            "--allow-existing".green(),
                         ),
                     )));
                 }
@@ -462,6 +477,30 @@ pub(crate) fn create(
         executable,
         base_executable: base_python,
     })
+}
+
+fn confirm_clear(location: &Path) -> Result<bool, io::Error> {
+    let term = Term::stderr();
+    if term.is_term() {
+        let prompt = format!(
+            "The directory `{}` exists. Did you mean to clear its contents (`--clear`)?",
+            location.user_display(),
+        );
+        uv_console::confirm(&prompt, &term, true)
+    } else {
+        Ok(false)
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub enum VenvCreationPolicy {
+    /// Do not create a virtual environment if a non-empty directory exists.
+    #[default]
+    FailIfNotEmpty,
+    /// Overwrite existing virtual environment files.
+    OverwriteFiles,
+    /// Remove existing directory.
+    RemoveDirectory,
 }
 
 #[derive(Debug, Copy, Clone)]
