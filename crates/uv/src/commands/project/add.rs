@@ -1081,7 +1081,6 @@ async fn lock_and_sync(
         InstallOptions::default(),
         Modifications::Sufficient,
         None,
-        None,
         settings.into(),
         network_settings,
         &sync_state,

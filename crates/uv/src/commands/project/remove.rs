@@ -358,7 +358,6 @@ pub(crate) async fn remove(
         InstallOptions::default(),
         Modifications::Exact,
         None,
-        None,
         (&settings).into(),
         &network_settings,
         &state,

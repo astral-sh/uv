@@ -3439,14 +3439,6 @@ pub struct SyncArgs {
     )]
     pub python: Option<Maybe<String>>,
 
-    /// The minimum Python version that should be supported by the requirements (e.g., `3.7` or
-    /// `3.7.9`).
-    ///
-    /// If a patch version is omitted, the minimum patch version is assumed. For example, `3.7` is
-    /// mapped to `3.7.0`.
-    #[arg(long)]
-    pub python_version: Option<PythonVersion>,
-
     /// The platform for which requirements should be installed.
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of

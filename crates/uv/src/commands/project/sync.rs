@@ -24,9 +24,7 @@ use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
-use uv_python::{
-    PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest, PythonVersion,
-};
+use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Installable, Lock};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
@@ -67,7 +65,6 @@ pub(crate) async fn sync(
     modifications: Modifications,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
-    python_version: Option<PythonVersion>,
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -459,7 +456,6 @@ pub(crate) async fn sync(
         install_options,
         modifications,
         python_platform.as_ref(),
-        python_version.as_ref(),
         (&settings).into(),
         &network_settings,
         &state,
@@ -597,7 +593,6 @@ pub(super) async fn do_sync(
     install_options: InstallOptions,
     modifications: Modifications,
     python_platform: Option<&TargetTriple>,
-    python_version: Option<&PythonVersion>,
     settings: InstallerSettingsRef<'_>,
     network_settings: &NetworkSettings,
     state: &PlatformState,
@@ -653,7 +648,7 @@ pub(super) async fn do_sync(
     target.validate_groups(groups)?;
 
     // Determine the markers to use for resolution.
-    let marker_env = resolution_markers(python_version, python_platform, venv.interpreter());
+    let marker_env = resolution_markers(None, python_platform, venv.interpreter());
 
     // Validate that the platform is supported by the lockfile.
     let environments = target.lock().supported_environments();
@@ -680,7 +675,7 @@ pub(super) async fn do_sync(
     }
 
     // Determine the tags to use for the resolution.
-    let tags = resolution_tags(python_version, python_platform, venv.interpreter())?;
+    let tags = resolution_tags(None, python_platform, venv.interpreter())?;
 
     // Read the lockfile.
     let resolution = target.to_resolution(
@@ -856,7 +851,7 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
 fn store_credentials_from_target(target: InstallTarget<'_>) {
-    // Iterate over any idnexes in the target.
+    // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
             let credentials = Arc::new(credentials);

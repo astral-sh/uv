@@ -1803,7 +1803,6 @@ async fn run_project(
                 args.modifications,
                 args.python,
                 args.python_platform,
-                args.python_version,
                 args.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,

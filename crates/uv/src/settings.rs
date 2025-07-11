@@ -1151,7 +1151,6 @@ pub(crate) struct SyncSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
-    pub(crate) python_version: Option<PythonVersion>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
@@ -1193,7 +1192,6 @@ impl SyncSettings {
             script,
             python,
             python_platform,
-            python_version,
             check,
             no_check,
         } = args;
@@ -1254,7 +1252,6 @@ impl SyncSettings {
             package,
             python: python.and_then(Maybe::into_option),
             python_platform,
-            python_version,
             refresh: Refresh::from(refresh),
             settings,
             install_mirrors,
