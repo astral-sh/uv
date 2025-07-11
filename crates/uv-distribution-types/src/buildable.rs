@@ -124,7 +124,10 @@ impl SourceUrl<'_> {
     pub fn is_editable(&self) -> bool {
         matches!(
             self,
-            Self::Directory(DirectorySourceUrl { editable: true, .. })
+            Self::Directory(DirectorySourceUrl {
+                editable: Some(true),
+                ..
+            })
         )
     }
 
@@ -210,7 +213,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 pub struct DirectorySourceUrl<'a> {
     pub url: &'a DisplaySafeUrl,
     pub install_path: Cow<'a, Path>,
-    pub editable: bool,
+    pub editable: Option<bool>,
 }
 
 impl std::fmt::Display for DirectorySourceUrl<'_> {

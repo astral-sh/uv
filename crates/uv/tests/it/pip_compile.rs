@@ -14728,7 +14728,7 @@ fn invalid_platform() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--python-platform")
-        .arg("linux")
+        .arg("x86_64-manylinux_2_17")
         .arg("requirements.in"), @r"
     success: false
     exit_code: 1
@@ -17411,11 +17411,11 @@ fn compile_broken_active_venv() -> Result<()> {
         .arg(&broken_system_python)
         .arg("venv2"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No interpreter found at path `python3.14159`
+    error: No interpreter found at path `python3.14159`
     ");
 
     // Simulate a removed Python interpreter

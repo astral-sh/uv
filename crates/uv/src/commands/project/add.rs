@@ -83,7 +83,7 @@ pub(crate) async fn add(
     extras_of_dependency: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
-    workspace: bool,
+    workspace: Option<bool>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     network_settings: NetworkSettings,
@@ -497,16 +497,41 @@ pub(crate) async fn add(
     // Track modification status, for reverts.
     let mut modified = false;
 
-    // If `--workspace` is provided, add any members to the `workspace` section of the
+    // Determine whether to use workspace mode.
+    let use_workspace = match workspace {
+        Some(workspace) => workspace,
+        None => {
+            // Check if we're in a project (not a script), and if any requirements are path
+            // dependencies within the workspace.
+            if let AddTarget::Project(ref project, _) = target {
+                let workspace_root = project.workspace().install_path();
+                requirements.iter().any(|req| {
+                    if let RequirementSource::Directory { install_path, .. } = &req.source {
+                        let absolute_path = if install_path.is_absolute() {
+                            install_path.to_path_buf()
+                        } else {
+                            project.root().join(install_path)
+                        };
+                        absolute_path.starts_with(workspace_root)
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                false
+            }
+        }
+    };
+
+    // If workspace mode is enabled, add any members to the `workspace` section of the
     // `pyproject.toml` file.
-    if workspace {
+    if use_workspace {
         let AddTarget::Project(project, python_target) = target else {
             unreachable!("`--workspace` and `--script` are conflicting options");
         };
 
-        let workspace = project.workspace();
         let mut toml = PyProjectTomlMut::from_toml(
-            &workspace.pyproject_toml().raw,
+            &project.workspace().pyproject_toml().raw,
             DependencyTarget::PyProjectToml,
         )?;
 
@@ -519,21 +544,32 @@ pub(crate) async fn add(
                     project.root().join(install_path)
                 };
 
-                // Check if the path is not already included in the workspace.
-                if !workspace.includes(&absolute_path)? {
-                    let relative_path = absolute_path
-                        .strip_prefix(workspace.install_path())
-                        .unwrap_or(&absolute_path);
-
-                    toml.add_workspace(relative_path)?;
-                    modified |= true;
-
-                    writeln!(
-                        printer.stderr(),
-                        "Added `{}` to workspace members",
-                        relative_path.user_display().cyan()
-                    )?;
+                // Either `--workspace` was provided explicitly, or it was omitted but the path is
+                // within the workspace root.
+                let use_workspace = workspace.unwrap_or_else(|| {
+                    absolute_path.starts_with(project.workspace().install_path())
+                });
+                if !use_workspace {
+                    continue;
                 }
+
+                // If the project is already a member of the workspace, skip it.
+                if project.workspace().includes(&absolute_path)? {
+                    continue;
+                }
+
+                let relative_path = absolute_path
+                    .strip_prefix(project.workspace().install_path())
+                    .unwrap_or(&absolute_path);
+
+                toml.add_workspace(relative_path)?;
+                modified |= true;
+
+                writeln!(
+                    printer.stderr(),
+                    "Added `{}` to workspace members",
+                    relative_path.user_display().cyan()
+                )?;
             }
         }
 
@@ -542,7 +578,7 @@ pub(crate) async fn add(
         target = if modified {
             let workspace_content = toml.to_string();
             fs_err::write(
-                workspace.install_path().join("pyproject.toml"),
+                project.workspace().install_path().join("pyproject.toml"),
                 &workspace_content,
             )?;
 
@@ -747,13 +783,13 @@ fn edits(
                     .and_then(|tool| tool.uv.as_ref())
                     .and_then(|uv| uv.sources.as_ref())
                     .map(ToolUvSources::inner);
-                let workspace = project
+                let is_workspace_member = project
                     .workspace()
                     .packages()
                     .contains_key(&requirement.name);
                 resolve_requirement(
                     requirement,
-                    workspace,
+                    is_workspace_member,
                     editable,
                     index.cloned(),
                     rev.map(ToString::to_string),

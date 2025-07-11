@@ -3713,10 +3713,19 @@ pub struct AddArgs {
 
     /// Add the dependency as a workspace member.
     ///
-    /// When used with a path dependency, the package will be added to the workspace's `members`
-    /// list in the root `pyproject.toml` file.
-    #[arg(long)]
+    /// By default, uv will add path dependencies that are within the workspace directory
+    /// as workspace members. When used with a path dependency, the package will be added
+    /// to the workspace's `members` list in the root `pyproject.toml` file.
+    #[arg(long, overrides_with = "no_workspace")]
     pub workspace: bool,
+
+    /// Don't add the dependency as a workspace member.
+    ///
+    /// By default, when adding a dependency that's a local path and is within the workspace
+    /// directory, uv will add it as a workspace member; pass `--no-workspace` to add the package
+    /// as direct path dependency instead.
+    #[arg(long, overrides_with = "workspace")]
+    pub no_workspace: bool,
 }
 
 #[derive(Args)]
