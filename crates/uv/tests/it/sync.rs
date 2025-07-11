@@ -5001,6 +5001,59 @@ fn sync_update_project() -> Result<()> {
 }
 
 #[test]
+fn sync_no_pyvenv_cfg() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Break the virtual environment
+    fs_err::remove_dir_all(
+        context
+            .venv
+            .join(if cfg!(windows) { "Scripts" } else { "bin" }),
+    )?;
+    fs_err::remove_file(context.venv.join("pyvenv.cfg"))?;
+
+    // Running `uv sync` won't create the venv
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
+    ");
+
+    // Write the marker that indicates the environment was partially removed by uv
+    fs_err::write(context.venv.join(".uv-partial-rm"), "")?;
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_environment_prompt() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
