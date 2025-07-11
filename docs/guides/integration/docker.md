@@ -80,6 +80,9 @@ As with the distroless image, each derived image is published with uv version ta
 In addition, starting with `0.8` each derived image also sets `UV_TOOL_BIN_DIR` to `/usr/local/bin`
 to allow `uv tool install` to work as expected with the default user.
 
+In addition, starting with `0.8` each derived image also sets `UV_TOOL_BIN_DIR` to `/usr/local/bin`
+to allow `uv tool install` to work as expected with the default user.
+
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
 
