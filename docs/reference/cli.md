@@ -1181,7 +1181,7 @@ environment in the project.</p>
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
-<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
 </ul></dd><dt id="uv-sync--quiet"><a href="#uv-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-sync--refresh"><a href="#uv-sync--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
