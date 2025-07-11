@@ -317,7 +317,7 @@ impl InternerGuard<'_> {
                 key,
                 value,
                 negated,
-            } => (Variable::Variant { key, value }, Edges::from_bool(negated)),
+            } => (Variable::Variant { key, value }, Edges::from_bool(!negated)),
             // A variable representing the existence or absence of a particular extra.
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Extra(extra),
