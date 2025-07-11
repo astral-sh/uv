@@ -4881,10 +4881,12 @@ dependencies = [
 name = "uv-cache-info"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "fs-err 3.1.1",
  "globwalk",
  "schemars",
  "serde",
+ "tempfile",
  "thiserror 2.0.12",
  "toml",
  "tracing",

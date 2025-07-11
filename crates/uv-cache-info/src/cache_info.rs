@@ -346,3 +346,56 @@ enum DirectoryTimestamp {
     Timestamp(Timestamp),
     Inode(u64),
 }
+
+#[cfg(all(test, unix))]
+mod tests_unix {
+    use std::fs;
+
+    use anyhow::Result;
+
+    use crate::{CacheInfo, Timestamp};
+
+    #[test]
+    fn test_cache_info_symlink_resolve() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let dir = dir.path().join("dir");
+        fs::create_dir_all(&dir)?;
+
+        let write_manifest = |cache_key: &str| {
+            fs::write(
+                dir.join("pyproject.toml"),
+                format!(
+                    r#"
+                [tool.uv]
+                cache-keys = [
+                    "{cache_key}"
+                ]
+                "#
+                ),
+            )
+        };
+
+        let touch = |path: &str| -> Result<_> {
+            let path = dir.join(path);
+            fs::create_dir_all(path.parent().unwrap())?;
+            fs::write(&path, "")?;
+            let meta = fs::metadata(&path)?;
+            Ok(Timestamp::from_metadata(&meta))
+        };
+
+        let cache_timestamp = || -> Result<_> { Ok(CacheInfo::from_directory(&dir)?.timestamp) };
+
+        write_manifest("x/*")?;
+        assert_eq!(cache_timestamp()?, None);
+        let y = touch("x/y")?;
+        assert_eq!(cache_timestamp()?, Some(y));
+        let z = touch("x/z")?;
+        assert_eq!(cache_timestamp()?, Some(z));
+
+        let a = touch("../a")?;
+        std::os::unix::fs::symlink(dir.join("../a"), dir.join("x/b"))?;
+        assert_eq!(cache_timestamp()?, Some(a));
+
+        Ok(())
+    }
+}

@@ -24,3 +24,7 @@ thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+tempfile = { workspace = true }
