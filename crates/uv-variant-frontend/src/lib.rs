@@ -185,10 +185,11 @@ impl VariantBuild {
                     if known_property.namespace != backend.namespace:
                         continue
                     known_properties.append(VariantPropertyType(**known_property))
+                known_properties = frozenset(known_properties)
             else:
                 known_properties = None
 
-            configs = backend.get_supported_configs(frozenset(known_properties))
+            configs = backend.get_supported_configs(known_properties)
             features = {{config.name: config.values for config in configs}}
             output = {{"namespace": backend.namespace, "features": features}}
 
