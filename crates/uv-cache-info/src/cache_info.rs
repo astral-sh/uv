@@ -403,8 +403,14 @@ mod tests_unix {
         let z = touch("x/z")?;
         assert_eq!(cache_timestamp()?, Some(z));
 
+        // leaf entry symlink should be resolved
         let a = touch("../a")?;
-        std::os::unix::fs::symlink(dir.join("../a"), dir.join("x/b"))?;
+        std::os::unix::fs::symlink(dir.join("../a"), dir.join("x/a"))?;
+        assert_eq!(cache_timestamp()?, Some(a));
+
+        // symlink directories should not be followed while globbing
+        _ = touch("../b/c")?;
+        std::os::unix::fs::symlink(dir.join("../b"), dir.join("x/b"))?;
         assert_eq!(cache_timestamp()?, Some(a));
 
         Ok(())
