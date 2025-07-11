@@ -230,11 +230,22 @@ impl CacheInfo {
                             continue;
                         }
                     };
-                    let metadata = match entry.metadata() {
-                        Ok(metadata) => metadata,
-                        Err(err) => {
-                            warn!("Failed to read metadata for glob entry: {err}");
-                            continue;
+                    let metadata = if entry.path_is_symlink() {
+                        // resolve symlinks for leaf entries without following symlinks while globbing
+                        match std::fs::metadata(entry.path()) {
+                            Ok(metadata) => metadata,
+                            Err(err) => {
+                                warn!("Failed to resolve symlink for glob entry: {err}");
+                                continue;
+                            }
+                        }
+                    } else {
+                        match entry.metadata() {
+                            Ok(metadata) => metadata,
+                            Err(err) => {
+                                warn!("Failed to read metadata for glob entry: {err}");
+                                continue;
+                            }
                         }
                     };
                     if !metadata.is_file() {
