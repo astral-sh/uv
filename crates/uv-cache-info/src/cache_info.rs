@@ -249,10 +249,13 @@ impl CacheInfo {
                         }
                     };
                     if !metadata.is_file() {
-                        warn!(
-                            "Expected file for cache key, but found directory: `{}`",
-                            entry.path().display()
-                        );
+                        if !entry.path_is_symlink() {
+                            // don't warn if it was a symlink - it may legitimately resolve to a directory
+                            warn!(
+                                "Expected file for cache key, but found directory: `{}`",
+                                entry.path().display()
+                            );
+                        }
                         continue;
                     }
                     timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
@@ -393,7 +396,7 @@ mod tests_unix {
 
         let cache_timestamp = || -> Result<_> { Ok(CacheInfo::from_directory(&dir)?.timestamp) };
 
-        write_manifest("x/*")?;
+        write_manifest("x/**")?;
         assert_eq!(cache_timestamp()?, None);
         let y = touch("x/y")?;
         assert_eq!(cache_timestamp()?, Some(y));
@@ -417,6 +420,10 @@ mod tests_unix {
         assert_eq!(cache_timestamp()?, Some(a));
         write_manifest("x/b/c")?;
         assert_eq!(cache_timestamp()?, Some(c));
+
+        // symlink pointing to a directory
+        write_manifest("x/*b*")?;
+        assert_eq!(cache_timestamp()?, None);
 
         Ok(())
     }
