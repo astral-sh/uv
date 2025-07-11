@@ -343,9 +343,9 @@ pub struct DirectorySourceDist {
     /// The absolute path to the distribution which we use for installing.
     pub install_path: Box<Path>,
     /// Whether the package should be installed in editable mode.
-    pub editable: bool,
+    pub editable: Option<bool>,
     /// Whether the package should be built and installed.
-    pub r#virtual: bool,
+    pub r#virtual: Option<bool>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -452,8 +452,8 @@ impl Dist {
         name: PackageName,
         url: VerbatimUrl,
         install_path: &Path,
-        editable: bool,
-        r#virtual: bool,
+        editable: Option<bool>,
+        r#virtual: Option<bool>,
     ) -> Result<Dist, Error> {
         // Convert to an absolute path.
         let install_path = path::absolute(install_path)?;
@@ -655,7 +655,7 @@ impl SourceDist {
     /// Returns `true` if the distribution is editable.
     pub fn is_editable(&self) -> bool {
         match self {
-            Self::Directory(DirectorySourceDist { editable, .. }) => *editable,
+            Self::Directory(DirectorySourceDist { editable, .. }) => editable.unwrap_or(false),
             _ => false,
         }
     }
@@ -663,7 +663,7 @@ impl SourceDist {
     /// Returns `true` if the distribution is virtual.
     pub fn is_virtual(&self) -> bool {
         match self {
-            Self::Directory(DirectorySourceDist { r#virtual, .. }) => *r#virtual,
+            Self::Directory(DirectorySourceDist { r#virtual, .. }) => r#virtual.unwrap_or(false),
             _ => false,
         }
     }
