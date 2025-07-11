@@ -162,11 +162,11 @@ fn collect_dnf(
             }
         }
         MarkerTreeKind::Variant(marker) => {
-            for (value, tree) in marker.children() {
+            for (is_high, tree) in marker.children() {
                 let expr = MarkerExpression::Variant {
                     key: *marker.key(),
                     value: ArcStr::from(marker.value()),
-                    negated: !value,
+                    negated: !is_high,
                 };
 
                 path.push(expr);

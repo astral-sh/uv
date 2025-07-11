@@ -1021,6 +1021,7 @@ impl MarkerTree {
                     .evaluate_reporter_impl(env, extras, variants, reporter);
             }
             MarkerTreeKind::Variant(marker) => {
+                dbg!(variants.is_some());
                 let Some(variants) = variants else {
                     // If we're not limiting to specific variants, we're solving universally.
                     return true;
@@ -1056,8 +1057,7 @@ impl MarkerTree {
                         }),
                 };
 
-                // TODO(konsti): Why do we need to negate the edge here?
-                return marker.edge(!edge).evaluate_reporter_impl(
+                return marker.edge(edge).evaluate_reporter_impl(
                     env,
                     extras,
                     Some(variants),
@@ -3607,7 +3607,7 @@ mod test {
     }
 
     #[test]
-    fn test_marker_evaluation_variants() {
+    fn marker_evaluation_variants() {
         let env37 = env37();
         let gpu_namespaces = [("gpu".to_string(), "cuda".to_string(), "12.4".to_string())];
         let cpu_namespaces = [("cpu".to_string(), String::new(), String::new())];
@@ -3651,7 +3651,7 @@ mod test {
     }
 
     #[test]
-    fn test_marker_evaluation_variants_combined() {
+    fn marker_evaluation_variants_combined() {
         let env37 = env37();
         let namespaces = [
             ("gpu".to_string(), "cuda".to_string(), "12.4".to_string()),
@@ -3671,5 +3671,72 @@ mod test {
         let marker2 = m("python_version >= '3.7' and 'gpu' not in variant_namespaces");
         assert!(marker2.evaluate(&env37, None, &[]));
         assert!(!marker2.evaluate(&env37, Some(&namespaces), &[]));
+    }
+
+    #[test]
+    fn torch_variant_marker() {
+        let marker_str = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.9' in variant_properties";
+        let marker = m(marker_str);
+
+        let env = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "",
+            implementation_version: "3.7",
+            os_name: "linux",
+            platform_machine: "x86_64",
+            platform_python_implementation: "",
+            platform_release: "",
+            platform_system: "",
+            platform_version: "",
+            python_full_version: "3.7",
+            python_version: "3.7",
+            sys_platform: "linux",
+        })
+        .unwrap();
+
+        assert_eq!(marker.try_to_string().unwrap(), marker_str);
+
+        assert!(!marker.evaluate(&env, Some(&[]), &[]));
+    }
+
+    #[test]
+    fn variant_to_string() {
+        let assert_roundtrips = |marker| {
+            assert_eq!(m(marker).try_to_string().unwrap(), marker);
+        };
+        assert_roundtrips("'gpu' in variant_namespaces");
+        assert_roundtrips("'gpu' not in variant_namespaces");
+        assert_roundtrips("'gpu :: cuda' in variant_properties");
+        assert_roundtrips("'gpu :: cuda' not in variant_properties");
+        assert_roundtrips("'gpu :: cuda :: 12.4' in variant_features");
+        assert_roundtrips("'gpu :: cuda :: 12.8' not in variant_features");
+
+        // TODO(konsti): Implement normalization and test it.
+    }
+
+    #[test]
+    fn variant_errors() {
+        let err = MarkerExpression::from_str(r#"variant_namespaces in 'gpu'"#)
+            .unwrap_err()
+            .to_string();
+        assert_snapshot!(
+            err,
+            @r"
+        The variant marker variant_namespaces must be on the right hand side of the expression
+        variant_namespaces in 'gpu'
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "
+        );
+        let err = MarkerExpression::from_str(r#"'gpu :: cuda' == variant_properties"#)
+            .unwrap_err()
+            .to_string();
+        assert_snapshot!(
+            err,
+            @r"
+        The operator == is not supported with the variant marker variant_properties, only the `in` and `not in` operators are supported
+        'gpu :: cuda' == variant_properties
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "
+        );
+        // TODO(konsti): Test all cases systematically
     }
 }
