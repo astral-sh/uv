@@ -315,15 +315,15 @@ impl Workspace {
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {
                         install_path: member.root.clone().into_boxed_path(),
-                        editable: true,
-                        r#virtual: false,
+                        editable: Some(true),
+                        r#virtual: Some(false),
                         url,
                     }
                 } else {
                     RequirementSource::Directory {
                         install_path: member.root.clone().into_boxed_path(),
-                        editable: false,
-                        r#virtual: true,
+                        editable: Some(false),
+                        r#virtual: Some(true),
                         url,
                     }
                 },
@@ -371,15 +371,15 @@ impl Workspace {
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {
                         install_path: member.root.clone().into_boxed_path(),
-                        editable: true,
-                        r#virtual: false,
+                        editable: Some(true),
+                        r#virtual: Some(false),
                         url,
                     }
                 } else {
                     RequirementSource::Directory {
                         install_path: member.root.clone().into_boxed_path(),
-                        editable: false,
-                        r#virtual: true,
+                        editable: Some(false),
+                        r#virtual: Some(true),
                         url,
                     }
                 },
