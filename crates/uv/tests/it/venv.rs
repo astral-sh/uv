@@ -656,13 +656,13 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Found conflicting Python requirements:
-      │ - foo: <3.12
-      │ - foo:dev: >=3.12
+    error: Found conflicting Python requirements:
+    - foo: <3.12
+    - foo:dev: >=3.12
     "
     );
 
@@ -808,7 +808,7 @@ fn seed_older_python_version() {
 
 #[test]
 fn create_venv_unknown_python_minor() {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]).with_filtered_python_sources();
 
     let mut command = context.venv();
     command
@@ -819,34 +819,22 @@ fn create_venv_unknown_python_minor() {
         // Unset this variable to force what the user would see
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
-    if cfg!(windows) {
-        uv_snapshot!(&mut command, @r###"
-        success: false
-        exit_code: 1
-        ----- stdout -----
+    uv_snapshot!(context.filters(), &mut command, @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-          × No interpreter found for Python 3.100 in managed installations, search path, or registry
-        "###
-        );
-    } else {
-        uv_snapshot!(&mut command, @r###"
-        success: false
-        exit_code: 1
-        ----- stdout -----
-
-        ----- stderr -----
-          × No interpreter found for Python 3.100 in managed installations or search path
-        "###
-        );
-    }
+    ----- stderr -----
+    error: No interpreter found for Python 3.100 in [PYTHON SOURCES]
+    "
+    );
 
     context.venv.assert(predicates::path::missing());
 }
 
 #[test]
 fn create_venv_unknown_python_patch() {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = TestContext::new_with_versions(&["3.12"]).with_filtered_python_sources();
 
     let mut command = context.venv();
     command
@@ -857,27 +845,15 @@ fn create_venv_unknown_python_patch() {
         // Unset this variable to force what the user would see
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
-    if cfg!(windows) {
-        uv_snapshot!(&mut command, @r###"
-        success: false
-        exit_code: 1
-        ----- stdout -----
+    uv_snapshot!(context.filters(), &mut command, @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-          × No interpreter found for Python 3.12.100 in managed installations, search path, or registry
-        "###
-        );
-    } else {
-        uv_snapshot!(&mut command, @r"
-        success: false
-        exit_code: 1
-        ----- stdout -----
-
-        ----- stderr -----
-          × No interpreter found for Python 3.12.100 in managed installations or search path
-        "
-        );
-    }
+    ----- stderr -----
+    error: No interpreter found for Python 3.12.[X] in [PYTHON SOURCES]
+    "
+    );
 
     context.venv.assert(predicates::path::missing());
 }
@@ -915,19 +891,17 @@ fn file_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    uv::venv::creation
-
-      × Failed to create virtualenv
-      ╰─▶ File exists at `.venv`
-    "###
+    error: Failed to create virtual environment
+      Caused by: File exists at `.venv`
+    "
     );
 
     Ok(())
@@ -970,19 +944,17 @@ fn non_empty_dir_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    uv::venv::creation
-
-      × Failed to create virtualenv
-      ╰─▶ The directory `.venv` exists, but it's not a virtual environment
-    "###
+    error: Failed to create virtual environment
+      Caused by: The directory `.venv` exists, but it's not a virtual environment
+    "
     );
 
     Ok(())
@@ -1000,19 +972,17 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    uv::venv::creation
-
-      × Failed to create virtualenv
-      ╰─▶ The directory `.venv` exists, but it's not a virtual environment
-    "###
+    error: Failed to create virtual environment
+      Caused by: The directory `.venv` exists, but it's not a virtual environment
+    "
     );
 
     uv_snapshot!(context.filters(), context.venv()
