@@ -1625,7 +1625,7 @@ fn python_install_emulated_macos() {
     ");
 
     // Install an x86_64 version (assuming an aarch64 host)
-    uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.13-macos-x86_64"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13-x86_64"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1656,7 +1656,7 @@ fn python_install_emulated_macos() {
     ----- stderr -----
     ");
 
-    uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.13-macos-aarch64"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13-aarch64"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
