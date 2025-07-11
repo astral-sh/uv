@@ -29,6 +29,7 @@ uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-envy = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
