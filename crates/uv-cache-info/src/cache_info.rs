@@ -409,9 +409,17 @@ mod tests_unix {
         assert_eq!(cache_timestamp()?, Some(a));
 
         // symlink directories should not be followed while globbing
-        _ = touch("../b/c")?;
+        let c = touch("../b/c")?;
         std::os::unix::fs::symlink(dir.join("../b"), dir.join("x/b"))?;
         assert_eq!(cache_timestamp()?, Some(a));
+
+        // no globs, should work as expected
+        write_manifest("x/y")?;
+        assert_eq!(cache_timestamp()?, Some(y));
+        write_manifest("x/a")?;
+        assert_eq!(cache_timestamp()?, Some(a));
+        write_manifest("x/b/c")?;
+        assert_eq!(cache_timestamp()?, Some(c));
 
         Ok(())
     }
