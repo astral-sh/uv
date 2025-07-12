@@ -1711,6 +1711,66 @@ fn lock_project_with_overrides() -> Result<()> {
 
     Ok(())
 }
+/// Lock a project with `uv.tool.excluded-dependencies`
+#[test]
+fn lock_project_with_excluded_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pytest==7.4.0", "requests==2.31.0"]
+
+        [tool.uv]
+        excluded-dependencies = ["pytest"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    ");
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    ");
+
+    // Install the dependencies from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 9 packages in [TIME]
+    Installed 9 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==7.4.0
+     + requests==2.31.0
+     + urllib3==2.2.1
+    ");
+
+    Ok(())
+}
 
 /// Lock a project with `uv.tool.override-dependencies` that reference `tool.uv.sources`.
 #[test]
