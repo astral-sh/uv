@@ -1,10 +1,12 @@
+use std::borrow::Cow;
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::cache_digest;
-use uv_configuration::ConfigSettings;
+use uv_configuration::{ConfigSettings, PackageConfigSettings};
 use uv_distribution_types::{
     DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
 };
+use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
@@ -18,7 +20,8 @@ pub struct BuiltWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,
     hasher: &'a HashStrategy,
-    build_configuration: &'a ConfigSettings,
+    config_settings: &'a ConfigSettings,
+    config_settings_package: &'a PackageConfigSettings,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
@@ -27,13 +30,15 @@ impl<'a> BuiltWheelIndex<'a> {
         cache: &'a Cache,
         tags: &'a Tags,
         hasher: &'a HashStrategy,
-        build_configuration: &'a ConfigSettings,
+        config_settings: &'a ConfigSettings,
+        config_settings_package: &'a PackageConfigSettings,
     ) -> Self {
         Self {
             cache,
             tags,
             hasher,
-            build_configuration,
+            config_settings,
+            config_settings_package,
         }
     }
 
@@ -63,10 +68,11 @@ impl<'a> BuiltWheelIndex<'a> {
         let cache_shard = cache_shard.shard(revision.id());
 
         // If there are build settings, we need to scope to a cache shard.
-        let cache_shard = if self.build_configuration.is_empty() {
+        let config_settings = self.config_settings_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(self.build_configuration))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         Ok(self.find(&cache_shard))
@@ -100,10 +106,11 @@ impl<'a> BuiltWheelIndex<'a> {
         let cache_shard = cache_shard.shard(revision.id());
 
         // If there are build settings, we need to scope to a cache shard.
-        let cache_shard = if self.build_configuration.is_empty() {
+        let config_settings = self.config_settings_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(self.build_configuration))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         Ok(self
@@ -148,10 +155,11 @@ impl<'a> BuiltWheelIndex<'a> {
         let cache_shard = cache_shard.shard(revision.id());
 
         // If there are build settings, we need to scope to a cache shard.
-        let cache_shard = if self.build_configuration.is_empty() {
+        let config_settings = self.config_settings_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(self.build_configuration))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         Ok(self
@@ -174,10 +182,11 @@ impl<'a> BuiltWheelIndex<'a> {
         );
 
         // If there are build settings, we need to scope to a cache shard.
-        let cache_shard = if self.build_configuration.is_empty() {
+        let config_settings = self.config_settings_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(self.build_configuration))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         self.find(&cache_shard)
@@ -238,5 +247,14 @@ impl<'a> BuiltWheelIndex<'a> {
         }
 
         candidate
+    }
+
+    /// Determine the [`ConfigSettings`] for the given package name.
+    fn config_settings_for(&self, name: &PackageName) -> Cow<'_, ConfigSettings> {
+        if let Some(package_settings) = self.config_settings_package.get(name) {
+            Cow::Owned(package_settings.clone().merge(self.config_settings.clone()))
+        } else {
+            Cow::Borrowed(self.config_settings)
+        }
     }
 }

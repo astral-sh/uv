@@ -14,7 +14,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, PreviewMode, Reinstall,
+    SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -90,6 +91,7 @@ pub(crate) async fn pip_compile(
     keyring_provider: KeyringProviderType,
     network_settings: &NetworkSettings,
     config_settings: ConfigSettings,
+    config_settings_package: PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
@@ -477,6 +479,7 @@ pub(crate) async fn pip_compile(
         state,
         index_strategy,
         &config_settings,
+        &config_settings_package,
         build_isolation,
         link_mode,
         &build_options,

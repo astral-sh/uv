@@ -11,7 +11,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    HashCheckingMode, IndexStrategy, PackageConfigSettings, PreviewMode, Reinstall, SourceStrategy,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -75,6 +76,7 @@ pub(crate) async fn pip_install(
     hash_checking: Option<HashCheckingMode>,
     installer_metadata: bool,
     config_settings: &ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
@@ -422,6 +424,7 @@ pub(crate) async fn pip_install(
         state.clone(),
         index_strategy,
         config_settings,
+        config_settings_package,
         build_isolation,
         link_mode,
         &build_options,
@@ -513,6 +516,7 @@ pub(crate) async fn pip_install(
         compile,
         &index_locations,
         config_settings,
+        config_settings_package,
         &hasher,
         &tags,
         &client,

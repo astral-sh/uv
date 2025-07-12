@@ -436,6 +436,7 @@ pub(crate) async fn add(
                 state.clone().into_inner(),
                 settings.resolver.index_strategy,
                 &settings.resolver.config_setting,
+                &settings.resolver.config_settings_package,
                 build_isolation,
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
