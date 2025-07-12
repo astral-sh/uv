@@ -3537,6 +3537,15 @@ pub struct AddArgs {
     #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
+    /// Auto-detect the requirements from the given Python script.
+    ///
+    /// This option is only available when used with `--script`. When enabled, uv will parse the
+    /// given script and map its import statements to requirements based on heuristics.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, group = "sources")]
+    pub auto: bool,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a

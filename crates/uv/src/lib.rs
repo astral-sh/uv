@@ -1958,6 +1958,7 @@ async fn run_project(
                 args.marker,
                 args.editable,
                 args.dependency_type,
+                args.auto,
                 args.raw,
                 args.bounds,
                 args.indexes,

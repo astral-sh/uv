@@ -1321,6 +1321,7 @@ pub(crate) struct AddSettings {
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
     pub(crate) extras: Vec<ExtraName>,
+    pub(crate) auto: bool,
     pub(crate) raw: bool,
     pub(crate) bounds: Option<AddBoundsKind>,
     pub(crate) rev: Option<String>,
@@ -1343,6 +1344,7 @@ impl AddSettings {
         let AddArgs {
             packages,
             requirements,
+            auto,
             constraints,
             marker,
             dev,
@@ -1461,6 +1463,7 @@ impl AddSettings {
             marker,
             dependency_type,
             raw,
+            auto,
             bounds,
             rev,
             tag,
