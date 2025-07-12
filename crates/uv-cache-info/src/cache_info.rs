@@ -230,18 +230,32 @@ impl CacheInfo {
                             continue;
                         }
                     };
-                    let metadata = match entry.metadata() {
-                        Ok(metadata) => metadata,
-                        Err(err) => {
-                            warn!("Failed to read metadata for glob entry: {err}");
-                            continue;
+                    let metadata = if entry.path_is_symlink() {
+                        // resolve symlinks for leaf entries without following symlinks while globbing
+                        match fs_err::metadata(entry.path()) {
+                            Ok(metadata) => metadata,
+                            Err(err) => {
+                                warn!("Failed to resolve symlink for glob entry: {err}");
+                                continue;
+                            }
+                        }
+                    } else {
+                        match entry.metadata() {
+                            Ok(metadata) => metadata,
+                            Err(err) => {
+                                warn!("Failed to read metadata for glob entry: {err}");
+                                continue;
+                            }
                         }
                     };
                     if !metadata.is_file() {
-                        warn!(
-                            "Expected file for cache key, but found directory: `{}`",
-                            entry.path().display()
-                        );
+                        if !entry.path_is_symlink() {
+                            // don't warn if it was a symlink - it may legitimately resolve to a directory
+                            warn!(
+                                "Expected file for cache key, but found directory: `{}`",
+                                entry.path().display()
+                            );
+                        }
                         continue;
                     }
                     timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
@@ -345,4 +359,72 @@ pub enum FilePattern {
 enum DirectoryTimestamp {
     Timestamp(Timestamp),
     Inode(u64),
+}
+
+#[cfg(all(test, unix))]
+mod tests_unix {
+    use anyhow::Result;
+
+    use super::{CacheInfo, Timestamp};
+
+    #[test]
+    fn test_cache_info_symlink_resolve() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let dir = dir.path().join("dir");
+        fs_err::create_dir_all(&dir)?;
+
+        let write_manifest = |cache_key: &str| {
+            fs_err::write(
+                dir.join("pyproject.toml"),
+                format!(
+                    r#"
+                [tool.uv]
+                cache-keys = [
+                    "{cache_key}"
+                ]
+                "#
+                ),
+            )
+        };
+
+        let touch = |path: &str| -> Result<_> {
+            let path = dir.join(path);
+            fs_err::create_dir_all(path.parent().unwrap())?;
+            fs_err::write(&path, "")?;
+            Ok(Timestamp::from_metadata(&path.metadata()?))
+        };
+
+        let cache_timestamp = || -> Result<_> { Ok(CacheInfo::from_directory(&dir)?.timestamp) };
+
+        write_manifest("x/**")?;
+        assert_eq!(cache_timestamp()?, None);
+        let y = touch("x/y")?;
+        assert_eq!(cache_timestamp()?, Some(y));
+        let z = touch("x/z")?;
+        assert_eq!(cache_timestamp()?, Some(z));
+
+        // leaf entry symlink should be resolved
+        let a = touch("../a")?;
+        fs_err::os::unix::fs::symlink(dir.join("../a"), dir.join("x/a"))?;
+        assert_eq!(cache_timestamp()?, Some(a));
+
+        // symlink directories should not be followed while globbing
+        let c = touch("../b/c")?;
+        fs_err::os::unix::fs::symlink(dir.join("../b"), dir.join("x/b"))?;
+        assert_eq!(cache_timestamp()?, Some(a));
+
+        // no globs, should work as expected
+        write_manifest("x/y")?;
+        assert_eq!(cache_timestamp()?, Some(y));
+        write_manifest("x/a")?;
+        assert_eq!(cache_timestamp()?, Some(a));
+        write_manifest("x/b/c")?;
+        assert_eq!(cache_timestamp()?, Some(c));
+
+        // symlink pointing to a directory
+        write_manifest("x/*b*")?;
+        assert_eq!(cache_timestamp()?, None);
+
+        Ok(())
+    }
 }
