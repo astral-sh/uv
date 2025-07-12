@@ -1,6 +1,6 @@
 pub use dependency_mode::DependencyMode;
 pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
-pub use exclude_newer::ExcludeNewer;
+pub use exclude_newer::{ExcludeNewer, ExcludeNewerPackageEntry, ExcludeNewerTimestamp};
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;

@@ -22,7 +22,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{ExcludeNewer, yanks::AllowedYanks};
+use crate::{ExcludeNewer, ExcludeNewerTimestamp, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -112,7 +112,7 @@ impl VersionMap {
                 allowed_yanks: allowed_yanks.clone(),
                 hasher: hasher.clone(),
                 requires_python: requires_python.clone(),
-                exclude_newer: exclude_newer.copied(),
+                exclude_newer: exclude_newer.and_then(|en| en.exclude_newer_package(package_name)),
             }),
         }
     }
@@ -365,7 +365,7 @@ struct VersionMapLazy {
     /// in the current environment.
     tags: Option<Tags>,
     /// Whether files newer than this timestamp should be excluded or not.
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: Option<ExcludeNewerTimestamp>,
     /// Which yanked versions are allowed
     allowed_yanks: AllowedYanks,
     /// The hashes of allowed distributions.
@@ -420,7 +420,7 @@ impl VersionMapLazy {
             for (filename, file) in files.all() {
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
-                let (excluded, upload_time) = if let Some(exclude_newer) = self.exclude_newer {
+                let (excluded, upload_time) = if let Some(exclude_newer) = &self.exclude_newer {
                     match file.upload_time_utc_ms.as_ref() {
                         Some(&upload_time) if upload_time >= exclude_newer.timestamp_millis() => {
                             (true, Some(upload_time))
