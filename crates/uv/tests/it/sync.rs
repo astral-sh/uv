@@ -3127,7 +3127,6 @@ fn sync_group_self() -> Result<()> {
             { name = "project", extra = ["test"] },
         ]
         foo = [
-            { name = "project" },
             { name = "typing-extensions" },
         ]
 
@@ -3157,21 +3156,7 @@ fn sync_group_self() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + iniconfig==2.0.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-     + typing-extensions==4.10.0
-    "###);
-
-    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3179,11 +3164,25 @@ fn sync_group_self() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 3 packages in [TIME]
      + idna==3.6
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      - typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }

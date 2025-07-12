@@ -9,7 +9,7 @@ use uv_pep508::{
     ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
     MarkerTree,
 };
-use uv_pypi_types::{ConflictItem, ConflictPackage, Conflicts};
+use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts};
 
 use crate::ResolveError;
 
@@ -148,9 +148,10 @@ impl UniversalMarker {
     /// This may simplify the conflicting marker component of this universal
     /// marker.
     pub(crate) fn assume_conflict_item(&mut self, item: &ConflictItem) {
-        match *item.conflict() {
-            ConflictPackage::Extra(ref extra) => self.assume_extra(item.package(), extra),
-            ConflictPackage::Group(ref group) => self.assume_group(item.package(), group),
+        match *item.kind() {
+            ConflictKind::Extra(ref extra) => self.assume_extra(item.package(), extra),
+            ConflictKind::Group(ref group) => self.assume_group(item.package(), group),
+            ConflictKind::Project => {}
         }
         self.pep508 = self.marker.without_extras();
     }
@@ -161,9 +162,10 @@ impl UniversalMarker {
     /// This may simplify the conflicting marker component of this universal
     /// marker.
     pub(crate) fn assume_not_conflict_item(&mut self, item: &ConflictItem) {
-        match *item.conflict() {
-            ConflictPackage::Extra(ref extra) => self.assume_not_extra(item.package(), extra),
-            ConflictPackage::Group(ref group) => self.assume_not_group(item.package(), group),
+        match *item.kind() {
+            ConflictKind::Extra(ref extra) => self.assume_not_extra(item.package(), extra),
+            ConflictKind::Group(ref group) => self.assume_not_group(item.package(), group),
+            ConflictKind::Project => {}
         }
         self.pep508 = self.marker.without_extras();
     }
@@ -350,9 +352,10 @@ impl ConflictMarker {
     /// Create a conflict marker that is true only when the given extra or
     /// group (for a specific package) is activated.
     pub fn from_conflict_item(item: &ConflictItem) -> ConflictMarker {
-        match *item.conflict() {
-            ConflictPackage::Extra(ref extra) => ConflictMarker::extra(item.package(), extra),
-            ConflictPackage::Group(ref group) => ConflictMarker::group(item.package(), group),
+        match *item.kind() {
+            ConflictKind::Extra(ref extra) => ConflictMarker::extra(item.package(), extra),
+            ConflictKind::Group(ref group) => ConflictMarker::group(item.package(), group),
+            ConflictKind::Project => ConflictMarker::TRUE,
         }
     }
 
