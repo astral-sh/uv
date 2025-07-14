@@ -2975,3 +2975,73 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn tool_run_reresolve_python() -> anyhow::Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let foo_dir = context.temp_dir.child("foo");
+    let foo_pyproject_toml = foo_dir.child("pyproject.toml");
+
+    foo_pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:run"
+        "#
+    })?;
+    let foo_project_src = foo_dir.child("src");
+    let foo_module = foo_project_src.child("foo");
+    let foo_init = foo_module.child("__init__.py");
+    foo_init.write_str(indoc! { r#"
+        import sys
+
+        def run():
+            print(".".join(str(key) for key in sys.version_info[:2]))
+       "#
+    })?;
+
+    // Although 3.11 is first on the path, we'll re-resolve with 3.12 because the `requires-python`
+    // is not compatible with 3.11.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("--python")
+        .arg("3.11")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    Ok(())
+}
