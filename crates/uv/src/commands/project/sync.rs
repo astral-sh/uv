@@ -330,10 +330,19 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(prev, cur)) if dry_run.enabled() => {
-            // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
-            // sync operation, but exit with a non-zero status.
-            Outcome::LockMismatch(prev, cur)
+        Err(ProjectError::LockMismatch(prev, cur)) => {
+            if dry_run.enabled() {
+                // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
+                // sync operation, but exit with a non-zero status.
+                Outcome::LockMismatch(prev, cur)
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    ProjectError::LockMismatch(prev, cur).to_string().bold()
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
         }
         Err(err) => return Err(err.into()),
     };
@@ -398,7 +407,14 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur) => Err(ProjectError::LockMismatch(prev, cur).into()),
+        Outcome::LockMismatch(prev, cur) => {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                ProjectError::LockMismatch(prev, cur).to_string().bold()
+            )?;
+            Ok(ExitStatus::Failure)
+        }
     }
 }
 

@@ -234,16 +234,8 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
-        Err(ProjectError::LockMismatch(previous, lock)) => {
-            // we're --locked and there was a mismatch, show all changes and exit as Failure
-            for event in LockEvent::detect_changes(previous.as_deref(), &lock, dry_run) {
-                writeln!(printer.stderr(), "{event}")?;
-            }
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "The lockfile is outdated; run `uv lock` to update it".bold()
-            )?;
+        Err(err @ ProjectError::LockMismatch(..)) => {
+            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
             Ok(ExitStatus::Failure)
         }
         Err(ProjectError::Operation(err)) => {
