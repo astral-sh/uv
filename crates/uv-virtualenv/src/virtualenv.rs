@@ -86,64 +86,54 @@ pub(crate) fn create(
                     format!("File exists at `{}`", location.user_display()),
                 )));
             } else if metadata.is_dir() {
-                let confirmed_clear = venv_creation_policy == VenvCreationPolicy::FailIfNotEmpty
-                    && confirm_clear(location)?;
-
-                if venv_creation_policy == VenvCreationPolicy::OverwriteFiles {
-                    debug!("Allowing existing directory due to `--allow-existing`");
-                } else if venv_creation_policy == VenvCreationPolicy::RemoveDirectory
-                    || confirmed_clear
-                {
-                    if venv_creation_policy == VenvCreationPolicy::RemoveDirectory {
-                        debug!("Removing existing directory due to `--clear`");
-                    } else {
-                        debug!("Removing existing directory");
+                match venv_creation_policy {
+                    VenvCreationPolicy::OverwriteFiles => {
+                        debug!("Allowing existing directory due to `--allow-existing`");
                     }
+                    VenvCreationPolicy::RemoveDirectory => {
+                        debug!("Removing existing directory due to `--clear`");
+                        remove_venv_directory(location)?;
+                    }
+                    VenvCreationPolicy::FailIfNotEmpty => {
+                        if location
+                            .read_dir()
+                            .is_ok_and(|mut dir| dir.next().is_none())
+                        {
+                            debug!("Ignoring empty directory");
+                        } else {
+                            let directory_message = if uv_fs::is_virtualenv_base(location) {
+                                format!(
+                                    "A virtual environment exists at `{}`.",
+                                    location.user_display()
+                                )
+                            } else {
+                                format!("The directory `{}` exists.", location.user_display())
+                            };
 
-                    // On Windows, if the current executable is in the directory, guard against
-                    // self-deletion.
-                    #[cfg(windows)]
-                    if let Ok(itself) = std::env::current_exe() {
-                        let target = std::path::absolute(location)?;
-                        if itself.starts_with(&target) {
-                            debug!("Detected self-delete of executable: {}", itself.display());
-                            self_replace::self_delete_outside_path(location)?;
+                            if Term::stderr().is_term() {
+                                if confirm_clear(location)? {
+                                    debug!("Removing existing directory");
+                                    remove_venv_directory(location)?;
+                                } else {
+                                    return Err(Error::Io(io::Error::new(
+                                        io::ErrorKind::AlreadyExists,
+                                        format!(
+                                            "{directory_message} \n\n{}{} Use `{}` to remove the directory first",
+                                            "hint".bold().cyan(),
+                                            ":".bold(),
+                                            "--clear".green(),
+                                        ),
+                                    )));
+                                }
+                            } else {
+                                // If this is not a tty, warn for now.
+                                warn_user_once!(
+                                    "{directory_message} In the future, uv will require `{}` to remove the directory first",
+                                    "--clear".green(),
+                                );
+                            }
                         }
                     }
-
-                    fs::remove_dir_all(location)?;
-                    fs::create_dir_all(location)?;
-                } else if location
-                    .read_dir()
-                    .is_ok_and(|mut dir| dir.next().is_none())
-                {
-                    debug!("Ignoring empty directory");
-                } else {
-                    let directory_message = if uv_fs::is_virtualenv_base(location) {
-                        format!(
-                            "A virtual environment exists at `{}`.",
-                            location.user_display()
-                        )
-                    } else {
-                        format!("The directory `{}` exists.", location.user_display())
-                    };
-                    if Term::stderr().is_term() {
-                        return Err(Error::Io(io::Error::new(
-                            io::ErrorKind::AlreadyExists,
-                            format!(
-                                "{directory_message} \n\n{}{} Use `{}` to remove the directory first",
-                                "hint".bold().cyan(),
-                                ":".bold(),
-                                "--clear".green(),
-                            ),
-                        )));
-                    }
-
-                    // If this is not a tty, warn for now.
-                    warn_user_once!(
-                        "{directory_message} In the future, uv will require `{}` to remove the directory first",
-                        "--clear".green(),
-                    );
                 }
             }
         }
@@ -505,6 +495,24 @@ fn confirm_clear(location: &Path) -> Result<bool, io::Error> {
     } else {
         Ok(false)
     }
+}
+
+fn remove_venv_directory(location: &Path) -> Result<(), Error> {
+    // On Windows, if the current executable is in the directory, guard against
+    // self-deletion.
+    #[cfg(windows)]
+    if let Ok(itself) = std::env::current_exe() {
+        let target = std::path::absolute(location)?;
+        if itself.starts_with(&target) {
+            debug!("Detected self-delete of executable: {}", itself.display());
+            self_replace::self_delete_outside_path(location)?;
+        }
+    }
+
+    fs::remove_dir_all(location)?;
+    fs::create_dir_all(location)?;
+
+    Ok(())
 }
 
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]

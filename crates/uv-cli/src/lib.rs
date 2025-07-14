@@ -2620,7 +2620,7 @@ pub struct VenvArgs {
     /// By default, `uv venv` will exit with an error if the given path is non-empty. The
     /// `--clear` option will instead clear a non-empty path before creating a new virtual
     /// environment.
-    #[clap(long, short, conflicts_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
+    #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
     pub clear: bool,
 
     /// Preserve any existing files or directories at the target path.
@@ -2631,7 +2631,7 @@ pub struct VenvArgs {
     ///
     /// WARNING: This option can lead to unexpected behavior if the existing virtual environment and
     /// the newly-created virtual environment are linked to different Python interpreters.
-    #[clap(long, conflicts_with = "clear")]
+    #[clap(long, overrides_with = "clear")]
     pub allow_existing: bool,
 
     /// The path to the virtual environment to create.
