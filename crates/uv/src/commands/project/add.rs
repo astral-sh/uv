@@ -25,7 +25,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement, VersionId,
+    RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification, VersionId,
 };
 use uv_fs::{LockedFile, Simplified};
 use uv_git::GIT_STORE;
@@ -74,6 +74,7 @@ pub(crate) async fn add(
     marker: Option<MarkerTree>,
     editable: Option<bool>,
     dependency_type: DependencyType,
+    auto: bool,
     raw: bool,
     bounds: Option<AddBoundsKind>,
     indexes: Vec<Index>,
@@ -98,7 +99,11 @@ pub(crate) async fn add(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     if bounds.is_some() && preview.is_disabled() {
-        warn_user_once!("The bounds option is in preview and may change in any future release.");
+        warn_user_once!("The bounds option is in preview and may change in any future release");
+    }
+
+    if auto && preview.is_disabled() {
+        warn_user_once!("The `--auto` option is in preview and may change in any future release");
     }
 
     for source in &requirements {
@@ -338,7 +343,7 @@ pub(crate) async fn add(
 
     // Read the requirements.
     let RequirementsSpecification {
-        requirements,
+        mut requirements,
         constraints,
         ..
     } = RequirementsSpecification::from_sources(
@@ -349,6 +354,40 @@ pub(crate) async fn add(
         &client_builder,
     )
     .await?;
+
+    // If `--auto` was provided, infer the requirements from the script.
+    if auto {
+        match target {
+            AddTarget::Script(ref script, ..) => {
+                // Extract the inferred requirements.
+                let names = uv_analyze::extract_requirements(&script.source_code())?;
+
+                if names.is_empty() {
+                    writeln!(
+                        printer.stderr(),
+                        "No requirements found in script `{}`",
+                        script.path.user_display().cyan()
+                    )?;
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "Inferred requirements: {}",
+                        names.iter().map(|name| name.cyan()).join(", ")
+                    )?;
+                }
+
+                // Add the inferred requirements to the list of requirements.
+                for name in names {
+                    requirements.push(UnresolvedRequirementSpecification::from(Requirement::from(
+                        name,
+                    )));
+                }
+            }
+            AddTarget::Project(..) => {
+                bail!("`--auto` is not supported for projects, only scripts")
+            }
+        }
+    }
 
     // Initialize any shared state.
     let state = PlatformState::default();

@@ -302,6 +302,11 @@ impl Pep723Script {
             .and_then(|uv| uv.sources.as_ref())
             .unwrap_or(&EMPTY)
     }
+
+    /// Return the source code of the script, excluding the PEP 723 metadata.
+    pub fn source_code(&self) -> String {
+        format!("{}{}", self.prelude, self.postlude)
+    }
 }
 
 /// PEP 723 metadata as parsed from a `script` comment block.

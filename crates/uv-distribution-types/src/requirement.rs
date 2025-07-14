@@ -192,6 +192,24 @@ impl PartialOrd for Requirement {
     }
 }
 
+impl From<PackageName> for Requirement {
+    /// Convert a [`PackageName`] to a [`Requirement`].
+    fn from(name: PackageName) -> Self {
+        Requirement {
+            name,
+            extras: Box::new([]),
+            groups: Box::new([]),
+            marker: MarkerTree::default(),
+            source: RequirementSource::Registry {
+                specifier: VersionSpecifiers::empty(),
+                index: None,
+                conflict: None,
+            },
+            origin: None,
+        }
+    }
+}
+
 impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
     /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
     fn from(requirement: Requirement) -> Self {
