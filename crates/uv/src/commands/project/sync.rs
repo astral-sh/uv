@@ -839,7 +839,7 @@ struct WorkspaceReport {
 
 impl From<&Workspace> for WorkspaceReport {
     fn from(workspace: &Workspace) -> Self {
-        WorkspaceReport {
+        Self {
             path: workspace.install_path().as_path().into(),
         }
     }
@@ -854,7 +854,7 @@ struct ProjectReport {
 
 impl From<&VirtualProject> for ProjectReport {
     fn from(project: &VirtualProject) -> Self {
-        ProjectReport {
+        Self {
             path: project.root().into(),
             workspace: WorkspaceReport::from(project.workspace()),
         }
@@ -878,7 +878,7 @@ struct ScriptReport {
 
 impl From<&Pep723Script> for ScriptReport {
     fn from(script: &Pep723Script) -> Self {
-        ScriptReport {
+        Self {
             path: script.path.as_path().into(),
         }
     }
@@ -1033,7 +1033,7 @@ struct PythonReport {
 
 impl From<&uv_python::Interpreter> for PythonReport {
     fn from(interpreter: &uv_python::Interpreter) -> Self {
-        PythonReport {
+        Self {
             path: interpreter.sys_executable().into(),
             version: interpreter.python_full_version().clone(),
             implementation: interpreter.implementation_name().to_string(),
@@ -1060,7 +1060,7 @@ struct EnvironmentReport {
 
 impl From<&PythonEnvironment> for EnvironmentReport {
     fn from(env: &PythonEnvironment) -> Self {
-        EnvironmentReport {
+        Self {
             python: PythonReport::from(env.interpreter()),
             path: env.root().into(),
         }
@@ -1157,7 +1157,7 @@ struct LockReport {
 
 impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
     fn from((target, mode, outcome): (&LockTarget, &LockMode, &Outcome)) -> Self {
-        LockReport {
+        Self {
             path: target.lock_path().deref().into(),
             action: match outcome {
                 Outcome::Success(result) => {
