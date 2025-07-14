@@ -88,12 +88,12 @@ fn locked() -> Result<()> {
     // Running with `--locked` should error.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     let updated = context.read("uv.lock");
@@ -424,12 +424,12 @@ fn sync_json() -> Result<()> {
         .arg("--locked")
         .arg("--output-format").arg("json"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -894,7 +894,7 @@ fn check() -> Result<()> {
     // Running `uv sync --check` should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--check"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -904,7 +904,7 @@ fn check() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    error: The environment is outdated; run `uv sync` to update the environment
+    The environment is outdated; run `uv sync` to update the environment
     ");
 
     // Sync the environment.
@@ -8626,7 +8626,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
     // Running with `--locked` and `--dry-run` should error.
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--dry-run"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -8635,7 +8635,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     let updated = context.read("uv.lock");
@@ -8962,13 +8962,13 @@ fn sync_locked_script() -> Result<()> {
     // Re-run with `--locked`.
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
@@ -9064,14 +9064,14 @@ fn sync_locked_script() -> Result<()> {
     // Re-run with `--locked`.
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Updating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
@@ -9944,12 +9944,12 @@ fn sync_build_constraints() -> Result<()> {
     // This should fail, given that the build constraints have changed.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Changing the build constraints should lead to a re-resolve.
