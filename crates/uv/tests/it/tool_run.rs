@@ -3026,11 +3026,31 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/foo)
     ");
 
+    // When an incompatible Python version is explicitly requested, we should not re-resolve
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
         .arg("./foo")
         .arg("--python")
         .arg("3.11")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
+          And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    // Unless the discovered interpreter is compatible with the request
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("--python")
+        .arg(">=3.11")
         .arg("foo")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
