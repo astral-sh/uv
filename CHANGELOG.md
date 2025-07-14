@@ -21,6 +21,9 @@ for more details.
 - Add an exception handler on Windows to display information on crash ([#14582](https://github.com/astral-sh/uv/pull/14582))
 - Add hint when Python downloads are disabled ([#14522](https://github.com/astral-sh/uv/pull/14522))
 - Add `UV_HTTP_RETRIES` to customize retry counts ([#14544](https://github.com/astral-sh/uv/pull/14544))
+- Follow leaf symlinks matched by globs in `cache-key` ([#13438](https://github.com/astral-sh/uv/pull/13438))
+- Support parent path components (`..`) in globs in `cache-key` ([#13469](https://github.com/astral-sh/uv/pull/13469))
+- Improve `cache-key` performance ([#13469](https://github.com/astral-sh/uv/pull/13469))
 
 ### Preview features
 
@@ -29,13 +32,12 @@ for more details.
 ### Bug fixes
 
 - Do not re-resolve with a new Python version in `uv tool` if it is incompatible with `--python` ([#14606](https://github.com/astral-sh/uv/pull/14606))
-- Fix handling of globs in `cache-key`: follow symlinks ([#13438](https://github.com/astral-sh/uv/pull/13438)) and `..` and improve performance ([#13469](https://github.com/astral-sh/uv/pull/13469))
 
 ### Documentation
 
 - Document how to nest dependency groups with `include-group` ([#14539](https://github.com/astral-sh/uv/pull/14539))
 - Fix repeated word in Pyodide doc ([#14554](https://github.com/astral-sh/uv/pull/14554))
-- Update CONTRIBUTING.md with instructions to format markdown files ([#14246](https://github.com/astral-sh/uv/pull/14246))
+- Update CONTRIBUTING.md with instructions to format Markdown files via Docker ([#14246](https://github.com/astral-sh/uv/pull/14246))
 - Fix version number for `setup-python` ([#14533](https://github.com/astral-sh/uv/pull/14533))
 
 ## 0.7.20
