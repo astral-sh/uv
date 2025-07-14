@@ -330,10 +330,19 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
-            // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
-            // sync operation, but exit with a non-zero status.
-            Outcome::LockMismatch(lock)
+        Err(ProjectError::LockMismatch(prev, cur)) => {
+            if dry_run.enabled() {
+                // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
+                // sync operation, but exit with a non-zero status.
+                Outcome::LockMismatch(prev, cur)
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    ProjectError::LockMismatch(prev, cur).to_string().bold()
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
         }
         Err(err) => return Err(err.into()),
     };
@@ -398,7 +407,14 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(lock) => Err(ProjectError::LockMismatch(lock).into()),
+        Outcome::LockMismatch(prev, cur) => {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                ProjectError::LockMismatch(prev, cur).to_string().bold()
+            )?;
+            Ok(ExitStatus::Failure)
+        }
     }
 }
 
@@ -409,15 +425,18 @@ enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>),
 }
 
 impl Outcome {
     /// Return the [`Lock`] associated with this outcome.
     fn lock(&self) -> &Lock {
         match self {
-            Self::Success(lock) => lock.lock(),
-            Self::LockMismatch(lock) => lock,
+            Self::Success(lock) => match lock {
+                LockResult::Changed(_, lock) => lock,
+                LockResult::Unchanged(lock) => lock,
+            },
+            Self::LockMismatch(_prev, cur) => cur,
         }
     }
 }
@@ -1179,7 +1198,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                     }
                 }
                 // TODO(zanieb): We don't have a way to report the outcome of the lock yet
-                Outcome::LockMismatch(_) => LockAction::Check,
+                Outcome::LockMismatch(..) => LockAction::Check,
             },
             dry_run: matches!(mode, LockMode::DryRun(_)),
         }
