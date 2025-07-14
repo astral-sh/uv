@@ -432,7 +432,10 @@ impl Outcome {
     /// Return the [`Lock`] associated with this outcome.
     fn lock(&self) -> &Lock {
         match self {
-            Self::Success(lock) => lock,
+            Self::Success(lock) => match lock {
+                LockResult::Changed(_, lock) => lock,
+                LockResult::Unchanged(lock) => lock,
+            },
             Self::LockMismatch(_prev, cur) => cur,
         }
     }
@@ -1195,7 +1198,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                     }
                 }
                 // TODO(zanieb): We don't have a way to report the outcome of the lock yet
-                Outcome::LockMismatch(_) => LockAction::Check,
+                Outcome::LockMismatch(..) => LockAction::Check,
             },
             dry_run: matches!(mode, LockMode::DryRun(_)),
         }
