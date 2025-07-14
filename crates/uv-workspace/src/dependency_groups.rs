@@ -148,7 +148,7 @@ impl FlatDependencyGroups {
                         if let Some(included) = resolved.get(include_group) {
                             requirements.extend(included.requirements.iter().cloned());
 
-                            // Intersect the requires-python for this group with the the included group's
+                            // Intersect the requires-python for this group with the included group's
                             requires_python_intersection = requires_python_intersection
                                 .into_iter()
                                 .chain(included.requires_python.clone().into_iter().flatten())

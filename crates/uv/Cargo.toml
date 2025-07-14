@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.7.20"
+version = "0.7.21"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -108,6 +108,7 @@ zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 self-replace = { workspace = true }
+windows = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }

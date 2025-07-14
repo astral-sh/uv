@@ -11,7 +11,7 @@ use uv_cli::{
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolListFormat, ToolRunArgs,
+    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolListFormat, ToolRunArgs,
     ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
@@ -1153,9 +1153,11 @@ pub(crate) struct SyncSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) output_format: SyncFormat,
 }
 
 impl SyncSettings {
@@ -1193,8 +1195,10 @@ impl SyncSettings {
             package,
             script,
             python,
+            python_platform,
             check,
             no_check,
+            output_format,
         } = args;
         let install_mirrors = filesystem
             .clone()
@@ -1214,6 +1218,7 @@ impl SyncSettings {
         };
 
         Self {
+            output_format,
             locked,
             frozen,
             dry_run,
@@ -1252,6 +1257,7 @@ impl SyncSettings {
             all_packages,
             package,
             python: python.and_then(Maybe::into_option),
+            python_platform,
             refresh: Refresh::from(refresh),
             settings,
             install_mirrors,
@@ -1567,7 +1573,7 @@ impl RemoveSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct VersionSettings {
     pub(crate) value: Option<String>,
-    pub(crate) bump: Option<VersionBump>,
+    pub(crate) bump: Vec<VersionBump>,
     pub(crate) short: bool,
     pub(crate) output_format: VersionFormat,
     pub(crate) dry_run: bool,

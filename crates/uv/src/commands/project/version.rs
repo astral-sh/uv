@@ -1,6 +1,6 @@
 use std::fmt::Write;
+use std::path::Path;
 use std::str::FromStr;
-use std::{cmp::Ordering, path::Path};
 
 use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
@@ -15,7 +15,7 @@ use uv_configuration::{
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
-use uv_pep440::Version;
+use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
@@ -55,7 +55,7 @@ pub(crate) fn self_version(
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
-    bump: Option<VersionBump>,
+    mut bump: Vec<VersionBump>,
     short: bool,
     output_format: VersionFormat,
     strict: bool,
@@ -105,7 +105,7 @@ pub(crate) async fn project_version(
     };
 
     // Short-circuit early for a frozen read
-    let is_read_only = value.is_none() && bump.is_none();
+    let is_read_only = value.is_none() && bump.is_empty();
     if frozen && is_read_only {
         return Box::pin(print_frozen_version(
             project,
@@ -158,7 +158,8 @@ pub(crate) async fn project_version(
         match Version::from_str(&value) {
             Ok(version) => Some(version),
             Err(err) => match &*value {
-                "major" | "minor" | "patch" => {
+                "major" | "minor" | "patch" | "alpha" | "beta" | "rc" | "dev" | "post"
+                | "stable" => {
                     return Err(anyhow!(
                         "Invalid version `{value}`, did you mean to pass `--bump {value}`?"
                     ));
@@ -168,8 +169,135 @@ pub(crate) async fn project_version(
                 }
             },
         }
-    } else if let Some(bump) = bump {
-        Some(bumped_version(&old_version, bump, printer)?)
+    } else if !bump.is_empty() {
+        // While we can rationalize many of these combinations of operations together,
+        // we want to conservatively refuse to support any of them until users demand it.
+        //
+        // The most complex thing we *do* allow is `--bump major --bump beta --bump dev`
+        // because that makes perfect sense and is reasonable to do.
+        let release_components: Vec<_> = bump
+            .iter()
+            .filter(|bump| {
+                matches!(
+                    bump,
+                    VersionBump::Major | VersionBump::Minor | VersionBump::Patch
+                )
+            })
+            .collect();
+        let prerelease_components: Vec<_> = bump
+            .iter()
+            .filter(|bump| {
+                matches!(
+                    bump,
+                    VersionBump::Alpha | VersionBump::Beta | VersionBump::Rc | VersionBump::Dev
+                )
+            })
+            .collect();
+        let post_count = bump
+            .iter()
+            .filter(|bump| *bump == &VersionBump::Post)
+            .count();
+        let stable_count = bump
+            .iter()
+            .filter(|bump| *bump == &VersionBump::Stable)
+            .count();
+
+        // Very little reason to do "bump to stable" and then do other things,
+        // even if we can make sense of it.
+        if stable_count > 0 && bump.len() > 1 {
+            let components = bump
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(anyhow!(
+                "`--bump stable` cannot be used with another `--bump` value, got: {components}"
+            ));
+        }
+
+        // Very little reason to "bump to post" and then do other things,
+        // how is it a post-release otherwise?
+        if post_count > 0 && bump.len() > 1 {
+            let components = bump
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(anyhow!(
+                "`--bump post` cannot be used with another `--bump` value, got: {components}"
+            ));
+        }
+
+        // `--bump major --bump minor` makes perfect sense (1.2.3 => 2.1.0)
+        // ...but it's weird and probably a mistake?
+        // `--bump major --bump major` perfect sense (1.2.3 => 3.0.0)
+        // ...but it's weird and probably a mistake?
+        if release_components.len() > 1 {
+            let components = release_components
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(anyhow!(
+                "Only one release version component can be provided to `--bump`, got: {components}"
+            ));
+        }
+
+        // `--bump alpha --bump beta` is basically completely incoherent
+        // `--bump beta --bump beta` makes perfect sense (1.2.3b4 => 1.2.3b6)
+        // ...but it's weird and probably a mistake?
+        // `--bump beta --bump dev` makes perfect sense (1.2.3 => 1.2.3b1.dev1)
+        // ...but we want to discourage mixing `dev` with pre-releases
+        if prerelease_components.len() > 1 {
+            let components = prerelease_components
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(anyhow!(
+                "Only one pre-release version component can be provided to `--bump`, got: {components}"
+            ));
+        }
+
+        // Sort the given commands so the user doesn't have to care about
+        // the ordering of `--bump minor --bump beta` (only one ordering is ever useful)
+        bump.sort();
+
+        // Apply all the bumps
+        let mut new_version = old_version.clone();
+        for bump in &bump {
+            let command = match *bump {
+                VersionBump::Major => BumpCommand::BumpRelease { index: 0 },
+                VersionBump::Minor => BumpCommand::BumpRelease { index: 1 },
+                VersionBump::Patch => BumpCommand::BumpRelease { index: 2 },
+                VersionBump::Alpha => BumpCommand::BumpPrerelease {
+                    kind: PrereleaseKind::Alpha,
+                },
+                VersionBump::Beta => BumpCommand::BumpPrerelease {
+                    kind: PrereleaseKind::Beta,
+                },
+                VersionBump::Rc => BumpCommand::BumpPrerelease {
+                    kind: PrereleaseKind::Rc,
+                },
+                VersionBump::Post => BumpCommand::BumpPost,
+                VersionBump::Dev => BumpCommand::BumpDev,
+                VersionBump::Stable => BumpCommand::MakeStable,
+            };
+            new_version.bump(command);
+        }
+
+        if new_version <= old_version {
+            if old_version.is_stable() && new_version.is_pre() {
+                return Err(anyhow!(
+                    "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
+                ));
+            }
+            return Err(anyhow!(
+                "{old_version} => {new_version} didn't increase the version; provide the exact version to force an update"
+            ));
+        }
+
+        Some(new_version)
     } else {
         None
     };
@@ -506,6 +634,7 @@ async fn lock_and_sync(
         EditableMode::Editable,
         install_options,
         Modifications::Sufficient,
+        None,
         settings.into(),
         &network_settings,
         &state,
@@ -568,36 +697,4 @@ fn print_version(
         }
     }
     Ok(())
-}
-
-fn bumped_version(from: &Version, bump: VersionBump, printer: Printer) -> Result<Version> {
-    // All prereleasey details "carry to 0" with every currently supported mode of `--bump`
-    // We could go out of our way to preserve epoch information but no one uses those...
-    if from.any_prerelease() || from.is_post() || from.is_local() || from.epoch() > 0 {
-        writeln!(
-            printer.stderr(),
-            "warning: prerelease information will be cleared as part of the version bump"
-        )?;
-    }
-
-    let index = match bump {
-        VersionBump::Major => 0,
-        VersionBump::Minor => 1,
-        VersionBump::Patch => 2,
-    };
-
-    // Use `max` here to try to do 0.2 => 0.3 instead of 0.2 => 0.3.0
-    let old_parts = from.release();
-    let len = old_parts.len().max(index + 1);
-    let new_release_vec = (0..len)
-        .map(|i| match i.cmp(&index) {
-            // Everything before the bumped value is preserved (or is an implicit 0)
-            Ordering::Less => old_parts.get(i).copied().unwrap_or(0),
-            // This is the value to bump (could be implicit 0)
-            Ordering::Equal => old_parts.get(i).copied().unwrap_or(0) + 1,
-            // Everything after the bumped value becomes 0
-            Ordering::Greater => 0,
-        })
-        .collect::<Vec<u64>>();
-    Ok(Version::new(new_release_vec))
 }

@@ -107,18 +107,9 @@ impl PythonInstallation {
             Err(err) => err,
         };
 
-        let downloads_enabled = preference.allows_managed()
-            && python_downloads.is_automatic()
-            && client_builder.connectivity.is_online();
-
-        if !downloads_enabled {
-            debug!("Python downloads are disabled. Skipping check for available downloads...");
-            return Err(err);
-        }
-
         match err {
             // If Python is missing, we should attempt a download
-            Error::MissingPython(_) => {}
+            Error::MissingPython(..) => {}
             // If we raised a non-critical error, we should attempt a download
             Error::Discovery(ref err) if !err.is_critical() => {}
             // Otherwise, this is fatal
@@ -126,40 +117,109 @@ impl PythonInstallation {
         }
 
         // If we can't convert the request to a download, throw the original error
-        let Some(request) = PythonDownloadRequest::from_request(request) else {
+        let Some(download_request) = PythonDownloadRequest::from_request(request) else {
             return Err(err);
         };
 
-        debug!("Requested Python not found, checking for available download...");
-        match Self::fetch(
-            request.fill()?,
+        let downloads_enabled = preference.allows_managed()
+            && python_downloads.is_automatic()
+            && client_builder.connectivity.is_online();
+
+        let download = download_request.clone().fill().map(|request| {
+            ManagedPythonDownload::from_request(&request, python_downloads_json_url)
+        });
+
+        // Regardless of whether downloads are enabled, we want to determine if the download is
+        // available to power error messages. However, if downloads aren't enabled, we don't want to
+        // report any errors related to them.
+        let download = match download {
+            Ok(Ok(download)) => Some(download),
+            // If the download cannot be found, return the _original_ discovery error
+            Ok(Err(downloads::Error::NoDownloadFound(_))) => {
+                if downloads_enabled {
+                    debug!("No downloads are available for {request}");
+                    return Err(err);
+                }
+                None
+            }
+            Err(err) | Ok(Err(err)) => {
+                if downloads_enabled {
+                    // We failed to determine the platform information
+                    return Err(err.into());
+                }
+                None
+            }
+        };
+
+        let Some(download) = download else {
+            // N.B. We should only be in this case when downloads are disabled; when downloads are
+            // enabled, we should fail eagerly when something goes wrong with the download.
+            debug_assert!(!downloads_enabled);
+            return Err(err);
+        };
+
+        // If the download is available, but not usable, we attach a hint to the original error.
+        if !downloads_enabled {
+            let for_request = match request {
+                PythonRequest::Default | PythonRequest::Any => String::new(),
+                _ => format!(" for {request}"),
+            };
+
+            match python_downloads {
+                PythonDownloads::Automatic => {}
+                PythonDownloads::Manual => {
+                    return Err(err.with_missing_python_hint(format!(
+                        "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
+                        request.to_canonical_string(),
+                    )));
+                }
+                PythonDownloads::Never => {
+                    return Err(err.with_missing_python_hint(format!(
+                        "A managed Python download is available{for_request}, but Python downloads are set to 'never'"
+                    )));
+                }
+            }
+
+            match preference {
+                PythonPreference::OnlySystem => {
+                    return Err(err.with_missing_python_hint(format!(
+                        "A managed Python download is available{for_request}, but the Python preference is set to 'only system'"
+                    )));
+                }
+                PythonPreference::Managed
+                | PythonPreference::OnlyManaged
+                | PythonPreference::System => {}
+            }
+
+            if !client_builder.connectivity.is_online() {
+                return Err(err.with_missing_python_hint(format!(
+                    "A managed Python download is available{for_request}, but uv is set to offline mode"
+                )));
+            }
+
+            return Err(err);
+        }
+
+        Self::fetch(
+            download,
             client_builder,
             cache,
             reporter,
             python_install_mirror,
             pypy_install_mirror,
-            python_downloads_json_url,
             preview,
         )
         .await
-        {
-            Ok(installation) => Ok(installation),
-            // Throw the original error if we couldn't find a download
-            Err(Error::Download(downloads::Error::NoDownloadFound(_))) => Err(err),
-            // But if the download failed, throw that error
-            Err(err) => Err(err),
-        }
     }
 
     /// Download and install the requested installation.
     pub async fn fetch(
-        request: PythonDownloadRequest,
+        download: &'static ManagedPythonDownload,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
-        python_downloads_json_url: Option<&str>,
         preview: PreviewMode,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
@@ -167,7 +227,6 @@ impl PythonInstallation {
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        let download = ManagedPythonDownload::from_request(&request, python_downloads_json_url)?;
         let client = client_builder.build();
 
         info!("Fetching requested Python...");

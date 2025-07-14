@@ -195,6 +195,12 @@ impl TestContext {
             "managed installations, search path, or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
+        self.filters.push((
+            "registry or search path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters
+            .push(("search path".to_string(), "[PYTHON SOURCES]".to_string()));
         self
     }
 
@@ -204,7 +210,7 @@ impl TestContext {
     pub fn with_filtered_python_names(mut self) -> Self {
         if cfg!(windows) {
             self.filters
-                .push(("python.exe".to_string(), "python".to_string()));
+                .push((r"python\.exe".to_string(), "python".to_string()));
         } else {
             self.filters
                 .push((r"python\d.\d\d".to_string(), "python".to_string()));

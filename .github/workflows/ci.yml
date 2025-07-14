@@ -223,6 +223,9 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
             --features python-patch \
@@ -232,7 +235,8 @@ jobs:
   cargo-test-macos:
     timeout-minutes: 15
     needs: determine_changes
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    # Only run macOS tests on main without opt-in
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') || github.ref == 'refs/heads/main' }}
     runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
     name: "cargo test | macos"
     steps:
@@ -255,6 +259,9 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
             --no-default-features \
@@ -299,6 +306,8 @@ jobs:
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
           # Avoid permission errors during concurrent tests
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
@@ -2523,7 +2532,7 @@ jobs:
         run: cargo codspeed build --profile profiling --features codspeed -p uv-bench
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@0010eb0ca6e89b80c88e8edaaa07cfe5f3e6664d # v3.5.0
+        uses: CodSpeedHQ/action@c28fe9fbe7d57a3da1b7834ae3761c1d8217612d # v3.7.0
         with:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
@@ -2560,7 +2569,7 @@ jobs:
         run: cargo codspeed build --profile profiling --features codspeed -p uv-bench
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@0010eb0ca6e89b80c88e8edaaa07cfe5f3e6664d # v3.5.0
+        uses: CodSpeedHQ/action@c28fe9fbe7d57a3da1b7834ae3761c1d8217612d # v3.7.0
         with:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}

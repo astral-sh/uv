@@ -246,7 +246,7 @@ used.</p>
 </dd><dt id="uv-run--upgrade-package"><a href="#uv-run--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-run--verbose"><a href="#uv-run--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
-</dd><dt id="uv-run--with"><a href="#uv-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed.</p>
+</dd><dt id="uv-run--with"><a href="#uv-run--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Run with the given packages installed.</p>
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
 </dd><dt id="uv-run--with-editable"><a href="#uv-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode.</p>
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
@@ -787,11 +787,18 @@ uv version [OPTIONS] [VALUE]
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
 <p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-version--bump"><a href="#uv-version--bump"><code>--bump</code></a> <i>bump</i></dt><dd><p>Update the project version using the given semantics</p>
+<p>This flag can be passed multiple times.</p>
 <p>Possible values:</p>
 <ul>
-<li><code>major</code>:  Increase the major version (1.2.3 =&gt; 2.0.0)</li>
-<li><code>minor</code>:  Increase the minor version (1.2.3 =&gt; 1.3.0)</li>
-<li><code>patch</code>:  Increase the patch version (1.2.3 =&gt; 1.2.4)</li>
+<li><code>major</code>:  Increase the major version (e.g., 1.2.3 =&gt; 2.0.0)</li>
+<li><code>minor</code>:  Increase the minor version (e.g., 1.2.3 =&gt; 1.3.0)</li>
+<li><code>patch</code>:  Increase the patch version (e.g., 1.2.3 =&gt; 1.2.4)</li>
+<li><code>stable</code>:  Move from a pre-release to stable version (e.g., 1.2.3b4.post5.dev6 =&gt; 1.2.3)</li>
+<li><code>alpha</code>:  Increase the alpha version (e.g., 1.2.3a4 =&gt; 1.2.3a5)</li>
+<li><code>beta</code>:  Increase the beta version (e.g., 1.2.3b4 =&gt; 1.2.3b5)</li>
+<li><code>rc</code>:  Increase the rc version (e.g., 1.2.3rc4 =&gt; 1.2.3rc5)</li>
+<li><code>post</code>:  Increase the post version (e.g., 1.2.3.post5 =&gt; 1.2.3.post6)</li>
+<li><code>dev</code>:  Increase the dev version (e.g., 1.2.3a4.dev6 =&gt; 1.2.3.dev7)</li>
 </ul></dd><dt id="uv-version--cache-dir"><a href="#uv-version--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
@@ -1107,7 +1114,12 @@ uv sync [OPTIONS]
 </dd><dt id="uv-sync--only-group"><a href="#uv-sync--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
-</dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
+</dd><dt id="uv-sync--output-format"><a href="#uv-sync--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>Select the output format</p>
+<p>[default: text]</p><p>Possible values:</p>
+<ul>
+<li><code>text</code>:  Display the result in a human-readable format</li>
+<li><code>json</code>:  Display the result in JSON format</li>
+</ul></dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
 <p>The workspace's environment (<code>.venv</code>) is updated to reflect the subset of dependencies declared by the specified workspace member package.</p>
 <p>If the workspace member does not exist, uv will exit with an error.</p>
 </dd><dt id="uv-sync--prerelease"><a href="#uv-sync--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
@@ -1131,7 +1143,51 @@ used.</p>
 synced to the given environment. The interpreter will be used to create a virtual
 environment in the project.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
-<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-sync--quiet"><a href="#uv-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-sync--python-platform"><a href="#uv-sync--python-platform"><code>--python-platform</code></a> <i>python-platform</i></dt><dd><p>The platform for which requirements should be installed.</p>
+<p>Represented as a &quot;target triple&quot;, a string that describes the target platform in terms of its CPU, vendor, and operating system name, like <code>x86_64-unknown-linux-gnu</code> or <code>aarch64-apple-darwin</code>.</p>
+<p>When targeting macOS (Darwin), the default minimum version is <code>12.0</code>. Use <code>MACOSX_DEPLOYMENT_TARGET</code> to specify a different minimum version, e.g., <code>13.0</code>.</p>
+<p>WARNING: When specified, uv will select wheels that are compatible with the <em>target</em> platform; as a result, the installed distributions may not be compatible with the <em>current</em> platform. Conversely, any distributions that are built from source may be incompatible with the <em>target</em> platform, as they will be built for the <em>current</em> platform. The <code>--python-platform</code> option is intended for advanced use cases.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>windows</code>:  An alias for <code>x86_64-pc-windows-msvc</code>, the default target for Windows</li>
+<li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
+<li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
+<li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
+<li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
+<li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
+<li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-manylinux_2_17</code>:  An <code>x86_64</code> target for the <code>manylinux_2_17</code> platform</li>
+<li><code>x86_64-manylinux_2_28</code>:  An <code>x86_64</code> target for the <code>manylinux_2_28</code> platform</li>
+<li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+<li><code>aarch64-manylinux2014</code>:  An ARM64 target for the <code>manylinux2014</code> platform. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
+<li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
+<li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+</ul></dd><dt id="uv-sync--quiet"><a href="#uv-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-sync--refresh"><a href="#uv-sync--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="uv-sync--refresh-package"><a href="#uv-sync--refresh-package"><code>--refresh-package</code></a> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
@@ -1712,7 +1768,7 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
-<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
 </ul></dd><dt id="uv-tree--python-version"><a href="#uv-tree--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The Python version to use when filtering the tree.</p>
 <p>For example, pass <code>--python-version 3.10</code> to display the dependencies that would be included when installing on Python 3.10.</p>
 <p>Defaults to the version of the discovered Python interpreter.</p>
@@ -1928,7 +1984,7 @@ uv tool run [OPTIONS] [COMMAND]
 </dd><dt id="uv-tool-run--upgrade-package"><a href="#uv-tool-run--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-tool-run--verbose"><a href="#uv-tool-run--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
-</dd><dt id="uv-tool-run--with"><a href="#uv-tool-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed</p>
+</dd><dt id="uv-tool-run--with"><a href="#uv-tool-run--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 </dd><dt id="uv-tool-run--with-editable"><a href="#uv-tool-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
 <p>When used in a project, these dependencies will be layered on top of the uv tool's environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
 </dd><dt id="uv-tool-run--with-requirements"><a href="#uv-tool-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files</p>
@@ -2097,7 +2153,7 @@ uv tool install [OPTIONS] <PACKAGE>
 </dd><dt id="uv-tool-install--upgrade-package"><a href="#uv-tool-install--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-tool-install--verbose"><a href="#uv-tool-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
-</dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a> <i>with</i></dt><dd><p>Include the following additional requirements</p>
+</dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Include the following additional requirements</p>
 </dd><dt id="uv-tool-install--with-editable"><a href="#uv-tool-install--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
 </dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Include all requirements listed in the given <code>requirements.txt</code> files</p>
 </dd></dl>
@@ -3402,7 +3458,7 @@ by <code>--python-version</code>.</p>
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
-<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
 </ul></dd><dt id="uv-pip-compile--python-version"><a href="#uv-pip-compile--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The Python version to use for resolution.</p>
 <p>For example, <code>3.8</code> or <code>3.8.17</code>.</p>
 <p>Defaults to the version of the Python interpreter used for resolution.</p>
@@ -3659,7 +3715,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
-<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
 </ul></dd><dt id="uv-pip-sync--python-version"><a href="#uv-pip-sync--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The minimum Python version that should be supported by the requirements (e.g., <code>3.7</code> or <code>3.7.9</code>).</p>
 <p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.7</code> is mapped to <code>3.7.0</code>.</p>
 </dd><dt id="uv-pip-sync--quiet"><a href="#uv-pip-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
@@ -3941,7 +3997,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
 <li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
 <li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
-<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12</li>
+<li><code>wasm32-pyodide2024</code>:  A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12</li>
 </ul></dd><dt id="uv-pip-install--python-version"><a href="#uv-pip-install--python-version"><code>--python-version</code></a> <i>python-version</i></dt><dd><p>The minimum Python version that should be supported by the requirements (e.g., <code>3.7</code> or <code>3.7.9</code>).</p>
 <p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.7</code> is mapped to <code>3.7.0</code>.</p>
 </dd><dt id="uv-pip-install--quiet"><a href="#uv-pip-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>

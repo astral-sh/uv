@@ -398,6 +398,12 @@ impl From<Box<Path>> for PortablePathBuf {
     }
 }
 
+impl<'a> From<&'a Path> for PortablePathBuf {
+    fn from(path: &'a Path) -> Self {
+        Box::<Path>::from(path).into()
+    }
+}
+
 #[cfg(feature = "serde")]
 impl serde::Serialize for PortablePathBuf {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

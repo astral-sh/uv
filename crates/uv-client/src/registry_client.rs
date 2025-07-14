@@ -21,8 +21,8 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -113,6 +113,11 @@ impl<'a> RegistryClientBuilder<'a> {
     pub fn retries(mut self, retries: u32) -> Self {
         self.base_client_builder = self.base_client_builder.retries(retries);
         self
+    }
+
+    pub fn retries_from_env(mut self) -> anyhow::Result<Self> {
+        self.base_client_builder = self.base_client_builder.retries_from_env()?;
+        Ok(self)
     }
 
     #[must_use]
@@ -682,30 +687,14 @@ impl RegistryClient {
 
                 let wheel = wheels.best_wheel();
 
-                let location = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        let url = uv_pypi_types::base_url_join_relative(base, url)
-                            .map_err(ErrorKind::JoinRelativeUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
-                    FileLocation::AbsoluteUrl(url) => {
-                        let url = url.to_url().map_err(ErrorKind::InvalidUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
+                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let location = if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+                    WheelLocation::Path(path)
+                } else {
+                    WheelLocation::Url(url)
                 };
 
                 match location {
@@ -1233,16 +1222,17 @@ mod tests {
 
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{JoinRelativeError, SimpleJson};
+    use uv_pypi_types::SimpleJson;
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
+    use crate::RegistryClientBuilder;
     use uv_cache::Cache;
+    use uv_distribution_types::{FileLocation, ToUrlError};
+    use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    use crate::RegistryClientBuilder;
 
     type Error = Box<dyn std::error::Error>;
 
@@ -1469,7 +1459,7 @@ mod tests {
     ///
     /// See: <https://github.com/astral-sh/uv/issues/1388>
     #[test]
-    fn relative_urls_code_artifact() -> Result<(), JoinRelativeError> {
+    fn relative_urls_code_artifact() -> Result<(), ToUrlError> {
         let text = r#"
         <!DOCTYPE html>
         <html>
@@ -1492,12 +1482,13 @@ mod tests {
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
+        let base = SmallString::from(base.as_str());
 
         // Test parsing of the file urls
         let urls = files
-            .iter()
-            .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
-            .collect::<Result<Vec<_>, JoinRelativeError>>()?;
+            .into_iter()
+            .map(|file| FileLocation::new(file.url, &base).to_url())
+            .collect::<Result<Vec<_>, _>>()?;
         let urls = urls
             .iter()
             .map(DisplaySafeUrl::to_string)

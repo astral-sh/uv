@@ -107,6 +107,7 @@ pub(crate) async fn pin(
     }
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -129,7 +130,8 @@ pub(crate) async fn pin(
     {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
-        Err(uv_python::Error::MissingPython(err)) if !resolved => {
+        Err(uv_python::Error::MissingPython(err, ..)) if !resolved => {
+            // N.B. We omit the hint and just show the inner error message
             warn_user_once!("{err}");
             None
         }

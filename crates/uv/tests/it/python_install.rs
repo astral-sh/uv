@@ -196,14 +196,16 @@ fn python_install_automatic() {
     uv_snapshot!(context.filters(), context.run()
         .env_remove("VIRTUAL_ENV")
         .arg("--no-python-downloads")
-        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found in [PYTHON SOURCES]
-    "###);
+
+    hint: A managed Python download is available, but Python downloads are set to 'never'
+    ");
 
     // Otherwise, we should fetch the latest Python version
     uv_snapshot!(context.filters(), context.run()

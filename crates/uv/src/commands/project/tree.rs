@@ -215,6 +215,7 @@ pub(crate) async fn tree(
             let client = RegistryClientBuilder::new(
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
+            .retries_from_env()?
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())

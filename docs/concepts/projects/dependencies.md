@@ -679,6 +679,26 @@ to resolve the requirements of the project with an error.
     If you have dependency groups that conflict with one another, resolution will fail
     unless you explicitly [declare them as conflicting](./config.md#conflicting-dependencies).
 
+### Nesting groups
+
+A dependency group can include other dependency groups, e.g.:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+dev = [
+  {include-group = "lint"}
+  {include-group = "test"}
+]
+lint = [
+  "ruff"
+]
+test = [
+  "pytest"
+]
+```
+
+An included group's dependencies cannot conflict with the other dependencies declared in a group.
+
 ### Default groups
 
 By default, uv includes the `dev` dependency group in the environment (e.g., during `uv run` or

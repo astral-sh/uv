@@ -3,6 +3,41 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.21
+
+### Python
+
+- Restore the SQLite `fts4`, `fts5`, `rtree`, and `geopoly` extensions on macOS and Linux
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250712)
+for more details.
+
+### Enhancements
+
+- Add `--python-platform` to `uv sync` ([#14320](https://github.com/astral-sh/uv/pull/14320))
+- Support pre-releases in `uv version --bump` ([#13578](https://github.com/astral-sh/uv/pull/13578))
+- Add `-w` shorthand for `--with` ([#14530](https://github.com/astral-sh/uv/pull/14530))
+- Add an exception handler on Windows to display information on crash ([#14582](https://github.com/astral-sh/uv/pull/14582))
+- Add hint when Python downloads are disabled ([#14522](https://github.com/astral-sh/uv/pull/14522))
+- Add `UV_HTTP_RETRIES` to customize retry counts ([#14544](https://github.com/astral-sh/uv/pull/14544))
+
+### Preview features
+
+- Add `uv sync --output-format json` ([#13689](https://github.com/astral-sh/uv/pull/13689))
+
+### Bug fixes
+
+- Do not re-resolve with a new Python version in `uv tool` if it is incompatible with `--python` ([#14606](https://github.com/astral-sh/uv/pull/14606))
+- Fix handling of globs in `cache-key`: follow symlinks ([#13438](https://github.com/astral-sh/uv/pull/13438)) and `..` and improve performance ([#13469](https://github.com/astral-sh/uv/pull/13469))
+
+### Documentation
+
+- Document how to nest dependency groups with `include-group` ([#14539](https://github.com/astral-sh/uv/pull/14539))
+- Fix repeated word in Pyodide doc ([#14554](https://github.com/astral-sh/uv/pull/14554))
+- Update CONTRIBUTING.md with instructions to format markdown files ([#14246](https://github.com/astral-sh/uv/pull/14246))
+- Fix version number for `setup-python` ([#14533](https://github.com/astral-sh/uv/pull/14533))
+
 ## 0.7.20
 
 ### Python
@@ -19,6 +54,7 @@ See the [PyPy](https://pypy.org/posts/2025/07/pypy-v7320-release.html) and [`pyt
 - Add auto-detection for Intel GPUs ([#14386](https://github.com/astral-sh/uv/pull/14386))
 - Drop trailing arguments when writing shebangs ([#14519](https://github.com/astral-sh/uv/pull/14519))
 - Add debug message when skipping Python downloads ([#14509](https://github.com/astral-sh/uv/pull/14509))
+- Add support for declaring multiple modules in namespace packages ([#14460](https://github.com/astral-sh/uv/pull/14460))
 
 ### Bug fixes
 

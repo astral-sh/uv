@@ -176,6 +176,7 @@ pub(crate) async fn add(
         }
 
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -329,6 +330,7 @@ pub(crate) async fn add(
         .ok();
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(settings.resolver.keyring_provider)
@@ -1080,6 +1082,7 @@ async fn lock_and_sync(
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
+        None,
         settings.into(),
         network_settings,
         &sync_state,

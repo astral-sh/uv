@@ -561,7 +561,9 @@ async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Resul
     uv_snapshot!(context.filters(), context
         .add()
         .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
-        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env_remove(EnvVars::UV_HTTP_RETRIES), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11875,7 +11877,9 @@ async fn add_unexpected_error_code() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri()), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri())
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----

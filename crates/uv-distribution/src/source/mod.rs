@@ -32,8 +32,8 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
-    PathSourceUrl, SourceDist, SourceUrl,
+    BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, PathSourceUrl,
+    SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
@@ -122,12 +122,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .join(dist.version.to_string()),
                 );
 
-                let url = match &dist.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        uv_pypi_types::base_url_join_relative(base, url)?
-                    }
-                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
-                };
+                let url = dist.file.url.to_url()?;
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {
@@ -271,12 +266,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .join(dist.version.to_string()),
                 );
 
-                let url = match &dist.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        uv_pypi_types::base_url_join_relative(base, url)?
-                    }
-                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
-                };
+                let url = dist.file.url.to_url()?;
 
                 // If the URL is a file URL, use the local path directly.
                 if url.scheme() == "file" {

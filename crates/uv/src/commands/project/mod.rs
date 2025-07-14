@@ -690,6 +690,7 @@ impl ScriptInterpreter {
         }
 
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -946,6 +947,7 @@ impl ProjectInterpreter {
         }
 
         let client_builder = BaseClientBuilder::default()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -1406,6 +1408,14 @@ impl ProjectEnvironment {
             Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
         }
     }
+
+    /// Return the path to the actual target, if this was a dry run environment.
+    pub(crate) fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::WouldReplace(path, _, _) | Self::WouldCreate(path, _, _) => Some(path),
+            Self::Created(_) | Self::Existing(_) | Self::Replaced(_) => None,
+        }
+    }
 }
 
 impl std::ops::Deref for ProjectEnvironment {
@@ -1586,6 +1596,14 @@ impl ScriptEnvironment {
             Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
         }
     }
+
+    /// Return the path to the actual target, if this was a dry run environment.
+    pub(crate) fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::WouldReplace(path, _, _) | Self::WouldCreate(path, _, _) => Some(path),
+            Self::Created(_) | Self::Existing(_) | Self::Replaced(_) => None,
+        }
+    }
 }
 
 impl std::ops::Deref for ScriptEnvironment {
@@ -1656,6 +1674,8 @@ pub(crate) async fn resolve_names(
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()
+        .map_err(uv_requirements::Error::ClientError)?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
@@ -1813,6 +1833,7 @@ pub(crate) async fn resolve_environment(
     } = spec.requirements;
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
@@ -1984,6 +2005,7 @@ pub(crate) async fn sync_environment(
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
@@ -2147,6 +2169,7 @@ pub(crate) async fn update_environment(
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)

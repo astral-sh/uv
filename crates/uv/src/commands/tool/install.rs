@@ -66,6 +66,7 @@ pub(crate) async fn install(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -97,6 +98,7 @@ pub(crate) async fn install(
     let workspace_cache = WorkspaceCache::default();
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
