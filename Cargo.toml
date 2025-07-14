@@ -116,7 +116,7 @@ home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "1.1.0" }
 indexmap = { version = "2.5.0" }
-indicatif = { version = "0.17.8" }
+indicatif = { version = "0.18.0" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
 jiff = { version = "0.2.0", features = ["serde"] }
