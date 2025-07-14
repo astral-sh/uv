@@ -3,13 +3,14 @@ use std::iter;
 
 use either::Either;
 use pubgrub::Ranges;
+use tracing::warn;
 
 use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{
-    Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
-    VerbatimParsedUrl,
+    ConflictItemRef, Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
+    ParsedUrl, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -18,6 +19,21 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Ranges<Version>,
+
+    /// When the parent that created this dependency is a "normal" package
+    /// (non-extra non-group), this corresponds to its name.
+    ///
+    /// This is used to create project-level `ConflictItemRef` for a specific
+    /// package. In effect, this lets us "delay" filtering of project
+    /// dependencies when a conflict is declared between the project and a
+    /// group.
+    ///
+    /// The main problem with deal with project level conflicts is that if you
+    /// declare a conflict between a package and a group, we represent that
+    /// group as a dependency of that package. So if you filter out the package
+    /// in a fork due to a conflict, you also filter out the group. Therefore,
+    /// we introduce this parent field to enable "delayed" filtering.
+    pub(crate) parent: Option<PackageName>,
 
     /// This field is set if the [`Requirement`] had a URL. We still use a URL from [`Urls`]
     /// even if this field is None where there is an override with a URL or there is a different
@@ -30,8 +46,12 @@ impl PubGrubDependency {
         conflicts: &Conflicts,
         requirement: Cow<'a, Requirement>,
         dev: Option<&'a GroupName>,
-        source_name: Option<&'a PackageName>,
+        parent_package: Option<&'a PubGrubPackage>,
     ) -> impl Iterator<Item = Self> + 'a {
+        let parent_name = parent_package.and_then(|package| package.name_no_root());
+        let is_normal_parent = parent_package
+            .map(|pp| pp.extra().is_none() && pp.dev().is_none())
+            .unwrap_or(false);
         let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
             // requirement are part of a declared conflict, then we
@@ -79,53 +99,70 @@ impl PubGrubDependency {
         };
 
         // Add the package, plus any extra variants.
-        iter.map(move |(extra, group)| {
-            PubGrubRequirement::from_requirement(&requirement, extra, group)
-        })
-        .map(move |requirement| {
+        iter.filter_map(move |(extra, group)| {
+            let pubgrub_requirement =
+                PubGrubRequirement::from_requirement(&requirement, extra, group);
             let PubGrubRequirement {
                 package,
                 version,
                 url,
-            } = requirement;
+            } = pubgrub_requirement;
             match &*package {
-                PubGrubPackageInner::Package { .. } => PubGrubDependency {
-                    package,
-                    version,
-                    url,
-                },
-                PubGrubPackageInner::Marker { .. } => PubGrubDependency {
-                    package,
-                    version,
-                    url,
-                },
-                PubGrubPackageInner::Extra { name, .. } => {
+                PubGrubPackageInner::Package { name, .. } => {
                     // Detect self-dependencies.
+                    if parent_name.is_some_and(|parent_name| parent_name == name) {
+                        warn!("{name} has a dependency on itself");
+                        return None;
+                    }
+
+                    Some(PubGrubDependency {
+                        package,
+                        version,
+                        parent: if is_normal_parent {
+                            parent_name.cloned()
+                        } else {
+                            None
+                        },
+                        url,
+                    })
+                }
+                PubGrubPackageInner::Marker { .. } => Some(PubGrubDependency {
+                    package,
+                    version,
+                    parent: if is_normal_parent {
+                        parent_name.cloned()
+                    } else {
+                        None
+                    },
+                    url,
+                }),
+                PubGrubPackageInner::Extra { name, .. } => {
                     if dev.is_none() {
                         debug_assert!(
-                            source_name.is_none_or(|source_name| source_name != name),
+                            parent_name.is_none_or(|parent_name| parent_name != name),
                             "extras not flattened for {name}"
                         );
                     }
-                    PubGrubDependency {
+                    Some(PubGrubDependency {
                         package,
                         version,
+                        parent: None,
                         url,
-                    }
+                    })
                 }
                 PubGrubPackageInner::Dev { name, .. } => {
-                    // Detect self-dependencies.
                     if dev.is_none() {
                         debug_assert!(
-                            source_name.is_none_or(|source_name| source_name != name),
+                            parent_name.is_none_or(|parent_name| parent_name != name),
                             "group not flattened for {name}"
                         );
                     }
-                    PubGrubDependency {
+                    Some(PubGrubDependency {
                         package,
                         version,
+                        parent: None,
                         url,
-                    }
+                    })
                 }
                 PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),
                 PubGrubPackageInner::Python(_) => {
@@ -134,6 +171,20 @@ impl PubGrubDependency {
                 PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
             }
         })
+    }
+
+    /// Extracts a possible conflicting item from this dependency.
+    ///
+    /// If this package can't possibly be classified as conflicting, then this
+    /// returns `None`.
+    pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
+        if let Some(conflict) = self.package.conflicting_item() {
+            return Some(conflict);
+        }
+        if let Some(ref parent) = self.parent {
+            return Some(ConflictItemRef::from(parent));
+        }
+        None
     }
 }
 

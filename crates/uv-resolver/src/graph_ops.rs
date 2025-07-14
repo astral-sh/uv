@@ -205,7 +205,7 @@ pub(crate) fn simplify_conflict_markers(
             let mut new_set = FxHashSet::default();
             for item in set {
                 for conflict_set in conflicts.iter() {
-                    if !conflict_set.contains(item.package(), item.as_ref().conflict()) {
+                    if !conflict_set.contains(item.package(), item.as_ref().kind()) {
                         continue;
                     }
                     for conflict_item in conflict_set.iter() {

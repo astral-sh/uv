@@ -42,7 +42,7 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictPackage, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
+    ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitUrl,
 };
 use uv_redacted::DisplaySafeUrl;
@@ -852,11 +852,12 @@ impl Lock {
                 list.push(each_element_on_its_line_array(set.iter().map(|item| {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(item.package().to_string()));
-                    match item.conflict() {
-                        ConflictPackage::Extra(extra) => {
+                    match item.kind() {
+                        ConflictKind::Project => {}
+                        ConflictKind::Extra(extra) => {
                             table.insert("extra", Value::from(extra.to_string()));
                         }
-                        ConflictPackage::Group(group) => {
+                        ConflictKind::Group(group) => {
                             table.insert("group", Value::from(group.to_string()));
                         }
                     }

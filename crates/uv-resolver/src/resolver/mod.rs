@@ -927,6 +927,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let PubGrubDependency {
                 package,
                 version: _,
+                parent: _,
                 url: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
@@ -1728,7 +1729,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.conflicts,
                             requirement,
                             None,
-                            None,
+                            Some(package),
                         )
                     })
                     .collect()
@@ -1844,7 +1845,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.conflicts,
                             requirement,
                             dev.as_ref(),
-                            Some(name),
+                            Some(package),
                         )
                     })
                     .chain(system_dependencies)
@@ -1868,6 +1869,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 marker,
                             }),
                             version: Range::singleton(version.clone()),
+                            parent: None,
                             url: None,
                         })
                         .collect(),
@@ -1895,6 +1897,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         marker,
                                     }),
                                     version: Range::singleton(version.clone()),
+                                    parent: None,
                                     url: None,
                                 })
                         })
@@ -1916,6 +1919,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 marker,
                             }),
                             version: Range::singleton(version.clone()),
+                            parent: None,
                             url: None,
                         })
                         .collect(),
@@ -2777,6 +2781,7 @@ impl ForkState {
             let PubGrubDependency {
                 package,
                 version,
+                parent: _,
                 url,
             } = dependency;
 
@@ -2848,6 +2853,7 @@ impl ForkState {
                 let PubGrubDependency {
                     package,
                     version,
+                    parent: _,
                     url: _,
                 } = dependency;
                 (package, version)
@@ -3716,7 +3722,7 @@ impl Fork {
 
     /// Add a dependency to this fork.
     fn add_dependency(&mut self, dep: PubGrubDependency) {
-        if let Some(conflicting_item) = dep.package.conflicting_item() {
+        if let Some(conflicting_item) = dep.conflicting_item() {
             self.conflicts.insert(conflicting_item.to_owned());
         }
         self.dependencies.push(dep);
@@ -3733,7 +3739,7 @@ impl Fork {
             if self.env.included_by_marker(marker) {
                 return true;
             }
-            if let Some(conflicting_item) = dep.package.conflicting_item() {
+            if let Some(conflicting_item) = dep.conflicting_item() {
                 self.conflicts.remove(&conflicting_item);
             }
             false
@@ -3758,13 +3764,13 @@ impl Fork {
     ) -> Option<Fork> {
         self.env = self.env.filter_by_group(rules)?;
         self.dependencies.retain(|dep| {
-            let Some(conflicting_item) = dep.package.conflicting_item() else {
+            let Some(conflicting_item) = dep.conflicting_item() else {
                 return true;
             };
             if self.env.included_by_group(conflicting_item) {
                 return true;
             }
-            if let Some(conflicting_item) = dep.package.conflicting_item() {
+            if let Some(conflicting_item) = dep.conflicting_item() {
                 self.conflicts.remove(&conflicting_item);
             }
             false
