@@ -4734,6 +4734,7 @@ dependencies = [
  "walkdir",
  "which",
  "whoami",
+ "windows 0.59.0",
  "wiremock",
  "zip",
 ]

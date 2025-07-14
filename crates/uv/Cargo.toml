@@ -108,6 +108,7 @@ zip = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 self-replace = { workspace = true }
+windows = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }
