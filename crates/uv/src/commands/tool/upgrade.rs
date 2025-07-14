@@ -155,6 +155,7 @@ pub(crate) async fn upgrade(
             .into_iter()
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
+            debug!("Error trace: {err:?}");
             writeln!(
                 printer.stderr(),
                 "{}: Failed to upgrade {}",

@@ -274,6 +274,7 @@ async fn gather_credentials(
                 fetching the trusted publishing token. If you don't want to use trusted \
                 publishing, you can ignore this error, but you need to provide credentials."
             )?;
+            debug!("Error trace: {err:?}");
             writeln!(
                 printer.stderr(),
                 "{}: {err}",
