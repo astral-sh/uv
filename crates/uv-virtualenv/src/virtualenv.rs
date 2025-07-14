@@ -119,26 +119,30 @@ pub(crate) fn create(
                 {
                     debug!("Ignoring empty directory");
                 } else {
+                    let directory_message = if uv_fs::is_virtualenv_base(location) {
+                        format!(
+                            "A virtual environment exists at `{}`.",
+                            location.user_display()
+                        )
+                    } else {
+                        format!("The directory `{}` exists.", location.user_display())
+                    };
                     if Term::stderr().is_term() {
                         return Err(Error::Io(io::Error::new(
                             io::ErrorKind::AlreadyExists,
                             format!(
-                                "The directory `{}` exists. \n\n{}{} Use `{}` to remove the directory first or `{}` to write to the directory without clearing",
-                                location.user_display(),
+                                "{directory_message} \n\n{}{} Use `{}` to remove the directory first",
                                 "hint".bold().cyan(),
                                 ":".bold(),
                                 "--clear".green(),
-                                "--allow-existing".green(),
                             ),
                         )));
                     }
 
                     // If this is not a tty, warn for now.
                     warn_user_once!(
-                        "The directory `{}` exists. In the future, uv will require `{}` to remove the directory first or `{}` to write to the directory without clearing",
-                        location.user_display(),
+                        "{directory_message} In the future, uv will require `{}` to remove the directory first",
                         "--clear".green(),
-                        "--allow-existing".green(),
                     );
                 }
             }
@@ -512,6 +516,18 @@ pub enum VenvCreationPolicy {
     OverwriteFiles,
     /// Remove existing directory.
     RemoveDirectory,
+}
+
+impl VenvCreationPolicy {
+    pub fn from_args(allow_existing: bool, clear: bool) -> Self {
+        if allow_existing {
+            VenvCreationPolicy::OverwriteFiles
+        } else if clear {
+            VenvCreationPolicy::RemoveDirectory
+        } else {
+            VenvCreationPolicy::default()
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -30,8 +30,6 @@ fn create_venv() {
 
     context.venv.assert(predicates::path::is_dir());
 
-    // Attempt to create a virtual environment at the same location,
-    // which should fail.
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
@@ -43,7 +41,7 @@ fn create_venv() {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: The directory `.venv` exists. In the future, uv will require `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    warning: A virtual environment exists at `.venv`. In the future, uv will require `--clear` to remove the directory first
     Activate with: source .venv/[BIN]/activate
     "
     );
@@ -972,7 +970,7 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: The directory `.venv` exists. In the future, uv will require `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    warning: The directory `.venv` exists. In the future, uv will require `--clear` to remove the directory first
     Activate with: source .venv/[BIN]/activate
     "
     );
@@ -1000,7 +998,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: The directory `.venv` exists. In the future, uv will require `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    warning: The directory `.venv` exists. In the future, uv will require `--clear` to remove the directory first
     Activate with: source .venv/[BIN]/activate
     "
     );

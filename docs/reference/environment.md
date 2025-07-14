@@ -443,11 +443,8 @@ the installer from modifying shell profiles or environment variables.
 
 ### `UV_VENV_CLEAR`
 
-Remove any existing files or directories at the target path.
-
-By default, `uv venv` will exit with an error if the given path is non-empty. The
-`--clear` option will instead clear a non-empty path before creating a new virtual
-environment.
+Equivalent to the `--clear` command-line argument. If set, uv will remove any
+existing files or directories at the target path.
 
 ### `UV_VENV_SEED`
 

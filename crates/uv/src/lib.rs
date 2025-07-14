@@ -1030,13 +1030,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let python_request: Option<PythonRequest> =
                 args.settings.python.as_deref().map(PythonRequest::parse);
 
-            let venv_creation_policy = if args.allow_existing {
-                VenvCreationPolicy::OverwriteFiles
-            } else if args.clear {
-                VenvCreationPolicy::RemoveDirectory
-            } else {
-                VenvCreationPolicy::default()
-            };
+            let venv_creation_policy =
+                VenvCreationPolicy::from_args(args.allow_existing, args.clear);
 
             commands::venv(
                 &project_dir,
