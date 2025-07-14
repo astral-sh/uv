@@ -19,6 +19,7 @@ use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
+use uv_warnings::warn_user_once;
 
 use crate::{Error, Prompt};
 
@@ -118,17 +119,27 @@ pub(crate) fn create(
                 {
                     debug!("Ignoring empty directory");
                 } else {
-                    return Err(Error::Io(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!(
-                            "The directory `{}` exists. \n\n{}{} Use `{}` to remove the directory first or `{}` to write to the directory without clearing",
-                            location.user_display(),
-                            "hint".bold().cyan(),
-                            ":".bold(),
-                            "--clear".green(),
-                            "--allow-existing".green(),
-                        ),
-                    )));
+                    if Term::stderr().is_term() {
+                        return Err(Error::Io(io::Error::new(
+                            io::ErrorKind::AlreadyExists,
+                            format!(
+                                "The directory `{}` exists. \n\n{}{} Use `{}` to remove the directory first or `{}` to write to the directory without clearing",
+                                location.user_display(),
+                                "hint".bold().cyan(),
+                                ":".bold(),
+                                "--clear".green(),
+                                "--allow-existing".green(),
+                            ),
+                        )));
+                    }
+
+                    // If this is not a tty, warn for now.
+                    warn_user_once!(
+                        "The directory `{}` exists. In the future, uv will require `{}` to remove the directory first or `{}` to write to the directory without clearing",
+                        location.user_display(),
+                        "--clear".green(),
+                        "--allow-existing".green(),
+                    );
                 }
             }
         }

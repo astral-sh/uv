@@ -36,19 +36,15 @@ fn create_venv() {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    uv::venv::creation
-
-      × Failed to create virtualenv
-      ╰─▶ The directory `.venv` exists.
-
-          hint: Use `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    warning: The directory `.venv` exists. In the future, uv will require `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
@@ -969,19 +965,15 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    uv::venv::creation
-
-      × Failed to create virtualenv
-      ╰─▶ The directory `.venv` exists.
-
-          hint: Use `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    warning: The directory `.venv` exists. In the future, uv will require `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
@@ -1001,19 +993,15 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    uv::venv::creation
-
-      × Failed to create virtualenv
-      ╰─▶ The directory `.venv` exists.
-
-          hint: Use `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    warning: The directory `.venv` exists. In the future, uv will require `--clear` to remove the directory first or `--allow-existing` to write to the directory without clearing
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
