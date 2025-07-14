@@ -686,7 +686,7 @@ A dependency group can include other dependency groups, e.g.:
 ```toml title="pyproject.toml"
 [dependency-groups]
 dev = [
-  {include-group = "lint"}
+  {include-group = "lint"},
   {include-group = "test"}
 ]
 lint = [
