@@ -1408,6 +1408,14 @@ impl ProjectEnvironment {
             Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
         }
     }
+
+    /// Return the path to the actual target, if this was a dry run environment.
+    pub(crate) fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::WouldReplace(path, _, _) | Self::WouldCreate(path, _, _) => Some(path),
+            Self::Created(_) | Self::Existing(_) | Self::Replaced(_) => None,
+        }
+    }
 }
 
 impl std::ops::Deref for ProjectEnvironment {
@@ -1586,6 +1594,14 @@ impl ScriptEnvironment {
             Self::Created(environment) => Ok(environment),
             Self::WouldReplace(..) => Err(ProjectError::DroppedEnvironment),
             Self::WouldCreate(..) => Err(ProjectError::DroppedEnvironment),
+        }
+    }
+
+    /// Return the path to the actual target, if this was a dry run environment.
+    pub(crate) fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::WouldReplace(path, _, _) | Self::WouldCreate(path, _, _) => Some(path),
+            Self::Created(_) | Self::Existing(_) | Self::Replaced(_) => None,
         }
     }
 }
