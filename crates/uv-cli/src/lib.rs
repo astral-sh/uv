@@ -4438,15 +4438,7 @@ pub struct ToolListArgs {
     pub no_python_downloads: bool,
 
     /// The format in which the list of tools would be displayed.
-    #[arg(
-        long,
-        value_enum,
-        default_value_t = ToolListFormat::default(),
-        conflicts_with = "show_paths",
-        conflicts_with = "show_version_specifiers",
-        conflicts_with = "show_with",
-        conflicts_with = "show_extras"
-    )]
+    #[arg(long, value_enum, default_value_t = ToolListFormat::default())]
     pub output_format: ToolListFormat,
 }
 
