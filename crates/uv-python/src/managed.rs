@@ -16,7 +16,8 @@ use uv_configuration::PreviewMode;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
-use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
+use uv_fs::{Simplified, replace_symlink, symlink_or_copy_file};
+use uv_lock::LockedFile;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, windows_python_launcher};
@@ -124,7 +125,7 @@ impl ManagedPythonInstallations {
     /// Grab a file lock for the managed Python distribution directory to prevent concurrent access
     /// across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(uv_lock::acquire_path(&self.root).await?)
     }
 
     /// Prefer, in order:

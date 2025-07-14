@@ -19,8 +19,9 @@ use uv_install_wheel::read_record_file;
 pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
 use uv_cache::Cache;
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::Simplified;
 use uv_installer::SitePackages;
+use uv_lock::LockedFile;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
@@ -144,7 +145,7 @@ impl InstalledTools {
 
     /// Grab a file lock for the tools directory to prevent concurrent access across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(uv_lock::acquire_path(&self.root).await?)
     }
 
     /// Add a receipt for a tool.

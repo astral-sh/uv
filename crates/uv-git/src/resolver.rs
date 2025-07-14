@@ -5,12 +5,10 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
-use fs_err::tokio as fs;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
-use uv_cache_key::{RepositoryUrl, cache_digest};
-use uv_fs::LockedFile;
+use uv_cache_key::RepositoryUrl;
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_static::EnvVars;
 use uv_version::version;
@@ -164,14 +162,8 @@ impl GitResolver {
         };
 
         // Avoid races between different processes, too.
-        let lock_dir = cache.join("locks");
-        fs::create_dir_all(&lock_dir).await?;
         let repository_url = RepositoryUrl::new(url.repository());
-        let _lock = LockedFile::acquire(
-            lock_dir.join(cache_digest(&repository_url)),
-            &repository_url,
-        )
-        .await?;
+        let _lock = uv_lock::acquire_resource(repository_url).await?;
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {

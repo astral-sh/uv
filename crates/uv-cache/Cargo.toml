@@ -22,6 +22,7 @@ uv-cache-key = { workspace = true }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
+uv-lock = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }

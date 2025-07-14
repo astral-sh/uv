@@ -26,6 +26,7 @@ uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
+uv-lock = { workspace = true, features = ["tokio"] }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }

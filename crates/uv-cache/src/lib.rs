@@ -11,7 +11,9 @@ use tracing::debug;
 
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
-use uv_fs::{LockedFile, cachedir, directories};
+use uv_cache_key::{CacheKey, CacheKeyHasher};
+use uv_fs::{cachedir, directories};
+use uv_lock::LockedFile;
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -81,8 +83,7 @@ impl CacheEntry {
 
     /// Acquire the [`CacheEntry`] as an exclusive lock.
     pub async fn lock(&self) -> Result<LockedFile, io::Error> {
-        fs_err::create_dir_all(self.dir())?;
-        LockedFile::acquire(self.path(), self.path().display()).await
+        uv_lock::acquire_path(self.path()).await
     }
 }
 
@@ -108,15 +109,26 @@ impl CacheShard {
         Self(self.0.join(dir.as_ref()))
     }
 
-    /// Acquire the cache entry as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
-        fs_err::create_dir_all(self.as_ref())?;
-        LockedFile::acquire(self.join(".lock"), self.display()).await
+    /// Return the path to the [`CacheShard`].
+    #[inline]
+    pub fn path(&self) -> &Path {
+        &self.0
     }
 
     /// Return the [`CacheShard`] as a [`PathBuf`].
     pub fn into_path_buf(self) -> PathBuf {
         self.0
+    }
+
+    /// Acquire the cache entry as an exclusive lock.
+    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+        uv_lock::acquire_path(self.path()).await
+    }
+}
+
+impl CacheKey for CacheShard {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.0.cache_key(state);
     }
 }
 
