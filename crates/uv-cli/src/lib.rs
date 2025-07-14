@@ -4941,6 +4941,19 @@ pub struct PythonInstallArgs {
     #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
     pub install_dir: Option<PathBuf>,
 
+    /// Install a Python executable into the `bin` directory.
+    ///
+    /// This is the default behavior. If this flag is provided explicitly, uv will error if the
+    /// executable cannot be installed.
+    ///
+    /// See `UV_PYTHON_BIN_DIR` to customize the target directory.
+    #[arg(long, overrides_with("no_bin"), hide = true)]
+    pub bin: bool,
+
+    /// Do not install a Python executable into the `bin` directory.
+    #[arg(long, overrides_with("bin"), conflicts_with("default"))]
+    pub no_bin: bool,
+
     /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
@@ -5003,7 +5016,7 @@ pub struct PythonInstallArgs {
     /// and `python`.
     ///
     /// If multiple Python versions are requested, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with("no_bin"))]
     pub default: bool,
 }
 
