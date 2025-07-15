@@ -191,11 +191,11 @@ pub(crate) async fn pip_compile(
             }
         }
 
-        if let Some(version_file) = version_file
-            && let Ok(request) = fs::read_to_string(version_file)
-        {
-            if !request.is_empty() {
-                python = Some(request.trim().to_string());
+        if let Some(version_file) = version_file {
+            if let Ok(request) = fs::read_to_string(version_file) {
+                if !request.is_empty() {
+                    python = Some(request.trim().to_string());
+                }
             }
         }
     }
