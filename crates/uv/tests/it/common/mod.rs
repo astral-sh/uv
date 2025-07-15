@@ -62,7 +62,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
-    (r"\\([\w\d]|\.)", "/$1"),
+    (r"\\{1,2}([\w\d]|\.)", "/$1"),
     (r"uv\.exe", "uv"),
     // uv version display
     (
@@ -225,7 +225,10 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_virtualenv_bin(mut self) -> Self {
         self.filters.push((
-            format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
+            format!(
+                r"(?:\\{{1,2}}|/){}",
+                venv_bin_path(PathBuf::new()).to_string_lossy()
+            ),
             "/[BIN]".to_string(),
         ));
         self
@@ -1172,11 +1175,12 @@ impl TestContext {
     fn path_pattern(path: impl AsRef<Path>) -> String {
         format!(
             // Trim the trailing separator for cross-platform directories filters
-            r"{}\\?/?",
+            r"{}\\{{0,2}}/?",
             regex::escape(&path.as_ref().simplified_display().to_string())
                 // Make separators platform agnostic because on Windows we will display
                 // paths with Unix-style separators sometimes
-                .replace(r"\\", r"(\\|\/)")
+                // (Double-backslashes is for JSON-ified Windows paths.)
+                .replace(r"\\", r"(\\{1,2}|\/)")
         )
     }
 

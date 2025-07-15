@@ -67,6 +67,15 @@ pub enum ListFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum ToolListFormat {
+    /// Display the list of tools as plain text.
+    #[default]
+    Text,
+    /// Display the list of tools as JSON.
+    Json,
+}
+
 fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     ExtraName::from_str(arg).map_err(|_err| {
         anyhow!(
@@ -4501,6 +4510,10 @@ pub struct ToolListArgs {
 
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
+
+    /// The format in which the list of tools would be displayed.
+    #[arg(long, value_enum, default_value_t = ToolListFormat::default())]
+    pub output_format: ToolListFormat,
 }
 
 #[derive(Args)]
