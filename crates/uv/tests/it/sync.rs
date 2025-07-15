@@ -475,7 +475,7 @@ fn sync_dry_json() -> Result<()> {
         "environment": {
           "path": "[VENV]/",
           "python": {
-            "path": "[VENV]/[BIN]/python",
+            "path": "[VENV]/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -4910,7 +4910,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[CACHE_DIR]/environments-v2/script-[HASH]",
           "python": {
-            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/python",
+            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
             "version": "3.11.[X]",
             "implementation": "cpython"
           }
@@ -4956,7 +4956,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[TEMP_DIR]/foo",
           "python": {
-            "path": "[TEMP_DIR]/foo/[BIN]/python",
+            "path": "[TEMP_DIR]/foo/[BIN]/[PYTHON]",
             "version": "3.11.[X]",
             "implementation": "cpython"
           }
@@ -5015,7 +5015,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[TEMP_DIR]/foo",
           "python": {
-            "path": "[TEMP_DIR]/foo/[BIN]/python",
+            "path": "[TEMP_DIR]/foo/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }

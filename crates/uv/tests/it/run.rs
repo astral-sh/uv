@@ -2879,14 +2879,14 @@ fn run_no_project() -> Result<()> {
     ");
 
     // `run --no-project --isolated` should run in an entirely isolated environment.
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).

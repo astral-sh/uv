@@ -216,6 +216,8 @@ impl TestContext {
                 .push((r"python\d.\d\d".to_string(), "[PYTHON]".to_string()));
             self.filters
                 .push((r"python\d".to_string(), "[PYTHON]".to_string()));
+            self.filters
+                .push((r"/python".to_string(), "/[PYTHON]".to_string()));
         }
         self
     }

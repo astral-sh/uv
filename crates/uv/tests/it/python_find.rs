@@ -550,14 +550,14 @@ fn python_find_venv() {
 
     // Or at the front of the PATH
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, child_dir.join(".venv").join("bin").as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, child_dir.join(".venv").join("bin").as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/child/.venv/[BIN]/python
+    [TEMP_DIR]/child/.venv/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // This holds even if there are other directories before it in the path, as long as they do
     // not contain a Python executable
@@ -569,14 +569,14 @@ fn python_find_venv() {
         ])
         .unwrap();
 
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r"
         success: true
         exit_code: 0
         ----- stdout -----
-        [TEMP_DIR]/child/.venv/[BIN]/python
+        [TEMP_DIR]/child/.venv/[BIN]/[PYTHON]
 
         ----- stderr -----
-        "###);
+        ");
     }
 
     // But, if there's an executable _before_ the virtual environment — we prefer that
