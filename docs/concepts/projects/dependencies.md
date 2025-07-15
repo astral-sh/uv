@@ -408,31 +408,11 @@ Or, a path to a project directory:
 $ uv add ~/projects/bar/
 ```
 
-### Path dependency installation
+!!! important
 
-By default, a path dependency project is installed in the environment as a package, unless it is
-explicitly marked as a [non-package](./config.md#build-systems). This is true even if it lacks a
-[`[build-system]` table](./config.md#build-systems). If you'd like to override this behavior and
-ensure the path dependency is not installed as a package, set `package = false` on the source:
-
-```toml title="pyproject.toml"
-[project]
-dependencies = ["bar"]
-
-[tool.uv.sources]
-bar = { path = "../projects/bar", package = false }
-```
-
-If the path dependency project is marked as a non-package, but you'd like to install it as a
-package, set `package = true` on the source:
-
-```toml title="pyproject.toml"
-[project]
-dependencies = ["bar"]
-
-[tool.uv.sources]
-bar = { path = "../projects/bar", package = true }
-```
+    When using a directory as a path dependency, uv will attempt to build and install the target as
+    a package by default. See the [virtual dependency](#virtual-dependencies) documentation for
+    details.
 
 An [editable installation](#editable-dependencies) is not used for path dependencies by default. An
 editable installation may be requested for project directories:
@@ -451,7 +431,10 @@ dependencies = ["bar"]
 bar = { path = "../projects/bar", editable = true }
 ```
 
-For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better fit.
+!!! tip
+
+    For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better
+    fit.
 
 ### Workspace member
 
@@ -818,6 +801,39 @@ Or, to opt-out of using an editable dependency in a workspace:
 
 ```console
 $ uv add --no-editable ./path/foo
+```
+
+## Virtual dependencies
+
+uv allows dependencies to be "virtual", in which the dependency itself is not installed as a
+[package](./config.md#project-packaging), but its dependencies are.
+
+By default, only workspace members without build systems declared are virtual.
+
+A dependency with a [`path` source](#path) is not virtual unless it explicitly sets
+[`tool.uv.package = false`](../../reference/settings.md#package). Unlike working _in_ the dependent
+project with uv, the package will be built even if a [build system](./config.md#build-systems) is
+not declared.
+
+To treat a dependency as virtual, set `package = false` on the source:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
+
+[tool.uv.sources]
+bar = { path = "../projects/bar", package = false }
+```
+
+Similarly, if a dependency sets `tool.uv.package = false`, it can be overridden by declaring
+`package = true` on the source:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["bar"]
+
+[tool.uv.sources]
+bar = { path = "../projects/bar", package = true }
 ```
 
 ## Dependency specifiers (PEP 508)
