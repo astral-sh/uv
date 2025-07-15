@@ -225,6 +225,13 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_virtualenv_bin(mut self) -> Self {
         self.filters.push((
+            format!(
+                r"[\\/]{}[\\/]",
+                venv_bin_path(PathBuf::new()).to_string_lossy()
+            ),
+            "/[BIN]/".to_string(),
+        ));
+        self.filters.push((
             format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
             "/[BIN]".to_string(),
         ));
