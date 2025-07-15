@@ -76,7 +76,11 @@ impl ExceptionSafeStderr {
     fn write_winerror(&mut self, s: &str) -> Result<(), windows_result::Error> {
         match self {
             Self::WriteConsole(handle) => {
-                let mut buf = ArrayVec::<u16, 4096>::new();
+                // According to comments in the ReactOS source, NT's behavior is that writes of 80
+                // bytes or fewer are passed in-line in the message to the console server and
+                // longer writes allocate out of a shared heap with CSRSS. In an attempt to avoid
+                // allocations, write in 80-byte chunks.
+                let mut buf = ArrayVec::<u16, 40>::new();
                 for c in s.encode_utf16() {
                     if buf.try_push(c).is_err() {
                         // SAFETY: winapi call, arrayvec guarantees the slice is valid
