@@ -1,7 +1,7 @@
+use fs_err as fs;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsStr;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -194,7 +194,9 @@ pub(crate) async fn pip_compile(
         if let Some(version_file) = version_file {
             if let Ok(request) = fs::read_to_string(version_file) {
                 if !request.is_empty() {
-                    python = Some(request.trim().to_string());
+                    if let Some(first_line) = request.lines().next() {
+                        python = Some(first_line.trim().to_string());
+                    }
                 }
             }
         }
