@@ -1533,6 +1533,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::python_dir(args.bin)?;
             Ok(ExitStatus::Success)
         }
+        Commands::Python(PythonNamespace {
+            command: PythonCommand::UpdateShell,
+        }) => {
+            commands::python_update_shell(printer).await?;
+            Ok(ExitStatus::Success)
+        }
         Commands::Publish(args) => {
             show_settings!(args);
 

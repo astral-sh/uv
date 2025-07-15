@@ -908,20 +908,29 @@ fn warn_if_not_on_path(bin: &Path) {
     if !Shell::contains_path(bin) {
         if let Some(shell) = Shell::from_env() {
             if let Some(command) = shell.prepend_path(bin) {
-                warn_user!(
-                    "`{}` is not on your PATH. To use the installed Python executable, run `{}`.",
-                    bin.simplified_display().cyan(),
-                    command.green(),
-                );
+                if shell.supports_update() {
+                    warn_user!(
+                        "`{}` is not on your PATH. To use installed Python executables, run `{}` or `{}`.",
+                        bin.simplified_display().cyan(),
+                        command.green(),
+                        "uv python update-shell".green()
+                    );
+                } else {
+                    warn_user!(
+                        "`{}` is not on your PATH. To use installed Python executables, run `{}`.",
+                        bin.simplified_display().cyan(),
+                        command.green()
+                    );
+                }
             } else {
                 warn_user!(
-                    "`{}` is not on your PATH. To use the installed Python executable, add the directory to your PATH.",
+                    "`{}` is not on your PATH. To use installed Python executables, add the directory to your PATH.",
                     bin.simplified_display().cyan(),
                 );
             }
         } else {
             warn_user!(
-                "`{}` is not on your PATH. To use the installed Python executable, add the directory to your PATH.",
+                "`{}` is not on your PATH. To use installed Python executables, add the directory to your PATH.",
                 bin.simplified_display().cyan(),
             );
         }

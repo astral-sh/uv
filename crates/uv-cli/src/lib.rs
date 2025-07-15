@@ -4856,6 +4856,19 @@ pub enum PythonCommand {
 
     /// Uninstall Python versions.
     Uninstall(PythonUninstallArgs),
+
+    /// Ensure that the Python executable directory is on the `PATH`.
+    ///
+    /// If the Python executable directory is not present on the `PATH`, uv will attempt to add it to
+    /// the relevant shell configuration files.
+    ///
+    /// If the shell configuration files already include a blurb to add the executable directory to
+    /// the path, but the directory is not present on the `PATH`, uv will exit with an error.
+    ///
+    /// The Python executable directory is determined according to the XDG standard and can be
+    /// retrieved with `uv python dir --bin`.
+    #[command(alias = "ensurepath")]
+    UpdateShell,
 }
 
 #[derive(Args)]
