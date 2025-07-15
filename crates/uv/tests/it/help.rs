@@ -290,14 +290,15 @@ fn help_subcommand() {
     Usage: uv python [OPTIONS] <COMMAND>
 
     Commands:
-      list       List the available Python installations
-      install    Download and install Python versions
-      upgrade    Upgrade installed Python versions to the latest supported patch release (requires the
-                 `--preview` flag)
-      find       Search for a Python installation
-      pin        Pin to a specific Python version
-      dir        Show the uv Python installation directory
-      uninstall  Uninstall Python versions
+      list          List the available Python installations
+      install       Download and install Python versions
+      upgrade       Upgrade installed Python versions to the latest supported patch release (requires
+                    the `--preview` flag)
+      find          Search for a Python installation
+      pin           Pin to a specific Python version
+      dir           Show the uv Python installation directory
+      uninstall     Uninstall Python versions
+      update-shell  Ensure that the Python executable directory is on the `PATH`
 
     Cache options:
       -n, --no-cache
@@ -725,14 +726,15 @@ fn help_flag_subcommand() {
     Usage: uv python [OPTIONS] <COMMAND>
 
     Commands:
-      list       List the available Python installations
-      install    Download and install Python versions
-      upgrade    Upgrade installed Python versions to the latest supported patch release (requires the
-                 `--preview` flag)
-      find       Search for a Python installation
-      pin        Pin to a specific Python version
-      dir        Show the uv Python installation directory
-      uninstall  Uninstall Python versions
+      list          List the available Python installations
+      install       Download and install Python versions
+      upgrade       Upgrade installed Python versions to the latest supported patch release (requires
+                    the `--preview` flag)
+      find          Search for a Python installation
+      pin           Pin to a specific Python version
+      dir           Show the uv Python installation directory
+      uninstall     Uninstall Python versions
+      update-shell  Ensure that the Python executable directory is on the `PATH`
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -934,6 +936,7 @@ fn help_unknown_subsubcommand() {
         pin
         dir
         uninstall
+        update-shell
     ");
 }
 
