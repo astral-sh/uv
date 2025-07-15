@@ -152,6 +152,7 @@ pub(crate) async fn install(
     reinstall: bool,
     upgrade: bool,
     bin: Option<bool>,
+    registry: Option<bool>,
     force: bool,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
@@ -500,7 +501,7 @@ pub(crate) async fn install(
             );
         }
 
-        if preview.is_enabled() {
+        if preview.is_enabled() && !matches!(registry, Some(false)) {
             #[cfg(windows)]
             {
                 match uv_python::windows_registry::create_registry_entry(installation) {
@@ -670,11 +671,14 @@ pub(crate) async fn install(
     }
 
     if !errors.is_empty() {
-        // If there are only bin install errors and the user didn't opt-in, we're only going to warn
-        let fatal = errors
-            .iter()
-            .all(|(kind, _, _)| matches!(kind, InstallErrorKind::Bin))
-            && bin.is_none();
+        // If there are only side-effect install errors and the user didn't opt-in, we're only going
+        // to warn
+        let fatal = !errors.iter().all(|(kind, _, _)| match kind {
+            InstallErrorKind::Bin => bin.is_none(),
+            #[cfg(windows)]
+            InstallErrorKind::Registry => registry.is_none(),
+            InstallErrorKind::DownloadUnpack => false,
+        });
 
         for (kind, key, err) in errors
             .into_iter()
@@ -691,10 +695,14 @@ pub(crate) async fn install(
                     (level, "install executable for")
                 }
                 #[cfg(windows)]
-                InstallErrorKind::Registry => (
-                    "error".red().bold().to_string(),
-                    "install registry entry for",
-                ),
+                InstallErrorKind::Registry => {
+                    let level = match registry {
+                        None => "warning".yellow().bold().to_string(),
+                        Some(false) => continue,
+                        Some(true) => "error".red().bold().to_string(),
+                    };
+                    (level, "install registry entry for")
+                }
             };
 
             writeln!(
@@ -714,10 +722,8 @@ pub(crate) async fn install(
         }
 
         if fatal {
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::Failure);
         }
-
-        return Ok(ExitStatus::Failure);
     }
 
     Ok(ExitStatus::Success)

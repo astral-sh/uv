@@ -934,6 +934,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
     pub(crate) bin: Option<bool>,
+    pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
     pub(crate) python_downloads_json_url: Option<String>,
@@ -964,6 +965,8 @@ impl PythonInstallSettings {
             reinstall,
             bin,
             no_bin,
+            registry,
+            no_registry,
             force,
             mirror: _,
             pypy_mirror: _,
@@ -977,6 +980,7 @@ impl PythonInstallSettings {
             reinstall,
             force,
             bin: flag(bin, no_bin, "bin"),
+            registry: flag(registry, no_registry, "registry"),
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
             python_downloads_json_url,
@@ -992,6 +996,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) force: bool,
+    pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
     pub(crate) python_downloads_json_url: Option<String>,
@@ -1019,6 +1024,7 @@ impl PythonUpgradeSettings {
         let force = false;
         let default = false;
         let bin = None;
+        let registry = None;
 
         let PythonUpgradeArgs {
             install_dir,
@@ -1032,6 +1038,7 @@ impl PythonUpgradeSettings {
             install_dir,
             targets,
             force,
+            registry,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
             python_downloads_json_url,

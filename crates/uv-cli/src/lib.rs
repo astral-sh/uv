@@ -4954,6 +4954,17 @@ pub struct PythonInstallArgs {
     #[arg(long, overrides_with("bin"), conflicts_with("default"))]
     pub no_bin: bool,
 
+    /// Register the Python installation in the Windows registry.
+    ///
+    /// This is the default behavior on Windows. If this flag is provided explicitly, uv will error if the
+    /// registry entry cannot be created.
+    #[arg(long, overrides_with("no_registry"), hide = true)]
+    pub registry: bool,
+
+    /// Do not register the Python installation in the Windows registry.
+    #[arg(long, overrides_with("registry"))]
+    pub no_registry: bool,
+
     /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
