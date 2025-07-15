@@ -808,12 +808,12 @@ Or, to opt-out of using an editable dependency in a workspace:
 $ uv add --no-editable ./path/foo
 ```
 
-## Dependency specifiers (PEP 508)
+## Dependency specifiers
 
-uv uses
+uv uses standard
 [dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/),
-previously known as [PEP 508](https://peps.python.org/pep-0508/). A dependency specifier is composed
-of, in order:
+originally defined in [PEP 508](https://peps.python.org/pep-0508/). A dependency specifier is
+composed of, in order:
 
 - The dependency name
 - The extras you want (optional)
