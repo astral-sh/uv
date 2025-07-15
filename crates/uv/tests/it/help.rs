@@ -504,6 +504,9 @@ fn help_subsubcommand() {
               
               [env: UV_PYTHON_INSTALL_DIR=]
 
+          --no-bin
+              Do not install a Python executable into the `bin` directory
+
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations.
               
@@ -790,6 +793,8 @@ fn help_flag_subsubcommand() {
     Options:
       -i, --install-dir <INSTALL_DIR>
               The directory to store the Python installation in [env: UV_PYTHON_INSTALL_DIR=]
+          --no-bin
+              Do not install a Python executable into the `bin` directory
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations [env:
               UV_PYTHON_INSTALL_MIRROR=]
