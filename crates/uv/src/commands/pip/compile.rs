@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsStr;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -152,6 +153,49 @@ pub(crate) async fn pip_compile(
         if let Ok(request) = std::env::var("UV_PYTHON") {
             if !request.is_empty() {
                 python = Some(request);
+            }
+        }
+    }
+
+    // Respect `.python-version` file
+    if python.is_none() && python_version.is_none() {
+        let mut version_file: Option<PathBuf> = None;
+
+        if PathBuf::from(".python-version").exists() {
+            // If there is `.python-version` in the current directory, use that.
+            // This is for cases like `uv pip compile requirements.in`.
+            version_file = Some(PathBuf::from(".python-version"));
+        } else if !requirements.is_empty() {
+            // If there is no `.python-version` present, try to find a sibling
+            // to the first RequirementsSource, which contains a path.
+            let file_name = match &requirements[0] {
+                RequirementsSource::PylockToml(file_name) => Some(file_name),
+                RequirementsSource::RequirementsTxt(file_name) => Some(file_name),
+                RequirementsSource::PyprojectToml(file_name) => Some(file_name),
+                RequirementsSource::SetupPy(file_name) => Some(file_name),
+                RequirementsSource::SetupCfg(file_name) => Some(file_name),
+                RequirementsSource::EnvironmentYml(file_name) => Some(file_name),
+                _ => None,
+            };
+
+            if let Some(file_name) = file_name {
+                let version_file_path = file_name
+                    .as_path()
+                    .parent()
+                    .unwrap()
+                    .join(PathBuf::from(".python-version"));
+
+                if version_file_path.exists() {
+                    version_file = Some(version_file_path);
+                }
+            }
+        }
+
+        if let Some(version_file) = version_file
+            && let Ok(request) = fs::read_to_string(version_file)
+        {
+            if !request.is_empty() {
+                python = Some(request.trim().to_string());
             }
         }
     }
