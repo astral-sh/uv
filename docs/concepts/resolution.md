@@ -535,3 +535,7 @@ The schema version is considered part of the public API, and so is only bumped i
 a breaking change (see [Versioning](../reference/policies/versioning.md)). As such, all uv patch
 versions within a given minor uv release are guaranteed to have full lockfile compatibility. In
 other words, lockfiles may only be rejected across minor releases.
+
+The `revision` field of the lockfile is used to track backwards compatible changes to the lockfile.
+For example, adding a new field to distributions. Changes to the revision will not cause older
+versions of uv to error.
