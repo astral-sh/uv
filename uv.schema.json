@@ -907,6 +907,18 @@
           ],
           "default": "auto"
         },
+        "cache-control": {
+          "description": "Cache control configuration for this index.\n\nWhen set, these headers will override the server's cache control headers\nfor both package metadata requests and artifact downloads.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\ncache-control = { api = \"max-age=600\", files = \"max-age=3600\" }\n```",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexCacheControl"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "default": {
           "description": "Mark the index as the default index.\n\nBy default, uv uses PyPI as the default index, such that even if additional indexes are\ndefined via `[[tool.uv.index]]`, PyPI will still be used as a fallback for packages that\naren't found elsewhere. To disable the PyPI default, set `default = true` on at least one\nother index.\n\nMarking an index as default will move it to the front of the list of indexes, such that it\nis given the highest priority when resolving packages.",
           "type": "boolean",
@@ -971,6 +983,26 @@
       "required": [
         "url"
       ]
+    },
+    "IndexCacheControl": {
+      "description": "Cache control configuration for an index.",
+      "type": "object",
+      "properties": {
+        "api": {
+          "description": "Cache control header for Simple API requests.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "description": "Cache control header for file downloads.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "IndexFormat": {
       "oneOf": [
