@@ -1533,7 +1533,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/bin/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1543,7 +1543,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/bin/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1552,7 +1552,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/bin/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1572,7 +1572,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/bin/[PYTHON]
 
     ----- stderr -----
     ");

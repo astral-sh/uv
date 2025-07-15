@@ -210,12 +210,12 @@ impl TestContext {
     pub fn with_filtered_python_names(mut self) -> Self {
         if cfg!(windows) {
             self.filters
-                .push((r"python\.exe".to_string(), "python".to_string()));
+                .push((r"python\.exe".to_string(), "[PYTHON]".to_string()));
         } else {
             self.filters
-                .push((r"python\d.\d\d".to_string(), "python".to_string()));
+                .push((r"python\d.\d\d".to_string(), "[PYTHON]".to_string()));
             self.filters
-                .push((r"python\d".to_string(), "python".to_string()));
+                .push((r"python\d".to_string(), "[PYTHON]".to_string()));
         }
         self
     }

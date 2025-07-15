@@ -425,25 +425,25 @@ fn python_find_venv() {
     // is super annoying and requires some changes to how we represent working directories in the
     // test context to resolve.
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Even if the `VIRTUAL_ENV` is not set (the test context includes this by default)
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all().unwrap();
@@ -485,14 +485,14 @@ fn python_find_venv() {
 
     // We should find virtual environments from a child directory
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // A virtual environment in the child directory takes precedence over the parent
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11").arg("-q").current_dir(&child_dir), @r###"
@@ -504,14 +504,14 @@ fn python_find_venv() {
     "###);
 
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/child/.venv/[BIN]/python
+    [TEMP_DIR]/child/.venv/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // But if we delete the parent virtual environment
     fs_err::remove_dir_all(context.temp_dir.child(".venv")).unwrap();
@@ -528,25 +528,25 @@ fn python_find_venv() {
 
     // Unless, it is requested by path
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().arg("child/.venv"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("child/.venv"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/child/.venv/[BIN]/python
+    [TEMP_DIR]/child/.venv/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Or activated via `VIRTUAL_ENV`
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, child_dir.join(".venv").as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, child_dir.join(".venv").as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/child/.venv/[BIN]/python
+    [TEMP_DIR]/child/.venv/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Or at the front of the PATH
     #[cfg(not(windows))]
@@ -684,27 +684,27 @@ fn python_find_venv_invalid() {
         .with_filtered_virtualenv_bin();
 
     // We find the virtual environment
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // If the binaries are missing from a virtual environment, we fail
     fs_err::remove_dir_all(venv_bin_path(&context.venv)).unwrap();
 
-    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
-    "###);
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
+    ");
 
     // Unless the virtual environment is not active
     uv_snapshot!(context.filters(), context.python_find(), @r###"
@@ -819,7 +819,7 @@ fn python_find_script() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/environments-v2/[HASHEDNAME]/[BIN]/python
+    [CACHE_DIR]/environments-v2/[HASHEDNAME]/[BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -846,7 +846,7 @@ fn python_find_script_no_environment() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
     ");

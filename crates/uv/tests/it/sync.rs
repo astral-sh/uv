@@ -306,7 +306,7 @@ fn sync_json() -> Result<()> {
         "environment": {
           "path": "[VENV]/",
           "python": {
-            "path": "[VENV]/[BIN]/python",
+            "path": "[VENV]/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -350,7 +350,7 @@ fn sync_json() -> Result<()> {
         "environment": {
           "path": "[VENV]/",
           "python": {
-            "path": "[VENV]/[BIN]/python",
+            "path": "[VENV]/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -389,7 +389,7 @@ fn sync_json() -> Result<()> {
         "environment": {
           "path": "[VENV]/",
           "python": {
-            "path": "[VENV]/[BIN]/python",
+            "path": "[VENV]/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -6558,7 +6558,7 @@ fn sync_invalid_environment() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/python -> python
+        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> python
         Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
         Removed virtual environment at: .venv
         Creating virtual environment at: .venv
