@@ -5500,3 +5500,49 @@ fn run_no_sync_incompatible_python() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_python_preference_no_project() {
+    let context =
+        TestContext::new_with_versions(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
+
+    context.venv().assert().success();
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--managed-python").arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    // `VIRTUAL_ENV` is set here, so we'll ignore the flag
+    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    // If we remove the `VIRTUAL_ENV` variable, we should get the unmanaged Python
+    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version").env_remove("VIRTUAL_ENV"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    ");
+}

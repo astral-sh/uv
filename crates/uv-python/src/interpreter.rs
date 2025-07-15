@@ -271,6 +271,23 @@ impl Interpreter {
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
     pub fn is_managed(&self) -> bool {
+        if let Ok(test_managed) =
+            std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
+        {
+            // During testing, we collect interpreters into an artificial search path and need to
+            // be able to mock whether an interpreter is managed or not.
+            return test_managed.split_ascii_whitespace().any(|item| {
+                let version = <PythonVersion as std::str::FromStr>::from_str(item).expect(
+                    "`UV_INTERNAL__TEST_PYTHON_MANAGED` items should be valid Python versions",
+                );
+                if version.patch().is_some() {
+                    version.version() == self.python_version()
+                } else {
+                    (version.major(), version.minor()) == self.python_tuple()
+                }
+            });
+        }
+
         let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
             return false;
         };

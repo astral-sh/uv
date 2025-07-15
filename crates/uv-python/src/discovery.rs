@@ -446,7 +446,16 @@ fn python_executables_from_installed<'a>(
     .flatten();
 
     match preference {
-        PythonPreference::OnlyManaged => Box::new(from_managed_installations),
+        PythonPreference::OnlyManaged => {
+            // TODO(zanieb): Ideally, we'd create "fake" managed installation directories for tests,
+            // but for now... we'll just include the test interpreters which are always on the
+            // search path.
+            if std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED).is_ok() {
+                Box::new(from_managed_installations.chain(from_search_path))
+            } else {
+                Box::new(from_managed_installations)
+            }
+        }
         PythonPreference::Managed => Box::new(
             from_managed_installations
                 .chain(from_search_path)
