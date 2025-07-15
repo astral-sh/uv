@@ -4884,14 +4884,10 @@ fn sync_active_script_environment_json() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain(vec![
-            (
-                r"environments-v2/script-[a-z0-9]+",
-                "environments-v2/script-[HASH]",
-            ),
-            ("bin/python3", "[PYTHON]"),
-            ("Scripts/python.exe", "[PYTHON]"),
-        ])
+        .chain(vec![(
+            r"environments-v2/script-[a-z0-9]+",
+            "environments-v2/script-[HASH]",
+        )])
         .collect::<Vec<_>>();
 
     // Running `uv sync --script` with `VIRTUAL_ENV` should warn
