@@ -81,6 +81,8 @@ impl PyProjectToml {
 
     /// Returns `true` if the project should be considered a Python package, as opposed to a
     /// non-package ("virtual") project.
+    ///
+    /// For workspace members, see [`WorkspaceMember::is_package`].
     pub fn is_package(&self) -> bool {
         // If `tool.uv.package` is set, defer to that explicit setting.
         if let Some(is_package) = self.tool_uv_package() {
