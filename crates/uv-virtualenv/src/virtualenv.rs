@@ -55,7 +55,7 @@ pub(crate) fn create(
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    venv_creation_policy: VenvCreationPolicy,
+    on_existing: OnExisting,
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
@@ -91,22 +91,22 @@ pub(crate) fn create(
             } else {
                 "directory"
             };
-            match venv_creation_policy {
-                VenvCreationPolicy::OverwriteFiles => {
+            match on_existing {
+                OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
-                VenvCreationPolicy::RemoveDirectory => {
+                OnExisting::Remove => {
                     debug!("Removing existing {name} due to `--clear`");
                     remove_venv_directory(location)?;
                 }
-                VenvCreationPolicy::FailIfNotEmpty
+                OnExisting::Fail
                     if location
                         .read_dir()
                         .is_ok_and(|mut dir| dir.next().is_none()) =>
                 {
                     debug!("Ignoring empty directory");
                 }
-                VenvCreationPolicy::FailIfNotEmpty => {
+                OnExisting::Fail => {
                     match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name}");
@@ -525,24 +525,25 @@ fn remove_venv_directory(location: &Path) -> Result<(), Error> {
 }
 
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub enum VenvCreationPolicy {
-    /// Do not create a virtual environment if a non-empty directory exists.
+pub enum OnExisting {
+    /// Fail if the directory already exists and is non-empty.
     #[default]
-    FailIfNotEmpty,
-    /// Overwrite existing virtual environment files.
-    OverwriteFiles,
-    /// Remove existing directory.
-    RemoveDirectory,
+    Fail,
+    /// Allow an existing directory, overwriting virtual environment files while retaining other
+    /// files in the directory.
+    Allow,
+    /// Remove an existing directory.
+    Remove,
 }
 
-impl VenvCreationPolicy {
+impl OnExisting {
     pub fn from_args(allow_existing: bool, clear: bool) -> Self {
         if allow_existing {
-            VenvCreationPolicy::OverwriteFiles
+            OnExisting::Allow
         } else if clear {
-            VenvCreationPolicy::RemoveDirectory
+            OnExisting::Remove
         } else {
-            VenvCreationPolicy::default()
+            OnExisting::default()
         }
     }
 }

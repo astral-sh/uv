@@ -6,7 +6,7 @@ use thiserror::Error;
 use uv_configuration::PreviewMode;
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use virtualenv::VenvCreationPolicy;
+pub use virtualenv::OnExisting;
 
 mod virtualenv;
 
@@ -52,7 +52,7 @@ pub fn create_venv(
     interpreter: Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    venv_creation_policy: VenvCreationPolicy,
+    on_existing: OnExisting,
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
@@ -64,7 +64,7 @@ pub fn create_venv(
         &interpreter,
         prompt,
         system_site_packages,
-        venv_creation_policy,
+        on_existing,
         relocatable,
         seed,
         upgradeable,
