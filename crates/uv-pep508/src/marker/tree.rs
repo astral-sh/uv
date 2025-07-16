@@ -3717,8 +3717,8 @@ mod test {
     #[test]
     fn torch_variant_marker() {
         let env37 = env37();
-        let gpu_namespaces = [("nvidia".to_string(), "ctk".to_string(), "12.6".to_string())];
-        let gpu_namespaces2 = [
+        let cu126 = [("nvidia".to_string(), "ctk".to_string(), "12.6".to_string())];
+        let cu126_2 = [
             ("nvidia".to_string(), "ctk".to_string(), "12.6".to_string()),
             (
                 "nvidia".to_string(),
@@ -3726,13 +3726,15 @@ mod test {
                 ">=12.6,<13".to_string(),
             ),
         ];
+        let cu128 = [("nvidia".to_string(), "ctk".to_string(), "12.8".to_string())];
 
         let marker = m(
             " platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.6' in variant_properties",
         );
 
         assert!(marker.evaluate(&env37, None, &[]));
-        assert!(marker.evaluate(&env37, Some(&gpu_namespaces), &[]));
-        assert!(marker.evaluate(&env37, Some(&gpu_namespaces2), &[]));
+        assert!(marker.evaluate(&env37, Some(&cu126), &[]));
+        assert!(marker.evaluate(&env37, Some(&cu126_2), &[]));
+        assert!(!marker.evaluate(&env37, Some(&cu128), &[]));
     }
 }
