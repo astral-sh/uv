@@ -534,7 +534,7 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
 
-    /// Used for trusted publishing via `uv publish`.
+    /// Used to detect if running in GitHub Actions, e.g., for trusted publishing via `uv publish`.
     pub const GITHUB_ACTIONS: &'static str = "GITHUB_ACTIONS";
 
     /// Used for trusted publishing via `uv publish`. Contains the oidc token url.

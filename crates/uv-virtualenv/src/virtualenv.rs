@@ -19,7 +19,7 @@ use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_ci_once, warn_user_once};
 
 use crate::{Error, Prompt};
 
@@ -134,6 +134,9 @@ pub(crate) fn create(
                                 "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
                                 location.user_display(),
                                 "--clear".green(),
+                            );
+                            warn_ci_once!(
+                                "`uv venv` replaced an existing {name}; this behavior is deprecated. In the future, uv will require `--clear` or `UV_VENV_CLEAR=1` to replace an existing {name}.",
                             );
                         }
                     }

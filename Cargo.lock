@@ -6010,6 +6010,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-shell",
+ "uv-static",
  "uv-version",
  "uv-warnings",
 ]
@@ -6021,6 +6022,7 @@ dependencies = [
  "anstream",
  "owo-colors",
  "rustc-hash",
+ "uv-static",
 ]
 
 [[package]]

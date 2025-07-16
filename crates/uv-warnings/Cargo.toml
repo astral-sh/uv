@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-static = { workspace = true }
+
 anstream = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
