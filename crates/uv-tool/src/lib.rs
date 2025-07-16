@@ -5,7 +5,7 @@ use uv_configuration::PreviewMode;
 use uv_dirs::user_executable_directory;
 use uv_pep440::Version;
 use uv_pep508::{InvalidNameError, PackageName};
-use uv_virtualenv::VenvCreationPolicy;
+use uv_virtualenv::OnExisting;
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -286,7 +286,7 @@ impl InstalledTools {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
-            VenvCreationPolicy::RemoveDirectory,
+            OnExisting::Remove,
             false,
             false,
             false,
