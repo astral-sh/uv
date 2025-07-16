@@ -654,6 +654,89 @@ jobs:
             ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uvx.exe
           retention-days: 1
 
+  build-binary-windows-aarch64:
+    needs: determine_changes
+    timeout-minutes: 30
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on:
+      labels: github-windows-11-aarch64-4
+    name: "build binary | windows aarch64"
+    steps:
+      - name: Download LLVM (aarch64)
+        uses: robinraju/release-downloader@v1
+        with:
+          repository: "llvm/llvm-project"
+          tag: "llvmorg-19.1.5"
+          filename: "LLVM-19.1.5-woa64.exe"
+
+      - name: Install LLVM (aarch64)
+        run: |
+          Start-Process -FilePath "LLVM-19.1.5-woa64.exe" -ArgumentList '/S' -NoNewWindow -Wait
+
+      - name: Cache VS Build Tools Packages
+        id: cache-vs-build-tools
+        uses: actions/cache@v3
+        with:
+          path: |
+            C:\ProgramData\Microsoft\VisualStudio\Packages
+            C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+          key: vs-build-tools-${{ runner.os }}-aarch64
+
+      - name: Install Build Tools (aarch64)
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin" -Encoding utf8
+          choco install visualstudio2022buildtools -y --no-progress --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang --add Microsoft.VisualStudio.Component.VC.CMake.Project"
+
+      - name: Add clang to PATH and check if clang exists
+        run: |
+          $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin" -Encoding utf8
+          clang --version
+
+      - name: Add cmake to PATH and check if cmake exists
+        run: |
+          $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin" -Encoding utf8
+          cmake --version
+
+      - name: Install Nightly Rust (aarch64)
+        run: |
+          Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE\.cargo\bin" -Encoding utf8
+          Invoke-WebRequest -Uri "https://win.rustup.rs/aarch64" -OutFile "$env:RUNNER_TEMP\rustup-init.exe"
+          & "$env:RUNNER_TEMP\rustup-init.exe" --default-host aarch64-pc-windows-msvc --default-toolchain nightly -y
+
+      - name: Download Git for Windows (aarch64)
+        uses: robinraju/release-downloader@v1
+        with:
+          repository: "git-for-windows/git"
+          tag: "v2.48.0-rc1.windows.1"
+          filename: "Git-2.48.0-rc1-arm64.exe"
+
+      - name: Install Git for Windows (aarch64)
+        run: |
+          Start-Process -FilePath "Git-2.48.0-rc1-arm64.exe" -ArgumentList "/VERYSILENT" -NoNewWindow -Wait
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files\Git\cmd" -Encoding utf8
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files\Git\bin" -Encoding utf8
+
+      - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v1"
+
+      - name: "Build"
+        run: $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"; $env:Path += ";C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\"; cargo build --target aarch64-pc-windows-msvc
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
+          path: target/aarch64-pc-windows-msvc/debug/uv.exe
+          retention-days: 1
+
   cargo-build-msrv:
     name: "cargo build (msrv)"
     needs: determine_changes
