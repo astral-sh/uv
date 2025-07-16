@@ -264,8 +264,13 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
 
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        self.marker.evaluate(env, None, extras)
+    pub fn evaluate_markers(
+        &self,
+        env: &MarkerEnvironment,
+        variants: Option<&[(String, String, String)]>,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.marker.evaluate(env, variants, extras)
     }
 
     /// Return the requirement with an additional marker added, to require the given extra.

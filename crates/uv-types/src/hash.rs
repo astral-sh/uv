@@ -180,9 +180,11 @@ impl HashStrategy {
         // package.
         let mut requirement_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
         for (requirement, digests) in requirements {
-            if !requirement
-                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
-            {
+            if !requirement.evaluate_markers(
+                marker_env.map(ResolverMarkerEnvironment::markers),
+                None,
+                &[],
+            ) {
                 continue;
             }
 

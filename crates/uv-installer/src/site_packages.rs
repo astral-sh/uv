@@ -243,7 +243,7 @@ impl SitePackages {
 
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(markers, &[]) {
+                    if !dependency.evaluate_markers(markers, None, &[]) {
                         continue;
                     }
 
@@ -423,6 +423,7 @@ impl SitePackages {
                     }
                 }
             } else {
+                // TODO(konsti): Evaluate variants
                 if requirement.evaluate_markers(Some(markers), None, &[]) {
                     if seen.insert(requirement.clone()) {
                         stack.push(Cow::Borrowed(requirement));
