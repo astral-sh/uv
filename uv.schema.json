@@ -215,7 +215,7 @@
       ]
     },
     "extra-build-dependencies": {
-      "description": "Additional build dependencies for dependencies.\n\nThis is intended for enabling more packages to be built with build-isolation, by adding dependencies that they ambiently assume to exist (`setuptools` and `pip` being common).",
+      "description": "Additional build dependencies for dependencies.\n\nThis is intended for enabling more packages to be built with\nbuild-isolation, by adding dependencies that they ambiently\nassume to exist (`setuptools` and `pip` being common).",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvExtraBuildDependencies"
@@ -1299,7 +1299,7 @@
           }
         },
         "extra-build-dependencies": {
-          "description": "Additional build dependencies for dependencies.\n\nThis is intended for enabling more packages to be built with build-isolation, by adding dependencies that they ambiently assume to exist (`setuptools` and `pip` being common).",
+          "description": "Additional build dependencies for dependencies.\n\nThis is intended for enabling more packages to be built with\nbuild-isolation, by adding dependencies that they ambiently\nassume to exist (`setuptools` and `pip` being common).",
           "type": [
             "object",
             "null"
