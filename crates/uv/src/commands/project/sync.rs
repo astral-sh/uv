@@ -117,7 +117,7 @@ pub(crate) async fn sync(
         // TODO(lucab): improve warning content
         // <https://github.com/astral-sh/uv/issues/7428>
         if project.workspace().pyproject_toml().has_scripts()
-            && !project.workspace().pyproject_toml().is_package()
+            && !project.workspace().pyproject_toml().is_package(true)
         {
             warn_user!(
                 "Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`"

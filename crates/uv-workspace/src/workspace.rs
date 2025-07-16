@@ -312,7 +312,7 @@ impl Workspace {
                 extras: Box::new([]),
                 groups: Box::new([]),
                 marker: MarkerTree::TRUE,
-                source: if member.is_package(false) {
+                source: if member.pyproject_toml().is_package(true) {
                     RequirementSource::Directory {
                         install_path: member.root.clone().into_boxed_path(),
                         editable: Some(true),
@@ -368,7 +368,7 @@ impl Workspace {
                 extras: Box::new([]),
                 groups: groups.into_boxed_slice(),
                 marker: MarkerTree::TRUE,
-                source: if member.is_package(false) {
+                source: if member.pyproject_toml().is_package(true) {
                     RequirementSource::Directory {
                         install_path: member.root.clone().into_boxed_path(),
                         editable: Some(true),
@@ -965,24 +965,6 @@ impl WorkspaceMember {
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         &self.pyproject_toml
-    }
-
-    /// Whether the workspace member is a package, or should be treated as virtual.
-    ///
-    /// Unlike [`PyProjectToml::is_package`], this method considers the workspace member a package
-    /// if it is a _dependency_ even if it does not have a build system definition.
-    pub fn is_package(&self, is_dependency: bool) -> bool {
-        if let Some(is_package) = self
-            .pyproject_toml()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.package)
-        {
-            return is_package;
-        }
-
-        self.pyproject_toml().build_system.is_some() || is_dependency
     }
 }
 

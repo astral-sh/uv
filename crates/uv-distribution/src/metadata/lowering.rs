@@ -306,7 +306,9 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member.is_package(true) {
+                            // We don't require a build system, because the workspace member is a
+                            // dependency
+                            } else if member.pyproject_toml().is_package(false) {
                                 RequirementSource::Directory {
                                     install_path: install_path.into_boxed_path(),
                                     url,
@@ -736,7 +738,8 @@ fn path_source(
                 fs_err::read_to_string(&pyproject_path)
                     .ok()
                     .and_then(|contents| PyProjectToml::from_string(contents).ok())
-                    .and_then(|pyproject_toml| pyproject_toml.tool_uv_package())
+                    // We don't require a build system for path dependencies
+                    .map(|pyproject_toml| pyproject_toml.is_package(false))
                     .unwrap_or(true)
             });
 

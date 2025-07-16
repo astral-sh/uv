@@ -1730,7 +1730,8 @@ impl Lock {
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
             let is_dependency = seen.iter().any(|package_id| &package_id.name == name);
-            let expected = !member.is_package(is_dependency);
+            // We don't require a build system, if the workspace member is a dependency
+            let expected = !member.pyproject_toml().is_package(!is_dependency);
             let actual = self
                 .find_by_name(name)
                 .ok()
