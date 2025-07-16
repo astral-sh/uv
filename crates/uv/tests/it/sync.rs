@@ -306,7 +306,7 @@ fn sync_json() -> Result<()> {
         "environment": {
           "path": "[VENV]/",
           "python": {
-            "path": "[VENV]/[BIN]/python",
+            "path": "[VENV]/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -350,7 +350,7 @@ fn sync_json() -> Result<()> {
         "environment": {
           "path": "[VENV]/",
           "python": {
-            "path": "[VENV]/[BIN]/python",
+            "path": "[VENV]/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -389,7 +389,7 @@ fn sync_json() -> Result<()> {
         "environment": {
           "path": "[VENV]/",
           "python": {
-            "path": "[VENV]/[BIN]/python",
+            "path": "[VENV]/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -475,7 +475,7 @@ fn sync_dry_json() -> Result<()> {
         "environment": {
           "path": "[VENV]/",
           "python": {
-            "path": "[VENV]/[BIN]/python",
+            "path": "[VENV]/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -4884,14 +4884,10 @@ fn sync_active_script_environment_json() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain(vec![
-            (
-                r"environments-v2/script-[a-z0-9]+",
-                "environments-v2/script-[HASH]",
-            ),
-            ("bin/python3", "[PYTHON]"),
-            ("Scripts/python.exe", "[PYTHON]"),
-        ])
+        .chain(vec![(
+            r"environments-v2/script-[a-z0-9]+",
+            "environments-v2/script-[HASH]",
+        )])
         .collect::<Vec<_>>();
 
     // Running `uv sync --script` with `VIRTUAL_ENV` should warn
@@ -4914,7 +4910,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[CACHE_DIR]/environments-v2/script-[HASH]",
           "python": {
-            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/python",
+            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/[PYTHON]",
             "version": "3.11.[X]",
             "implementation": "cpython"
           }
@@ -4960,7 +4956,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[TEMP_DIR]/foo",
           "python": {
-            "path": "[TEMP_DIR]/foo/[BIN]/python",
+            "path": "[TEMP_DIR]/foo/[BIN]/[PYTHON]",
             "version": "3.11.[X]",
             "implementation": "cpython"
           }
@@ -5019,7 +5015,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         "environment": {
           "path": "[TEMP_DIR]/foo",
           "python": {
-            "path": "[TEMP_DIR]/foo/[BIN]/python",
+            "path": "[TEMP_DIR]/foo/[BIN]/[PYTHON]",
             "version": "3.12.[X]",
             "implementation": "cpython"
           }
@@ -6558,7 +6554,7 @@ fn sync_invalid_environment() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/python -> python
+        warning: Ignoring existing virtual environment linked to non-existent Python interpreter: .venv/[BIN]/[PYTHON] -> python
         Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
         Removed virtual environment at: .venv
         Creating virtual environment at: .venv

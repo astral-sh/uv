@@ -1499,10 +1499,10 @@ fn python_install_patch_dylib() {
 fn python_install_314() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
         .with_managed_python_dirs()
+        .with_filtered_python_install_bin()
         .with_filtered_python_names()
-        .with_filtered_python_install_bin();
+        .with_filtered_exe_suffix();
 
     // Install 3.14
     // For now, this provides test coverage of pre-release handling
@@ -1533,7 +1533,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1543,7 +1543,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1552,7 +1552,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1572,7 +1572,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");

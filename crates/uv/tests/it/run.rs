@@ -2851,11 +2851,11 @@ fn run_no_project() -> Result<()> {
     init.touch()?;
 
     // `run` should run in the context of the project.
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -2865,50 +2865,50 @@ fn run_no_project() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // `run --no-project --isolated` should run in an entirely isolated environment.
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
+    [CACHE_DIR]/builds-v0/[TMP]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
     // if there were no project at all).
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     // `run --no-project --locked` should fail.
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--locked").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
     warning: `--locked` has no effect when used alongside `--no-project`
-    "###);
+    ");
 
     Ok(())
 }
@@ -3092,14 +3092,14 @@ fn run_project_toml_error() -> Result<()> {
     "###);
 
     // `run --no-project` should not
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/[BIN]/python
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -3691,7 +3691,7 @@ fn run_linked_environment_path() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/target
-    [TEMP_DIR]/target/[BIN]/python
+    [TEMP_DIR]/target/[BIN]/[PYTHON]
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
@@ -3705,7 +3705,7 @@ fn run_linked_environment_path() -> Result<()> {
     }, {
         assert_snapshot!(
             black_entrypoint, @r##"
-        #![TEMP_DIR]/target/[BIN]/python
+        #![TEMP_DIR]/target/[BIN]/[PYTHON]
         # -*- coding: utf-8 -*-
         import sys
         from black import patched_main

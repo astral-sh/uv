@@ -210,12 +210,14 @@ impl TestContext {
     pub fn with_filtered_python_names(mut self) -> Self {
         if cfg!(windows) {
             self.filters
-                .push((r"python\.exe".to_string(), "python".to_string()));
+                .push((r"python\.exe".to_string(), "[PYTHON]".to_string()));
         } else {
             self.filters
-                .push((r"python\d.\d\d".to_string(), "python".to_string()));
+                .push((r"python\d.\d\d".to_string(), "[PYTHON]".to_string()));
             self.filters
-                .push((r"python\d".to_string(), "python".to_string()));
+                .push((r"python\d".to_string(), "[PYTHON]".to_string()));
+            self.filters
+                .push((r"/python".to_string(), "/[PYTHON]".to_string()));
         }
         self
     }
@@ -224,6 +226,13 @@ impl TestContext {
     /// `Scripts` on Windows and `bin` on Unix.
     #[must_use]
     pub fn with_filtered_virtualenv_bin(mut self) -> Self {
+        self.filters.push((
+            format!(
+                r"[\\/]{}[\\/]",
+                venv_bin_path(PathBuf::new()).to_string_lossy()
+            ),
+            "/[BIN]/".to_string(),
+        ));
         self.filters.push((
             format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
             "/[BIN]".to_string(),
