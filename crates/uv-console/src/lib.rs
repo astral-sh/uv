@@ -82,7 +82,11 @@ fn confirm_inner(
             .cyan(),
     );
 
-    term.clear_line()?;
+    if hint.is_some() {
+        term.clear_last_lines(2)?;
+    } else {
+        term.clear_line()?;
+    }
     term.write_line(&report)?;
     term.show_cursor()?;
     term.flush()?;
