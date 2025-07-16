@@ -109,7 +109,7 @@ pub(crate) fn create(
                 OnExisting::Fail => {
                     match confirm_clear(location, name)? {
                         Some(true) => {
-                            debug!("Removing existing {name}");
+                            debug!("Removing existing {name} due to confirmation");
                             remove_venv_directory(location)?;
                         }
                         Some(false) => {
