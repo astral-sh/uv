@@ -18,6 +18,8 @@ pub enum AcceleratorError {
     ParseInt(#[from] std::num::ParseIntError),
     #[error("Unknown AMD GPU architecture: {0}")]
     UnknownAmdGpuArchitecture(String),
+    #[error("The output of `nvidia-smi` is empty or malformed")]
+    EmptyNvidiaSmiOutput,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -126,7 +128,8 @@ impl Accelerator {
             .output()
         {
             if output.status.success() {
-                let driver_version = Version::from_str(&String::from_utf8(output.stdout)?)?;
+                let content = String::from_utf8(output.stdout)?;
+                let driver_version = parse_nvidia_smi_version(&content)?;
                 debug!("Detected CUDA driver version from `nvidia-smi`: {driver_version}");
                 return Ok(Some(Self::Cuda { driver_version }));
             }
@@ -191,6 +194,24 @@ impl Accelerator {
 
         Ok(None)
     }
+}
+
+/// Parse the CUDA driver version from the content of `nvidia-smi --query-gpu=driver_version --format=csv,noheader`.
+fn parse_nvidia_smi_version(content: &str) -> Result<Version, AcceleratorError> {
+    // Parse, e.g.:
+    // ```text
+    // 550.144.03
+    // 550.119.08
+    // ```
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let driver_version = Version::from_str(line)?;
+        return Ok(driver_version);
+    }
+    Err(AcceleratorError::EmptyNvidiaSmiOutput)
 }
 
 /// Parse the CUDA driver version from the content of `/sys/module/nvidia/version`.
@@ -293,6 +314,18 @@ impl std::fmt::Display for AmdGpuArchitecture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nvidia_smi_version() {
+        let content = "375.74";
+        let result = parse_nvidia_smi_version(content).unwrap();
+        assert_eq!(result, Version::from_str("375.74").unwrap());
+
+        let content = r"572.60
+572.60";
+        let result = parse_nvidia_smi_version(content).unwrap();
+        assert_eq!(result, Version::from_str("572.60").unwrap());
+    }
 
     #[test]
     fn proc_driver_nvidia_version() {
