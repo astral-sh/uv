@@ -79,61 +79,67 @@ pub(crate) fn create(
 
     // Validate the existing location.
     match location.metadata() {
-        Ok(metadata) => {
-            if metadata.is_file() {
-                return Err(Error::Io(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!("File exists at `{}`", location.user_display()),
-                )));
-            } else if metadata.is_dir() {
-                match venv_creation_policy {
-                    VenvCreationPolicy::OverwriteFiles => {
-                        debug!("Allowing existing directory due to `--allow-existing`");
-                    }
-                    VenvCreationPolicy::RemoveDirectory => {
-                        debug!("Removing existing directory due to `--clear`");
-                        remove_venv_directory(location)?;
-                    }
-                    VenvCreationPolicy::FailIfNotEmpty
-                        if location
-                            .read_dir()
-                            .is_ok_and(|mut dir| dir.next().is_none()) =>
-                    {
-                        debug!("Ignoring empty directory");
-                    }
-                    VenvCreationPolicy::FailIfNotEmpty => {
-                        let name = if uv_fs::is_virtualenv_base(location) {
-                            "virtual environment"
+        Ok(metadata) if metadata.is_file() => {
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("File exists at `{}`", location.user_display()),
+            )));
+        }
+        Ok(metadata) if metadata.is_dir() => {
+            match venv_creation_policy {
+                VenvCreationPolicy::OverwriteFiles => {
+                    debug!("Allowing existing directory due to `--allow-existing`");
+                }
+                VenvCreationPolicy::RemoveDirectory => {
+                    debug!("Removing existing directory due to `--clear`");
+                    remove_venv_directory(location)?;
+                }
+                VenvCreationPolicy::FailIfNotEmpty
+                    if location
+                        .read_dir()
+                        .is_ok_and(|mut dir| dir.next().is_none()) =>
+                {
+                    debug!("Ignoring empty directory");
+                }
+                VenvCreationPolicy::FailIfNotEmpty => {
+                    let name = if uv_fs::is_virtualenv_base(location) {
+                        "virtual environment"
+                    } else {
+                        "directory"
+                    };
+                    if Term::stderr().is_term() {
+                        if confirm_clear(location)? {
+                            debug!("Removing existing {name}");
+                            remove_venv_directory(location)?;
                         } else {
-                            "directory"
-                        };
-                        if Term::stderr().is_term() {
-                            if confirm_clear(location)? {
-                                debug!("Removing existing {name}");
-                                remove_venv_directory(location)?;
-                            } else {
-                                return Err(Error::Io(io::Error::new(
-                                    io::ErrorKind::AlreadyExists,
-                                    format!(
-                                        "A {name} already exists at: {}\n\n{}{} Use `{}` to remove the directory first",
-                                        location.user_display(),
-                                        "hint".bold().cyan(),
-                                        ":".bold(),
-                                        "--clear".green(),
-                                    ),
-                                )));
-                            }
-                        } else {
-                            // If this is not a tty, warn for now.
-                            warn_user_once!(
-                                "A {name} already exists at `{}`. In the future, uv will require `{}` to remove the directory first",
-                                location.user_display(),
-                                "--clear".green(),
-                            );
+                            return Err(Error::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "A {name} already exists at: {}\n\n{}{} Use `{}` to remove the directory first",
+                                    location.user_display(),
+                                    "hint".bold().cyan(),
+                                    ":".bold(),
+                                    "--clear".green(),
+                                ),
+                            )));
                         }
+                    } else {
+                        // If this is not a tty, warn for now.
+                        warn_user_once!(
+                            "A {name} already exists at `{}`. In the future, uv will require `{}` to remove the directory first",
+                            location.user_display(),
+                            "--clear".green(),
+                        );
                     }
                 }
             }
+        }
+        Ok(_) => {
+            // It's not a file or a directory
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("Object already exists at `{}`", location.user_display()),
+            )));
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             fs::create_dir_all(location)?;
