@@ -211,7 +211,7 @@ async fn do_uninstall(
     }
 
     #[cfg(windows)]
-    if preview.is_enabled() {
+    {
         uv_python::windows_registry::remove_registry_entry(
             &matching_installations,
             all,

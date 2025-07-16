@@ -501,7 +501,7 @@ pub(crate) async fn install(
             );
         }
 
-        if preview.is_enabled() && !matches!(registry, Some(false)) {
+        if !matches!(registry, Some(false)) {
             #[cfg(windows)]
             {
                 match uv_python::windows_registry::create_registry_entry(installation) {
