@@ -29,12 +29,12 @@ pub use version_ranges::{
 };
 pub use {
     version::{
-        LocalSegment, LocalVersion, LocalVersionSlice, MIN_VERSION, Operator, OperatorParseError,
-        Prerelease, PrereleaseKind, Version, VersionParseError, VersionPattern,
+        BumpCommand, LocalSegment, LocalVersion, LocalVersionSlice, MIN_VERSION, Operator,
+        OperatorParseError, Prerelease, PrereleaseKind, Version, VersionParseError, VersionPattern,
         VersionPatternParseError,
     },
     version_specifier::{
-        VersionSpecifier, VersionSpecifierBuildError, VersionSpecifiers,
+        TildeVersionSpecifier, VersionSpecifier, VersionSpecifierBuildError, VersionSpecifiers,
         VersionSpecifiersParseError,
     },
 };

@@ -16,6 +16,7 @@
 
 #![warn(missing_docs)]
 
+#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};

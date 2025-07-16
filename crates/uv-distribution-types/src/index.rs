@@ -6,10 +6,22 @@ use thiserror::Error;
 
 use uv_auth::{AuthPolicy, Credentials};
 use uv_redacted::DisplaySafeUrl;
+use uv_small_str::SmallString;
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
 use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
+
+/// Cache control configuration for an index.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub struct IndexCacheControl {
+    /// Cache control header for Simple API requests.
+    pub api: Option<SmallString>,
+    /// Cache control header for file downloads.
+    pub files: Option<SmallString>,
+}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -104,6 +116,19 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub ignore_error_codes: Option<Vec<SerializableStatusCode>>,
+    /// Cache control configuration for this index.
+    ///
+    /// When set, these headers will override the server's cache control headers
+    /// for both package metadata requests and artifact downloads.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// cache-control = { api = "max-age=600", files = "max-age=3600" }
+    /// ```
+    #[serde(default)]
+    pub cache_control: Option<IndexCacheControl>,
 }
 
 #[derive(
@@ -142,6 +167,7 @@ impl Index {
             publish_url: None,
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
+            cache_control: None,
         }
     }
 
@@ -157,6 +183,7 @@ impl Index {
             publish_url: None,
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
+            cache_control: None,
         }
     }
 
@@ -172,6 +199,7 @@ impl Index {
             publish_url: None,
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
+            cache_control: None,
         }
     }
 
@@ -250,6 +278,7 @@ impl From<IndexUrl> for Index {
             publish_url: None,
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
+            cache_control: None,
         }
     }
 }
@@ -273,6 +302,7 @@ impl FromStr for Index {
                     publish_url: None,
                     authenticate: AuthPolicy::default(),
                     ignore_error_codes: None,
+                    cache_control: None,
                 });
             }
         }
@@ -289,6 +319,7 @@ impl FromStr for Index {
             publish_url: None,
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
+            cache_control: None,
         })
     }
 }
@@ -383,4 +414,56 @@ pub enum IndexSourceError {
     IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_index_cache_control_headers() {
+        // Test that cache control headers are properly parsed from TOML
+        let toml_str = r#"
+            name = "test-index"
+            url = "https://test.example.com/simple"
+            cache-control = { api = "max-age=600", files = "max-age=3600" }
+        "#;
+
+        let index: Index = toml::from_str(toml_str).unwrap();
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "test-index");
+        assert!(index.cache_control.is_some());
+        let cache_control = index.cache_control.as_ref().unwrap();
+        assert_eq!(cache_control.api.as_deref(), Some("max-age=600"));
+        assert_eq!(cache_control.files.as_deref(), Some("max-age=3600"));
+    }
+
+    #[test]
+    fn test_index_without_cache_control() {
+        // Test that indexes work without cache control headers
+        let toml_str = r#"
+            name = "test-index"
+            url = "https://test.example.com/simple"
+        "#;
+
+        let index: Index = toml::from_str(toml_str).unwrap();
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "test-index");
+        assert_eq!(index.cache_control, None);
+    }
+
+    #[test]
+    fn test_index_partial_cache_control() {
+        // Test that cache control can have just one field
+        let toml_str = r#"
+            name = "test-index"
+            url = "https://test.example.com/simple"
+            cache-control = { api = "max-age=300" }
+        "#;
+
+        let index: Index = toml::from_str(toml_str).unwrap();
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "test-index");
+        assert!(index.cache_control.is_some());
+        let cache_control = index.cache_control.as_ref().unwrap();
+        assert_eq!(cache_control.api.as_deref(), Some("max-age=300"));
+        assert_eq!(cache_control.files, None);
+    }
 }

@@ -3,6 +3,7 @@ use std::{env, io};
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use http::StatusCode;
 use serde_json::json;
+use uv_static::EnvVars;
 use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -48,7 +49,9 @@ async fn simple_http_500() {
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
-        .arg(&mock_server_uri), @r"
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -72,7 +75,9 @@ async fn simple_io_err() {
         .pip_install()
         .arg("tqdm")
         .arg("--index-url")
-        .arg(&mock_server_uri), @r"
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -99,7 +104,9 @@ async fn find_links_http_500() {
         .arg("tqdm")
         .arg("--no-index")
         .arg("--find-links")
-        .arg(&mock_server_uri), @r"
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -125,7 +132,9 @@ async fn find_links_io_error() {
         .arg("tqdm")
         .arg("--no-index")
         .arg("--find-links")
-        .arg(&mock_server_uri), @r"
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -154,7 +163,9 @@ async fn direct_url_http_500() {
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context
         .pip_install()
-        .arg(format!("tqdm @ {tqdm_url}")), @r"
+        .arg(format!("tqdm @ {tqdm_url}"))
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -180,7 +191,9 @@ async fn direct_url_io_error() {
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context
         .pip_install()
-        .arg(format!("tqdm @ {tqdm_url}")), @r"
+        .arg(format!("tqdm @ {tqdm_url}"))
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -239,7 +252,9 @@ async fn python_install_http_500() {
         .python_install()
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
-        .arg(python_downloads_json.path()), @r"
+        .arg(python_downloads_json.path())
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -269,7 +284,9 @@ async fn python_install_io_error() {
         .python_install()
         .arg("cpython-3.10.0-darwin-aarch64-none")
         .arg("--python-downloads-json-url")
-        .arg(python_downloads_json.path()), @r"
+        .arg(python_downloads_json.path())
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
     success: false
     exit_code: 1
     ----- stdout -----

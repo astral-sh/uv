@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pubgrub::{
     DefaultStringReporter, DerivationTree, Derived, External, Range, Ranges, Reporter, Term,
@@ -17,6 +18,8 @@ use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 use uv_pep440::{LocalVersionSlice, LowerBound, Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::Tags;
+use uv_pypi_types::ParsedUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
@@ -56,11 +59,14 @@ pub enum ResolveError {
         } else {
             format!(" in {env}")
         },
-        urls.join("\n- "),
+        urls.iter()
+            .map(|url| format!("{}{}", DisplaySafeUrl::from(url.clone()), if url.is_editable() { " (editable)" } else { "" }))
+            .collect::<Vec<_>>()
+            .join("\n- ")
     )]
     ConflictingUrls {
         package_name: PackageName,
-        urls: Vec<String>,
+        urls: Vec<ParsedUrl>,
         env: ResolverEnvironment,
     },
 
@@ -71,11 +77,14 @@ pub enum ResolveError {
         } else {
             format!(" in {env}")
         },
-        indexes.join("\n- "),
+        indexes.iter()
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n- ")
     )]
     ConflictingIndexesForEnvironment {
         package_name: PackageName,
-        indexes: Vec<String>,
+        indexes: Vec<IndexUrl>,
         env: ResolverEnvironment,
     },
 
@@ -148,7 +157,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
     }
 }
 
-pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
+pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
 
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 pub struct NoSolutionError {
@@ -359,6 +368,11 @@ impl NoSolutionError {
         NoSolutionHeader::new(self.env.clone())
     }
 
+    /// Get the conflict derivation tree for external analysis
+    pub fn derivation_tree(&self) -> &ErrorTree {
+        &self.error
+    }
+
     /// Hint at limiting the resolver environment if universal resolution failed for a target
     /// that is not the current platform or not the current Python version.
     fn hint_disjoint_targets(&self, f: &mut Formatter) -> std::fmt::Result {
@@ -395,6 +409,15 @@ impl NoSolutionError {
             )?;
         }
         Ok(())
+    }
+
+    /// Get the packages that are involved in this error.
+    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
+        self.error
+            .packages()
+            .into_iter()
+            .filter_map(|p| p.name())
+            .unique()
     }
 }
 

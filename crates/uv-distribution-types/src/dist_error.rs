@@ -131,11 +131,11 @@ impl DerivationChain {
                         ));
                         let target = edge.source();
                         let extra = match edge.weight() {
-                            Edge::Optional(extra, ..) => Some(extra.clone()),
+                            Edge::Optional(extra) => Some(extra.clone()),
                             _ => None,
                         };
                         let group = match edge.weight() {
-                            Edge::Dev(group, ..) => Some(group.clone()),
+                            Edge::Dev(group) => Some(group.clone()),
                             _ => None,
                         };
                         queue.push_back((target, extra, group, path));

@@ -1,6 +1,5 @@
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerTree;
 use uv_pypi_types::{HashDigest, HashDigests};
 
 use crate::{
@@ -202,12 +201,12 @@ impl Node {
     }
 }
 
-/// An edge in the resolution graph, along with the marker that must be satisfied to traverse it.
+/// An edge in the resolution graph.
 #[derive(Debug, Clone)]
 pub enum Edge {
-    Prod(MarkerTree),
-    Optional(ExtraName, MarkerTree),
-    Dev(GroupName, MarkerTree),
+    Prod,
+    Optional(ExtraName),
+    Dev(GroupName),
 }
 
 impl From<&ResolvedDist> for RequirementSource {

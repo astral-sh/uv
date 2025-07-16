@@ -170,7 +170,12 @@ impl FilesystemOptions {
 
     /// Load a [`FilesystemOptions`] from a `uv.toml` file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, Error> {
-        Ok(Self(read_file(path.as_ref())?))
+        let path = path.as_ref();
+        tracing::debug!("Reading user configuration from: `{}`", path.display());
+
+        let options = read_file(path)?;
+        validate_uv_toml(path, &options)?;
+        Ok(Self(options))
     }
 }
 

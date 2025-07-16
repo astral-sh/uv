@@ -1478,11 +1478,9 @@ impl Lock {
             if let Source::Registry(index) = &package.id.source {
                 match index {
                     RegistrySource::Url(url) => {
-                        // Normalize URL before validating.
-                        let url = url.without_trailing_slash();
                         if remotes
                             .as_ref()
-                            .is_some_and(|remotes| !remotes.contains(&url))
+                            .is_some_and(|remotes| !remotes.contains(url))
                         {
                             let name = &package.id.name;
                             let version = &package
@@ -1490,11 +1488,7 @@ impl Lock {
                                 .version
                                 .as_ref()
                                 .expect("version for registry source");
-                            return Ok(SatisfiesResult::MissingRemoteIndex(
-                                name,
-                                version,
-                                url.into_owned(),
-                            ));
+                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
                         }
                     }
                     RegistrySource::Path(path) => {
@@ -1799,7 +1793,7 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile is missing a workspace member.
     MissingRoot(PackageName),
     /// The lockfile referenced a remote index that was not provided
-    MissingRemoteIndex(&'lock PackageName, &'lock Version, UrlString),
+    MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.

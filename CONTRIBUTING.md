@@ -165,6 +165,13 @@ After making changes to the documentation, format the markdown files with:
 npx prettier --prose-wrap always --write "**/*.md"
 ```
 
+Note that the command above requires Node.js and npm to be installed on your system. As an
+alternative, you can run this command using Docker:
+
+```console
+$ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --prose-wrap always --write "**/*.md"
+```
+
 ## Releases
 
 Releases can only be performed by Astral team members.

@@ -38,22 +38,13 @@ impl IndexUrl {
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
-    ///
-    /// Normalizes non-file URLs by removing trailing slashes for consistency.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
         let url = match split_scheme(path) {
             Some((scheme, ..)) => {
                 match Scheme::parse(scheme) {
-                    Some(scheme) => {
-                        if scheme.is_file() {
-                            // Ex) `file:///path/to/something/`
-                            VerbatimUrl::parse_url(path)?
-                        } else {
-                            // Ex) `https://pypi.org/simple/`
-                            // Remove a trailing slash if it exists.
-                            let normalized_path = path.strip_suffix('/').unwrap_or(path);
-                            VerbatimUrl::parse_url(normalized_path)?
-                        }
+                    Some(_) => {
+                        // Ex) `https://pypi.org/simple`
+                        VerbatimUrl::parse_url(path)?
                     }
                     None => {
                         // Ex) `C:\Users\user\index`
@@ -462,6 +453,19 @@ impl<'a> IndexLocations {
             indexes
         }
     }
+
+    /// Add all authenticated sources to the cache.
+    pub fn cache_index_credentials(&self) {
+        for index in self.allowed_indexes() {
+            if let Some(credentials) = index.credentials() {
+                let credentials = Arc::new(credentials);
+                uv_auth::store_credentials(index.raw_url(), credentials.clone());
+                if let Some(root_url) = index.root_url() {
+                    uv_auth::store_credentials(&root_url, credentials.clone());
+                }
+            }
+        }
+    }
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
@@ -595,6 +599,26 @@ impl<'a> IndexUrls {
         }
         IndexStatusCodeStrategy::Default
     }
+
+    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.cache_control.as_ref()?.api.as_deref();
+            }
+        }
+        None
+    }
+
+    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.cache_control.as_ref()?.files.as_deref();
+            }
+        }
+        None
+    }
 }
 
 bitflags::bitflags! {
@@ -712,5 +736,65 @@ mod tests {
         assert!(is_disambiguated_path(
             "git+https://github.com/example/repo.git"
         ));
+    }
+
+    #[test]
+    fn test_cache_control_lookup() {
+        use std::str::FromStr;
+
+        use uv_small_str::SmallString;
+
+        use crate::IndexFormat;
+        use crate::index_name::IndexName;
+
+        let indexes = vec![
+            Index {
+                name: Some(IndexName::from_str("index1").unwrap()),
+                url: IndexUrl::from_str("https://index1.example.com/simple").unwrap(),
+                cache_control: Some(crate::IndexCacheControl {
+                    api: Some(SmallString::from("max-age=300")),
+                    files: Some(SmallString::from("max-age=1800")),
+                }),
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: uv_auth::AuthPolicy::default(),
+                ignore_error_codes: None,
+            },
+            Index {
+                name: Some(IndexName::from_str("index2").unwrap()),
+                url: IndexUrl::from_str("https://index2.example.com/simple").unwrap(),
+                cache_control: None,
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: uv_auth::AuthPolicy::default(),
+                ignore_error_codes: None,
+            },
+        ];
+
+        let index_urls = IndexUrls::from_indexes(indexes);
+
+        let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
+        assert_eq!(
+            index_urls.simple_api_cache_control_for(&url1),
+            Some("max-age=300")
+        );
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&url1),
+            Some("max-age=1800")
+        );
+
+        let url2 = IndexUrl::from_str("https://index2.example.com/simple").unwrap();
+        assert_eq!(index_urls.simple_api_cache_control_for(&url2), None);
+        assert_eq!(index_urls.artifact_cache_control_for(&url2), None);
+
+        let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
+        assert_eq!(index_urls.simple_api_cache_control_for(&url3), None);
+        assert_eq!(index_urls.artifact_cache_control_for(&url3), None);
     }
 }

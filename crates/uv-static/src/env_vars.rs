@@ -154,6 +154,10 @@ impl EnvVars {
     /// `--no-python-downloads` option. Whether uv should allow Python downloads.
     pub const UV_PYTHON_DOWNLOADS: &'static str = "UV_PYTHON_DOWNLOADS";
 
+    /// Overrides the environment-determined libc on linux systems when filling in the current platform
+    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
+    pub const UV_LIBC: &'static str = "UV_LIBC";
+
     /// Equivalent to the `--compile-bytecode` command-line argument. If set, uv
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
@@ -401,6 +405,9 @@ impl EnvVars {
 
     /// Timeout (in seconds) for HTTP requests. (default: 30 s)
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
+
+    /// The number of retries for HTTP requests. (default: 3)
+    pub const UV_HTTP_RETRIES: &'static str = "UV_HTTP_RETRIES";
 
     /// Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
     pub const UV_REQUEST_TIMEOUT: &'static str = "UV_REQUEST_TIMEOUT";
@@ -658,6 +665,9 @@ impl EnvVars {
     /// Used to set the vendor links url for tests.
     #[attr_hidden]
     pub const UV_TEST_VENDOR_LINKS_URL: &'static str = "UV_TEST_VENDOR_LINKS_URL";
+
+    /// Used to disable delay for HTTP retries in tests.
+    pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
 
     /// Used to set an index url for tests.
     #[attr_hidden]

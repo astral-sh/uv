@@ -40,6 +40,7 @@ use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
 
+use crate::child::run_to_completion;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
@@ -49,13 +50,12 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceSource, ProjectEnvironment, ProjectError,
+    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
     ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_specification, update_environment,
     validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::run::run_to_completion;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
@@ -240,7 +240,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .await?
             .into_environment()?;
 
-            let _lock = environment.lock().await?;
+            let _lock = environment
+                .lock()
+                .await
+                .inspect_err(|err| {
+                    warn!("Failed to acquire environment lock: {err}");
+                })
+                .ok();
 
             // Determine the lock mode.
             let mode = if frozen {
@@ -299,6 +305,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 editable,
                 install_options,
                 modifications,
+                None,
                 (&settings).into(),
                 &network_settings,
                 &sync_state,
@@ -386,7 +393,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         )
                     });
 
-                let _lock = environment.lock().await?;
+                let _lock = environment
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
 
                 match update_environment(
                     environment,
@@ -605,6 +618,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
                 let client_builder = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -699,7 +713,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
-                let _lock = venv.lock().await?;
+                let _lock = venv
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
 
                 // Determine the lock mode.
                 let mode = if frozen {
@@ -798,6 +818,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     editable,
                     install_options,
                     modifications,
+                    None,
                     (&settings).into(),
                     &network_settings,
                     &sync_state,
@@ -839,6 +860,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -909,6 +931,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         None
     } else {
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -940,10 +963,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let spec = EnvironmentSpecification::from(spec).with_preferences(
                 if let Some((lock, install_path)) = base_lock.as_ref() {
                     // If we have a lockfile, use the locked versions as preferences.
-                    PreferenceSource::Lock { lock, install_path }
+                    PreferenceLocation::Lock { lock, install_path }
                 } else {
                     // Otherwise, extract preferences from the base environment.
-                    PreferenceSource::Entries(
+                    PreferenceLocation::Entries(
                         base_site_packages
                             .iter()
                             .filter_map(Preference::from_installed)
@@ -1506,6 +1529,7 @@ impl RunCommand {
                     .tempfile()?;
 
                 let client = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone())

@@ -103,14 +103,6 @@ pub(crate) async fn refine_interpreter(
         return Ok(None);
     }
 
-    // If the user passed a `--python` request, and the refined interpreter is incompatible, we
-    // can't use it.
-    if let Some(python_request) = python_request {
-        if !python_request.satisfied(interpreter, cache) {
-            return Ok(None);
-        }
-    }
-
     // We want an interpreter that's as close to the required version as possible. If we choose the
     // "latest" Python, we risk choosing a version that lacks wheels for the tool's requirements
     // (assuming those requirements don't publish source distributions).
@@ -140,15 +132,15 @@ pub(crate) async fn refine_interpreter(
         Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
     };
 
-    let python_request = PythonRequest::Version(VersionRequest::Range(
+    let requires_python_request = PythonRequest::Version(VersionRequest::Range(
         VersionSpecifiers::from_iter([lower_bound, upper_bound]),
         PythonVariant::default(),
     ));
 
-    debug!("Refining interpreter with: {python_request}");
+    debug!("Refining interpreter with: {requires_python_request}");
 
     let interpreter = PythonInstallation::find_or_download(
-        Some(&python_request),
+        Some(&requires_python_request),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -162,6 +154,14 @@ pub(crate) async fn refine_interpreter(
     )
     .await?
     .into_interpreter();
+
+    // If the user passed a `--python` request, and the refined interpreter is incompatible, we
+    // can't use it.
+    if let Some(python_request) = python_request {
+        if !python_request.satisfied(&interpreter, cache) {
+            return Ok(None);
+        }
+    }
 
     Ok(Some(interpreter))
 }
@@ -234,14 +234,14 @@ pub(crate) fn finalize_tool_install(
         if target_entrypoints.is_empty() {
             writeln!(
                 printer.stdout(),
-                "No executables are provided by `{}`",
+                "No executables are provided by package `{}`; removing tool `{name}`",
                 package.cyan()
             )?;
 
             hint_executable_from_dependency(&package, &site_packages, printer)?;
 
             // Clean up the environment we just created.
-            installed_tools.remove_environment(&package)?;
+            installed_tools.remove_environment(&name)?;
 
             return Err(anyhow::anyhow!(
                 "Failed to install entrypoints for `{}`",
@@ -380,7 +380,9 @@ fn hint_executable_from_dependency(
             let command = format!("uv tool install {}", package.name());
             writeln!(
                 printer.stdout(),
-                "However, an executable with the name `{}` is available via dependency `{}`.\nDid you mean `{}`?",
+                "{}{} An executable with the name `{}` is available via dependency `{}`.\n      Did you mean `{}`?",
+                "hint".bold().cyan(),
+                ":".bold(),
                 name.cyan(),
                 package.name().cyan(),
                 command.bold(),
@@ -389,7 +391,9 @@ fn hint_executable_from_dependency(
         packages => {
             writeln!(
                 printer.stdout(),
-                "However, an executable with the name `{}` is available via the following dependencies::",
+                "{}{} An executable with the name `{}` is available via the following dependencies::",
+                "hint".bold().cyan(),
+                ":".bold(),
                 name.cyan(),
             )?;
 
@@ -398,7 +402,7 @@ fn hint_executable_from_dependency(
             }
             writeln!(
                 printer.stdout(),
-                "Did you mean to install one of them instead?"
+                "      Did you mean to install one of them instead?"
             )?;
         }
     }

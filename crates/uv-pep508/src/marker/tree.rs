@@ -2271,13 +2271,13 @@ mod test {
     #[test]
     fn test_marker_simplification() {
         assert_false("python_version == '3.9.1'");
-        assert_false("python_version == '3.9.0.*'");
         assert_true("python_version != '3.9.1'");
 
-        // Technically these is are valid substring comparison, but we do not allow them.
-        // e.g., using a version with patch components with `python_version` is considered
-        // impossible to satisfy since the value it is truncated at the minor version
-        assert_false("python_version in '3.9.0'");
+        // This is an edge case that happens to be supported, but is not critical to support.
+        assert_simplifies(
+            "python_version in '3.9.0'",
+            "python_full_version == '3.9.*'",
+        );
         // e.g., using a version that is not PEP 440 compliant is considered arbitrary
         assert_true("python_version in 'foo'");
         // e.g., including `*` versions, which would require tracking a version specifier
@@ -2287,15 +2287,24 @@ mod test {
         assert_true("python_version in '3.9,3.10'");
         assert_true("python_version in '3.9 or 3.10'");
 
-        // e.g, when one of the values cannot be true
-        // TODO(zanieb): This seems like a quirk of the `python_full_version` normalization, this
-        // should just act as though the patch version isn't present
-        assert_false("python_version in '3.9 3.10.0 3.11'");
+        // This is an edge case that happens to be supported, but is not critical to support.
+        assert_simplifies(
+            "python_version in '3.9 3.10.0 3.11'",
+            "python_full_version >= '3.9' and python_full_version < '3.12'",
+        );
 
         assert_simplifies("python_version == '3.9'", "python_full_version == '3.9.*'");
         assert_simplifies(
             "python_version == '3.9.0'",
             "python_full_version == '3.9.*'",
+        );
+        assert_simplifies(
+            "python_version == '3.9.0.*'",
+            "python_full_version == '3.9.*'",
+        );
+        assert_simplifies(
+            "python_version == '3.*'",
+            "python_full_version >= '3' and python_full_version < '4'",
         );
 
         // `<version> in`
@@ -2525,6 +2534,68 @@ mod test {
             r#"(extra != "bar" and (extra == "foo" or extra == "baz"))
             or ((extra != "foo" and extra != "bar") and extra == "baz")"#,
             "(extra != 'bar' and extra == 'baz') or (extra != 'bar' and extra == 'foo')",
+        );
+    }
+
+    #[test]
+    fn test_python_version_equal_star() {
+        // Input, equivalent with python_version, equivalent with python_full_version
+        let cases = [
+            ("3.*", "3.*", "3.*"),
+            ("3.0.*", "3.0", "3.0.*"),
+            ("3.0.0.*", "3.0", "3.0.*"),
+            ("3.9.*", "3.9", "3.9.*"),
+            ("3.9.0.*", "3.9", "3.9.*"),
+            ("3.9.0.0.*", "3.9", "3.9.*"),
+        ];
+        for (input, equal_python_version, equal_python_full_version) in cases {
+            assert_eq!(
+                m(&format!("python_version == '{input}'")),
+                m(&format!("python_version == '{equal_python_version}'")),
+                "{input} {equal_python_version}"
+            );
+            assert_eq!(
+                m(&format!("python_version == '{input}'")),
+                m(&format!(
+                    "python_full_version == '{equal_python_full_version}'"
+                )),
+                "{input} {equal_python_full_version}"
+            );
+        }
+
+        let cases_false = ["3.9.1.*", "3.9.1.0.*", "3.9.1.0.0.*"];
+        for input in cases_false {
+            assert!(
+                m(&format!("python_version == '{input}'")).is_false(),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tilde_equal_normalization() {
+        assert_eq!(
+            m("python_version ~= '3.10.0'"),
+            m("python_version >= '3.10.0' and python_version < '3.11.0'")
+        );
+
+        // Two digit versions such as `python_version` get padded with a zero, so they can never
+        // match
+        assert_eq!(m("python_version ~= '3.10.1'"), MarkerTree::FALSE);
+
+        assert_eq!(
+            m("python_version ~= '3.10'"),
+            m("python_version >= '3.10' and python_version < '4.0'")
+        );
+
+        assert_eq!(
+            m("python_full_version ~= '3.10.0'"),
+            m("python_full_version >= '3.10.0' and python_full_version < '3.11.0'")
+        );
+
+        assert_eq!(
+            m("python_full_version ~= '3.10'"),
+            m("python_full_version >= '3.10' and python_full_version < '4.0'")
         );
     }
 
@@ -3323,5 +3394,33 @@ mod test {
                 ),
             ]
         );
+    }
+
+    /// Case a: There is no version `3` (no trailing zero) in the interner yet.
+    #[test]
+    fn marker_normalization_a() {
+        let left_tree = m("python_version == '3.0.*'");
+        let left = left_tree.try_to_string().unwrap();
+        let right = "python_full_version == '3.0.*'";
+        assert_eq!(left, right, "{left} != {right}");
+    }
+
+    /// Case b: There is already a version `3` (no trailing zero) in the interner.
+    #[test]
+    fn marker_normalization_b() {
+        m("python_version >= '3' and python_version <= '3.0'");
+
+        let left_tree = m("python_version == '3.0.*'");
+        let left = left_tree.try_to_string().unwrap();
+        let right = "python_full_version == '3.0.*'";
+        assert_eq!(left, right, "{left} != {right}");
+    }
+
+    #[test]
+    fn marker_normalization_c() {
+        let left_tree = MarkerTree::from_str("python_version == '3.10.0.*'").unwrap();
+        let left = left_tree.try_to_string().unwrap();
+        let right = "python_full_version == '3.10.*'";
+        assert_eq!(left, right, "{left} != {right}");
     }
 }

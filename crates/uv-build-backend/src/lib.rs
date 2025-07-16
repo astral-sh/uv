@@ -22,6 +22,7 @@ use uv_normalize::PackageName;
 use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
+use crate::settings::ModuleName;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -184,7 +185,7 @@ fn check_metadata_directory(
     Ok(())
 }
 
-/// Returns the source root and the module path with the `__init__.py[i]`  below to it while
+/// Returns the source root and the module path(s) with the `__init__.py[i]`  below to it while
 /// checking the project layout and names.
 ///
 /// Some target platforms have case-sensitive filesystems, while others have case-insensitive
@@ -198,13 +199,15 @@ fn check_metadata_directory(
 /// dist-info-normalization, the rules are lowercasing, replacing `.` with `_` and
 /// replace `-` with `_`. Since `.` and `-` are not allowed in identifiers, we can use a string
 /// comparison with the module name.
+///
+/// While we recommend one module per package, it is possible to declare a list of modules.
 fn find_roots(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     relative_module_root: &Path,
-    module_name: Option<&str>,
+    module_name: Option<&ModuleName>,
     namespace: bool,
-) -> Result<(PathBuf, PathBuf), Error> {
+) -> Result<(PathBuf, Vec<PathBuf>), Error> {
     let relative_module_root = uv_fs::normalize_path(relative_module_root);
     let src_root = source_tree.join(&relative_module_root);
     if !src_root.starts_with(source_tree) {
@@ -215,22 +218,45 @@ fn find_roots(
 
     if namespace {
         // `namespace = true` disables module structure checks.
-        let module_relative = if let Some(module_name) = module_name {
-            module_name.split('.').collect::<PathBuf>()
+        let modules_relative = if let Some(module_name) = module_name {
+            match module_name {
+                ModuleName::Name(name) => {
+                    vec![name.split('.').collect::<PathBuf>()]
+                }
+                ModuleName::Names(names) => names
+                    .iter()
+                    .map(|name| name.split('.').collect::<PathBuf>())
+                    .collect(),
+            }
         } else {
-            PathBuf::from(pyproject_toml.name().as_dist_info_name().to_string())
+            vec![PathBuf::from(
+                pyproject_toml.name().as_dist_info_name().to_string(),
+            )]
         };
-        debug!("Namespace module path: {}", module_relative.user_display());
-        return Ok((src_root, module_relative));
+        for module_relative in &modules_relative {
+            debug!("Namespace module path: {}", module_relative.user_display());
+        }
+        return Ok((src_root, modules_relative));
     }
 
-    let module_relative = if let Some(module_name) = module_name {
-        module_path_from_module_name(&src_root, module_name)?
+    let modules_relative = if let Some(module_name) = module_name {
+        match module_name {
+            ModuleName::Name(name) => vec![module_path_from_module_name(&src_root, name)?],
+            ModuleName::Names(names) => names
+                .iter()
+                .map(|name| module_path_from_module_name(&src_root, name))
+                .collect::<Result<_, _>>()?,
+        }
     } else {
-        find_module_path_from_package_name(&src_root, pyproject_toml.name())?
+        vec![find_module_path_from_package_name(
+            &src_root,
+            pyproject_toml.name(),
+        )?]
     };
-    debug!("Module path: {}", module_relative.user_display());
-    Ok((src_root, module_relative))
+    for module_relative in &modules_relative {
+        debug!("Module path: {}", module_relative.user_display());
+    }
+    Ok((src_root, modules_relative))
 }
 
 /// Infer stubs packages from package name alone.
@@ -408,6 +434,15 @@ mod tests {
             wheel_filename,
             wheel_contents,
         })
+    }
+
+    fn build_err(source_root: &Path) -> String {
+        let dist = TempDir::new().unwrap();
+        let build_err = build(source_root, dist.path()).unwrap_err();
+        let err_message: String = format_err(&build_err)
+            .replace(&source_root.user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        err_message
     }
 
     fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
@@ -998,13 +1033,8 @@ mod tests {
         fs_err::create_dir_all(src.path().join("src").join("simple_namespace").join("part"))
             .unwrap();
 
-        let dist = TempDir::new().unwrap();
-        let build_err = build(src.path(), dist.path()).unwrap_err();
-        let err_message = format_err(&build_err)
-            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
-            .replace('\\', "/");
         assert_snapshot!(
-            err_message,
+            build_err(src.path()),
             @"Expected a Python module at: `[TEMP_PATH]/src/simple_namespace/part/__init__.py`"
         );
 
@@ -1025,16 +1055,13 @@ mod tests {
             .join("simple_namespace")
             .join("__init__.py");
         File::create(&bogus_init_py).unwrap();
-        let build_err = build(src.path(), dist.path()).unwrap_err();
-        let err_message = format_err(&build_err)
-            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
-            .replace('\\', "/");
         assert_snapshot!(
-            err_message,
+            build_err(src.path()),
             @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: `[TEMP_PATH]/src/simple_namespace`"
         );
         fs_err::remove_file(bogus_init_py).unwrap();
 
+        let dist = TempDir::new().unwrap();
         let build1 = build(src.path(), dist.path()).unwrap();
         assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
         simple_namespace_part-1.0.0/
@@ -1207,6 +1234,119 @@ mod tests {
         cloud_db_schema_stubs-1.0.0.dist-info/METADATA
         cloud_db_schema_stubs-1.0.0.dist-info/RECORD
         cloud_db_schema_stubs-1.0.0.dist-info/WHEEL
+        ");
+    }
+
+    /// A package with multiple modules, one a regular module and two namespace modules.
+    #[test]
+    fn multiple_module_names() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "simple-namespace-part"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = ["foo", "simple_namespace.part_a", "simple_namespace.part_b"]
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("foo")).unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("simple_namespace")
+                .join("part_a"),
+        )
+        .unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("simple_namespace")
+                .join("part_b"),
+        )
+        .unwrap();
+
+        // Most of these checks exist in other tests too, but we want to ensure that they apply
+        // with multiple modules too.
+
+        // The first module is missing an `__init__.py`.
+        assert_snapshot!(
+            build_err(src.path()),
+            @"Expected a Python module at: `[TEMP_PATH]/src/foo/__init__.py`"
+        );
+
+        // Create the first correct `__init__.py` file
+        File::create(src.path().join("src").join("foo").join("__init__.py")).unwrap();
+
+        // The second module, a namespace, is missing an `__init__.py`.
+        assert_snapshot!(
+            build_err(src.path()),
+            @"Expected a Python module at: `[TEMP_PATH]/src/simple_namespace/part_a/__init__.py`"
+        );
+
+        // Create the other two correct `__init__.py` files
+        File::create(
+            src.path()
+                .join("src")
+                .join("simple_namespace")
+                .join("part_a")
+                .join("__init__.py"),
+        )
+        .unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("simple_namespace")
+                .join("part_b")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        // For the second module, a namespace, there must not be an `__init__.py` here.
+        let bogus_init_py = src
+            .path()
+            .join("src")
+            .join("simple_namespace")
+            .join("__init__.py");
+        File::create(&bogus_init_py).unwrap();
+        assert_snapshot!(
+            build_err(src.path()),
+            @"For namespace packages, `__init__.py[i]` is not allowed in parent directory: `[TEMP_PATH]/src/simple_namespace`"
+        );
+        fs_err::remove_file(bogus_init_py).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build.source_dist_contents.join("\n"), @r"
+        simple_namespace_part-1.0.0/
+        simple_namespace_part-1.0.0/PKG-INFO
+        simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/src
+        simple_namespace_part-1.0.0/src/foo
+        simple_namespace_part-1.0.0/src/foo/__init__.py
+        simple_namespace_part-1.0.0/src/simple_namespace
+        simple_namespace_part-1.0.0/src/simple_namespace/part_a
+        simple_namespace_part-1.0.0/src/simple_namespace/part_a/__init__.py
+        simple_namespace_part-1.0.0/src/simple_namespace/part_b
+        simple_namespace_part-1.0.0/src/simple_namespace/part_b/__init__.py
+        ");
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        foo/
+        foo/__init__.py
+        simple_namespace/
+        simple_namespace/part_a/
+        simple_namespace/part_a/__init__.py
+        simple_namespace/part_b/
+        simple_namespace/part_b/__init__.py
+        simple_namespace_part-1.0.0.dist-info/
+        simple_namespace_part-1.0.0.dist-info/METADATA
+        simple_namespace_part-1.0.0.dist-info/RECORD
+        simple_namespace_part-1.0.0.dist-info/WHEEL
         ");
     }
 }

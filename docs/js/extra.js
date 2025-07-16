@@ -78,6 +78,8 @@ document$.subscribe(function () {
     "concepts/projects/#building-projects": "concepts/projects/build/",
     "concepts/projects/#build-isolation":
       "concepts/projects/config/#build-isolation",
+    "concepts/projects/dependencies/#dependency-specifiers-pep-508":
+      "concepts/projects/dependencies/#dependency-specifiers",
   };
 
   // The prefix for the site, see `site_dir` in `mkdocs.yml`

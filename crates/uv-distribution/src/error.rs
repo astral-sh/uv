@@ -25,8 +25,6 @@ pub enum Error {
     RelativePath(PathBuf),
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
-    #[error(transparent)]
-    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(DisplaySafeUrl),
     #[error(transparent)]
@@ -108,6 +106,8 @@ pub enum Error {
     CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]
     RequiresPython(VersionSpecifiers, Version),
+    #[error("Failed to identify base Python interpreter")]
+    BaseInterpreter(#[source] std::io::Error),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.

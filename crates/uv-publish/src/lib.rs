@@ -758,6 +758,14 @@ impl FormMetadata {
     }
 }
 
+impl<'a> IntoIterator for &'a FormMetadata {
+    type Item = &'a (&'a str, String);
+    type IntoIter = std::slice::Iter<'a, (&'a str, String)>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 /// Build the upload request.
 ///
 /// Returns the request and the reporter progress bar id.

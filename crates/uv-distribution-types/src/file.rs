@@ -57,10 +57,7 @@ impl File {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: match split_scheme(&file.url) {
-                Some(..) => FileLocation::AbsoluteUrl(UrlString::new(file.url)),
-                None => FileLocation::RelativeUrl(base.clone(), file.url),
-            },
+            url: FileLocation::new(file.url, base),
             yanked: file.yanked,
         })
     }
@@ -77,6 +74,17 @@ pub enum FileLocation {
 }
 
 impl FileLocation {
+    /// Parse a relative or absolute URL on a page with a base URL.
+    ///
+    /// This follows the HTML semantics where a link on a page is resolved relative to the URL of
+    /// that page.
+    pub fn new(url: SmallString, base: &SmallString) -> Self {
+        match split_scheme(&url) {
+            Some(..) => FileLocation::AbsoluteUrl(UrlString::new(url)),
+            None => FileLocation::RelativeUrl(base.clone(), url),
+        }
+    }
+
     /// Convert this location to a URL.
     ///
     /// A relative URL has its base joined to the path. An absolute URL is
@@ -169,15 +177,6 @@ impl UrlString {
             .map(|(path, _)| Cow::Owned(UrlString(SmallString::from(path))))
             .unwrap_or(Cow::Borrowed(self))
     }
-
-    /// Return the [`UrlString`] (as a [`Cow`]) with trailing slash removed.
-    #[must_use]
-    pub fn without_trailing_slash(&self) -> Cow<'_, Self> {
-        self.as_ref()
-            .strip_suffix('/')
-            .map(|path| Cow::Owned(UrlString(SmallString::from(path))))
-            .unwrap_or(Cow::Borrowed(self))
-    }
 }
 
 impl AsRef<str> for UrlString {
@@ -261,27 +260,15 @@ mod tests {
     fn without_fragment() {
         // Borrows a URL without a fragment
         let url = UrlString("https://example.com/path".into());
-        assert_eq!(url.without_fragment(), Cow::Borrowed(&url));
+        assert_eq!(&*url.without_fragment(), &url);
+        assert!(matches!(url.without_fragment(), Cow::Borrowed(_)));
 
         // Removes the fragment if present on the URL
         let url = UrlString("https://example.com/path?query#fragment".into());
         assert_eq!(
-            url.without_fragment(),
-            Cow::Owned(UrlString("https://example.com/path?query".into()))
+            &*url.without_fragment(),
+            &UrlString("https://example.com/path?query".into())
         );
-    }
-
-    #[test]
-    fn without_trailing_slash() {
-        // Borrows a URL without a slash
-        let url = UrlString("https://example.com/path".into());
-        assert_eq!(url.without_trailing_slash(), Cow::Borrowed(&url));
-
-        // Removes the trailing slash if present on the URL
-        let url = UrlString("https://example.com/path/".into());
-        assert_eq!(
-            url.without_trailing_slash(),
-            Cow::Owned(UrlString("https://example.com/path".into()))
-        );
+        assert!(matches!(url.without_fragment(), Cow::Owned(_)));
     }
 }

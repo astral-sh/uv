@@ -1,6 +1,7 @@
 ---
 source: crates/uv-requirements-txt/src/lib.rs
 expression: actual
+snapshot_kind: text
 ---
 RequirementsTxt {
     requirements: [
@@ -23,7 +24,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: python_full_version >= '3.8' and python_full_version < '4.0',
+                    marker: python_full_version >= '3.8' and python_full_version < '4',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
@@ -54,7 +55,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: python_full_version >= '3.8' and python_full_version < '4.0',
+                    marker: python_full_version >= '3.8' and python_full_version < '4',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
@@ -85,7 +86,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: python_full_version >= '3.8' and python_full_version < '4.0' and sys_platform == 'win32',
+                    marker: python_full_version >= '3.8' and python_full_version < '4' and sys_platform == 'win32',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
@@ -116,7 +117,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: python_full_version >= '3.8' and python_full_version < '4.0',
+                    marker: python_full_version >= '3.8' and python_full_version < '4',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",
@@ -148,7 +149,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: python_full_version >= '3.8' and python_full_version < '4.0',
+                    marker: python_full_version >= '3.8' and python_full_version < '4',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",

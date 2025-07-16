@@ -267,7 +267,7 @@ fn invalid_toml_filename() -> Result<()> {
 }
 
 #[test]
-fn invalid_uv_toml_option_disallowed() -> Result<()> {
+fn invalid_uv_toml_option_disallowed_automatic_discovery() -> Result<()> {
     let context = TestContext::new("3.12");
     let uv_toml = context.temp_dir.child("uv.toml");
     uv_toml.write_str(indoc! {r"
@@ -283,6 +283,30 @@ fn invalid_uv_toml_option_disallowed() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_uv_toml_option_disallowed_command_line() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let uv_toml = context.temp_dir.child("foo.toml");
+    uv_toml.write_str(indoc! {r"
+        managed = true
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig")
+        .arg("--config-file")
+        .arg("foo.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `foo.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+    "
     );
 
     Ok(())
@@ -342,10 +366,7 @@ dependencies = ["flask==1.0.x"]
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("./path_dep")?;
 
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: false
@@ -500,6 +521,66 @@ fn install_package() {
     );
 
     context.assert_command("import flask").success();
+}
+
+#[tokio::test]
+async fn install_http_retries() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Create a server that always fails, so we can see the number of retries used
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `UV_HTTP_RETRIES`
+      Caused by: invalid digit found in string
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "999999999999"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `UV_HTTP_RETRIES`
+      Caused by: number too large to fit in target type
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "5")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Request failed after 5 retries
+      Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
+    "
+    );
 }
 
 /// Install a package from a `requirements.txt` into a virtual environment.
@@ -1515,16 +1596,16 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/black_editable"))
         .arg("--constraint")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `black`:
-    - [WORKSPACE]/scripts/packages/black_editable
+    - file://[WORKSPACE]/scripts/packages/black_editable (editable)
     - https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
-    "###
+    "
     );
 
     Ok(())
@@ -2111,7 +2192,9 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
-        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env_remove(EnvVars::UV_HTTP_RETRIES), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4930,10 +5013,7 @@ fn no_build_isolation() -> Result<()> {
     requirements_in.write_str("anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz")?;
 
     // We expect the build to fail, because `setuptools` is not installed.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-build-isolation"), @r###"
@@ -5001,10 +5081,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     requirements_in.write_str("anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz")?;
 
     // We expect the build to fail, because `setuptools` is not installed.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
         .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
@@ -8601,10 +8678,7 @@ fn install_build_isolation_package() -> Result<()> {
     )?;
 
     // Running `uv pip install` should fail for iniconfig.
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
         .arg(package.path()), @r###"
@@ -8931,10 +9005,7 @@ fn missing_top_level() {
 fn sklearn() {
     let context = TestContext::new("3.12");
 
-    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("sklearn"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8984,10 +9055,7 @@ fn resolve_derivation_chain() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_install()
@@ -11483,6 +11551,135 @@ fn pep_751_dependency() -> Result<()> {
      + sniffio==1.3.1
     "
     );
+
+    Ok(())
+}
+
+/// Test that we show an error instead of panicking for conflicting arguments in different levels,
+/// which are not caught by clap.
+#[test]
+fn conflicting_flags_clap_bug() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.command()
+        .arg("pip")
+        .arg("--offline")
+        .arg("install")
+        .arg("--no-offline")
+        .arg("tqdm"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--offline` and `--no-offline` cannot be used together. Boolean flags on different levels are currently not supported (https://github.com/clap-rs/clap/issues/6049)
+    "
+    );
+}
+
+/// Test that shebang arguments are stripped when installing scripts
+#[test]
+#[cfg(unix)]
+fn strip_shebang_arguments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project_dir = context.temp_dir.child("shebang_test");
+    project_dir.create_dir_all()?;
+
+    // Create a package with scripts that have shebang arguments.
+    let pyproject_toml = project_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "shebang-test"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["setuptools>=61.0"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools]
+        packages = ["shebang_test"]
+        
+        [tool.setuptools.data-files]
+        "scripts" = ["scripts/custom_script", "scripts/custom_gui_script"]
+    "#})?;
+
+    // Create the package directory.
+    let package_dir = project_dir.child("shebang_test");
+    package_dir.create_dir_all()?;
+
+    // Create an `__init__.py` file in the package directory.
+    let init_file = package_dir.child("__init__.py");
+    init_file.touch()?;
+
+    // Create scripts directory with scripts that have shebangs with arguments
+    let scripts_dir = project_dir.child("scripts");
+    scripts_dir.create_dir_all()?;
+
+    let script_with_args = scripts_dir.child("custom_script");
+    script_with_args.write_str(indoc! {r#"
+        #!python -E -s
+        # This is a test script with shebang arguments
+        import sys
+        print(f"Hello from {sys.executable}")
+        print(f"Arguments: {sys.argv}")
+    "#})?;
+
+    let gui_script_with_args = scripts_dir.child("custom_gui_script");
+    gui_script_with_args.write_str(indoc! {r#"
+        #!pythonw -E
+        # This is a test GUI script with shebang arguments
+        import sys
+        print(f"Hello from GUI script: {sys.executable}")
+    "#})?;
+
+    // Create a `setup.py` that explicitly handles scripts.
+    let setup_py = project_dir.child("setup.py");
+    setup_py.write_str(indoc! {r"
+        from setuptools import setup
+        setup(scripts=['scripts/custom_script', 'scripts/custom_gui_script'])
+    "})?;
+
+    // Install the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg(project_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + shebang-test==0.1.0 (from file://[TEMP_DIR]/shebang_test)
+    "###);
+
+    // Check the installed scripts have their shebangs stripped of arguments.
+    let custom_script_path = venv_bin_path(&context.venv).join("custom_script");
+    let script_content = fs::read_to_string(&custom_script_path)?;
+
+    insta::with_settings!({filters => context.filters()
+    }, {
+        insta::assert_snapshot!(script_content, @r#"
+        #![VENV]/bin/python3
+        # This is a test script with shebang arguments
+        import sys
+        print(f"Hello from {sys.executable}")
+        print(f"Arguments: {sys.argv}")
+        "#);
+    });
+
+    let custom_gui_script_path = venv_bin_path(&context.venv).join("custom_gui_script");
+    let gui_script_content = fs::read_to_string(&custom_gui_script_path)?;
+
+    insta::with_settings!({filters => context.filters()
+    }, {
+        insta::assert_snapshot!(gui_script_content, @r#"
+        #![VENV]/bin/python3
+        # This is a test GUI script with shebang arguments
+        import sys
+        print(f"Hello from GUI script: {sys.executable}")
+        "#);
+    });
 
     Ok(())
 }

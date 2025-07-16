@@ -18,6 +18,8 @@ use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
+use crate::BuildArena;
+
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
 /// To resolve the dependencies of a packages, we may need to build one or more source
@@ -66,6 +68,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return a reference to the build arena.
+    fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
 
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
@@ -180,12 +185,12 @@ pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
 pub struct EmptyInstalledPackages;
 
 impl InstalledPackagesProvider for EmptyInstalledPackages {
-    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
-        Vec::new()
-    }
-
     fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         std::iter::empty()
+    }
+
+    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
+        Vec::new()
     }
 }
 

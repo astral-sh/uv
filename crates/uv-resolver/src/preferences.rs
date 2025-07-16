@@ -34,6 +34,8 @@ pub struct Preference {
     /// is part of, otherwise `None`.
     fork_markers: Vec<UniversalMarker>,
     hashes: HashDigests,
+    /// The source of the preference.
+    source: PreferenceSource,
 }
 
 impl Preference {
@@ -73,6 +75,7 @@ impl Preference {
                 .map(String::as_str)
                 .map(HashDigest::from_str)
                 .collect::<Result<_, _>>()?,
+            source: PreferenceSource::RequirementsTxt,
         }))
     }
 
@@ -91,6 +94,7 @@ impl Preference {
             index: PreferenceIndex::from(package.index(install_path)?),
             fork_markers: package.fork_markers().to_vec(),
             hashes: HashDigests::empty(),
+            source: PreferenceSource::Lock,
         }))
     }
 
@@ -112,6 +116,7 @@ impl Preference {
             // `pylock.toml` doesn't have fork annotations.
             fork_markers: vec![],
             hashes: HashDigests::empty(),
+            source: PreferenceSource::Lock,
         }))
     }
 
@@ -127,6 +132,7 @@ impl Preference {
             index: PreferenceIndex::Any,
             fork_markers: vec![],
             hashes: HashDigests::empty(),
+            source: PreferenceSource::Environment,
         })
     }
 
@@ -171,11 +177,24 @@ impl From<Option<IndexUrl>> for PreferenceIndex {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PreferenceSource {
+    /// The preference is from an installed package in the environment.
+    Environment,
+    /// The preference is from a `uv.ock` file.
+    Lock,
+    /// The preference is from a `requirements.txt` file.
+    RequirementsTxt,
+    /// The preference is from the current solve.
+    Resolver,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Entry {
     marker: UniversalMarker,
     index: PreferenceIndex,
     pin: Pin,
+    source: PreferenceSource,
 }
 
 impl Entry {
@@ -192,6 +211,11 @@ impl Entry {
     /// Return the pinned data associated with the entry.
     pub(crate) fn pin(&self) -> &Pin {
         &self.pin
+    }
+
+    /// Return the source of the entry.
+    pub(crate) fn source(&self) -> PreferenceSource {
+        self.source
     }
 }
 
@@ -245,6 +269,7 @@ impl Preferences {
                         version: preference.version,
                         hashes: preference.hashes,
                     },
+                    source: preference.source,
                 });
             } else {
                 for fork_marker in preference.fork_markers {
@@ -255,6 +280,7 @@ impl Preferences {
                             version: preference.version.clone(),
                             hashes: preference.hashes.clone(),
                         },
+                        source: preference.source,
                     });
                 }
             }
@@ -270,11 +296,13 @@ impl Preferences {
         index: Option<IndexUrl>,
         markers: UniversalMarker,
         pin: impl Into<Pin>,
+        source: PreferenceSource,
     ) {
         self.0.entry(package_name).or_default().push(Entry {
             marker: markers,
             index: PreferenceIndex::from(index),
             pin: pin.into(),
+            source,
         });
     }
 

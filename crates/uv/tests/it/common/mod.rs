@@ -66,7 +66,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"uv\.exe", "uv"),
     // uv version display
     (
-        r"uv(-.*)? \d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
+        r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
@@ -195,6 +195,12 @@ impl TestContext {
             "managed installations, search path, or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
+        self.filters.push((
+            "registry or search path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters
+            .push(("search path".to_string(), "[PYTHON SOURCES]".to_string()));
         self
     }
 
@@ -204,12 +210,14 @@ impl TestContext {
     pub fn with_filtered_python_names(mut self) -> Self {
         if cfg!(windows) {
             self.filters
-                .push(("python.exe".to_string(), "python".to_string()));
+                .push((r"python\.exe".to_string(), "[PYTHON]".to_string()));
         } else {
             self.filters
-                .push((r"python\d.\d\d".to_string(), "python".to_string()));
+                .push((r"python\d.\d\d".to_string(), "[PYTHON]".to_string()));
             self.filters
-                .push((r"python\d".to_string(), "python".to_string()));
+                .push((r"python\d".to_string(), "[PYTHON]".to_string()));
+            self.filters
+                .push((r"/python".to_string(), "/[PYTHON]".to_string()));
         }
         self
     }
@@ -218,6 +226,13 @@ impl TestContext {
     /// `Scripts` on Windows and `bin` on Unix.
     #[must_use]
     pub fn with_filtered_virtualenv_bin(mut self) -> Self {
+        self.filters.push((
+            format!(
+                r"[\\/]{}[\\/]",
+                venv_bin_path(PathBuf::new()).to_string_lossy()
+            ),
+            "/[BIN]/".to_string(),
+        ));
         self.filters.push((
             format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
             "/[BIN]".to_string(),
@@ -254,7 +269,7 @@ impl TestContext {
         let added_filters = [
             (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
             (
-                r"uv = \d+\.\d+\.\d+".to_string(),
+                r"uv = \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?".to_string(),
                 "uv = [UV_VERSION]".to_string(),
             ),
             (
@@ -517,6 +532,8 @@ impl TestContext {
         if cfg!(windows) {
             filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
             filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
+            // Unix uses "exit status", Windows uses "exit code"
+            filters.push((r"exit code: ".to_string(), "exit status: ".to_string()));
         }
 
         filters.extend(

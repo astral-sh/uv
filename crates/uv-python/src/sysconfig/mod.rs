@@ -349,7 +349,7 @@ mod tests {
 
         // Cross-compiles use GNU
         let sysconfigdata = [
-            ("CC", "/usr/bin/aarch64-linux-gnu-gcc"),
+            ("CC", "/usr/bin/riscv64-linux-gnu-gcc"),
             ("CXX", "/usr/bin/x86_64-linux-gnu-g++"),
         ]
         .into_iter()

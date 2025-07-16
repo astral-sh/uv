@@ -46,6 +46,15 @@ pub enum PythonListFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum SyncFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum ListFormat {
     /// Display the list of packages in a human-readable table.
@@ -532,8 +541,10 @@ pub struct VersionArgs {
     pub value: Option<String>,
 
     /// Update the project version using the given semantics
+    ///
+    /// This flag can be passed multiple times.
     #[arg(group = "operation", long)]
-    pub bump: Option<VersionBump>,
+    pub bump: Vec<VersionBump>,
 
     /// Don't write a new version to the `pyproject.toml`
     ///
@@ -608,14 +619,56 @@ pub struct VersionArgs {
     pub python: Option<Maybe<String>>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, clap::ValueEnum)]
+// Note that the ordering of the variants is significant, as when given a list of operations
+// to perform, we sort them and apply them in order, so users don't have to think too hard about it.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum VersionBump {
-    /// Increase the major version (1.2.3 => 2.0.0)
+    /// Increase the major version (e.g., 1.2.3 => 2.0.0)
     Major,
-    /// Increase the minor version (1.2.3 => 1.3.0)
+    /// Increase the minor version (e.g., 1.2.3 => 1.3.0)
     Minor,
-    /// Increase the patch version (1.2.3 => 1.2.4)
+    /// Increase the patch version (e.g., 1.2.3 => 1.2.4)
     Patch,
+    /// Move from a pre-release to stable version (e.g., 1.2.3b4.post5.dev6 => 1.2.3)
+    ///
+    /// Removes all pre-release components, but will not remove "local" components.
+    Stable,
+    /// Increase the alpha version (e.g., 1.2.3a4 => 1.2.3a5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0a1, you'd also include [`VersionBump::Major`].
+    Alpha,
+    /// Increase the beta version (e.g., 1.2.3b4 => 1.2.3b5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0b1, you'd also include [`VersionBump::Major`].
+    Beta,
+    /// Increase the rc version (e.g., 1.2.3rc4 => 1.2.3rc5)
+    ///
+    /// To move from a stable to a pre-release version, combine this with a stable component, e.g.,
+    /// for 1.2.3 => 2.0.0rc1, you'd also include [`VersionBump::Major`].]
+    Rc,
+    /// Increase the post version (e.g., 1.2.3.post5 => 1.2.3.post6)
+    Post,
+    /// Increase the dev version (e.g., 1.2.3a4.dev6 => 1.2.3.dev7)
+    Dev,
+}
+
+impl std::fmt::Display for VersionBump {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = match self {
+            VersionBump::Major => "major",
+            VersionBump::Minor => "minor",
+            VersionBump::Patch => "patch",
+            VersionBump::Stable => "stable",
+            VersionBump::Alpha => "alpha",
+            VersionBump::Beta => "beta",
+            VersionBump::Rc => "rc",
+            VersionBump::Post => "post",
+            VersionBump::Dev => "dev",
+        };
+        string.fmt(f)
+    }
 }
 
 #[derive(Args)]
@@ -3001,7 +3054,7 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of the project environment
     /// in a separate, ephemeral environment. These dependencies are allowed to conflict with those
     /// specified by the project.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode.
@@ -3162,6 +3215,10 @@ pub struct SyncArgs {
     /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = SyncFormat::default())]
+    pub output_format: SyncFormat,
 
     /// Include all optional dependencies.
     ///
@@ -3394,6 +3451,23 @@ pub struct SyncArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 
     /// Check if the Python environment is synchronized with the project.
     ///
@@ -3632,7 +3706,8 @@ pub struct AddArgs {
         long,
         conflicts_with = "dev",
         conflicts_with = "optional",
-        conflicts_with = "package"
+        conflicts_with = "package",
+        conflicts_with = "workspace"
     )]
     pub script: Option<PathBuf>,
 
@@ -3648,6 +3723,13 @@ pub struct AddArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// Add the dependency as a workspace member.
+    ///
+    /// When used with a path dependency, the package will be added to the workspace's `members`
+    /// list in the root `pyproject.toml` file.
+    #[arg(long)]
+    pub workspace: bool,
 }
 
 #[derive(Args)]
@@ -4204,7 +4286,7 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode
@@ -4319,7 +4401,7 @@ pub struct ToolInstallArgs {
     pub from: Option<String>,
 
     /// Include the following additional requirements.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Include all requirements listed in the given `requirements.txt` files.
@@ -4780,6 +4862,19 @@ pub enum PythonCommand {
 
     /// Uninstall Python versions.
     Uninstall(PythonUninstallArgs),
+
+    /// Ensure that the Python executable directory is on the `PATH`.
+    ///
+    /// If the Python executable directory is not present on the `PATH`, uv will attempt to add it to
+    /// the relevant shell configuration files.
+    ///
+    /// If the shell configuration files already include a blurb to add the executable directory to
+    /// the path, but the directory is not present on the `PATH`, uv will exit with an error.
+    ///
+    /// The Python executable directory is determined according to the XDG standard and can be
+    /// retrieved with `uv python dir --bin`.
+    #[command(alias = "ensurepath")]
+    UpdateShell,
 }
 
 #[derive(Args)]
@@ -4865,6 +4960,30 @@ pub struct PythonInstallArgs {
     #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
     pub install_dir: Option<PathBuf>,
 
+    /// Install a Python executable into the `bin` directory.
+    ///
+    /// This is the default behavior. If this flag is provided explicitly, uv will error if the
+    /// executable cannot be installed.
+    ///
+    /// See `UV_PYTHON_BIN_DIR` to customize the target directory.
+    #[arg(long, overrides_with("no_bin"), hide = true)]
+    pub bin: bool,
+
+    /// Do not install a Python executable into the `bin` directory.
+    #[arg(long, overrides_with("bin"), conflicts_with("default"))]
+    pub no_bin: bool,
+
+    /// Register the Python installation in the Windows registry.
+    ///
+    /// This is the default behavior on Windows. If this flag is provided explicitly, uv will error if the
+    /// registry entry cannot be created.
+    #[arg(long, overrides_with("no_registry"), hide = true)]
+    pub registry: bool,
+
+    /// Do not register the Python installation in the Windows registry.
+    #[arg(long, overrides_with("registry"))]
+    pub no_registry: bool,
+
     /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
@@ -4927,7 +5046,7 @@ pub struct PythonInstallArgs {
     /// and `python`.
     ///
     /// If multiple Python versions are requested, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with("no_bin"))]
     pub default: bool,
 }
 

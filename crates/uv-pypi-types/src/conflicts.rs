@@ -3,7 +3,9 @@ use petgraph::{
     graph::{DiGraph, NodeIndex},
 };
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::{borrow::Cow, collections::BTreeSet, hash::Hash, rc::Rc};
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
+use std::{collections::BTreeSet, hash::Hash, rc::Rc};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 
 use crate::dependency_groups::{DependencyGroupSpecifier, DependencyGroups};

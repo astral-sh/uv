@@ -420,7 +420,6 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
@@ -453,9 +452,9 @@ fn tool_install_suggest_other_packages_with_executable() {
     success: false
     exit_code: 2
     ----- stdout -----
-    No executables are provided by `fastapi`
-    However, an executable with the name `fastapi` is available via dependency `fastapi-cli`.
-    Did you mean `uv tool install fastapi-cli`?
+    No executables are provided by package `fastapi`; removing tool `fastapi`
+    hint: An executable with the name `fastapi` is available via dependency `fastapi-cli`.
+          Did you mean `uv tool install fastapi-cli`?
 
     ----- stderr -----
     Resolved 35 packages in [TIME]
@@ -827,7 +826,7 @@ fn tool_install_remove_on_empty() -> Result<()> {
     success: false
     exit_code: 2
     ----- stdout -----
-    No executables are provided by `black`
+    No executables are provided by package `black`; removing tool `black`
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -1656,7 +1655,7 @@ fn tool_install_no_entrypoints() {
     success: false
     exit_code: 2
     ----- stdout -----
-    No executables are provided by `iniconfig`
+    No executables are provided by package `iniconfig`; removing tool `iniconfig`
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -1686,7 +1685,6 @@ fn tool_install_uninstallable() {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"bdist\.[^/\\\s]+(-[^/\\\s]+)?", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"#+", "#"),

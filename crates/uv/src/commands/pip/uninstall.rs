@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::Result;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -42,6 +42,7 @@ pub(crate) async fn pip_uninstall(
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
@@ -100,7 +101,13 @@ pub(crate) async fn pip_uninstall(
         }
     }
 
-    let _lock = environment.lock().await?;
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_environment(&environment)?;

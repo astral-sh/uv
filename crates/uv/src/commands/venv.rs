@@ -193,6 +193,9 @@ async fn venv_impl(
             .unwrap_or(PathBuf::from(".venv")),
     );
 
+    // TODO(zanieb): We don't use [`BaseClientBuilder::retries_from_env`] here because it's a pain
+    // to map into a miette diagnostic. We should just remove miette diagnostics here, we're not
+    // using them elsewhere.
     let client_builder = BaseClientBuilder::default()
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
@@ -242,16 +245,7 @@ async fn venv_impl(
         python.into_interpreter()
     };
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Check if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {

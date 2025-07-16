@@ -86,6 +86,7 @@ pub(crate) async fn pip_tree(
         let capabilities = IndexCapabilities::default();
 
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .keyring(keyring_provider)

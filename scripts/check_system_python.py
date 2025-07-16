@@ -24,7 +24,7 @@ def install_package(*, uv: str, package: str):
         check=True,
     )
 
-    logging.info(f"Checking that `{package}` can be imported.")
+    logging.info(f"Checking that `{package}` can be imported with `{sys.executable}`.")
     code = subprocess.run(
         [sys.executable, "-c", f"import {package}"],
         cwd=temp_dir,
@@ -82,7 +82,9 @@ if __name__ == "__main__":
         )
 
         # Ensure that the package (`pylint`) is installed.
-        logging.info("Checking that `pylint` is installed.")
+        logging.info(
+            f"Checking that `pylint` is installed with `{sys.executable} -m pip`."
+        )
         code = subprocess.run(
             [sys.executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,

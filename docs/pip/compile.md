@@ -127,10 +127,10 @@ To sync an environment with a `requirements.txt` file:
 $ uv pip sync requirements.txt
 ```
 
-To sync an environment with a `pyproject.toml` file:
+To sync an environment with a [PEP 751](https://peps.python.org/pep-0751/) `pylock.toml` file:
 
 ```console
-$ uv pip sync pyproject.toml
+$ uv pip sync pylock.toml
 ```
 
 ## Adding constraints

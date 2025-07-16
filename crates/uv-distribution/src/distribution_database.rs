@@ -20,8 +20,7 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, InstalledDist, Name,
-    SourceDist,
+    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, InstalledDist, Name, SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -179,12 +178,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             BuiltDist::Registry(wheels) => {
                 let wheel = wheels.best_wheel();
-                let url = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        uv_pypi_types::base_url_join_relative(base, url)?
-                    }
-                    FileLocation::AbsoluteUrl(url) => url.to_url()?,
-                };
+                let url = wheel.file.url.to_url()?;
 
                 // Create a cache entry for the wheel.
                 let wheel_entry = self.build_context.cache().entry(

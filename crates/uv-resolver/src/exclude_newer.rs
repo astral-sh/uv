@@ -1,4 +1,6 @@
-use std::{borrow::Cow, str::FromStr};
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
+use std::str::FromStr;
 
 use jiff::{Timestamp, ToSpan, tz::TimeZone};
 

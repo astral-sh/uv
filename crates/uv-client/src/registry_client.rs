@@ -21,8 +21,8 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -113,6 +113,11 @@ impl<'a> RegistryClientBuilder<'a> {
     pub fn retries(mut self, retries: u32) -> Self {
         self.base_client_builder = self.base_client_builder.retries(retries);
         self
+    }
+
+    pub fn retries_from_env(mut self) -> anyhow::Result<Self> {
+        self.base_client_builder = self.base_client_builder.retries_from_env()?;
+        Ok(self)
     }
 
     #[must_use]
@@ -506,11 +511,17 @@ impl RegistryClient {
             format!("{package_name}.rkyv"),
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => CacheControl::from(
-                self.cache
-                    .freshness(&cache_entry, Some(package_name), None)
-                    .map_err(ErrorKind::Io)?,
-            ),
+            Connectivity::Online => {
+                if let Some(header) = self.index_urls.simple_api_cache_control_for(index) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.cache
+                            .freshness(&cache_entry, Some(package_name), None)
+                            .map_err(ErrorKind::Io)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -566,7 +577,7 @@ impl RegistryClient {
         package_name: &PackageName,
         url: &DisplaySafeUrl,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl,
+        cache_control: CacheControl<'_>,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let simple_request = self
             .uncached_client(url)
@@ -682,30 +693,14 @@ impl RegistryClient {
 
                 let wheel = wheels.best_wheel();
 
-                let location = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        let url = uv_pypi_types::base_url_join_relative(base, url)
-                            .map_err(ErrorKind::JoinRelativeUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
-                    FileLocation::AbsoluteUrl(url) => {
-                        let url = url.to_url().map_err(ErrorKind::InvalidUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
+                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let location = if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+                    WheelLocation::Path(path)
+                } else {
+                    WheelLocation::Url(url)
                 };
 
                 match location {
@@ -794,11 +789,17 @@ impl RegistryClient {
                 format!("{}.msgpack", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
-                Connectivity::Online => CacheControl::from(
-                    self.cache
-                        .freshness(&cache_entry, Some(&filename.name), None)
-                        .map_err(ErrorKind::Io)?,
-                ),
+                Connectivity::Online => {
+                    if let Some(header) = self.index_urls.artifact_cache_control_for(index) {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                }
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
@@ -864,11 +865,25 @@ impl RegistryClient {
             format!("{}.msgpack", filename.cache_key()),
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => CacheControl::from(
-                self.cache
-                    .freshness(&cache_entry, Some(&filename.name), None)
-                    .map_err(ErrorKind::Io)?,
-            ),
+            Connectivity::Online => {
+                if let Some(index) = index {
+                    if let Some(header) = self.index_urls.artifact_cache_control_for(index) {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                } else {
+                    CacheControl::from(
+                        self.cache
+                            .freshness(&cache_entry, Some(&filename.name), None)
+                            .map_err(ErrorKind::Io)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -1233,16 +1248,17 @@ mod tests {
 
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{JoinRelativeError, SimpleJson};
+    use uv_pypi_types::SimpleJson;
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
+    use crate::RegistryClientBuilder;
     use uv_cache::Cache;
+    use uv_distribution_types::{FileLocation, ToUrlError};
+    use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    use crate::RegistryClientBuilder;
 
     type Error = Box<dyn std::error::Error>;
 
@@ -1416,44 +1432,6 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_redirect_preserve_fragment() -> Result<(), Error> {
-        let redirect_server = MockServer::start().await;
-
-        // Configure the redirect server to respond with a 307 with a relative URL.
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(307).insert_header("Location", "/foo".to_string()))
-            .mount(&redirect_server)
-            .await;
-
-        Mock::given(method("GET"))
-            .and(path_regex("/foo"))
-            .respond_with(ResponseTemplate::new(200))
-            .mount(&redirect_server)
-            .await;
-
-        let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache).build();
-        let client = registry_client.cached_client().uncached();
-
-        let mut url = DisplaySafeUrl::parse(&redirect_server.uri())?;
-        url.set_fragment(Some("fragment"));
-
-        assert_eq!(
-            client
-                .for_host(&url)
-                .get(Url::from(url.clone()))
-                .send()
-                .await?
-                .url()
-                .to_string(),
-            format!("{}/foo#fragment", redirect_server.uri()),
-            "Requests should preserve fragment"
-        );
-
-        Ok(())
-    }
-
     #[test]
     fn ignore_failing_files() {
         // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid
@@ -1507,7 +1485,7 @@ mod tests {
     ///
     /// See: <https://github.com/astral-sh/uv/issues/1388>
     #[test]
-    fn relative_urls_code_artifact() -> Result<(), JoinRelativeError> {
+    fn relative_urls_code_artifact() -> Result<(), ToUrlError> {
         let text = r#"
         <!DOCTYPE html>
         <html>
@@ -1530,12 +1508,13 @@ mod tests {
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
+        let base = SmallString::from(base.as_str());
 
         // Test parsing of the file urls
         let urls = files
-            .iter()
-            .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
-            .collect::<Result<Vec<_>, JoinRelativeError>>()?;
+            .into_iter()
+            .map(|file| FileLocation::new(file.url, &base).to_url())
+            .collect::<Result<Vec<_>, _>>()?;
         let urls = urls
             .iter()
             .map(DisplaySafeUrl::to_string)

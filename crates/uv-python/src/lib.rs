@@ -1,4 +1,5 @@
 //! Find requested Python interpreters and query interpreters for information.
+use owo_colors::OwoColorize;
 use thiserror::Error;
 
 #[cfg(test)]
@@ -93,14 +94,29 @@ pub enum Error {
     #[error(transparent)]
     KeyError(#[from] installation::PythonInstallationKeyError),
 
-    #[error(transparent)]
-    MissingPython(#[from] PythonNotFound),
+    #[error("{}{}", .0, if let Some(hint) = .1 { format!("\n\n{}{} {hint}", "hint".bold().cyan(), ":".bold()) } else { String::new() })]
+    MissingPython(PythonNotFound, Option<String>),
 
     #[error(transparent)]
     MissingEnvironment(#[from] environment::EnvironmentNotFound),
 
     #[error(transparent)]
     InvalidEnvironment(#[from] environment::InvalidEnvironment),
+}
+
+impl Error {
+    pub(crate) fn with_missing_python_hint(self, hint: String) -> Self {
+        match self {
+            Error::MissingPython(err, _) => Error::MissingPython(err, Some(hint)),
+            _ => self,
+        }
+    }
+}
+
+impl From<PythonNotFound> for Error {
+    fn from(err: PythonNotFound) -> Self {
+        Error::MissingPython(err, None)
+    }
 }
 
 // The mock interpreters are not valid on Windows so we don't have unit test coverage there

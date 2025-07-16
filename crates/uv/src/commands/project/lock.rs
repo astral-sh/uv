@@ -99,6 +99,7 @@ pub(crate) async fn lock(
     let script = match script {
         Some(ScriptPath::Path(path)) => {
             let client_builder = BaseClientBuilder::new()
+                .retries_from_env()?
                 .connectivity(network_settings.connectivity)
                 .native_tls(network_settings.native_tls)
                 .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -588,21 +589,13 @@ async fn do_lock(
 
     // Initialize the client.
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
@@ -942,7 +935,7 @@ impl ValidatedLock {
                 lock.prerelease_mode().cyan(),
                 options.prerelease_mode.cyan()
             );
-            return Ok(Self::Unusable(lock));
+            return Ok(Self::Preferable(lock));
         }
         if lock.fork_strategy() != options.fork_strategy {
             let _ = writeln!(

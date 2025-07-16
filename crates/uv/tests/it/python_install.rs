@@ -196,14 +196,16 @@ fn python_install_automatic() {
     uv_snapshot!(context.filters(), context.run()
         .env_remove("VIRTUAL_ENV")
         .arg("--no-python-downloads")
-        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found in [PYTHON SOURCES]
-    "###);
+
+    hint: A managed Python download is available, but Python downloads are set to 'never'
+    ");
 
     // Otherwise, we should fetch the latest Python version
     uv_snapshot!(context.filters(), context.run()
@@ -428,13 +430,33 @@ fn python_install_preview() {
     bin_python.touch().unwrap();
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to install executable for cpython-3.13.5-[PLATFORM]
+      Caused by: Executable already exists at `[BIN]/python3.13` but is not managed by uv; use `--force` to replace it
+    ");
+
+    // With `--bin`, this should error instead of warn
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--bin").arg("3.13"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to install cpython-3.13.5-[PLATFORM]
+    error: Failed to install executable for cpython-3.13.5-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.13` but is not managed by uv; use `--force` to replace it
+    ");
+
+    // With `--no-bin`, this should be silent
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin").arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--force").arg("3.13"), @r"
@@ -561,6 +583,52 @@ fn python_install_preview() {
             );
         });
     }
+}
+
+#[test]
+fn python_install_preview_no_bin() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install the latest version
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.5 in [TIME]
+     + cpython-3.13.5-[PLATFORM]
+    ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX));
+
+    // The executable should not be installed in the bin directory
+    bin_python.assert(predicate::path::missing());
+
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin").arg("--default"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--no-bin' cannot be used with '--default'
+
+    Usage: uv python install --no-bin --install-dir <INSTALL_DIR> [TARGETS]...
+
+    For more information, try '--help'.
+    ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python{}", std::env::consts::EXE_SUFFIX));
+
+    // The executable should not be installed in the bin directory
+    bin_python.assert(predicate::path::missing());
 }
 
 #[test]
@@ -1431,10 +1499,10 @@ fn python_install_patch_dylib() {
 fn python_install_314() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
         .with_managed_python_dirs()
+        .with_filtered_python_install_bin()
         .with_filtered_python_names()
-        .with_filtered_python_install_bin();
+        .with_filtered_exe_suffix();
 
     // Install 3.14
     // For now, this provides test coverage of pre-release handling
@@ -1444,8 +1512,8 @@ fn python_install_314() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0b3 in [TIME]
-     + cpython-3.14.0b3-[PLATFORM]
+    Installed Python 3.14.0b4 in [TIME]
+     + cpython-3.14.0b4-[PLATFORM]
     ");
 
     // Install a specific pre-release
@@ -1465,7 +1533,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b3-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1475,7 +1543,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b3-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1484,7 +1552,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b3-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -1504,7 +1572,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.13.5-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");

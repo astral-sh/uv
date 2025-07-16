@@ -153,9 +153,6 @@ pub enum ErrorKind {
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
 
     #[error(transparent)]
-    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
-
-    #[error(transparent)]
     Flat(#[from] FlatIndexError),
 
     #[error("Expected a file URL, but received: {0}")]
@@ -262,6 +259,9 @@ pub enum ErrorKind {
         "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`"
     )]
     Offline(String),
+
+    #[error("Invalid cache control header: `{0}`")]
+    InvalidCacheControl(String),
 }
 
 impl ErrorKind {

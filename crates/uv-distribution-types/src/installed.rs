@@ -365,7 +365,7 @@ impl InstalledDist {
     pub fn installer(&self) -> Result<Option<String>, InstalledDistError> {
         let path = self.install_path().join("INSTALLER");
         match fs::read_to_string(path) {
-            Ok(installer) => Ok(Some(installer)),
+            Ok(installer) => Ok(Some(installer.trim().to_owned())),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
         }

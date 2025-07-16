@@ -1152,7 +1152,7 @@ impl<'lock> PylockToml {
             };
 
             let index = graph.add_node(dist);
-            graph.add_edge(root, index, Edge::Prod(package.marker));
+            graph.add_edge(root, index, Edge::Prod);
         }
 
         Ok(Resolution::new(graph))

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io;
-use std::io::{BufReader, Read, Seek, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -144,7 +144,7 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
 ///
 /// <https://github.com/pypa/pip/blob/76e82a43f8fb04695e834810df64f2d9a2ff6020/src/pip/_vendor/distlib/scripts.py#L121-L126>
 fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
-    // Only check for pythonw.exe on Windows
+    // Only check for `pythonw.exe` on Windows.
     if cfg!(windows) && is_gui {
         python_executable
             .file_name()
@@ -431,21 +431,40 @@ fn install_script(
         Err(err) => return Err(Error::Io(err)),
     }
     let size_and_encoded_hash = if start == placeholder_python {
-        let is_gui = {
-            let mut buf = vec![0; 1];
-            script.read_exact(&mut buf)?;
-            if buf == b"w" {
-                true
-            } else {
-                script.seek_relative(-1)?;
-                false
+        // Read the rest of the first line, one byte at a time, until we hit a newline.
+        let mut is_gui = false;
+        let mut first = true;
+        let mut byte = [0u8; 1];
+        loop {
+            match script.read_exact(&mut byte) {
+                Ok(()) => {
+                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                        break;
+                    }
+
+                    // Check if this is a GUI script (starts with 'w').
+                    if first {
+                        is_gui = byte[0] == b'w';
+                        first = false;
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(err) => return Err(Error::Io(err)),
             }
-        };
+        }
+
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
-        let start = format_shebang(&executable, &layout.os_name, relocatable)
+        let mut start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
+
+        // Use appropriate line ending for the platform.
+        if layout.os_name == "nt" {
+            start.extend_from_slice(b"\r\n");
+        } else {
+            start.push(b'\n');
+        }
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;

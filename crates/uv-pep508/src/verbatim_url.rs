@@ -18,11 +18,16 @@ use uv_redacted::DisplaySafeUrl;
 use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
+///
+/// The original string is not preserved after serialization/deserialization.
 #[derive(Debug, Clone, Eq)]
 pub struct VerbatimUrl {
     /// The parsed URL.
     url: DisplaySafeUrl,
     /// The URL as it was provided by the user.
+    ///
+    /// Even if originally set, this will be [`None`] after
+    /// serialization/deserialization.
     given: Option<ArcStr>,
 }
 

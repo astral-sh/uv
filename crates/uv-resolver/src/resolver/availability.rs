@@ -7,7 +7,7 @@ use uv_platform_tags::{AbiTag, Tags};
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum UnavailableReason {
+pub enum UnavailableReason {
     /// The entire package cannot be used.
     Package(UnavailablePackage),
     /// A single version cannot be used.
@@ -29,7 +29,7 @@ impl Display for UnavailableReason {
 /// Most variant are from [`MetadataResponse`] without the error source, since we don't format
 /// the source and we want to merge unavailable messages across versions.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum UnavailableVersion {
+pub enum UnavailableVersion {
     /// Version is incompatible because it has no usable distributions
     IncompatibleDist(IncompatibleDist),
     /// The wheel metadata was found, but could not be parsed.
@@ -123,7 +123,7 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
 
 /// The package is unavailable and cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum UnavailablePackage {
+pub enum UnavailablePackage {
     /// Index lookups were disabled (i.e., `--no-index`) and the package was not found in a flat index (i.e. from `--find-links`).
     NoIndex,
     /// Network requests were disabled (i.e., `--offline`), and the package was not found in the cache.

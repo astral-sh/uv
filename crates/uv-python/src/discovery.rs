@@ -884,6 +884,14 @@ impl Error {
                     );
                     false
                 }
+                #[cfg(windows)]
+                InterpreterError::CorruptWindowsPackage { path, err } => {
+                    debug!(
+                        "Skipping bad interpreter at {} from {source}: {err}",
+                        path.display()
+                    );
+                    false
+                }
                 InterpreterError::NotFound(path)
                 | InterpreterError::BrokenSymlink(BrokenSymlink { path, .. }) => {
                     // If the interpreter is from an active, valid virtual environment, we should

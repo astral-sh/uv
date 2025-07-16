@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, io, iter};
 
+use anyhow::Context;
 use anyhow::anyhow;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
@@ -166,6 +167,25 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    /// Read the retry count from [`EnvVars::UV_HTTP_RETRIES`] if set, otherwise, make no change.
+    ///
+    /// Errors when [`EnvVars::UV_HTTP_RETRIES`] is not a valid u32.
+    pub fn retries_from_env(self) -> anyhow::Result<Self> {
+        // TODO(zanieb): We should probably parse this in another layer, but there's not a natural
+        // fit for it right now
+        if let Some(value) = env::var_os(EnvVars::UV_HTTP_RETRIES) {
+            Ok(self.retries(
+                value
+                    .to_string_lossy()
+                    .as_ref()
+                    .parse::<u32>()
+                    .context("Failed to parse `UV_HTTP_RETRIES`")?,
+            ))
+        } else {
+            Ok(self)
+        }
+    }
+
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.native_tls = native_tls;
@@ -238,7 +258,11 @@ impl<'a> BaseClientBuilder<'a> {
 
     /// Create a [`RetryPolicy`] for the client.
     fn retry_policy(&self) -> ExponentialBackoff {
-        ExponentialBackoff::builder().build_with_max_retries(self.retries)
+        let mut builder = ExponentialBackoff::builder();
+        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
+        }
+        builder.build_with_max_retries(self.retries)
     }
 
     pub fn build(&self) -> BaseClient {
@@ -977,6 +1001,45 @@ mod tests {
                 request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
                     .unwrap();
             assert!(redirect_request.headers().contains_key(AUTHORIZATION));
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_preserves_fragment() -> Result<()> {
+        for status in &[301, 302, 303, 307, 308] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .respond_with(
+                    ResponseTemplate::new(*status)
+                        .insert_header("location", format!("{}/redirect", server.uri())),
+                )
+                .mount(&server)
+                .await;
+
+            let request = Client::new()
+                .get(format!("{}#fragment", server.uri()))
+                .build()
+                .unwrap();
+
+            let response = Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap()
+                .execute(request.try_clone().unwrap())
+                .await
+                .unwrap();
+
+            let redirect_request =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .unwrap();
+            assert!(
+                redirect_request
+                    .url()
+                    .fragment()
+                    .is_some_and(|fragment| fragment == "fragment")
+            );
         }
 
         Ok(())

@@ -2,11 +2,11 @@ use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
+    #[error("Failed to read from zip file")]
     Zip(#[from] zip::result::ZipError),
-    #[error(transparent)]
+    #[error("Failed to read from zip file")]
     AsyncZip(#[from] async_zip::error::ZipError),
-    #[error(transparent)]
+    #[error("I/O operation failed during extraction")]
     Io(#[from] std::io::Error),
     #[error(
         "The top-level of the archive must only contain a list directory, but it contains: {0:?}"

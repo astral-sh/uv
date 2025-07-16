@@ -13,7 +13,6 @@ use uv_configuration::ExtrasSpecificationWithDefaults;
 use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
@@ -113,7 +112,7 @@ pub trait Installable<'lock> {
             inverse.insert(&dist.id, index);
 
             // Add an edge from the root.
-            petgraph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
+            petgraph.add_edge(root, index, Edge::Prod);
 
             // Push the package onto the queue.
             roots.push((dist, index));
@@ -189,7 +188,7 @@ pub trait Installable<'lock> {
                     // a specific marker environment and set of extras/groups.
                     // So at this point, we know the extras/groups have been
                     // satisfied, so we can safely drop the conflict marker.
-                    Edge::Dev(group.clone(), dep.complexified_marker.pep508()),
+                    Edge::Dev(group.clone()),
                 );
 
                 // Push its dependencies on the queue.
@@ -231,7 +230,7 @@ pub trait Installable<'lock> {
             inverse.insert(&dist.id, index);
 
             // Add the edge.
-            petgraph.add_edge(root, index, Edge::Prod(dependency.marker));
+            petgraph.add_edge(root, index, Edge::Prod);
 
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
@@ -300,7 +299,7 @@ pub trait Installable<'lock> {
             };
 
             // Add the edge.
-            petgraph.add_edge(root, index, Edge::Dev(group.clone(), dependency.marker));
+            petgraph.add_edge(root, index, Edge::Dev(group.clone()));
 
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
@@ -484,9 +483,9 @@ pub trait Installable<'lock> {
                     index,
                     dep_index,
                     if let Some(extra) = extra {
-                        Edge::Optional(extra.clone(), dep.complexified_marker.pep508())
+                        Edge::Optional(extra.clone())
                     } else {
-                        Edge::Prod(dep.complexified_marker.pep508())
+                        Edge::Prod
                     },
                 );
 
