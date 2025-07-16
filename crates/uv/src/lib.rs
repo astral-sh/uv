@@ -39,7 +39,7 @@ use uv_python::PythonRequest;
 use uv_requirements::RequirementsSource;
 use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
-use uv_settings::{Combine, FilesystemOptions, Options};
+use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -303,6 +303,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
         .map(FilesystemOptions::from)
         .combine(filesystem);
+
+    // Load environment variables not handled by Clap
+    let environment = EnvironmentOptions::new()?;
 
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
@@ -1391,7 +1394,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonInstallSettings::resolve(args, filesystem);
+            let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
             // TODO(john): If we later want to support `--upgrade`, we need to replace this.
             let upgrade = false;

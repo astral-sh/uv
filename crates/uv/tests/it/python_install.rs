@@ -449,9 +449,25 @@ fn python_install_preview() {
     error: Failed to install executable for cpython-3.13.5-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.13` but is not managed by uv; use `--force` to replace it
     ");
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13").env(EnvVars::UV_PYTHON_INSTALL_BIN, "1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install executable for cpython-3.13.5-[PLATFORM]
+      Caused by: Executable already exists at `[BIN]/python3.13` but is not managed by uv; use `--force` to replace it
+    ");
 
     // With `--no-bin`, this should be silent
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--no-bin").arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13").env(EnvVars::UV_PYTHON_INSTALL_BIN, "0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -643,7 +659,7 @@ fn python_install_preview_upgrade() {
         .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
 
     // Install 3.12.5
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.5"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.5"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -651,7 +667,7 @@ fn python_install_preview_upgrade() {
     ----- stderr -----
     Installed Python 3.12.5 in [TIME]
      + cpython-3.12.5-[PLATFORM] (python3.12)
-    "###);
+    ");
 
     // Installing with a patch version should cause the link to be to the patch installation.
     if cfg!(unix) {

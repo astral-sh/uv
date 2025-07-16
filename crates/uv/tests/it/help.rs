@@ -506,10 +506,14 @@ fn help_subsubcommand() {
               [env: UV_PYTHON_INSTALL_DIR=]
 
           --no-bin
-              Do not install a Python executable into the `bin` directory
+              Do not install a Python executable into the `bin` directory.
+              
+              This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
 
           --no-registry
-              Do not register the Python installation in the Windows registry
+              Do not register the Python installation in the Windows registry.
+              
+              This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
 
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations.

@@ -4959,11 +4959,15 @@ pub struct PythonInstallArgs {
     /// This is the default behavior. If this flag is provided explicitly, uv will error if the
     /// executable cannot be installed.
     ///
+    /// This can also be set with `UV_PYTHON_INSTALL_BIN=1`.
+    ///
     /// See `UV_PYTHON_BIN_DIR` to customize the target directory.
     #[arg(long, overrides_with("no_bin"), hide = true)]
     pub bin: bool,
 
     /// Do not install a Python executable into the `bin` directory.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
     #[arg(long, overrides_with("bin"), conflicts_with("default"))]
     pub no_bin: bool,
 
@@ -4971,10 +4975,14 @@ pub struct PythonInstallArgs {
     ///
     /// This is the default behavior on Windows. If this flag is provided explicitly, uv will error if the
     /// registry entry cannot be created.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=1`.
     #[arg(long, overrides_with("no_registry"), hide = true)]
     pub registry: bool,
 
     /// Do not register the Python installation in the Windows registry.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
     #[arg(long, overrides_with("registry"))]
     pub no_registry: bool,
 

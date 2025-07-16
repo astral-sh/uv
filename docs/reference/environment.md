@@ -376,6 +376,10 @@ This will allow for setting each property of the Python installation, mostly the
 
 Note that currently, only local paths are supported.
 
+### `UV_PYTHON_INSTALL_BIN`
+
+Whether to install the Python executable into the `UV_PYTHON_BIN_DIR` directory.
+
 ### `UV_PYTHON_INSTALL_DIR`
 
 Specifies the directory for storing managed Python installations.
@@ -389,6 +393,10 @@ This variable can be set to a mirror URL to use a different source for Python in
 The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
 `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
 Distributions can be read from a local directory by using the `file://` URL scheme.
+
+### `UV_PYTHON_INSTALL_REGISTRY`
+
+Whether to install the Python executable into the Windows registry.
 
 ### `UV_PYTHON_PREFERENCE`
 
