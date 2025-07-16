@@ -1279,24 +1279,6 @@ impl Lock {
             }
         }
 
-        // Validate that the member sources have not changed (e.g., that they've switched from
-        // virtual to non-virtual or vice versa).
-        for (name, member) in packages {
-            let is_dependency = requirements
-                .iter()
-                .chain(dependency_groups.values().flatten())
-                .any(|requirement| &requirement.name == name);
-            let expected = !member.is_package(is_dependency);
-            let actual = self
-                .find_by_name(name)
-                .ok()
-                .flatten()
-                .map(|package| matches!(package.id.source, Source::Virtual(_)));
-            if actual != Some(expected) {
-                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
-            }
-        }
-
         // Validate that the lockfile was generated with the same requirements.
         {
             let expected: BTreeSet<_> = requirements
@@ -1741,6 +1723,21 @@ impl Lock {
                         queue.push_back(dep_dist);
                     }
                 }
+            }
+        }
+
+        // Validate that the member sources have not changed (e.g., that they've switched from
+        // virtual to non-virtual or vice versa).
+        for (name, member) in packages {
+            let is_dependency = seen.iter().any(|package_id| &package_id.name == name);
+            let expected = !member.is_package(is_dependency);
+            let actual = self
+                .find_by_name(name)
+                .ok()
+                .flatten()
+                .map(|package| matches!(package.id.source, Source::Virtual(_)));
+            if actual != Some(expected) {
+                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
             }
         }
 
