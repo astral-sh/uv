@@ -87,6 +87,10 @@ if __name__ == "__main__":
             [sys.executable, "-m", "pip", "show", "pylint"],
             cwd=temp_dir,
         )
+        subprocess.run(
+            ["uv", "pip", "show", "--system", "--verbose", "pylint"],
+            cwd=temp_dir,
+        )
         if code.returncode != 0:
             raise Exception("The package `pylint` isn't installed (but should be).")
 
