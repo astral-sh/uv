@@ -12064,10 +12064,6 @@ fn lock_remove_member() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["leaf"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = ["leaf"]
 
@@ -12141,7 +12137,7 @@ fn lock_remove_member() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "leaf" },
         ]
