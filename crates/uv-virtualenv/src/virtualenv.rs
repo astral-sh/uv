@@ -102,24 +102,21 @@ pub(crate) fn create(
                         debug!("Ignoring empty directory");
                     }
                     VenvCreationPolicy::FailIfNotEmpty => {
-                        let directory_message = if uv_fs::is_virtualenv_base(location) {
-                            format!(
-                                "A virtual environment exists at `{}`.",
-                                location.user_display()
-                            )
+                        let name = if uv_fs::is_virtualenv_base(location) {
+                            "virtual environment"
                         } else {
-                            format!("The directory `{}` exists.", location.user_display())
+                            "directory"
                         };
-
                         if Term::stderr().is_term() {
                             if confirm_clear(location)? {
-                                debug!("Removing existing directory");
+                                debug!("Removing existing {name}");
                                 remove_venv_directory(location)?;
                             } else {
                                 return Err(Error::Io(io::Error::new(
                                     io::ErrorKind::AlreadyExists,
                                     format!(
-                                        "{directory_message} \n\n{}{} Use `{}` to remove the directory first",
+                                        "A {name} already exists at: {}\n\n{}{} Use `{}` to remove the directory first",
+                                        location.user_display(),
                                         "hint".bold().cyan(),
                                         ":".bold(),
                                         "--clear".green(),
@@ -129,7 +126,8 @@ pub(crate) fn create(
                         } else {
                             // If this is not a tty, warn for now.
                             warn_user_once!(
-                                "{directory_message} In the future, uv will require `{}` to remove the directory first",
+                                "A {name} already exists at `{}`. In the future, uv will require `{}` to remove the directory first",
+                                location.user_display(),
                                 "--clear".green(),
                             );
                         }
