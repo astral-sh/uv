@@ -19,5 +19,10 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 
+[dev-dependencies]
+insta = "1.43.1"
+itertools = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+
 [lints]
 workspace = true

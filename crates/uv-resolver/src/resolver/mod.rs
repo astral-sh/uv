@@ -83,11 +83,9 @@ use crate::{
 };
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
-use uv_variants::VariantProviderOutput;
 use uv_variants::resolved_variants::ResolvedVariants;
-use uv_variants::variants_json::{
-    DefaultPriorities, Variant, VariantNamespace, VariantPropertyType,
-};
+use uv_variants::score_variant;
+use uv_variants::variants_json::VariantPropertyType;
 
 mod availability;
 mod batch_prefetch;
@@ -1441,7 +1439,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 panic!("Variant {variant} not found in variants.json");
             };
 
-            let Some(scores) = uv_variants::score_variant(
+            let Some(scores) = score_variant(
                 &resolved_variants.variants_json.default_priorities,
                 &resolved_variants.target_variants,
                 variants_properties,

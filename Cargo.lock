@@ -3588,6 +3588,7 @@ version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "ryu",
@@ -6029,8 +6030,11 @@ version = "0.1.0"
 dependencies = [
  "indexmap",
  "indoc",
+ "insta",
+ "itertools 0.14.0",
  "rustc-hash",
  "serde",
+ "serde_json",
  "tracing",
  "uv-pep508",
  "uv-pypi-types",
