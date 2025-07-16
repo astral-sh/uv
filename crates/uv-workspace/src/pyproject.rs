@@ -66,7 +66,7 @@ pub struct PyProjectToml {
 
     /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    build_system: Option<serde::de::IgnoredAny>,
+    pub build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {

@@ -966,6 +966,22 @@ impl WorkspaceMember {
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         &self.pyproject_toml
     }
+
+    pub fn is_package(&self, is_dependency: bool) -> bool {
+        if let Some(is_package) = self
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.package)
+        {
+            return is_package;
+        }
+
+        // Otherwise, a project is assumed to be a package if `build-system` is present or if it is
+        // a dependency.
+        self.pyproject_toml().build_system.is_some() || is_dependency
+    }
 }
 
 /// The current project and the workspace it is part of, with all of the workspace members.

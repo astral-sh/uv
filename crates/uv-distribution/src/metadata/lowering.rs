@@ -306,7 +306,7 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member.pyproject_toml().is_package() {
+                            } else if member.is_package(true) {
                                 RequirementSource::Directory {
                                     install_path: install_path.into_boxed_path(),
                                     url,

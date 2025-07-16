@@ -12941,7 +12941,9 @@ fn add_path_with_existing_workspace() -> Result<()> {
     ----- stderr -----
     Added `dep` to workspace members
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13018,7 +13020,9 @@ fn add_path_with_workspace() -> Result<()> {
     ----- stderr -----
     Added `dep` to workspace members
     Resolved 2 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");

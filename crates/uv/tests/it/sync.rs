@@ -3626,9 +3626,10 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      + idna==3.6
      + sniffio==1.3.1
     ");

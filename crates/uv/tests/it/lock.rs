@@ -12111,7 +12111,7 @@ fn lock_remove_member() -> Result<()> {
         [[package]]
         name = "leaf"
         version = "0.1.0"
-        source = { virtual = "leaf" }
+        source = { editable = "leaf" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12128,7 +12128,7 @@ fn lock_remove_member() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "leaf", virtual = "leaf" }]
+        requires-dist = [{ name = "leaf", editable = "leaf" }]
 
         [[package]]
         name = "sniffio"
@@ -12143,14 +12143,15 @@ fn lock_remove_member() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Remove the member.
     pyproject_toml.write_str(
