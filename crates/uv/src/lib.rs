@@ -1029,6 +1029,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let python_request: Option<PythonRequest> =
                 args.settings.python.as_deref().map(PythonRequest::parse);
 
+            let on_existing = uv_virtualenv::OnExisting::from_args(args.allow_existing, args.clear);
+
             commands::venv(
                 &project_dir,
                 args.path,
@@ -1045,7 +1047,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 args.seed,
-                args.allow_existing,
+                on_existing,
                 args.settings.exclude_newer,
                 globals.concurrency,
                 cli.top_level.no_config,

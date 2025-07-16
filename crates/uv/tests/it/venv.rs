@@ -30,9 +30,27 @@ fn create_venv() {
 
     context.venv.assert(predicates::path::is_dir());
 
-    // Create a virtual environment at the same location, which should replace it.
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // Create a virtual environment at the same location using `--clear`,
+    // which should replace it.
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
         .arg("--python")
         .arg("3.12"), @r###"
     success: true
@@ -162,7 +180,7 @@ fn create_venv_project_environment() -> Result<()> {
         .assert(predicates::path::is_dir());
 
     // Or, of they opt-out with `--no-workspace` or `--no-project`
-    uv_snapshot!(context.filters(), context.venv().arg("--no-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-workspace"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -174,7 +192,7 @@ fn create_venv_project_environment() -> Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), context.venv().arg("--no-project"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-project"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -252,7 +270,7 @@ fn create_venv_reads_request_from_python_version_file() {
         .write_str("3.12")
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -291,7 +309,7 @@ fn create_venv_reads_request_from_python_versions_file() {
         .write_str("3.12\n3.11")
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -334,7 +352,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -357,7 +375,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -380,7 +398,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -414,7 +432,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -437,7 +455,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -460,7 +478,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -475,7 +493,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     context.venv.assert(predicates::path::is_dir());
 
     // We warn if we receive an incompatible version
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -527,7 +545,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -560,7 +578,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -593,7 +611,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -621,7 +639,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -654,7 +672,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -945,15 +963,15 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    error: Failed to create virtual environment
-      Caused by: The directory `.venv` exists, but it's not a virtual environment
+    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
@@ -973,15 +991,15 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--python")
         .arg("3.12"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    error: Failed to create virtual environment
-      Caused by: The directory `.venv` exists, but it's not a virtual environment
+    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
     "
     );
 
@@ -1103,31 +1121,6 @@ fn windows_shims() -> Result<()> {
 }
 
 #[test]
-fn virtualenv_compatibility() {
-    let context = TestContext::new_with_versions(&["3.12"]);
-
-    // Create a virtual environment at `.venv`, passing the redundant `--clear` flag.
-    uv_snapshot!(context.filters(), context.venv()
-        .arg(context.venv.as_os_str())
-        .arg("--clear")
-        .arg("--python")
-        .arg("3.12"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: virtualenv's `--clear` has no effect (uv always clears the virtual environment)
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    "###
-    );
-
-    context.venv.assert(predicates::path::is_dir());
-}
-
-#[test]
 fn verify_pyvenv_cfg() {
     let context = TestContext::new("3.12");
     let pyvenv_cfg = context.venv.child("pyvenv.cfg");
@@ -1154,6 +1147,7 @@ fn verify_pyvenv_cfg_relocatable() {
     context
         .venv()
         .arg(context.venv.as_os_str())
+        .arg("--clear")
         .arg("--python")
         .arg("3.12")
         .arg("--relocatable")

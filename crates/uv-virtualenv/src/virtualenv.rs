@@ -5,9 +5,11 @@ use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+use console::Term;
 use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_configuration::PreviewMode;
@@ -17,6 +19,7 @@ use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
+use uv_warnings::warn_user_once;
 
 use crate::{Error, Prompt};
 
@@ -52,7 +55,7 @@ pub(crate) fn create(
     interpreter: &Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    allow_existing: bool,
+    on_existing: OnExisting,
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
@@ -76,46 +79,73 @@ pub(crate) fn create(
 
     // Validate the existing location.
     match location.metadata() {
-        Ok(metadata) => {
-            if metadata.is_file() {
-                return Err(Error::Io(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!("File exists at `{}`", location.user_display()),
-                )));
-            } else if metadata.is_dir() {
-                if allow_existing {
-                    debug!("Allowing existing directory");
-                } else if uv_fs::is_virtualenv_base(location) {
-                    debug!("Removing existing directory");
-
-                    // On Windows, if the current executable is in the directory, guard against
-                    // self-deletion.
-                    #[cfg(windows)]
-                    if let Ok(itself) = std::env::current_exe() {
-                        let target = std::path::absolute(location)?;
-                        if itself.starts_with(&target) {
-                            debug!("Detected self-delete of executable: {}", itself.display());
-                            self_replace::self_delete_outside_path(location)?;
-                        }
-                    }
-
-                    fs::remove_dir_all(location)?;
-                    fs::create_dir_all(location)?;
-                } else if location
-                    .read_dir()
-                    .is_ok_and(|mut dir| dir.next().is_none())
+        Ok(metadata) if metadata.is_file() => {
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("File exists at `{}`", location.user_display()),
+            )));
+        }
+        Ok(metadata) if metadata.is_dir() => {
+            let name = if uv_fs::is_virtualenv_base(location) {
+                "virtual environment"
+            } else {
+                "directory"
+            };
+            match on_existing {
+                OnExisting::Allow => {
+                    debug!("Allowing existing {name} due to `--allow-existing`");
+                }
+                OnExisting::Remove => {
+                    debug!("Removing existing {name} due to `--clear`");
+                    remove_venv_directory(location)?;
+                }
+                OnExisting::Fail
+                    if location
+                        .read_dir()
+                        .is_ok_and(|mut dir| dir.next().is_none()) =>
                 {
                     debug!("Ignoring empty directory");
-                } else {
-                    return Err(Error::Io(io::Error::new(
-                        io::ErrorKind::AlreadyExists,
-                        format!(
-                            "The directory `{}` exists, but it's not a virtual environment",
-                            location.user_display()
-                        ),
-                    )));
+                }
+                OnExisting::Fail => {
+                    match confirm_clear(location, name)? {
+                        Some(true) => {
+                            debug!("Removing existing {name} due to confirmation");
+                            remove_venv_directory(location)?;
+                        }
+                        Some(false) => {
+                            let hint = format!(
+                                "Use the `{}` flag or set `{}` to replace the existing {name}",
+                                "--clear".green(),
+                                "UV_VENV_CLEAR=1".green()
+                            );
+                            return Err(Error::Io(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!(
+                                    "A {name} already exists at: {}\n\n{}{} {hint}",
+                                    location.user_display(),
+                                    "hint".bold().cyan(),
+                                    ":".bold(),
+                                ),
+                            )));
+                        }
+                        // When we don't have a TTY, warn that the behavior will change in the future
+                        None => {
+                            warn_user_once!(
+                                "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
+                                location.user_display(),
+                                "--clear".green(),
+                            );
+                        }
+                    }
                 }
             }
+        }
+        Ok(_) => {
+            // It's not a file or a directory
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("Object already exists at `{}`", location.user_display()),
+            )));
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             fs::create_dir_all(location)?;
@@ -462,6 +492,71 @@ pub(crate) fn create(
         executable,
         base_executable: base_python,
     })
+}
+
+/// Prompt a confirmation that the virtual environment should be cleared.
+///
+/// If not a TTY, returns `None`.
+fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io::Error> {
+    let term = Term::stderr();
+    if term.is_term() {
+        let prompt = format!(
+            "A {name} already exists at `{}`. Do you want to replace it?",
+            location.user_display(),
+        );
+        let hint = format!(
+            "Use the `{}` flag or set `{}` to skip this prompt",
+            "--clear".green(),
+            "UV_VENV_CLEAR=1".green()
+        );
+        Ok(Some(uv_console::confirm_with_hint(
+            &prompt, &hint, &term, true,
+        )?))
+    } else {
+        Ok(None)
+    }
+}
+
+fn remove_venv_directory(location: &Path) -> Result<(), Error> {
+    // On Windows, if the current executable is in the directory, guard against
+    // self-deletion.
+    #[cfg(windows)]
+    if let Ok(itself) = std::env::current_exe() {
+        let target = std::path::absolute(location)?;
+        if itself.starts_with(&target) {
+            debug!("Detected self-delete of executable: {}", itself.display());
+            self_replace::self_delete_outside_path(location)?;
+        }
+    }
+
+    fs::remove_dir_all(location)?;
+    fs::create_dir_all(location)?;
+
+    Ok(())
+}
+
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub enum OnExisting {
+    /// Fail if the directory already exists and is non-empty.
+    #[default]
+    Fail,
+    /// Allow an existing directory, overwriting virtual environment files while retaining other
+    /// files in the directory.
+    Allow,
+    /// Remove an existing directory.
+    Remove,
+}
+
+impl OnExisting {
+    pub fn from_args(allow_existing: bool, clear: bool) -> Self {
+        if allow_existing {
+            OnExisting::Allow
+        } else if clear {
+            OnExisting::Remove
+        } else {
+            OnExisting::default()
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

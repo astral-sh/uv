@@ -296,6 +296,10 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
 
+    /// Equivalent to the `--clear` command-line argument. If set, uv will remove any
+    /// existing files or directories at the target path.
+    pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
+
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
     /// created by `uv venv`.
     ///
