@@ -1255,6 +1255,7 @@ impl Lock {
         root: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
+        required_members: &BTreeSet<PackageName>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
@@ -1276,6 +1277,23 @@ impl Lock {
             let actual = &self.manifest.members;
             if expected != *actual {
                 return Ok(SatisfiesResult::MismatchedMembers(expected, actual));
+            }
+        }
+
+        // Validate that the member sources have not changed (e.g., that they've switched from
+        // virtual to non-virtual or vice versa).
+        for (name, member) in packages {
+            // We don't require a build system, if the workspace member is a dependency
+            let expected = !member
+                .pyproject_toml()
+                .is_package(!required_members.contains(name));
+            let actual = self
+                .find_by_name(name)
+                .ok()
+                .flatten()
+                .map(|package| matches!(package.id.source, Source::Virtual(_)));
+            if actual != Some(expected) {
+                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
             }
         }
 
@@ -1723,22 +1741,6 @@ impl Lock {
                         queue.push_back(dep_dist);
                     }
                 }
-            }
-        }
-
-        // Validate that the member sources have not changed (e.g., that they've switched from
-        // virtual to non-virtual or vice versa).
-        for (name, member) in packages {
-            let is_dependency = seen.iter().any(|package_id| &package_id.name == name);
-            // We don't require a build system, if the workspace member is a dependency
-            let expected = !member.pyproject_toml().is_package(!is_dependency);
-            let actual = self
-                .find_by_name(name)
-                .ok()
-                .flatten()
-                .map(|package| matches!(package.id.source, Source::Virtual(_)));
-            if actual != Some(expected) {
-                return Ok(SatisfiesResult::MismatchedVirtual(name.clone(), expected));
             }
         }
 

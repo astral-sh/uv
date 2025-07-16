@@ -12187,12 +12187,12 @@ fn lock_remove_member() -> Result<()> {
     // Re-run with `--locked`. This should fail.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -12250,7 +12250,7 @@ fn lock_remove_member() -> Result<()> {
         [[package]]
         name = "leaf"
         version = "0.1.0"
-        source = { virtual = "leaf" }
+        source = { editable = "leaf" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12640,15 +12640,15 @@ fn lock_add_member_without_build_system() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-run with `--offline`. This should also fail, during the resolve phase.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
@@ -12778,12 +12778,12 @@ fn lock_add_member_without_build_system() -> Result<()> {
     // Re-run with `--locked`. This should fail.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.

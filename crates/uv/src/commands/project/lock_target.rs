@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use itertools::Either;
@@ -149,6 +149,18 @@ impl<'lock> LockTarget<'lock> {
             Self::Workspace(workspace) => workspace.packages(),
             Self::Script(_) => {
                 static EMPTY: BTreeMap<PackageName, WorkspaceMember> = BTreeMap::new();
+                &EMPTY
+            }
+        }
+    }
+
+    /// Return the set of required workspace members, i.e., those that are required by other
+    /// members.
+    pub(crate) fn required_members(self) -> &'lock BTreeSet<PackageName> {
+        match self {
+            Self::Workspace(workspace) => workspace.required_members(),
+            Self::Script(_) => {
+                static EMPTY: BTreeSet<PackageName> = BTreeSet::new();
                 &EMPTY
             }
         }
