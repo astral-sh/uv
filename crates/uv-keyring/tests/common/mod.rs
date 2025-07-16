@@ -12,22 +12,22 @@
 /// to have tests use a random string for key names to avoid
 /// the conflicts, and then do any needed cleanup once everything
 /// is working correctly.  So we export this function for tests to use.
-pub fn generate_random_string_of_len(len: usize) -> String {
+pub(crate) fn generate_random_string_of_len(len: usize) -> String {
     use fastrand;
     use std::iter::repeat_with;
     repeat_with(fastrand::alphanumeric).take(len).collect()
 }
 
-pub fn generate_random_string() -> String {
+pub(crate) fn generate_random_string() -> String {
     generate_random_string_of_len(30)
 }
 
-pub fn generate_random_bytes_of_len(len: usize) -> Vec<u8> {
+pub(crate) fn generate_random_bytes_of_len(len: usize) -> Vec<u8> {
     use fastrand;
     use std::iter::repeat_with;
     repeat_with(|| fastrand::u8(..)).take(len).collect()
 }
 
-pub fn init_logger() {
+pub(crate) fn init_logger() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
