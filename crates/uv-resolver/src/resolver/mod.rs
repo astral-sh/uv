@@ -83,8 +83,11 @@ use crate::{
 };
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
+use uv_variants::VariantProviderOutput;
 use uv_variants::resolved_variants::ResolvedVariants;
-use uv_variants::variants_json::VariantPropertyType;
+use uv_variants::variants_json::{
+    DefaultPriorities, Variant, VariantNamespace, VariantPropertyType,
+};
 
 mod availability;
 mod batch_prefetch;
@@ -1395,7 +1398,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         // No variants.json, no variants
-        // TODO(konsti): Be more lenient?
+        // TODO(konsti): Be more lenient, e.g. parse the wheel itself?
         let Some(variants_json) = prioritized_dist.variants_json() else {
             return Ok(None);
         };
@@ -1438,86 +1441,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 panic!("Variant {variant} not found in variants.json");
             };
 
-            let mut compatible = true;
-            'compatibility: for (namespace, features) in variants_properties {
-                for (feature, properties) in features {
-                    let Some(resolved_properties) = resolved_variants
-                        .target_variants
-                        .get(namespace)
-                        .and_then(|namespace| namespace.features.get(feature))
-                    else {
-                        compatible = false;
-                        break 'compatibility;
-                    };
-                    if !properties
-                        .iter()
-                        .any(|property| resolved_properties.contains(property))
-                    {
-                        compatible = false;
-                        break 'compatibility;
-                    }
-                }
-            }
-            if !compatible {
+            let Some(scores) = uv_variants::score_variant(
+                &resolved_variants.variants_json.default_priorities,
+                &resolved_variants.target_variants,
+                variants_properties,
+            ) else {
+                // The wheel is not compatible.
                 continue;
-            }
-
-            // TODO(konsti): This is performance sensitive
-            let default_priorities = &resolved_variants.variants_json.default_priorities;
-            let mut scores = Vec::new();
-            for namespace in &default_priorities.namespace {
-                // Explicit priorities are optional, but take priority over the provider
-                let explicit_feature_priorities = default_priorities.feature.get(namespace);
-                let Some(target_variants) = resolved_variants.target_variants.get(namespace) else {
-                    // TODO(konsti): Can this even happen?
-                    debug!("missing namespace priority {namespace}");
-                    continue;
-                };
-                let feature_priorities = explicit_feature_priorities.into_iter().flatten().chain(
-                    target_variants.features.keys().filter(|priority| {
-                        explicit_feature_priorities
-                            .is_none_or(|explicit| !explicit.contains(priority))
-                    }),
-                );
-
-                for feature in feature_priorities {
-                    let value_priorities: Vec<String> = default_priorities
-                        .property
-                        .get(namespace)
-                        .and_then(|namespace_features| namespace_features.get(feature))
-                        .into_iter()
-                        .flatten()
-                        .map(ToString::to_string)
-                        .chain(
-                            resolved_variants
-                                .target_variants
-                                .get(namespace)
-                                .and_then(|namespace| namespace.features.get(feature).cloned())
-                                .into_iter()
-                                .flatten(),
-                        )
-                        .collect();
-                    if !value_priorities.contains(feature) {
-                        debug!("missing value priority {feature}");
-                    }
-                    let Some(wheel_properties) = variants_properties
-                        .get(namespace)
-                        .and_then(|namespace| namespace.get(feature))
-                    else {
-                        scores.push(0);
-                        continue;
-                    };
-
-                    // Determine the highest scoring property
-                    // Reversed to give a higher score to earlier entries
-                    let score = value_priorities.len()
-                        - value_priorities
-                            .iter()
-                            .position(|feature| wheel_properties.contains(feature))
-                            .unwrap_or(value_priorities.len());
-                    scores.push(score);
-                }
-            }
+            };
 
             if let Some((_, old_scores)) = &highest_priority_variant_wheel {
                 if let Some((new, old)) = scores

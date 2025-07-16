@@ -17,6 +17,7 @@ indexmap = { workspace = true }
 indoc = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true

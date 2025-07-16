@@ -6031,6 +6031,7 @@ dependencies = [
  "indoc",
  "rustc-hash",
  "serde",
+ "tracing",
  "uv-pep508",
  "uv-pypi-types",
 ]
