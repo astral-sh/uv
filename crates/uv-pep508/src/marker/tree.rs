@@ -1030,7 +1030,7 @@ impl MarkerTree {
                     MarkerValueVariant::VariantNamespaces => variants
                         .iter()
                         .any(|(namespace, _feature, _property)| namespace == marker.value.trim()),
-                    MarkerValueVariant::VariantProperties => marker
+                    MarkerValueVariant::VariantFeatures => marker
                         .value
                         .split_once("::")
                         .is_some_and(|(value_namespace, value_feature)| {
@@ -1039,7 +1039,7 @@ impl MarkerTree {
                                     && feature == value_feature.trim()
                             })
                         }),
-                    MarkerValueVariant::VariantFeatures => marker
+                    MarkerValueVariant::VariantProperties => marker
                         .value
                         .split_once("::")
                         .and_then(|(value_namespace, value_feature_property)| {
@@ -1926,7 +1926,7 @@ mod test {
             implementation_name: "",
             implementation_version: "3.7",
             os_name: "linux",
-            platform_machine: "",
+            platform_machine: "x86_64",
             platform_python_implementation: "",
             platform_release: "",
             platform_system: "",
@@ -3625,8 +3625,8 @@ mod test {
         assert!(marker2.evaluate(&env37, Some(&cpu_namespaces), &[]));
 
         // property variant markers
-        let marker3 = m("'gpu :: cuda' in variant_properties");
-        let marker4 = m("'gpu :: rocm' in variant_properties");
+        let marker3 = m("'gpu :: cuda' in variant_features");
+        let marker4 = m("'gpu :: rocm' in variant_features");
 
         assert!(marker3.evaluate(&env37, None, &[]));
         assert!(marker4.evaluate(&env37, None, &[]));
@@ -3637,8 +3637,8 @@ mod test {
         assert!(!marker4.evaluate(&env37, Some(&cpu_namespaces), &[]));
 
         // feature variant markers
-        let marker5 = m("'gpu :: cuda :: 12.4' in variant_features");
-        let marker6 = m("'gpu :: cuda :: 12.8' in variant_features");
+        let marker5 = m("'gpu :: cuda :: 12.4' in variant_properties");
+        let marker6 = m("'gpu :: cuda :: 12.8' in variant_properties");
 
         assert!(marker5.evaluate(&env37, None, &[]));
         assert!(marker6.evaluate(&env37, None, &[]));
@@ -3661,40 +3661,15 @@ mod test {
         ];
 
         let marker1 = m("'gpu' in variant_namespaces \
-            and 'cpu:: x86_64      :: v3' in variant_features \
+            and 'cpu:: x86_64      :: v3' in variant_properties \
             and python_version >= '3.7' \
-            and 'gpu :: rocm' not in variant_properties");
+            and 'gpu :: rocm' not in variant_features");
         assert!(marker1.evaluate(&env37, None, &[]));
         assert!(marker1.evaluate(&env37, Some(&namespaces), &[]));
 
         let marker2 = m("python_version >= '3.7' and 'gpu' not in variant_namespaces");
         assert!(marker2.evaluate(&env37, None, &[]));
         assert!(!marker2.evaluate(&env37, Some(&namespaces), &[]));
-    }
-
-    #[test]
-    fn torch_variant_marker() {
-        let marker_str = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.9' in variant_properties";
-        let marker = m(marker_str);
-
-        let env = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
-            implementation_name: "",
-            implementation_version: "3.7",
-            os_name: "linux",
-            platform_machine: "x86_64",
-            platform_python_implementation: "",
-            platform_release: "",
-            platform_system: "",
-            platform_version: "",
-            python_full_version: "3.7",
-            python_version: "3.7",
-            sys_platform: "linux",
-        })
-        .unwrap();
-
-        assert_eq!(marker.try_to_string().unwrap(), marker_str);
-
-        assert!(!marker.evaluate(&env, Some(&[]), &[]));
     }
 
     #[test]
@@ -3737,5 +3712,27 @@ mod test {
         "
         );
         // TODO(konsti): Test all cases systematically
+    }
+
+    #[test]
+    fn torch_variant_marker() {
+        let env37 = env37();
+        let gpu_namespaces = [("nvidia".to_string(), "ctk".to_string(), "12.6".to_string())];
+        let gpu_namespaces2 = [
+            ("nvidia".to_string(), "ctk".to_string(), "12.6".to_string()),
+            (
+                "nvidia".to_string(),
+                "cuda_version".to_string(),
+                ">=12.6,<13".to_string(),
+            ),
+        ];
+
+        let marker = m(
+            " platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.6' in variant_properties",
+        );
+
+        assert!(marker.evaluate(&env37, None, &[]));
+        assert!(marker.evaluate(&env37, Some(&gpu_namespaces), &[]));
+        assert!(marker.evaluate(&env37, Some(&gpu_namespaces2), &[]));
     }
 }
