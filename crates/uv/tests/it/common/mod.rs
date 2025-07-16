@@ -188,6 +188,18 @@ impl TestContext {
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
+            "virtual environments, search path, or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "virtual environments, registry, or search path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "virtual environments or search path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
             "managed installations or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
@@ -411,6 +423,15 @@ impl TestContext {
             .push((EnvVars::UV_PYTHON_INSTALL_DIR.into(), managed.into()));
         self.extra_env
             .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "automatic".into()));
+
+        self
+    }
+
+    pub fn with_versions_as_managed(mut self, versions: &[&str]) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED.into(),
+            versions.iter().join(" ").into(),
+        ));
 
         self
     }

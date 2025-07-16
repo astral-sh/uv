@@ -11684,3 +11684,58 @@ fn strip_shebang_arguments() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn install_python_preference() {
+    let context =
+        TestContext::new_with_versions(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
+
+    // Create a managed interpreter environment
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    // Install a package, requesting managed Python
+    uv_snapshot!(context.filters(), context.pip_install().arg("anyio").arg("--managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Install a package, requesting unmanaged Python
+    // This is allowed, because the virtual environment already exists
+    uv_snapshot!(context.filters(), context.pip_install().arg("anyio").arg("--no-managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    ");
+
+    // This also works with `VIRTUAL_ENV` unset
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio").arg("--no-managed-python").env_remove("VIRTUAL_ENV"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    ");
+}

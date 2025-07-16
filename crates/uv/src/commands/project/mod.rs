@@ -30,8 +30,8 @@ use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest, satisfies_python_preference,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -664,6 +664,7 @@ impl ScriptInterpreter {
                     &venv,
                     EnvironmentKind::Script,
                     python_request.as_ref(),
+                    python_preference,
                     requires_python
                         .as_ref()
                         .map(|(requires_python, _)| requires_python),
@@ -794,6 +795,9 @@ pub(crate) enum EnvironmentIncompatibilityError {
         "The interpreter in the {0} environment has a different version ({1}) than it was created with ({2})"
     )]
     PyenvVersionConflict(EnvironmentKind, Version, Version),
+
+    #[error("The {0} environment's Python interpreter does not meet the Python preference: `{1}`")]
+    PythonPreference(EnvironmentKind, PythonPreference),
 }
 
 /// Whether an environment is usable for a project or script, i.e., if it matches the requirements.
@@ -801,6 +805,7 @@ fn environment_is_usable(
     environment: &PythonEnvironment,
     kind: EnvironmentKind,
     python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
     requires_python: Option<&RequiresPython>,
     cache: &Cache,
 ) -> Result<(), EnvironmentIncompatibilityError> {
@@ -834,6 +839,22 @@ fn environment_is_usable(
                 requires_python.clone(),
             ));
         }
+    }
+
+    if satisfies_python_preference(
+        PythonSource::DiscoveredEnvironment,
+        environment.interpreter(),
+        python_preference,
+    ) {
+        trace!(
+            "The virtual environment's Python interpreter meets the Python preference: `{}`",
+            python_preference
+        );
+    } else {
+        return Err(EnvironmentIncompatibilityError::PythonPreference(
+            kind,
+            python_preference,
+        ));
     }
 
     Ok(())
@@ -889,6 +910,7 @@ impl ProjectInterpreter {
                     &venv,
                     EnvironmentKind::Project,
                     python_request.as_ref(),
+                    python_preference,
                     requires_python.as_ref(),
                     cache,
                 ) {
