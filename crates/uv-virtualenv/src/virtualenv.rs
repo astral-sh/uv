@@ -113,14 +113,18 @@ pub(crate) fn create(
                             remove_venv_directory(location)?;
                         }
                         Some(false) => {
+                            let hint = format!(
+                                "Use the `{}` flag or set `{}` to replace the existing {name}",
+                                "--clear".green(),
+                                "UV_VENV_CLEAR=1".green()
+                            );
                             return Err(Error::Io(io::Error::new(
                                 io::ErrorKind::AlreadyExists,
                                 format!(
-                                    "A {name} already exists at: {}\n\n{}{} Use `{}` to replace it",
+                                    "A {name} already exists at: {}\n\n{}{} {hint}",
                                     location.user_display(),
                                     "hint".bold().cyan(),
                                     ":".bold(),
-                                    "--clear".green(),
                                 ),
                             )));
                         }
