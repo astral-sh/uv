@@ -2623,6 +2623,7 @@ impl BuildSettings {
 pub(crate) struct VenvSettings {
     pub(crate) seed: bool,
     pub(crate) allow_existing: bool,
+    pub(crate) clear: bool,
     pub(crate) path: Option<PathBuf>,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
@@ -2641,6 +2642,7 @@ impl VenvSettings {
             no_system,
             seed,
             allow_existing,
+            clear,
             path,
             prompt,
             system_site_packages,
@@ -2658,6 +2660,7 @@ impl VenvSettings {
         Self {
             seed,
             allow_existing,
+            clear,
             path,
             prompt,
             system_site_packages,

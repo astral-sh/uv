@@ -458,6 +458,11 @@ Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`,
 Used ephemeral environments like CI to install uv to a specific path while preventing
 the installer from modifying shell profiles or environment variables.
 
+### `UV_VENV_CLEAR`
+
+Equivalent to the `--clear` command-line argument. If set, uv will remove any
+existing files or directories at the target path.
+
 ### `UV_VENV_SEED`
 
 Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
