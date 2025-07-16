@@ -497,10 +497,16 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
     let term = Term::stderr();
     if term.is_term() {
         let prompt = format!(
-            "A {name} already exists at `{}`. Did you mean to clear its contents (`--clear`)?",
+            "A {name} already exists at `{}`. Do you want to replace it?",
             location.user_display(),
         );
-        Ok(Some(uv_console::confirm(&prompt, &term, true)?))
+        let hint = format!(
+            "Provide the `{}` flag or set `UV_VENV_CLEAR=1` to skip this prompt",
+            "--clear".green()
+        );
+        Ok(Some(uv_console::confirm_with_hint(
+            &prompt, &hint, &term, true,
+        )?))
     } else {
         Ok(None)
     }
