@@ -41,7 +41,7 @@ fn create_venv() {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: A virtual environment exists at `.venv`. In the future, uv will require `--clear` to remove the directory first
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to remove the directory first
     Activate with: source .venv/[BIN]/activate
     "
     );
