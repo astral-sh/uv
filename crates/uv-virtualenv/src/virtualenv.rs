@@ -94,44 +94,44 @@ pub(crate) fn create(
                         debug!("Removing existing directory due to `--clear`");
                         remove_venv_directory(location)?;
                     }
-                    VenvCreationPolicy::FailIfNotEmpty => {
+                    VenvCreationPolicy::FailIfNotEmpty
                         if location
                             .read_dir()
-                            .is_ok_and(|mut dir| dir.next().is_none())
-                        {
-                            debug!("Ignoring empty directory");
+                            .is_ok_and(|mut dir| dir.next().is_none()) =>
+                    {
+                        debug!("Ignoring empty directory");
+                    }
+                    VenvCreationPolicy::FailIfNotEmpty => {
+                        let directory_message = if uv_fs::is_virtualenv_base(location) {
+                            format!(
+                                "A virtual environment exists at `{}`.",
+                                location.user_display()
+                            )
                         } else {
-                            let directory_message = if uv_fs::is_virtualenv_base(location) {
-                                format!(
-                                    "A virtual environment exists at `{}`.",
-                                    location.user_display()
-                                )
-                            } else {
-                                format!("The directory `{}` exists.", location.user_display())
-                            };
+                            format!("The directory `{}` exists.", location.user_display())
+                        };
 
-                            if Term::stderr().is_term() {
-                                if confirm_clear(location)? {
-                                    debug!("Removing existing directory");
-                                    remove_venv_directory(location)?;
-                                } else {
-                                    return Err(Error::Io(io::Error::new(
-                                        io::ErrorKind::AlreadyExists,
-                                        format!(
-                                            "{directory_message} \n\n{}{} Use `{}` to remove the directory first",
-                                            "hint".bold().cyan(),
-                                            ":".bold(),
-                                            "--clear".green(),
-                                        ),
-                                    )));
-                                }
+                        if Term::stderr().is_term() {
+                            if confirm_clear(location)? {
+                                debug!("Removing existing directory");
+                                remove_venv_directory(location)?;
                             } else {
-                                // If this is not a tty, warn for now.
-                                warn_user_once!(
-                                    "{directory_message} In the future, uv will require `{}` to remove the directory first",
-                                    "--clear".green(),
-                                );
+                                return Err(Error::Io(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    format!(
+                                        "{directory_message} \n\n{}{} Use `{}` to remove the directory first",
+                                        "hint".bold().cyan(),
+                                        ":".bold(),
+                                        "--clear".green(),
+                                    ),
+                                )));
                             }
+                        } else {
+                            // If this is not a tty, warn for now.
+                            warn_user_once!(
+                                "{directory_message} In the future, uv will require `{}` to remove the directory first",
+                                "--clear".green(),
+                            );
                         }
                     }
                 }
