@@ -80,7 +80,7 @@ issue for more details and possible workarounds.
  */
 use std::collections::HashMap;
 
-use dbus_secret_service::{Collection, EncryptionType, Error, Item, SecretService};
+use secret_service::{Collection, EncryptionType, Error, Item, SecretService};
 
 use crate::credential::{Credential, CredentialApi, CredentialBuilder, CredentialBuilderApi};
 use crate::error::{Error as ErrorCode, Result, decode_password};
@@ -100,31 +100,38 @@ pub struct SsCredential {
     target: Option<String>,
 }
 
+#[async_trait::async_trait]
 impl CredentialApi for SsCredential {
     /// Sets the password on a unique matching item, if it exists, or creates one if necessary.
     ///
-    /// If there are multiple matches,
-    /// returns an [Ambiguous](ErrorCode::Ambiguous) error with a credential for each
-    /// matching item.
+    /// If there are multiple matches, returns an [Ambiguous](ErrorCode::Ambiguous) error with
+    /// a credential for each matching item.
     ///
     /// When creating, the item is put into a collection named by the credential's `target`
     /// attribute.
-    fn set_password(&self, password: &str) -> Result<()> {
-        self.set_secret(password.as_bytes())
+    async fn set_password(&self, password: &str) -> Result<()> {
+        self.set_secret(password.as_bytes()).await
     }
 
     /// Sets the secret on a unique matching item, if it exists, or creates one if necessary.
     ///
-    /// If there are multiple matches,
-    /// returns an [Ambiguous](ErrorCode::Ambiguous) error with a credential for each
-    /// matching item.
+    /// If there are multiple matches, returns an [Ambiguous](ErrorCode::Ambiguous) error
+    /// with a credential for each matching item.
     ///
     /// When creating, the item is put into a collection named by the credential's `target`
     /// attribute.
-    fn set_secret(&self, secret: &[u8]) -> Result<()> {
+    async fn set_secret(&self, secret: &[u8]) -> Result<()> {
         // first try to find a unique, existing, matching item and set its password
-        match self.map_matching_items(|i| set_item_secret(i, secret), true) {
-            Ok(_) => return Ok(()),
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.matching_items(&ss).await {
+            Ok(items) => {
+                for item in items.iter() {
+                    set_item_secret(item, secret).await?;
+                }
+                return Ok(());
+            }
             Err(ErrorCode::NoEntry) => {}
             Err(err) => return Err(err),
         }
@@ -132,9 +139,14 @@ impl CredentialApi for SsCredential {
         // an item, the credential must have an explicit target.  All entries created with
         // the [new] or [new_with_target] commands will have explicit targets.  But entries
         // created to wrap 3rd-party items that don't have `target` attributes may not.
-        let ss = SecretService::connect(EncryptionType::Dh).map_err(platform_failure)?;
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
         let name = self.target.as_ref().ok_or_else(empty_target)?;
-        let collection = get_collection(&ss, name).or_else(|_| create_collection(&ss, name))?;
+        let collection = match get_collection(&ss, name).await {
+            Ok(collection) => collection,
+            Err(_) => create_collection(&ss, name).await?,
+        };
         collection
             .create_item(
                 self.label.as_str(),
@@ -143,19 +155,29 @@ impl CredentialApi for SsCredential {
                 true, // replace
                 "text/plain",
             )
+            .await
             .map_err(platform_failure)?;
         Ok(())
     }
 
     /// Gets the password on a unique matching item, if it exists.
     ///
-    /// If there are no
-    /// matching items, returns a [NoEntry](ErrorCode::NoEntry) error.
-    /// If there are multiple matches,
-    /// returns an [Ambiguous](ErrorCode::Ambiguous)
+    /// If there are no matching items, returns a [NoEntry](ErrorCode::NoEntry) error.
+    /// If there are multiple matches, returns an [Ambiguous](ErrorCode::Ambiguous)
     /// error with a credential for each matching item.
-    fn get_password(&self) -> Result<String> {
-        Ok(self.map_matching_items(get_item_password, true)?.remove(0))
+    async fn get_password(&self) -> Result<String> {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.unique_matching_item(&ss).await {
+            Ok(item) => get_item_password(&item).await,
+            Err(ErrorCode::NoEntry) => {
+                let collection = ss.get_default_collection().await.map_err(decode_error)?;
+                let item = self.find_unique_legacy_item(&collection).await?;
+                get_item_password(&item).await
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Gets the secret on a unique matching item, if it exists.
@@ -165,33 +187,71 @@ impl CredentialApi for SsCredential {
     /// If there are multiple matches,
     /// returns an [Ambiguous](ErrorCode::Ambiguous)
     /// error with a credential for each matching item.
-    fn get_secret(&self) -> Result<Vec<u8>> {
-        Ok(self.map_matching_items(get_item_secret, true)?.remove(0))
+    async fn get_secret(&self) -> Result<Vec<u8>> {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.unique_matching_item(&ss).await {
+            Ok(item) => get_item_secret(&item).await,
+            Err(ErrorCode::NoEntry) => {
+                let collection = ss.get_default_collection().await.map_err(decode_error)?;
+                let item = self.find_unique_legacy_item(&collection).await?;
+                get_item_secret(&item).await
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Get attributes on a unique matching item, if it exists
-    fn get_attributes(&self) -> Result<HashMap<String, String>> {
-        let attributes: Vec<HashMap<String, String>> =
-            self.map_matching_items(get_item_attributes, true)?;
-        Ok(attributes.into_iter().next().unwrap())
+    async fn get_attributes(&self) -> Result<HashMap<String, String>> {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.unique_matching_item(&ss).await {
+            Ok(item) => get_item_attributes(&item).await,
+            Err(ErrorCode::NoEntry) => {
+                let collection = ss.get_default_collection().await.map_err(decode_error)?;
+                let item = self.find_unique_legacy_item(&collection).await?;
+                get_item_attributes(&item).await
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Update attributes on a unique matching item, if it exists
-    fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
-        self.map_matching_items(|i| update_item_attributes(i, attributes), true)?;
-        Ok(())
+    async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.unique_matching_item(&ss).await {
+            Ok(item) => update_item_attributes(&item, attributes).await,
+            Err(ErrorCode::NoEntry) => {
+                let collection = ss.get_default_collection().await.map_err(decode_error)?;
+                let item = self.find_unique_legacy_item(&collection).await?;
+                update_item_attributes(&item, attributes).await
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Deletes the unique matching item, if it exists.
     ///
-    /// If there are no
-    /// matching items, returns a [NoEntry](ErrorCode::NoEntry) error.
-    /// If there are multiple matches,
-    /// returns an [Ambiguous](ErrorCode::Ambiguous)
+    /// If there are no matching items, returns a [NoEntry](ErrorCode::NoEntry) error.
+    /// If there are multiple matches, returns an [Ambiguous](ErrorCode::Ambiguous)
     /// error with a credential for each matching item.
-    fn delete_credential(&self) -> Result<()> {
-        self.map_matching_items(delete_item, true)?;
-        Ok(())
+    async fn delete_credential(&self) -> Result<()> {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.unique_matching_item(&ss).await {
+            Ok(item) => delete_item(&item).await,
+            Err(ErrorCode::NoEntry) => {
+                let collection = ss.get_default_collection().await.map_err(decode_error)?;
+                let item = self.find_unique_legacy_item(&collection).await?;
+                delete_item(&item).await
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Return the underlying credential object with an `Any` type so that it can
@@ -230,7 +290,7 @@ impl SsCredential {
         Ok(Self {
             attributes,
             label: format!(
-                "{user}@{service}:{target} (keyring v{})",
+                "{user}@{service}:{target} (uv v{})",
                 env!("CARGO_PKG_VERSION"),
             ),
             target: Some(target.to_string()),
@@ -250,7 +310,7 @@ impl SsCredential {
         Ok(Self {
             attributes,
             label: format!(
-                "keyring-rs v{} for no target, service '{service}', user '{user}'",
+                "uv v{} for no target, service '{service}', user '{user}'",
                 env!("CARGO_PKG_VERSION"),
             ),
             target: None,
@@ -261,90 +321,137 @@ impl SsCredential {
     ///
     /// The created credential will have all the attributes and label
     /// of the underlying item, so you can examine them.
-    pub fn new_from_item(item: &Item) -> Result<Self> {
-        let attributes = item.get_attributes().map_err(decode_error)?;
+    pub async fn new_from_item(item: &Item<'_>) -> Result<Self> {
+        let attributes = item.get_attributes().await.map_err(decode_error)?;
         let target = attributes.get("target").cloned();
         Ok(Self {
             attributes,
-            label: item.get_label().map_err(decode_error)?,
+            label: item.get_label().await.map_err(decode_error)?,
             target,
         })
     }
 
     /// Construct a credential for this credential's underlying matching item,
     /// if there is exactly one.
-    pub fn new_from_matching_item(&self) -> Result<Self> {
-        Ok(self
-            .map_matching_items(Self::new_from_item, true)?
-            .remove(0))
+    pub async fn new_from_matching_item(&self) -> Result<Self> {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.unique_matching_item(&ss).await {
+            Ok(item) => Self::new_from_item(&item).await,
+            Err(ErrorCode::NoEntry) => {
+                let collection = ss.get_default_collection().await.map_err(decode_error)?;
+                let item = self.find_unique_legacy_item(&collection).await?;
+                Self::new_from_item(&item).await
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// If there are multiple matching items for this credential, get all of their passwords.
     ///
     /// (This is useful if [get_password](SsCredential::get_password)
     /// returns an [Ambiguous](ErrorCode::Ambiguous) error.)
-    pub fn get_all_passwords(&self) -> Result<Vec<String>> {
-        self.map_matching_items(get_item_password, false)
+    pub async fn get_all_passwords(&self) -> Result<Vec<String>> {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.matching_items(&ss).await {
+            Ok(items) => {
+                let mut passwords = Vec::new();
+                for item in items.iter() {
+                    passwords.push(get_item_password(item).await?);
+                }
+                Ok(passwords)
+            }
+            Err(ErrorCode::NoEntry) => {
+                let collection = ss.get_default_collection().await.map_err(decode_error)?;
+                let items = self.find_legacy_items(&collection).await?;
+                let mut passwords = Vec::new();
+                for item in items.iter() {
+                    passwords.push(get_item_password(item).await?);
+                }
+                Ok(passwords)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// If there are multiple matching items for this credential, delete all of them.
     ///
     /// (This is useful if [delete_credential](SsCredential::delete_credential)
     /// returns an [Ambiguous](ErrorCode::Ambiguous) error.)
-    pub fn delete_all_passwords(&self) -> Result<()> {
-        self.map_matching_items(delete_item, false)?;
-        Ok(())
+    pub async fn delete_all_passwords(&self) -> Result<()> {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(platform_failure)?;
+        match self.matching_items(&ss).await {
+            Ok(items) => {
+                for item in items.iter() {
+                    delete_item(item).await?;
+                }
+                Ok(())
+            }
+            Err(ErrorCode::NoEntry) => {
+                let collection = ss.get_default_collection().await.map_err(decode_error)?;
+                let items = self.find_legacy_items(&collection).await?;
+                for item in items.iter() {
+                    delete_item(item).await?;
+                }
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
     }
 
-    /// Map a function over the items matching this credential.
+    /// Find and unlock items matching this credential.
     ///
-    /// Items are unlocked before the function is applied.
-    ///
-    /// If `require_unique` is true, and there are no matching items, then
-    /// a [NoEntry](ErrorCode::NoEntry) error is returned.
-    /// If `require_unique` is true, and there are multiple matches,
-    /// then an [Ambiguous](ErrorCode::Ambiguous) error is returned
-    /// with a vector containing one
-    /// credential for each of the matching items.
-    pub fn map_matching_items<F, T>(&self, f: F, require_unique: bool) -> Result<Vec<T>>
-    where
-        F: Fn(&Item) -> Result<T>,
-        T: Sized,
-    {
-        let ss = SecretService::connect(EncryptionType::Dh).map_err(platform_failure)?;
+    /// Items are unlocked before being returned.
+    async fn matching_items<'a>(&self, ss: &'a SecretService<'_>) -> Result<Vec<Item<'a>>> {
         let attributes: HashMap<&str, &str> = self.search_attributes(false).into_iter().collect();
-        let search = ss.search_items(attributes).map_err(decode_error)?;
+        let search = ss.search_items(attributes).await.map_err(decode_error)?;
         let count = search.locked.len() + search.unlocked.len();
         if count == 0 {
-            if let Some("default") = self.target.as_deref() {
-                return self.map_matching_legacy_items(&ss, f, require_unique);
-            }
+            return Err(ErrorCode::NoEntry);
         }
-        if require_unique {
-            if count == 0 {
-                return Err(ErrorCode::NoEntry);
-            } else if count > 1 {
+
+        let mut results: Vec<Item<'a>> = vec![];
+        for item in search.unlocked {
+            results.push(item);
+        }
+        for item in search.locked {
+            item.unlock().await.map_err(decode_error)?;
+            results.push(item);
+        }
+        Ok(results)
+    }
+
+    /// Find and unlock a unique item matching this credential.
+    ///
+    /// If there are no matching items, then a [NoEntry](ErrorCode::NoEntry) error is returned.
+    /// If there are multiple matches, then an [Ambiguous](ErrorCode::Ambiguous) error is
+    /// returned with a vector containing one credential for each of the matching items.
+    async fn unique_matching_item<'a>(&self, ss: &'a SecretService<'_>) -> Result<Item<'a>> {
+        let mut items = self.matching_items(ss).await?;
+        match items.len() {
+            0 => Err(ErrorCode::NoEntry),
+            1 => Ok(items.pop().unwrap()),
+            _ => {
                 let mut creds: Vec<Box<Credential>> = vec![];
+                let attributes: HashMap<&str, &str> =
+                    self.search_attributes(false).into_iter().collect();
+                let search = ss.search_items(attributes).await.map_err(decode_error)?;
                 for item in search.locked.iter().chain(search.unlocked.iter()) {
-                    let cred = Self::new_from_item(item)?;
+                    let cred = Self::new_from_item(item).await?;
                     creds.push(Box::new(cred))
                 }
                 return Err(ErrorCode::Ambiguous(creds));
             }
         }
-        let mut results: Vec<T> = vec![];
-        for item in search.unlocked.iter() {
-            results.push(f(item)?);
-        }
-        for item in search.locked.iter() {
-            item.unlock().map_err(decode_error)?;
-            results.push(f(item)?);
-        }
-        Ok(results)
     }
 
-    /// Map a function over items that older versions of keyring
-    /// would have matched against this credential.
+    /// Find legacy items in the given collection if the credential being searched has
+    /// the default target.
     ///
     /// Keyring v1 created secret service items that had no target attribute, and it was
     /// only able to create items in the default collection. Keyring v2, and Keyring v3.1,
@@ -362,40 +469,59 @@ impl SsCredential {
     /// collection.
     ///
     /// So with keyring v3.2.1, if the service-wide search fails to find any matching
-    /// credential, and the credential being searched for has the default target (or
-    /// no target), we fall back and search the default collection for a v1-style credential.
+    /// credential, and the credential being searched for has the default target,
+    /// we fall back and search the default collection for a v1-style credential.
     /// That preserves the legacy behavior at the cost of a second round-trip through
     /// the secret service for the collection search.
-    pub fn map_matching_legacy_items<F, T>(
-        &self,
-        ss: &SecretService,
-        f: F,
-        require_unique: bool,
-    ) -> Result<Vec<T>>
-    where
-        F: Fn(&Item) -> Result<T>,
-        T: Sized,
-    {
-        let collection = ss.get_default_collection().map_err(decode_error)?;
-        let attributes = self.search_attributes(true);
-        let search = collection.search_items(attributes).map_err(decode_error)?;
-        if require_unique {
-            if search.is_empty() && require_unique {
+    ///
+    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there are no matching items or
+    /// if the credential being searched does not have the default target.
+    async fn find_legacy_items<'a>(&self, collection: &'a Collection<'_>) -> Result<Vec<Item<'a>>> {
+        if let Some("default") = self.target.as_deref() {
+            let attributes = self.search_attributes(true);
+            let search = collection
+                .search_items(attributes)
+                .await
+                .map_err(decode_error)?;
+            if search.is_empty() {
                 return Err(ErrorCode::NoEntry);
-            } else if search.len() > 1 {
+            }
+
+            Ok(search)
+        } else {
+            Err(ErrorCode::NoEntry)
+        }
+    }
+
+    /// Find unique legacy item in the given collection if the credential being searched has
+    /// the default target.
+    ///
+    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there are no matching items or
+    /// if the credential being searched does not have the default target.
+    /// If there are multiple matches, then an [Ambiguous](ErrorCode::Ambiguous) error is
+    /// returned with a vector containing one credential for each of the matching items.
+    async fn find_unique_legacy_item<'a>(
+        &self,
+        collection: &'a Collection<'_>,
+    ) -> Result<Item<'a>> {
+        let mut items = self.find_legacy_items(collection).await?;
+        match items.len() {
+            0 => Err(ErrorCode::NoEntry),
+            1 => Ok(items.pop().unwrap()),
+            _ => {
                 let mut creds: Vec<Box<Credential>> = vec![];
+                let attributes = self.search_attributes(true);
+                let search = collection
+                    .search_items(attributes)
+                    .await
+                    .map_err(decode_error)?;
                 for item in search.iter() {
-                    let cred = Self::new_from_item(item)?;
+                    let cred = Self::new_from_item(item).await?;
                     creds.push(Box::new(cred))
                 }
                 return Err(ErrorCode::Ambiguous(creds));
             }
         }
-        let mut results: Vec<T> = vec![];
-        for item in search.iter() {
-            results.push(f(item)?);
-        }
-        Ok(results)
     }
 
     /// Using strings in the credential map makes managing the lifetime
@@ -457,18 +583,23 @@ impl CredentialBuilderApi for SsCredentialBuilder {
 ///
 /// The name `default` is treated specially and is interpreted as naming
 /// the default collection regardless of its label (which might be different).
-pub fn get_collection<'a>(ss: &'a SecretService, name: &str) -> Result<Collection<'a>> {
+pub async fn get_collection<'a>(ss: &'a SecretService<'_>, name: &str) -> Result<Collection<'a>> {
     let collection = if name.eq("default") {
-        ss.get_default_collection().map_err(decode_error)?
+        ss.get_default_collection().await.map_err(decode_error)?
     } else {
-        let all = ss.get_all_collections().map_err(decode_error)?;
-        let found = all
-            .into_iter()
-            .find(|c| c.get_label().map(|l| l.eq(name)).unwrap_or(false));
+        let all = ss.get_all_collections().await.map_err(decode_error)?;
+        let mut found = None;
+        for c in all {
+            let label = c.get_label().await.map_err(decode_error)?;
+            if label.eq(name) {
+                found = Some(c);
+                break;
+            }
+        }
         found.ok_or(ErrorCode::NoEntry)?
     };
-    if collection.is_locked().map_err(decode_error)? {
-        collection.unlock().map_err(decode_error)?;
+    if collection.is_locked().await.map_err(decode_error)? {
+        collection.unlock().await.map_err(decode_error)?;
     }
     Ok(collection)
 }
@@ -478,45 +609,56 @@ pub fn get_collection<'a>(ss: &'a SecretService, name: &str) -> Result<Collectio
 /// If a collection with that name already exists, it is returned.
 ///
 /// The name `default` is specially interpreted to mean the default collection.
-pub fn create_collection<'a>(ss: &'a SecretService, name: &str) -> Result<Collection<'a>> {
+pub async fn create_collection<'a>(
+    ss: &'a SecretService<'_>,
+    name: &str,
+) -> Result<Collection<'a>> {
     let collection = if name.eq("default") {
-        ss.get_default_collection().map_err(decode_error)?
+        ss.get_default_collection().await.map_err(decode_error)?
     } else {
-        ss.create_collection(name, "").map_err(decode_error)?
+        ss.create_collection(name, "").await.map_err(decode_error)?
     };
     Ok(collection)
 }
 
 /// Given an existing item, set its secret.
-pub fn set_item_secret(item: &Item, secret: &[u8]) -> Result<()> {
-    item.set_secret(secret, "text/plain").map_err(decode_error)
+pub async fn set_item_secret(item: &Item<'_>, secret: &[u8]) -> Result<()> {
+    item.set_secret(secret, "text/plain")
+        .await
+        .map_err(decode_error)
 }
 
 /// Given an existing item, retrieve and decode its password.
-pub fn get_item_password(item: &Item) -> Result<String> {
-    let bytes = item.get_secret().map_err(decode_error)?;
+pub async fn get_item_password(item: &Item<'_>) -> Result<String> {
+    let bytes = item.get_secret().await.map_err(decode_error)?;
     decode_password(bytes)
 }
 
 /// Given an existing item, retrieve its secret.
-pub fn get_item_secret(item: &Item) -> Result<Vec<u8>> {
-    let secret = item.get_secret().map_err(decode_error)?;
+pub async fn get_item_secret(item: &Item<'_>) -> Result<Vec<u8>> {
+    let secret = item.get_secret().await.map_err(decode_error)?;
     Ok(secret)
 }
 
 /// Given an existing item, retrieve its non-controlled attributes.
-pub fn get_item_attributes(item: &Item) -> Result<HashMap<String, String>> {
-    let mut attributes = item.get_attributes().map_err(decode_error)?;
+pub async fn get_item_attributes(item: &Item<'_>) -> Result<HashMap<String, String>> {
+    let mut attributes = item.get_attributes().await.map_err(decode_error)?;
     attributes.remove("target");
     attributes.remove("service");
     attributes.remove("username");
-    attributes.insert("label".to_string(), item.get_label().map_err(decode_error)?);
+    attributes.insert(
+        "label".to_string(),
+        item.get_label().await.map_err(decode_error)?,
+    );
     Ok(attributes)
 }
 
 /// Given an existing item, retrieve its non-controlled attributes.
-pub fn update_item_attributes(item: &Item, attributes: &HashMap<&str, &str>) -> Result<()> {
-    let existing = item.get_attributes().map_err(decode_error)?;
+pub async fn update_item_attributes(
+    item: &Item<'_>,
+    attributes: &HashMap<&str, &str>,
+) -> Result<()> {
+    let existing = item.get_attributes().await.map_err(decode_error)?;
     let mut updated: HashMap<&str, &str> = HashMap::new();
     for (k, v) in existing.iter() {
         updated.insert(k, v);
@@ -532,7 +674,7 @@ pub fn update_item_attributes(item: &Item, attributes: &HashMap<&str, &str>) -> 
                     "cannot be empty".to_string(),
                 ));
             }
-            item.set_label(v).map_err(decode_error)?;
+            item.set_label(v).await.map_err(decode_error)?;
             if updated.contains_key("label") {
                 updated.insert("label", v);
             }
@@ -540,13 +682,13 @@ pub fn update_item_attributes(item: &Item, attributes: &HashMap<&str, &str>) -> 
             updated.insert(k, v);
         }
     }
-    item.set_attributes(updated).map_err(decode_error)?;
+    item.set_attributes(updated).await.map_err(decode_error)?;
     Ok(())
 }
 
 // Given an existing item, delete it.
-pub fn delete_item(item: &Item) -> Result<()> {
-    item.delete().map_err(decode_error)
+pub async fn delete_item(item: &Item<'_>) -> Result<()> {
+    item.delete().await.map_err(decode_error)
 }
 
 //
@@ -609,47 +751,43 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_empty_service_and_user() {
-        crate::tests::test_empty_service_and_user(entry_new);
-    }
-
     #[tokio::test]
     async fn test_missing_entry() {
         crate::tests::test_missing_entry(entry_new).await;
     }
 
-    #[test]
-    fn test_empty_password() {
-        crate::tests::test_empty_password(entry_new);
+    #[tokio::test]
+    async fn test_empty_password() {
+        crate::tests::test_empty_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_ascii_password() {
-        crate::tests::test_round_trip_ascii_password(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_ascii_password() {
+        crate::tests::test_round_trip_ascii_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_non_ascii_password() {
-        crate::tests::test_round_trip_non_ascii_password(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_non_ascii_password() {
+        crate::tests::test_round_trip_non_ascii_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_random_secret() {
-        crate::tests::test_round_trip_random_secret(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_random_secret() {
+        crate::tests::test_round_trip_random_secret(entry_new).await;
     }
 
-    #[test]
-    fn test_update() {
-        crate::tests::test_update(entry_new);
+    #[tokio::test]
+    async fn test_update() {
+        crate::tests::test_update(entry_new).await;
     }
 
-    #[test]
-    fn test_get_credential() {
+    #[tokio::test]
+    async fn test_get_credential() {
         let name = generate_random_string();
         let entry = entry_new(&name, &name);
         entry
             .set_password("test get credential")
+            .await
             .expect("Can't set password for get_credential");
         let credential: &SsCredential = entry
             .get_credential()
@@ -657,6 +795,7 @@ mod tests {
             .expect("Not a secret service credential");
         let actual = credential
             .new_from_matching_item()
+            .await
             .expect("Can't read credential");
         assert_eq!(actual.label, credential.label, "Labels don't match");
         for (key, value) in &credential.attributes {
@@ -668,19 +807,20 @@ mod tests {
         }
         entry
             .delete_credential()
+            .await
             .expect("Couldn't delete get-credential");
-        assert!(matches!(entry.get_password(), Err(Error::NoEntry)));
+        assert!(matches!(entry.get_password().await, Err(Error::NoEntry)));
     }
 
-    #[test]
-    fn test_get_update_attributes() {
+    #[tokio::test]
+    async fn test_get_update_attributes() {
         let name = generate_random_string();
         let credential = SsCredential::new_with_target(None, &name, &name)
             .expect("Can't create credential for attribute test");
         let create_label = credential.label.clone();
         let entry = Entry::new_with_credential(Box::new(credential));
         assert!(
-            matches!(entry.get_attributes(), Err(Error::NoEntry)),
+            matches!(entry.get_attributes().await, Err(Error::NoEntry)),
             "Read missing credential in attribute test",
         );
         let mut in_map: HashMap<&str, &str> = HashMap::new();
@@ -690,15 +830,17 @@ mod tests {
         in_map.insert("service", "ignored service value");
         in_map.insert("username", "ignored username value");
         assert!(
-            matches!(entry.update_attributes(&in_map), Err(Error::NoEntry)),
+            matches!(entry.update_attributes(&in_map).await, Err(Error::NoEntry)),
             "Updated missing credential in attribute test",
         );
         // create the credential and test again
         entry
             .set_password("test password for attributes")
+            .await
             .unwrap_or_else(|err| panic!("Can't set password for attribute test: {err:?}"));
         let out_map = entry
             .get_attributes()
+            .await
             .expect("Can't get attributes after create");
         assert_eq!(out_map["label"], create_label);
         assert_eq!(out_map["application"], "rust-keyring");
@@ -706,11 +848,12 @@ mod tests {
         assert!(!out_map.contains_key("service"));
         assert!(!out_map.contains_key("username"));
         assert!(
-            matches!(entry.update_attributes(&in_map), Ok(())),
+            matches!(entry.update_attributes(&in_map).await, Ok(())),
             "Couldn't update attributes in attribute test",
         );
         let after_map = entry
             .get_attributes()
+            .await
             .expect("Can't get attributes after update");
         assert_eq!(after_map["label"], in_map["label"]);
         assert_eq!(
@@ -720,21 +863,25 @@ mod tests {
         assert_eq!(out_map["application"], "rust-keyring");
         in_map.insert("label", "");
         assert!(
-            matches!(entry.update_attributes(&in_map), Err(Error::Invalid(_, _))),
+            matches!(
+                entry.update_attributes(&in_map).await,
+                Err(Error::Invalid(_, _))
+            ),
             "Was able to set empty label in attribute test",
         );
         entry
             .delete_credential()
+            .await
             .unwrap_or_else(|err| panic!("Can't delete credential for attribute test: {err:?}"));
         assert!(
-            matches!(entry.get_attributes(), Err(Error::NoEntry)),
+            matches!(entry.get_attributes().await, Err(Error::NoEntry)),
             "Read deleted credential in attribute test",
         );
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore = "can't be run headless, because it needs to prompt"]
-    fn test_create_new_target_collection() {
+    async fn test_create_new_target_collection() {
         let name = generate_random_string();
         let credential = SsCredential::new_with_target(Some(&name), &name, &name)
             .expect("Can't create credential for new collection");
@@ -742,21 +889,24 @@ mod tests {
         let password = "password in new collection";
         entry
             .set_password(password)
+            .await
             .expect("Can't set password for new collection entry");
         let actual = entry
             .get_password()
+            .await
             .expect("Can't get password for new collection entry");
         assert_eq!(actual, password);
         entry
             .delete_credential()
+            .await
             .expect("Couldn't delete password for new collection entry");
-        assert!(matches!(entry.get_password(), Err(Error::NoEntry)));
-        delete_collection(&name);
+        assert!(matches!(entry.get_password().await, Err(Error::NoEntry)));
+        delete_collection(&name).await;
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore = "can't be run headless, because it needs to prompt"]
-    fn test_separate_targets_dont_interfere() {
+    async fn test_separate_targets_dont_interfere() {
         let name1 = generate_random_string();
         let name2 = generate_random_string();
         let credential1 = SsCredential::new_with_target(Some(&name1), &name1, &name1)
@@ -771,72 +921,90 @@ mod tests {
         let password3 = "password for default collection";
         entry1
             .set_password(password1)
+            .await
             .expect("Can't set password for collection 1");
         entry2
             .set_password(password2)
+            .await
             .expect("Can't set password for collection 2");
         entry3
             .set_password(password3)
+            .await
             .expect("Can't set password for default collection");
         let actual1 = entry1
             .get_password()
+            .await
             .expect("Can't get password for collection 1");
         assert_eq!(actual1, password1);
         let actual2 = entry2
             .get_password()
+            .await
             .expect("Can't get password for collection 2");
         assert_eq!(actual2, password2);
         let actual3 = entry3
             .get_password()
+            .await
             .expect("Can't get password for default collection");
         assert_eq!(actual3, password3);
         entry1
             .delete_credential()
+            .await
             .expect("Couldn't delete password for collection 1");
-        assert!(matches!(entry1.get_password(), Err(Error::NoEntry)));
+        assert!(matches!(entry1.get_password().await, Err(Error::NoEntry)));
         entry2
             .delete_credential()
+            .await
             .expect("Couldn't delete password for collection 2");
-        assert!(matches!(entry2.get_password(), Err(Error::NoEntry)));
+        assert!(matches!(entry2.get_password().await, Err(Error::NoEntry)));
         entry3
             .delete_credential()
+            .await
             .expect("Couldn't delete password for default collection");
-        assert!(matches!(entry3.get_password(), Err(Error::NoEntry)));
-        delete_collection(&name1);
-        delete_collection(&name2);
+        assert!(matches!(entry3.get_password().await, Err(Error::NoEntry)));
+        delete_collection(&name1).await;
+        delete_collection(&name2).await;
     }
 
-    #[test]
-    fn test_legacy_entry() {
+    #[tokio::test]
+    async fn test_legacy_entry() {
         let name = generate_random_string();
         let pw = "test password";
         let v3_entry = Entry::new(&name, &name).expect("Can't create v3 entry");
-        let _ = v3_entry.get_password().expect_err("Found v3 entry");
-        create_v1_entry(&name, pw);
-        let password = v3_entry.get_password().expect("Can't find v1 entry");
+        let _ = v3_entry.get_password().await.expect_err("Found v3 entry");
+        create_v1_entry(&name, pw).await;
+        let password = v3_entry.get_password().await.expect("Can't find v1 entry");
         assert_eq!(password, pw);
-        v3_entry.delete_credential().expect("Can't delete v1 entry");
+        v3_entry
+            .delete_credential()
+            .await
+            .expect("Can't delete v1 entry");
         let _ = v3_entry
             .get_password()
+            .await
             .expect_err("Got password for v1 entry after delete");
     }
 
-    fn delete_collection(name: &str) {
-        let ss =
-            SecretService::connect(EncryptionType::Dh).expect("Can't connect to secret service");
-        let collection = super::get_collection(&ss, name).expect("Can't find collection to delete");
-        collection.delete().expect("Can't delete collection");
+    async fn delete_collection(name: &str) {
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .expect("Can't connect to secret service");
+        let collection = super::get_collection(&ss, name)
+            .await
+            .expect("Can't find collection to delete");
+        collection.delete().await.expect("Can't delete collection");
     }
 
-    fn create_v1_entry(name: &str, password: &str) {
-        use dbus_secret_service::{EncryptionType, SecretService};
+    async fn create_v1_entry(name: &str, password: &str) {
+        use secret_service::{EncryptionType, SecretService};
 
         let cred = SsCredential::new_with_no_target(name, name)
             .expect("Can't create credential with no target");
-        let ss =
-            SecretService::connect(EncryptionType::Dh).expect("Can't connect to secret service");
+        let ss = SecretService::connect(EncryptionType::Dh)
+            .await
+            .expect("Can't connect to secret service");
         let collection = ss
             .get_default_collection()
+            .await
             .expect("Can't get default collection");
         collection
             .create_item(
@@ -846,6 +1014,7 @@ mod tests {
                 true, // replace
                 "text/plain",
             )
+            .await
             .expect("Can't create item with no target in default collection");
     }
 }

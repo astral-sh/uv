@@ -15,18 +15,20 @@ default = ["apple-native", "secret-service", "windows-native"]
 ## Use the built-in Keychain Services on macOS and iOS
 apple-native = ["dep:security-framework"]
 ## Use the secret-service on *nix.
-secret-service = ["dep:dbus-secret-service"]
+secret-service = ["dep:secret-service"]
 ## Use the built-in credential store on Windows
 windows-native = ["dep:windows-sys", "dep:byteorder"]
 
 [dependencies]
+async-trait = { workspace = true }
 log = "0.4"
+tokio = { workspace = true }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 security-framework = { version = "3", optional = true }
 
 [target.'cfg(any(target_os = "linux",target_os = "freebsd", target_os = "openbsd"))'.dependencies]
-dbus-secret-service = { version = "4", features = ["crypto-rust"], optional = true }
+secret-service = { version = "5.0.0", features = ["rt-tokio-crypto-rust"], optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 byteorder = { version = "1", optional = true }
@@ -50,6 +52,7 @@ env_logger = "0.11.5"
 fastrand = "2"
 rpassword = "7"
 rprompt = "2"
+tokio = { workspace = true }
 whoami = "1.5"
 
 [package.metadata.docs.rs]
