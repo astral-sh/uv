@@ -501,8 +501,9 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
             location.user_display(),
         );
         let hint = format!(
-            "Provide the `{}` flag or set `UV_VENV_CLEAR=1` to skip this prompt",
-            "--clear".green()
+            "Use the `{}` flag or set `{}` to skip this prompt",
+            "--clear".green(),
+            "UV_VENV_CLEAR=1".green()
         );
         Ok(Some(uv_console::confirm_with_hint(
             &prompt, &hint, &term, true,
