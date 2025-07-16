@@ -1059,7 +1059,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Project(project) => {
             Box::pin(run_project(
-                cli.top_level.global_args.project.is_some(),
                 project,
                 &project_dir,
                 run_command,
@@ -1650,7 +1649,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
 /// Run a [`ProjectCommand`].
 async fn run_project(
-    project_was_explicit: bool,
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
@@ -2042,19 +2040,11 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
-            // If they specified any of these flags, they probably don't mean `uv self version`
-            let strict = project_was_explicit
-                || globals.preview.is_enabled()
-                || args.dry_run
-                || !args.bump.is_empty()
-                || args.value.is_some()
-                || args.package.is_some();
             Box::pin(commands::project_version(
                 args.value,
                 args.bump,
                 args.short,
                 args.output_format,
-                strict,
                 project_dir,
                 args.package,
                 args.dry_run,
