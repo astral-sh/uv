@@ -41,7 +41,7 @@ fn create_venv() {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to remove the directory first
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
     "
     );
@@ -970,7 +970,7 @@ fn non_empty_dir_exists() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to remove the directory first
+    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
     "
     );
@@ -998,7 +998,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to remove the directory first
+    warning: A directory already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
     "
     );

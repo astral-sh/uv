@@ -116,7 +116,7 @@ pub(crate) fn create(
                             return Err(Error::Io(io::Error::new(
                                 io::ErrorKind::AlreadyExists,
                                 format!(
-                                    "A {name} already exists at: {}\n\n{}{} Use `{}` to remove the directory first",
+                                    "A {name} already exists at: {}\n\n{}{} Use `{}` to replace it",
                                     location.user_display(),
                                     "hint".bold().cyan(),
                                     ":".bold(),
@@ -127,7 +127,7 @@ pub(crate) fn create(
                         // When we don't have a TTY, warn that the behavior will change in the future
                         None => {
                             warn_user_once!(
-                                "A {name} already exists at `{}`. In the future, uv will require `{}` to remove the directory first",
+                                "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
                                 location.user_display(),
                                 "--clear".green(),
                             );
