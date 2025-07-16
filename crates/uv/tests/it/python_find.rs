@@ -678,10 +678,9 @@ fn python_find_unsupported_version() {
 #[test]
 fn python_find_venv_invalid() {
     let context: TestContext = TestContext::new("3.12")
-        // Enable additional filters for Windows compatibility
-        .with_filtered_exe_suffix()
         .with_filtered_python_names()
-        .with_filtered_virtualenv_bin();
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // We find the virtual environment
     uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r"
@@ -783,9 +782,10 @@ fn python_required_python_major_minor() {
 #[test]
 fn python_find_script() {
     let context = TestContext::new("3.13")
-        .with_filtered_exe_suffix()
         .with_filtered_virtualenv_bin()
-        .with_filtered_python_names();
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
     let filters = context
         .filters()
         .into_iter()
@@ -828,9 +828,9 @@ fn python_find_script() {
 #[test]
 fn python_find_script_no_environment() {
     let context = TestContext::new("3.13")
-        .with_filtered_exe_suffix()
         .with_filtered_virtualenv_bin()
-        .with_filtered_python_names();
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
 
     let script = context.temp_dir.child("foo.py");
 
@@ -881,9 +881,9 @@ fn python_find_script_python_not_found() {
 #[test]
 fn python_find_script_no_such_version() {
     let context = TestContext::new("3.13")
-        .with_filtered_exe_suffix()
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names()
+        .with_filtered_exe_suffix()
         .with_filtered_python_sources();
     let filters = context
         .filters()
