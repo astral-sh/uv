@@ -13381,7 +13381,9 @@ fn add_path_with_no_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13452,7 +13454,9 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/external_dep)
     ");
 
     let pyproject_toml = fs_err::read_to_string(workspace_toml)?;
