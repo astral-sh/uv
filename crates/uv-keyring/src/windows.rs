@@ -664,9 +664,9 @@ mod tests {
         crate::tests::test_empty_service_and_user(entry_new);
     }
 
-    #[test]
-    fn test_missing_entry() {
-        crate::tests::test_missing_entry(entry_new);
+    #[tokio::test]
+    async fn test_missing_entry() {
+        crate::tests::test_missing_entry(entry_new).await;
     }
 
     #[test]
