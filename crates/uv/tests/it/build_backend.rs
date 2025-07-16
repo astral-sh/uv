@@ -222,8 +222,7 @@ fn preserve_executable_bit() -> Result<()> {
     let project_dir = context.temp_dir.path().join("preserve_executable_bit");
     context
         .init()
-        .arg("--build-backend")
-        .arg("uv")
+        .arg("--lib")
         .arg(&project_dir)
         .assert()
         .success();
@@ -296,7 +295,7 @@ fn rename_module() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
@@ -377,7 +376,7 @@ fn rename_module_editable_build() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
@@ -436,7 +435,7 @@ fn build_module_name_normalization() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
 
         [tool.uv.build-backend]
@@ -548,7 +547,7 @@ fn build_sdist_with_long_path() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.7,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
     context
@@ -591,7 +590,7 @@ fn sdist_error_without_module() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.7,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
@@ -661,7 +660,7 @@ fn complex_namespace_packages() -> Result<()> {
             module-name = "{project_name_dist_info}.{part_name}"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<10000"]
+            requires = ["uv_build>=0.7,<10000"]
             build-backend = "uv_build"
             "#
         };
@@ -770,8 +769,7 @@ fn symlinked_file() -> Result<()> {
     let project = context.temp_dir.child("project");
     context
         .init()
-        .arg("--build-backend")
-        .arg("uv")
+        .arg("--lib")
         .arg(project.path())
         .assert()
         .success();
@@ -783,7 +781,7 @@ fn symlinked_file() -> Result<()> {
         license-files = ["LICENSE"]
 
         [build-system]
-        requires = ["uv_build>=0.5.15,<10000"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
         "#
     })?;
