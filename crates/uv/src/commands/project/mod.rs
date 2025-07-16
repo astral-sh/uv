@@ -75,7 +75,7 @@ pub(crate) enum ProjectError {
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
     )]
-    LockMismatch(Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>),
 
     #[error(
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
@@ -199,9 +199,6 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to parse PEP 723 script metadata")]
     Pep723ScriptTomlParse(#[source] toml::de::Error),
-
-    #[error("Failed to remove ephemeral overlay")]
-    OverlayRemoval(#[source] std::io::Error),
 
     #[error("Failed to find `site-packages` directory for environment")]
     NoSitePackages,

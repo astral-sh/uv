@@ -485,11 +485,9 @@ pub(crate) async fn install(
             preview,
         )?;
 
-        if preview.is_enabled() {
-            #[cfg(windows)]
-            {
-                uv_python::windows_registry::create_registry_entry(installation, &mut errors)?;
-            }
+        #[cfg(windows)]
+        {
+            uv_python::windows_registry::create_registry_entry(installation, &mut errors)?;
         }
     }
 

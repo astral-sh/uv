@@ -435,3 +435,18 @@ are not yet available for musl Linux on ARM).
 ### PyPy distributions
 
 PyPy distributions are provided by the PyPy project.
+
+## Registration in the Windows registry
+
+On Windows, installation of managed Python versions will register them with the Windows registry as
+defined by [PEP 514](https://peps.python.org/pep-0514/).
+
+After installation, the Python versions can be selected with the `py` launcher, e.g.:
+
+```console
+$ uv python install 3.13.1
+$ py -V:Astral/CPython3.13.1
+```
+
+On uninstall, uv will remove the registry entry for the target version as well as any broken
+registry entries.
