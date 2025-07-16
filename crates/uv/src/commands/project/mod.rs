@@ -43,7 +43,6 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_virtualenv::OnExisting;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
@@ -1340,7 +1339,7 @@ impl ProjectEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove,
                         false,
                         false,
                         upgradeable,
@@ -1379,7 +1378,7 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     upgradeable,
@@ -1531,7 +1530,7 @@ impl ScriptEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove,
                         false,
                         false,
                         upgradeable,
@@ -1567,7 +1566,7 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     upgradeable,
