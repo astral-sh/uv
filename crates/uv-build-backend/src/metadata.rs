@@ -171,7 +171,7 @@ impl PyProjectToml {
     ///
     /// ```toml
     /// [build-system]
-    /// requires = ["uv_build>=0.4.15,<5"]
+    /// requires = ["uv_build>=0.4.15,<0.5"]
     /// build-backend = "uv_build"
     /// ```
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
@@ -826,7 +826,7 @@ mod tests {
             {payload}
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<0.5"]
             build-backend = "uv_build"
         "#
         }
@@ -909,7 +909,7 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<0.5"]
             build-backend = "uv_build"
         "#
         };
@@ -1036,7 +1036,7 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<0.5"]
             build-backend = "uv_build"
         "#
         };
@@ -1104,7 +1104,7 @@ mod tests {
         let contents = extend_project("");
         let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("1.0.0+test").join("\n"),
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @""
         );
     }
@@ -1135,7 +1135,7 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5", "wheel"]
+            requires = ["uv_build>=0.4.15,<0.5", "wheel"]
             build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
@@ -1171,7 +1171,7 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<0.5"]
             build-backend = "setuptools"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
