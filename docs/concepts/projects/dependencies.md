@@ -808,9 +808,9 @@ $ uv add --no-editable ./path/foo
 uv allows dependencies to be "virtual", in which the dependency itself is not installed as a
 [package](./config.md#project-packaging), but its dependencies are.
 
-By default, only workspace members without build systems declared are virtual.
+By default, dependencies are never virtual.
 
-A dependency with a [`path` source](#path) is not virtual unless it explicitly sets
+A dependency with a [`path` source](#path) can be virtual if it explicitly sets
 [`tool.uv.package = false`](../../reference/settings.md#package). Unlike working _in_ the dependent
 project with uv, the package will be built even if a [build system](./config.md#build-systems) is
 not declared.
@@ -825,8 +825,8 @@ dependencies = ["bar"]
 bar = { path = "../projects/bar", package = false }
 ```
 
-Similarly, if a dependency sets `tool.uv.package = false`, it can be overridden by declaring
-`package = true` on the source:
+If a dependency sets `tool.uv.package = false`, it can be overridden by declaring `package = true`
+on the source:
 
 ```toml title="pyproject.toml"
 [project]
@@ -835,6 +835,53 @@ dependencies = ["bar"]
 [tool.uv.sources]
 bar = { path = "../projects/bar", package = true }
 ```
+
+Similarly, a dependency with a [`workspace` source](#workspace-member) can be virtual if it
+explicitly sets [`tool.uv.package = false`](../../reference/settings.md#package). The workspace
+member will be built even if a [build system](./config.md#build-systems) is not declared.
+
+Workspace members that are _not_ dependencies can be virtual by default, e.g., if the parent
+`pyproject.toml` is:
+
+```toml title="pyproject.toml"
+[project]
+name = "parent"
+version = "1.0.0"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["child"]
+```
+
+And the child `pyproject.toml` excluded a build system:
+
+```toml title="pyproject.toml"
+[project]
+name = "child"
+version = "1.0.0"
+dependencies = ["anyio"]
+```
+
+Then the `child` workspace member would not be installed, but the transitive dependency `anyio`
+would be.
+
+In contrast, if the parent declared a dependency on `child`:
+
+```
+```toml title="pyproject.toml"
+[project]
+name = "parent"
+version = "1.0.0"
+dependencies = ["child"]
+
+[tool.uv.sources]
+child = { workspace = true }
+
+[tool.uv.workspace]
+members = ["child"]
+```
+
+Then `child` would be built and installed.
 
 ## Dependency specifiers
 
