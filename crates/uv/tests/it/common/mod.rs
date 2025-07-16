@@ -664,6 +664,14 @@ impl TestContext {
         ));
         // For wiremock tests
         filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
+        // Avoid breaking the tests when bumping the uv version
+        filters.push((
+            format!(
+                r#"requires = \["uv_build>={},<[0-9.]+"\]"#,
+                uv_version::version()
+            ),
+            r#"requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]"#.to_string(),
+        ));
 
         Self {
             root: ChildPath::new(root.path()),

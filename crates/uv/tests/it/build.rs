@@ -1439,7 +1439,6 @@ fn build_fast_path() -> Result<()> {
     let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1")), @r###"
@@ -1465,7 +1464,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1485,7 +1483,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
@@ -1505,7 +1502,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
@@ -1545,7 +1541,6 @@ fn build_list_files() -> Result<()> {
     // By default, we build the wheel from the source dist, which we need to do even for the list
     // task.
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
@@ -1601,7 +1596,6 @@ fn build_list_files() -> Result<()> {
         .assert(predicate::path::missing());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1670,7 +1664,6 @@ fn build_list_files_errors() -> Result<()> {
     // In CI, we run with link mode settings.
     filters.push(("--link-mode <LINK_MODE> ", ""));
     uv_snapshot!(filters, context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
@@ -1694,7 +1687,6 @@ fn build_list_files_errors() -> Result<()> {
     // Windows normalization
     filters.push(("/crates/uv/../../", "/"));
     uv_snapshot!(filters, context.build()
-        .arg("--preview")
         .arg(&anyio_local)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1987,12 +1979,7 @@ fn force_pep517() -> Result<()> {
     // We need to use a real `uv_build` package.
     let context = TestContext::new("3.12").with_exclude_newer("2025-05-27T00:00:00Z");
 
-    context
-        .init()
-        .arg("--build-backend")
-        .arg("uv")
-        .assert()
-        .success();
+    context.init().assert().success();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -2026,7 +2013,7 @@ fn force_pep517() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    Error: Missing module directory for `does_not_exist` in `src`. Found: `temp`
+    Error: Missing source directory at: `src`
       × Failed to build `[TEMP_DIR]/`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
