@@ -104,7 +104,7 @@ impl Libc {
             "linux" => {
                 if let Ok(libc) = std::env::var(EnvVars::UV_LIBC) {
                     if !libc.is_empty() {
-                        return Ok(Self::from_str(&libc)?);
+                        return Self::from_str(&libc);
                     }
                 }
 
