@@ -189,10 +189,6 @@ pub mod secret_service;
 #[cfg_attr(docsrs, doc(cfg(target_os = "macos")))]
 pub mod macos;
 
-#[cfg(all(any(target_os = "macos", target_os = "ios"), feature = "apple-native"))]
-#[cfg_attr(docsrs, doc(cfg(any(target_os = "macos", target_os = "ios"))))]
-pub mod ios;
-
 //
 // pick the Windows keystore
 //
@@ -313,9 +309,9 @@ impl Entry {
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
-    pub fn set_password(&self, password: &str) -> Result<()> {
+    pub async fn set_password(&self, password: &str) -> Result<()> {
         debug!("set password for entry {:?}", self.inner);
-        self.inner.set_password(password)
+        self.inner.set_password(password).await
     }
 
     /// Set the secret for this entry.
@@ -325,9 +321,9 @@ impl Entry {
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
-    pub fn set_secret(&self, secret: &[u8]) -> Result<()> {
+    pub async fn set_secret(&self, secret: &[u8]) -> Result<()> {
         debug!("set secret for entry {:?}", self.inner);
-        self.inner.set_secret(secret)
+        self.inner.set_secret(secret).await
     }
 
     /// Retrieve the password saved for this entry.
@@ -339,9 +335,9 @@ impl Entry {
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
-    pub fn get_password(&self) -> Result<String> {
+    pub async fn get_password(&self) -> Result<String> {
         debug!("get password from entry {:?}", self.inner);
-        self.inner.get_password()
+        self.inner.get_password().await
     }
 
     /// Retrieve the secret saved for this entry.
@@ -353,9 +349,9 @@ impl Entry {
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
-    pub fn get_secret(&self) -> Result<Vec<u8>> {
+    pub async fn get_secret(&self) -> Result<Vec<u8>> {
         debug!("get secret from entry {:?}", self.inner);
-        self.inner.get_secret()
+        self.inner.get_secret().await
     }
 
     /// Get the attributes on the underlying credential for this entry.
@@ -371,9 +367,9 @@ impl Entry {
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
-    pub fn get_attributes(&self) -> Result<HashMap<String, String>> {
+    pub async fn get_attributes(&self) -> Result<HashMap<String, String>> {
         debug!("get attributes from entry {:?}", self.inner);
-        self.inner.get_attributes()
+        self.inner.get_attributes().await
     }
 
     /// Update the attributes on the underlying credential for this entry.
@@ -391,12 +387,12 @@ impl Entry {
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
-    pub fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
+    pub async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
         debug!(
             "update attributes for entry {:?} from map {attributes:?}",
             self.inner
         );
-        self.inner.update_attributes(attributes)
+        self.inner.update_attributes(attributes).await
     }
 
     /// Delete the underlying credential for this entry.
@@ -412,9 +408,9 @@ impl Entry {
     /// Note: This does _not_ affect the lifetime of the [Entry]
     /// structure, which is controlled by Rust.  It only
     /// affects the underlying credential store.
-    pub fn delete_credential(&self) -> Result<()> {
+    pub async fn delete_credential(&self) -> Result<()> {
         debug!("delete entry {:?}", self.inner);
-        self.inner.delete_credential()
+        self.inner.delete_credential().await
     }
 
     /// Return a reference to this entry's wrapped credential.
@@ -474,12 +470,14 @@ mod tests {
         }
     }
 
-    fn test_round_trip_no_delete(case: &str, entry: &Entry, in_pass: &str) {
+    async fn test_round_trip_no_delete(case: &str, entry: &Entry, in_pass: &str) {
         entry
             .set_password(in_pass)
+            .await
             .unwrap_or_else(|err| panic!("Can't set password for {case}: {err:?}"));
         let out_pass = entry
             .get_password()
+            .await
             .unwrap_or_else(|err| panic!("Can't get password for {case}: {err:?}"));
         assert_eq!(
             in_pass, out_pass,
@@ -488,12 +486,13 @@ mod tests {
     }
 
     /// A basic round-trip unit test given an entry and a password.
-    pub(crate) fn test_round_trip(case: &str, entry: &Entry, in_pass: &str) {
-        test_round_trip_no_delete(case, entry, in_pass);
+    pub(crate) async fn test_round_trip(case: &str, entry: &Entry, in_pass: &str) {
+        test_round_trip_no_delete(case, entry, in_pass).await;
         entry
             .delete_credential()
+            .await
             .unwrap_or_else(|err| panic!("Can't delete password for {case}: {err:?}"));
-        let password = entry.get_password();
+        let password = entry.get_password().await;
         assert!(
             matches!(password, Err(Error::NoEntry)),
             "Read deleted password for {case}",
@@ -501,12 +500,14 @@ mod tests {
     }
 
     /// A basic round-trip unit test given an entry and a password.
-    pub(crate) fn test_round_trip_secret(case: &str, entry: &Entry, in_secret: &[u8]) {
+    pub(crate) async fn test_round_trip_secret(case: &str, entry: &Entry, in_secret: &[u8]) {
         entry
             .set_secret(in_secret)
+            .await
             .unwrap_or_else(|err| panic!("Can't set secret for {case}: {err:?}"));
         let out_secret = entry
             .get_secret()
+            .await
             .unwrap_or_else(|err| panic!("Can't get secret for {case}: {err:?}"));
         assert_eq!(
             in_secret, &out_secret,
@@ -514,8 +515,9 @@ mod tests {
         );
         entry
             .delete_credential()
+            .await
             .unwrap_or_else(|err| panic!("Can't delete password for {case}: {err:?}"));
-        let password = entry.get_secret();
+        let password = entry.get_secret().await;
         assert!(
             matches!(password, Err(Error::NoEntry)),
             "Read deleted password for {case}",
@@ -551,101 +553,104 @@ mod tests {
         let name = generate_random_string();
         let entry = f(&name, &name);
         assert!(
-            matches!(entry.get_password(), Err(Error::NoEntry)),
+            matches!(entry.get_password().await, Err(Error::NoEntry)),
             "Missing entry has password"
         )
     }
 
-    pub(crate) fn test_empty_password<F>(f: F)
+    pub(crate) async fn test_empty_password<F>(f: F)
     where
         F: FnOnce(&str, &str) -> Entry,
     {
         let name = generate_random_string();
         let entry = f(&name, &name);
-        test_round_trip("empty password", &entry, "");
+        test_round_trip("empty password", &entry, "").await;
     }
 
-    pub(crate) fn test_round_trip_ascii_password<F>(f: F)
+    pub(crate) async fn test_round_trip_ascii_password<F>(f: F)
     where
         F: FnOnce(&str, &str) -> Entry,
     {
         let name = generate_random_string();
         let entry = f(&name, &name);
-        test_round_trip("ascii password", &entry, "test ascii password");
+        test_round_trip("ascii password", &entry, "test ascii password").await;
     }
 
-    pub(crate) fn test_round_trip_non_ascii_password<F>(f: F)
+    pub(crate) async fn test_round_trip_non_ascii_password<F>(f: F)
     where
         F: FnOnce(&str, &str) -> Entry,
     {
         let name = generate_random_string();
         let entry = f(&name, &name);
-        test_round_trip("non-ascii password", &entry, "このきれいな花は桜です");
+        test_round_trip("non-ascii password", &entry, "このきれいな花は桜です").await;
     }
 
-    pub(crate) fn test_round_trip_random_secret<F>(f: F)
+    pub(crate) async fn test_round_trip_random_secret<F>(f: F)
     where
         F: FnOnce(&str, &str) -> Entry,
     {
         let name = generate_random_string();
         let entry = f(&name, &name);
         let secret = generate_random_bytes_of_len(24);
-        test_round_trip_secret("non-ascii password", &entry, secret.as_slice());
+        test_round_trip_secret("non-ascii password", &entry, secret.as_slice()).await;
     }
 
-    pub(crate) fn test_update<F>(f: F)
+    pub(crate) async fn test_update<F>(f: F)
     where
         F: FnOnce(&str, &str) -> Entry,
     {
         let name = generate_random_string();
         let entry = f(&name, &name);
-        test_round_trip_no_delete("initial ascii password", &entry, "test ascii password");
+        test_round_trip_no_delete("initial ascii password", &entry, "test ascii password").await;
         test_round_trip(
             "updated non-ascii password",
             &entry,
             "このきれいな花は桜です",
-        );
+        )
+        .await;
     }
 
-    pub(crate) fn test_noop_get_update_attributes<F>(f: F)
+    pub(crate) async fn test_noop_get_update_attributes<F>(f: F)
     where
         F: FnOnce(&str, &str) -> Entry,
     {
         let name = generate_random_string();
         let entry = f(&name, &name);
         assert!(
-            matches!(entry.get_attributes(), Err(Error::NoEntry)),
+            matches!(entry.get_attributes().await, Err(Error::NoEntry)),
             "Read missing credential in attribute test",
         );
         let mut map: HashMap<&str, &str> = HashMap::new();
         map.insert("test attribute name", "test attribute value");
         assert!(
-            matches!(entry.update_attributes(&map), Err(Error::NoEntry)),
+            matches!(entry.update_attributes(&map).await, Err(Error::NoEntry)),
             "Updated missing credential in attribute test",
         );
         // create the credential and test again
         entry
             .set_password("test password for attributes")
+            .await
             .unwrap_or_else(|err| panic!("Can't set password for attribute test: {err:?}"));
-        match entry.get_attributes() {
+        match entry.get_attributes().await {
             Err(err) => panic!("Couldn't get attributes: {err:?}"),
             Ok(attrs) if attrs.is_empty() => {}
             Ok(attrs) => panic!("Unexpected attributes: {attrs:?}"),
         }
         assert!(
-            matches!(entry.update_attributes(&map), Ok(())),
+            matches!(entry.update_attributes(&map).await, Ok(())),
             "Couldn't update attributes in attribute test",
         );
-        match entry.get_attributes() {
+        match entry.get_attributes().await {
             Err(err) => panic!("Couldn't get attributes after update: {err:?}"),
             Ok(attrs) if attrs.is_empty() => {}
             Ok(attrs) => panic!("Unexpected attributes after update: {attrs:?}"),
         }
         entry
             .delete_credential()
+            .await
             .unwrap_or_else(|err| panic!("Can't delete credential for attribute test: {err:?}"));
         assert!(
-            matches!(entry.get_attributes(), Err(Error::NoEntry)),
+            matches!(entry.get_attributes().await, Err(Error::NoEntry)),
             "Read deleted credential in attribute test",
         );
     }

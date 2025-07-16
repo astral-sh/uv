@@ -77,7 +77,7 @@ impl CredentialApi for WinCredential {
     /// The new credential replaces any existing one in the store.
     /// Since there is only one credential with a given _target name_,
     /// there is no chance of ambiguity.
-    fn set_password(&self, password: &str) -> Result<()> {
+    async fn set_password(&self, password: &str) -> Result<()> {
         self.validate_attributes(None, Some(password))?;
         // Password strings are converted to UTF-16, because that's the native
         // charset for Windows strings.  This allows interoperability with native
@@ -98,7 +98,7 @@ impl CredentialApi for WinCredential {
     /// The new credential replaces any existing one in the store.
     /// Since there is only one credential with a given _target name_,
     /// there is no chance of ambiguity.
-    fn set_secret(&self, secret: &[u8]) -> Result<()> {
+    async fn set_secret(&self, secret: &[u8]) -> Result<()> {
         self.validate_attributes(Some(secret), None)?;
         self.save_credential(secret)
     }
@@ -107,7 +107,7 @@ impl CredentialApi for WinCredential {
     ///
     /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
-    fn get_password(&self) -> Result<String> {
+    async fn get_password(&self) -> Result<String> {
         self.extract_from_platform(extract_password)
     }
 
@@ -115,7 +115,7 @@ impl CredentialApi for WinCredential {
     ///
     /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
-    fn get_secret(&self) -> Result<Vec<u8>> {
+    async fn get_secret(&self) -> Result<Vec<u8>> {
         self.extract_from_platform(extract_secret)
     }
 
@@ -123,7 +123,7 @@ impl CredentialApi for WinCredential {
     ///
     /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
-    fn get_attributes(&self) -> Result<HashMap<String, String>> {
+    async fn get_attributes(&self) -> Result<HashMap<String, String>> {
         let cred = self.extract_from_platform(Self::extract_credential)?;
         let mut attributes: HashMap<String, String> = HashMap::new();
         attributes.insert("comment".to_string(), cred.comment.clone());
@@ -136,7 +136,7 @@ impl CredentialApi for WinCredential {
     ///
     /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
-    fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
+    async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
         let secret = self.extract_from_platform(extract_secret)?;
         let mut cred = self.extract_from_platform(Self::extract_credential)?;
         if let Some(comment) = attributes.get(&"comment") {
@@ -156,7 +156,7 @@ impl CredentialApi for WinCredential {
     ///
     /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
-    fn delete_credential(&self) -> Result<()> {
+    async fn delete_credential(&self) -> Result<()> {
         self.validate_attributes(None, None)?;
         let target_name = to_wstr(&self.target_name);
         let cred_type = CRED_TYPE_GENERIC;
@@ -528,13 +528,14 @@ mod tests {
         assert!(matches!(
             default_credential_builder().persistence(),
             CredentialPersistence::UntilDelete
-        ))
+        ));
     }
 
     fn entry_new(service: &str, user: &str) -> Entry {
         crate::tests::entry_from_constructor(WinCredential::new_with_target, service, user)
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     #[test]
     fn test_bad_password() {
         fn make_platform_credential(password: &mut Vec<u8>) -> CREDENTIALW {
@@ -592,7 +593,7 @@ mod tests {
                     assert_eq!(val, len, "Error names wrong limit");
                 }
                 Err(other) => panic!("Error is not '{attr} too long': {other}"),
-                Ok(_) => panic!("No error when {attr} too long"),
+                Ok(()) => panic!("No error when {attr} too long"),
             }
         }
         let cred = WinCredential {
@@ -622,11 +623,11 @@ mod tests {
             match attr {
                 "password" => {
                     let password = generate_random_string_of_len((len / 2) as usize + 1);
-                    validate(bad_cred.validate_attributes(None, Some(&password)))
+                    validate(bad_cred.validate_attributes(None, Some(&password)));
                 }
                 "secret" => {
                     let secret: Vec<u8> = vec![255u8; len as usize + 1];
-                    validate(bad_cred.validate_attributes(Some(&secret), None))
+                    validate(bad_cred.validate_attributes(Some(&secret), None));
                 }
                 _ => validate(bad_cred.validate_attributes(None, None)),
             }
@@ -659,49 +660,44 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_empty_service_and_user() {
-        crate::tests::test_empty_service_and_user(entry_new);
-    }
-
     #[tokio::test]
     async fn test_missing_entry() {
         crate::tests::test_missing_entry(entry_new).await;
     }
 
-    #[test]
-    fn test_empty_password() {
-        crate::tests::test_empty_password(entry_new);
+    #[tokio::test]
+    async fn test_empty_password() {
+        crate::tests::test_empty_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_ascii_password() {
-        crate::tests::test_round_trip_ascii_password(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_ascii_password() {
+        crate::tests::test_round_trip_ascii_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_non_ascii_password() {
-        crate::tests::test_round_trip_non_ascii_password(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_non_ascii_password() {
+        crate::tests::test_round_trip_non_ascii_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_random_secret() {
-        crate::tests::test_round_trip_random_secret(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_random_secret() {
+        crate::tests::test_round_trip_random_secret(entry_new).await;
     }
 
-    #[test]
-    fn test_update() {
-        crate::tests::test_update(entry_new);
+    #[tokio::test]
+    async fn test_update() {
+        crate::tests::test_update(entry_new).await;
     }
 
-    #[test]
-    fn test_get_update_attributes() {
+    #[tokio::test]
+    async fn test_get_update_attributes() {
         let name = generate_random_string();
         let cred = WinCredential::new_with_target(None, &name, &name)
             .expect("Can't create credential for attribute test");
         let entry = Entry::new_with_credential(Box::new(cred.clone()));
         assert!(
-            matches!(entry.get_attributes(), Err(ErrorCode::NoEntry)),
+            matches!(entry.get_attributes().await, Err(ErrorCode::NoEntry)),
             "Read missing credential in attribute test",
         );
         let mut in_map: HashMap<&str, &str> = HashMap::new();
@@ -711,25 +707,31 @@ mod tests {
         in_map.insert("comment", "comment value");
         in_map.insert("username", "username value");
         assert!(
-            matches!(entry.update_attributes(&in_map), Err(ErrorCode::NoEntry)),
+            matches!(
+                entry.update_attributes(&in_map).await,
+                Err(ErrorCode::NoEntry)
+            ),
             "Updated missing credential in attribute test",
         );
         // create the credential and test again
         entry
             .set_password("test password for attributes")
+            .await
             .unwrap_or_else(|err| panic!("Can't set password for attribute test: {err:?}"));
         let out_map = entry
             .get_attributes()
+            .await
             .expect("Can't get attributes after create");
         assert_eq!(out_map["target_alias"], cred.target_alias);
         assert_eq!(out_map["comment"], cred.comment);
         assert_eq!(out_map["username"], cred.username);
         assert!(
-            matches!(entry.update_attributes(&in_map), Ok(())),
+            matches!(entry.update_attributes(&in_map).await, Ok(())),
             "Couldn't update attributes in attribute test",
         );
         let after_map = entry
             .get_attributes()
+            .await
             .expect("Can't get attributes after update");
         assert_eq!(after_map["target_alias"], in_map["target_alias"]);
         assert_eq!(after_map["comment"], in_map["comment"]);
@@ -738,20 +740,22 @@ mod tests {
         assert!(!after_map.contains_key("attribute name"));
         entry
             .delete_credential()
+            .await
             .unwrap_or_else(|err| panic!("Can't delete credential for attribute test: {err:?}"));
         assert!(
-            matches!(entry.get_attributes(), Err(ErrorCode::NoEntry)),
+            matches!(entry.get_attributes().await, Err(ErrorCode::NoEntry)),
             "Read deleted credential in attribute test",
         );
     }
 
-    #[test]
-    fn test_get_credential() {
+    #[tokio::test]
+    async fn test_get_credential() {
         let name = generate_random_string();
         let entry = entry_new(&name, &name);
         let password = "test get password";
         entry
             .set_password(password)
+            .await
             .expect("Can't set test get password");
         let credential: &WinCredential = entry
             .get_credential()
@@ -773,7 +777,11 @@ mod tests {
         assert_eq!(actual.comment, credential.comment, "Comments don't match");
         entry
             .delete_credential()
+            .await
             .expect("Couldn't delete get-credential");
-        assert!(matches!(entry.get_password(), Err(ErrorCode::NoEntry)));
+        assert!(matches!(
+            entry.get_password().await,
+            Err(ErrorCode::NoEntry)
+        ));
     }
 }
