@@ -1437,10 +1437,8 @@ fn version_set_dynamic() -> Result<()> {
     Ok(())
 }
 
-// Previously would fallback to `uv --version` if this pyproject.toml isn't usable for whatever reason
-// (In this case, because tool.uv.managed = false)
-//
-// This fallback path is now deprecated and we just get an error.
+/// Previously would fallback to `uv --version` if this pyproject.toml isn't usable for whatever reason
+/// (In this case, because tool.uv.managed = false)
 #[test]
 fn version_get_fallback_unmanaged() -> Result<()> {
     let context = TestContext::new("3.12");
