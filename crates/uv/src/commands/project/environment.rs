@@ -2,13 +2,6 @@ use std::path::Path;
 
 use tracing::debug;
 
-use uv_cache::{Cache, CacheBucket};
-use uv_cache_key::{cache_digest, hash_digest};
-use uv_configuration::{Concurrency, Constraints, PreviewMode};
-use uv_distribution_types::{Name, Resolution};
-use uv_fs::PythonExt;
-use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
-
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
@@ -16,6 +9,13 @@ use crate::commands::project::{
 };
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::{cache_digest, hash_digest};
+use uv_configuration::{Concurrency, Constraints, PreviewMode};
+use uv_distribution_types::{Name, Resolution};
+use uv_fs::PythonExt;
+use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
 #[derive(Debug)]
@@ -171,7 +171,7 @@ impl CachedEnvironment {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
-            false,
+            uv_virtualenv::OnExisting::Remove,
             true,
             false,
             false,

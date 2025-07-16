@@ -331,7 +331,7 @@ impl SourceBuild {
                 interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                false,
+                uv_virtualenv::OnExisting::Remove,
                 false,
                 false,
                 false,
