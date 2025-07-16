@@ -126,9 +126,9 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker.evaluate_no_extras(markers, None)
+                }) {
                     continue;
                 }
 
@@ -269,9 +269,9 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker.evaluate_no_extras(markers, None)
+                }) {
                     continue;
                 }
 

@@ -1115,7 +1115,7 @@ impl Lock {
                     || dist
                         .fork_markers
                         .iter()
-                        .any(|marker| marker.evaluate_no_extras(marker_env))
+                        .any(|marker| marker.evaluate_no_extras(marker_env, None))
                 {
                     if found_dist.is_some() {
                         return Err(format!("found multiple packages matching `{name}`"));

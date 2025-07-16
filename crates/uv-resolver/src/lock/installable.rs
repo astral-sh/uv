@@ -144,6 +144,7 @@ pub trait Installable<'lock> {
             {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
+                    None,
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {
@@ -368,6 +369,7 @@ pub trait Installable<'lock> {
                     }
                     if !dep.complexified_marker.evaluate(
                         marker_env,
+                        None,
                         activated_extras
                             .iter()
                             .chain(additional_activated_extras.iter())
@@ -455,6 +457,7 @@ pub trait Installable<'lock> {
             for dep in deps {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
+                    None,
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {

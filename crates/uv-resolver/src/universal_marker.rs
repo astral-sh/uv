@@ -239,8 +239,12 @@ impl UniversalMarker {
     ///
     /// This should only be used when evaluating a marker that is known not to
     /// have any extras. For example, the PEP 508 markers on a fork.
-    pub(crate) fn evaluate_no_extras(self, env: &MarkerEnvironment) -> bool {
-        self.marker.evaluate(env, None, &[])
+    pub(crate) fn evaluate_no_extras(
+        self,
+        env: &MarkerEnvironment,
+        variants: Option<&[(String, String, String)]>,
+    ) -> bool {
+        self.marker.evaluate(env, variants, &[])
     }
 
     /// Returns true if this universal marker is satisfied by the given marker
@@ -252,6 +256,7 @@ impl UniversalMarker {
     pub(crate) fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
+        variants: Option<&[(String, String, String)]>,
         extras: impl Iterator<Item = (P, E)>,
         groups: impl Iterator<Item = (P, G)>,
     ) -> bool
@@ -264,8 +269,11 @@ impl UniversalMarker {
             extras.map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
         let groups =
             groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
-        self.marker
-            .evaluate(env, None, &extras.chain(groups).collect::<Vec<ExtraName>>())
+        self.marker.evaluate(
+            env,
+            variants,
+            &extras.chain(groups).collect::<Vec<ExtraName>>(),
+        )
     }
 
     /// Returns the internal marker that combines both the PEP 508
@@ -426,7 +434,12 @@ impl ConflictMarker {
 
     /// Returns true if this conflict marker is satisfied by the given
     /// list of activated extras and groups.
-    pub(crate) fn evaluate<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
+    pub(crate) fn evaluate<P, E, G>(
+        self,
+        variants: Option<&[(String, String, String)]>,
+        extras: &[(P, E)],
+        groups: &[(P, G)],
+    ) -> bool
     where
         P: Borrow<PackageName>,
         E: Borrow<ExtraName>,
@@ -456,7 +469,7 @@ impl ConflictMarker {
             .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
         self.marker.evaluate(
             &DUMMY,
-            None,
+            variants,
             &extras.chain(groups).collect::<Vec<ExtraName>>(),
         )
     }
@@ -862,7 +875,7 @@ mod tests {
                 .collect::<Vec<(PackageName, ExtraName)>>();
             let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                !cm.evaluate(&extras, &groups),
+                !cm.evaluate(None, &extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `false` in `{cm:?}`"
             );
         }
@@ -885,7 +898,7 @@ mod tests {
                 .collect::<Vec<(PackageName, ExtraName)>>();
             let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                cm.evaluate(&extras, &groups),
+                cm.evaluate(None, &extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `true` in `{cm:?}`"
             );
         }

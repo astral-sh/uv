@@ -250,7 +250,7 @@ impl Preferences {
                     if !preference
                         .fork_markers
                         .iter()
-                        .any(|marker| marker.evaluate_no_extras(markers))
+                        .any(|marker| marker.evaluate_no_extras(markers, None))
                     {
                         trace!(
                             "Excluding {preference} from preferences due to unmatched fork markers"
