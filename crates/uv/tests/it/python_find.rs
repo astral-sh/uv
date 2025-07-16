@@ -728,6 +728,57 @@ fn python_find_venv_invalid() {
     "###);
 }
 
+#[test]
+fn python_find_managed() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_python_sources()
+        .with_versions_as_managed(&["3.12"]);
+
+    // We find the managed interpreter
+    uv_snapshot!(context.filters(), context.python_find().arg("--managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request an interpreter that cannot be satisfied
+    uv_snapshot!(context.filters(), context.python_find().arg("--managed-python").arg("3.11"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.11 in virtual environments or managed installations
+    ");
+
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_python_sources()
+        .with_versions_as_managed(&["3.11"]);
+
+    // We find the unmanaged interpreter
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request an interpreter that cannot be satisfied
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-managed-python").arg("3.11"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.11 in [PYTHON SOURCES]
+    ");
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/11825>
 ///
 /// This test will not succeed on macOS if using a Homebrew provided interpreter. The interpreter
