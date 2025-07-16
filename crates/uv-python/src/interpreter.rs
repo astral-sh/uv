@@ -292,11 +292,7 @@ impl Interpreter {
             return false;
         };
 
-        installations
-            .find_all()
-            .into_iter()
-            .flatten()
-            .any(|install| install.path() == self.sys_base_prefix)
+        self.sys_base_prefix.starts_with(installations.root())
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
