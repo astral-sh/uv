@@ -154,8 +154,8 @@ impl EnvVars {
     /// `--no-python-downloads` option. Whether uv should allow Python downloads.
     pub const UV_PYTHON_DOWNLOADS: &'static str = "UV_PYTHON_DOWNLOADS";
 
-    /// Overrides libc selection on linux systems when determining the current platform for
-    /// managed python downloads. Options are: gnu, gnueabi, gnueabihf, musl, and none.
+    /// Overrides the environment-determined libc on linux systems when filling in the current platform
+    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
     pub const UV_LIBC: &'static str = "UV_LIBC";
 
     /// Equivalent to the `--compile-bytecode` command-line argument. If set, uv

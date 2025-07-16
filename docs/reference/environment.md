@@ -167,6 +167,11 @@ Defaults to `~/.local/bin`.
 Equivalent to the `--keyring-provider` command-line argument. If set, uv
 will use this value as the keyring provider.
 
+### `UV_LIBC`
+
+Overrides the environment-determined libc on linux systems when filling in the current platform
+within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
+
 ### `UV_LINK_MODE`
 
 Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
