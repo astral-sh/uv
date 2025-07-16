@@ -5,7 +5,8 @@ use std::collections::HashMap;
 
 use uv_keyring::{Entry, Error, Result};
 
-fn main() {
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
     let mut args: Cli = Cli::parse();
     if args.user.eq_ignore_ascii_case("<logged-in username>") {
         args.user = whoami::username()
@@ -24,11 +25,11 @@ fn main() {
         Command::Set { .. } => {
             let value = args.get_password_and_attributes();
             match &value {
-                Value::Secret(secret) => match entry.set_secret(secret) {
+                Value::Secret(secret) => match entry.set_secret(secret).await {
                     Ok(()) => args.success_message_for(&value),
                     Err(err) => args.error_message_for(err),
                 },
-                Value::Password(password) => match entry.set_password(password) {
+                Value::Password(password) => match entry.set_password(password).await {
                     Ok(()) => args.success_message_for(&value),
                     Err(err) => args.error_message_for(err),
                 },
@@ -37,7 +38,7 @@ fn main() {
                         .iter()
                         .map(|(k, v)| (k.as_str(), v.as_str()))
                         .collect();
-                    match entry.update_attributes(&attrs) {
+                    match entry.update_attributes(&attrs).await {
                         Ok(()) => args.success_message_for(&value),
                         Err(err) => args.error_message_for(err),
                     }
@@ -45,28 +46,28 @@ fn main() {
                 _ => panic!("Can't set without a value"),
             }
         }
-        Command::Password => match entry.get_password() {
+        Command::Password => match entry.get_password().await {
             Ok(password) => {
                 println!("{password}");
                 args.success_message_for(&Value::Password(password));
             }
             Err(err) => args.error_message_for(err),
         },
-        Command::Secret => match entry.get_secret() {
+        Command::Secret => match entry.get_secret().await {
             Ok(secret) => {
                 println!("{}", secret_string(&secret));
-                args.success_message_for(&Value::Secret(secret));
+                args.success_message_for(&Value::Secret(secret.to_vec()));
             }
             Err(err) => args.error_message_for(err),
         },
-        Command::Attributes => match entry.get_attributes() {
+        Command::Attributes => match entry.get_attributes().await {
             Ok(attributes) => {
                 println!("{}", attributes_string(&attributes));
                 args.success_message_for(&Value::Attributes(attributes));
             }
             Err(err) => args.error_message_for(err),
         },
-        Command::Delete => match entry.delete_credential() {
+        Command::Delete => match entry.delete_credential().await {
             Ok(()) => args.success_message_for(&Value::None),
             Err(err) => args.error_message_for(err),
         },

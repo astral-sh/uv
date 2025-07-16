@@ -36,7 +36,6 @@ ignores all the others. so clients can't use it to access or update any attribut
  */
 use crate::credential::{Credential, CredentialApi, CredentialBuilder, CredentialBuilderApi};
 use crate::error::{Error as ErrorCode, Result, decode_password};
-use crate::ios::IosCredential;
 use security_framework::base::Error;
 use security_framework::os::macos::keychain::{SecKeychain, SecPreferencesDomain};
 use security_framework::os::macos::passwords::find_generic_password;
@@ -53,13 +52,14 @@ pub struct MacCredential {
     pub account: String,
 }
 
+#[async_trait::async_trait]
 impl CredentialApi for MacCredential {
     /// Create and write a credential with password for this entry.
     ///
     /// The new credential replaces any existing one in the store.
     /// Since there is only one credential with a given _account_ and _user_
     /// in any given keychain, there is no chance of ambiguity.
-    fn set_password(&self, password: &str) -> Result<()> {
+    async fn set_password(&self, password: &str) -> Result<()> {
         get_keychain(self)?
             .set_generic_password(&self.service, &self.account, password.as_bytes())
             .map_err(decode_error)?;
@@ -71,7 +71,7 @@ impl CredentialApi for MacCredential {
     /// The new credential replaces any existing one in the store.
     /// Since there is only one credential with a given _account_ and _user_
     /// in any given keychain, there is no chance of ambiguity.
-    fn set_secret(&self, secret: &[u8]) -> Result<()> {
+    async fn set_secret(&self, secret: &[u8]) -> Result<()> {
         get_keychain(self)?
             .set_generic_password(&self.service, &self.account, secret)
             .map_err(decode_error)?;
@@ -82,7 +82,7 @@ impl CredentialApi for MacCredential {
     ///
     /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
-    fn get_password(&self) -> Result<String> {
+    async fn get_password(&self) -> Result<String> {
         let (password_bytes, _) =
             find_generic_password(Some(&[get_keychain(self)?]), &self.service, &self.account)
                 .map_err(decode_error)?;
@@ -93,7 +93,7 @@ impl CredentialApi for MacCredential {
     ///
     /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
-    fn get_secret(&self) -> Result<Vec<u8>> {
+    async fn get_secret(&self) -> Result<Vec<u8>> {
         let (password_bytes, _) =
             find_generic_password(Some(&[get_keychain(self)?]), &self.service, &self.account)
                 .map_err(decode_error)?;
@@ -104,7 +104,7 @@ impl CredentialApi for MacCredential {
     ///
     /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
-    fn delete_credential(&self) -> Result<()> {
+    async fn delete_credential(&self) -> Result<()> {
         let (_, item) =
             find_generic_password(Some(&[get_keychain(self)?]), &self.service, &self.account)
                 .map_err(decode_error)?;
@@ -199,16 +199,11 @@ impl CredentialBuilderApi for MacCredentialBuilder {
         } else {
             MacKeychainDomain::User
         };
-        match domain {
-            MacKeychainDomain::Protected => Ok(Box::new(IosCredential::new_with_target(
-                None, service, user,
-            )?)),
-            _ => Ok(Box::new(MacCredential::new_with_target(
-                Some(domain),
-                service,
-                user,
-            )?)),
-        }
+        Ok(Box::new(MacCredential::new_with_target(
+            Some(domain),
+            service,
+            user,
+        )?))
     }
 
     /// Return the underlying builder object with an `Any` type so that it can
@@ -331,38 +326,38 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_missing_entry() {
-        crate::tests::test_missing_entry(entry_new);
+    #[tokio::test]
+    async fn test_missing_entry() {
+        crate::tests::test_missing_entry(entry_new).await;
     }
 
-    #[test]
-    fn test_empty_password() {
-        crate::tests::test_empty_password(entry_new);
+    #[tokio::test]
+    async fn test_empty_password() {
+        crate::tests::test_empty_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_ascii_password() {
-        crate::tests::test_round_trip_ascii_password(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_ascii_password() {
+        crate::tests::test_round_trip_ascii_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_non_ascii_password() {
-        crate::tests::test_round_trip_non_ascii_password(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_non_ascii_password() {
+        crate::tests::test_round_trip_non_ascii_password(entry_new).await;
     }
 
-    #[test]
-    fn test_round_trip_random_secret() {
-        crate::tests::test_round_trip_random_secret(entry_new);
+    #[tokio::test]
+    async fn test_round_trip_random_secret() {
+        crate::tests::test_round_trip_random_secret(entry_new).await;
     }
 
-    #[test]
-    fn test_update() {
-        crate::tests::test_update(entry_new);
+    #[tokio::test]
+    async fn test_update() {
+        crate::tests::test_update(entry_new).await;
     }
 
-    #[test]
-    fn test_get_credential() {
+    #[tokio::test]
+    async fn test_get_credential() {
         let name = generate_random_string();
         let entry = entry_new(&name, &name);
         let credential: &MacCredential = entry
@@ -375,17 +370,19 @@ mod tests {
         );
         entry
             .set_password("test get_credential")
+            .await
             .expect("Can't set password for get_credential");
         assert!(credential.get_credential().is_ok());
         entry
             .delete_credential()
+            .await
             .expect("Couldn't delete after get_credential");
-        assert!(matches!(entry.get_password(), Err(Error::NoEntry)));
+        assert!(matches!(entry.get_password().await, Err(Error::NoEntry)));
     }
 
-    #[test]
-    fn test_get_update_attributes() {
-        crate::tests::test_noop_get_update_attributes(entry_new);
+    #[tokio::test]
+    async fn test_get_update_attributes() {
+        crate::tests::test_noop_get_update_attributes(entry_new).await;
     }
 
     #[test]
@@ -404,15 +401,6 @@ mod tests {
                     "wrong domain for unknown specifier"
                 )
             }
-        }
-        for name in ["data protection", "protected"] {
-            let cred = Entry::new_with_target(name, name, name)
-                .expect("couldn't create credential")
-                .inner;
-            let _: &super::IosCredential = cred
-                .as_any()
-                .downcast_ref()
-                .expect("credential not an iOS credential");
         }
     }
 }

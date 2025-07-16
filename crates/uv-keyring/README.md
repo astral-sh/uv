@@ -15,10 +15,10 @@ use keyring::{Entry, Result};
 
 fn main() -> Result<()> {
     let entry = Entry::new("my-service", "my-name")?;
-    entry.set_password("topS3cr3tP4$$w0rd")?;
-    let password = entry.get_password()?;
+    entry.set_password("topS3cr3tP4$$w0rd").await?;
+    let password = entry.get_password().await?;
     println!("My password is '{}'", password);
-    entry.delete_credential()?;
+    entry.delete_credential().await?;
     Ok(())
 }
 ```

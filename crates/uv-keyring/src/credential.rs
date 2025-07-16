@@ -13,35 +13,35 @@ use std::collections::HashMap;
 
 use crate::Result;
 
-
 /// The API that [credentials](Credential) implement.
+#[async_trait::async_trait]
 pub trait CredentialApi {
     /// Set the credential's password (a string).
     ///
     /// This will persist the password in the underlying store.
-    fn set_password(&self, password: &str) -> Result<()> {
-        self.set_secret(password.as_bytes())
+    async fn set_password(&self, password: &str) -> Result<()> {
+        self.set_secret(password.as_bytes()).await
     }
 
     /// Set the credential's secret (a byte array).
     ///
     /// This will persist the secret in the underlying store.
-    fn set_secret(&self, password: &[u8]) -> Result<()>;
+    async fn set_secret(&self, password: &[u8]) -> Result<()>;
 
     /// Retrieve the password (a string) from the underlying credential.
     ///
     /// This has no effect on the underlying store. If there is no credential
     /// for this entry, a [NoEntry](crate::Error::NoEntry) error is returned.
-    fn get_password(&self) -> Result<String> {
-        let secret = self.get_secret()?;
-        super::error::decode_password(secret)
+    async fn get_password(&self) -> Result<String> {
+        let secret = self.get_secret().await?;
+        crate::error::decode_password(secret)
     }
 
     /// Retrieve a secret (a byte array) from the credential.
     ///
     /// This has no effect on the underlying store. If there is no credential
     /// for this entry, a [NoEntry](crate::Error::NoEntry) error is returned.
-    fn get_secret(&self) -> Result<Vec<u8>>;
+    async fn get_secret(&self) -> Result<Vec<u8>>;
 
     /// Get the secure store attributes on this entry's credential.
     ///
@@ -53,9 +53,9 @@ pub trait CredentialApi {
     ///
     /// We provide a default (no-op) implementation of this method
     /// for backward compatibility with stores that don't implement it.
-    fn get_attributes(&self) -> Result<HashMap<String, String>> {
+    async fn get_attributes(&self) -> Result<HashMap<String, String>> {
         // this should err in the same cases as get_secret, so first call that for effect
-        self.get_secret()?;
+        self.get_secret().await?;
         // if we got this far, return success with no attributes
         Ok(HashMap::new())
     }
@@ -71,9 +71,9 @@ pub trait CredentialApi {
     ///
     /// We provide a default no-op implementation of this method
     /// for backward compatibility with stores that don't implement it.
-    fn update_attributes(&self, _: &HashMap<&str, &str>) -> Result<()> {
+    async fn update_attributes(&self, _: &HashMap<&str, &str>) -> Result<()> {
         // this should err in the same cases as get_secret, so first call that for effect
-        self.get_secret()?;
+        self.get_secret().await?;
         // if we got this far, return success after setting no attributes
         Ok(())
     }
@@ -83,7 +83,7 @@ pub trait CredentialApi {
     /// This is not idempotent if the credential existed!
     /// A second call to delete_credential will return
     /// a [NoEntry](crate::Error::NoEntry) error.
-    fn delete_credential(&self) -> Result<()>;
+    async fn delete_credential(&self) -> Result<()>;
 
     /// Return the underlying concrete object cast to [Any].
     ///
