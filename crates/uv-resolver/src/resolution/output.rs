@@ -894,16 +894,11 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
         // Re-add the edges to the reduced graph.
         for edge in graph.edge_indices() {
             let (source, target) = graph.edge_endpoints(edge).unwrap();
-            // OK to ignore conflicting marker because we've asserted
-            // above that we aren't in universal mode. If we aren't in
-            // universal mode, then there can be no conflicts since
-            // conflicts imply forks and forks imply universal mode.
-            let marker = graph[edge].pep508();
 
             match (&graph[source], &graph[target]) {
                 (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
                     let target = inverse[&target_dist.name()];
-                    transformed.update_edge(root, target, Edge::Prod(marker));
+                    transformed.update_edge(root, target, Edge::Prod);
                 }
                 (
                     ResolutionGraphNode::Dist(source_dist),
@@ -913,11 +908,11 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
                     let target = inverse[&target_dist.name()];
 
                     let edge = if let Some(extra) = source_dist.extra.as_ref() {
-                        Edge::Optional(extra.clone(), marker)
+                        Edge::Optional(extra.clone())
                     } else if let Some(dev) = source_dist.dev.as_ref() {
-                        Edge::Dev(dev.clone(), marker)
+                        Edge::Dev(dev.clone())
                     } else {
-                        Edge::Prod(marker)
+                        Edge::Prod
                     };
 
                     transformed.add_edge(source, target, edge);
