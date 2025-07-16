@@ -16412,7 +16412,7 @@ fn lock_unique_named_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "example"
-        url = "https://example.com"
+        url = "https://astral.sh"
         "#,
     )?;
 
