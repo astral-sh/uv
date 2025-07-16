@@ -1,6 +1,5 @@
 use crate::cpuinfo::detect_hardware_floating_point_support;
 use crate::libc::{LibcDetectionError, LibcVersion, detect_linux_libc};
-use std::env;
 use std::fmt::Display;
 use std::ops::Deref;
 use std::{fmt, str::FromStr};
@@ -102,28 +101,30 @@ pub enum Libc {
 impl Libc {
     pub(crate) fn from_env() -> Result<Self, Error> {
         match std::env::consts::OS {
-            "linux" => match env::var(EnvVars::UV_LIBC) {
-                Ok(libc) => Ok(Self::from_str(&libc)?),
-                Err(e) => match e {
-                    env::VarError::NotPresent => Ok(Self::Some(match detect_linux_libc()? {
-                        LibcVersion::Manylinux { .. } => match std::env::consts::ARCH {
-                            // Checks if the CPU supports hardware floating-point operations.
-                            // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
-                            // download-metadata.json only includes armv7.
-                            "arm" | "armv5te" | "armv7" => {
-                                match detect_hardware_floating_point_support() {
-                                    Ok(true) => target_lexicon::Environment::Gnueabihf,
-                                    Ok(false) => target_lexicon::Environment::Gnueabi,
-                                    Err(_) => target_lexicon::Environment::Gnu,
-                                }
+            "linux" => {
+                if let Ok(libc) = std::env::var(EnvVars::UV_LIBC) {
+                    if !libc.is_empty() {
+                        return Ok(Self::from_str(&libc)?);
+                    }
+                }
+
+                Ok(Self::Some(match detect_linux_libc()? {
+                    LibcVersion::Manylinux { .. } => match std::env::consts::ARCH {
+                        // Checks if the CPU supports hardware floating-point operations.
+                        // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
+                        // download-metadata.json only includes armv7.
+                        "arm" | "armv5te" | "armv7" => {
+                            match detect_hardware_floating_point_support() {
+                                Ok(true) => target_lexicon::Environment::Gnueabihf,
+                                Ok(false) => target_lexicon::Environment::Gnueabi,
+                                Err(_) => target_lexicon::Environment::Gnu,
                             }
-                            _ => target_lexicon::Environment::Gnu,
-                        },
-                        LibcVersion::Musllinux { .. } => target_lexicon::Environment::Musl,
-                    })),
-                    _ => Err(Error::UnknownLibc(String::new())),
-                },
-            },
+                        }
+                        _ => target_lexicon::Environment::Gnu,
+                    },
+                    LibcVersion::Musllinux { .. } => target_lexicon::Environment::Musl,
+                }))
+            }
             "windows" | "macos" => Ok(Self::None),
             // Use `None` on platforms without explicit support.
             _ => Ok(Self::None),
