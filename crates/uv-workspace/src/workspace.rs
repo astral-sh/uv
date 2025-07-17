@@ -109,6 +109,8 @@ pub struct Workspace {
     install_path: PathBuf,
     /// The members of the workspace.
     packages: WorkspaceMembers,
+    /// The workspace members that are required by other members.
+    required_members: BTreeSet<PackageName>,
     /// The sources table from the workspace `pyproject.toml`.
     ///
     /// This table is overridden by the project sources.
@@ -280,17 +282,33 @@ impl Workspace {
             // Set the `pyproject.toml` for the member.
             member.pyproject_toml = pyproject_toml;
 
+            // Recompute required_members with the updated data
+            let required_members = Self::collect_required_members(
+                &packages,
+                &workspace_sources,
+                &workspace_pyproject_toml,
+            );
+
             Some(Self {
                 pyproject_toml: workspace_pyproject_toml,
                 sources: workspace_sources,
                 packages,
+                required_members,
                 ..self
             })
         } else {
             // Set the `pyproject.toml` for the member.
             member.pyproject_toml = pyproject_toml;
 
-            Some(Self { packages, ..self })
+            // Recompute required_members with the updated member data
+            let required_members =
+                Self::collect_required_members(&packages, &self.sources, &self.pyproject_toml);
+
+            Some(Self {
+                packages,
+                required_members,
+                ..self
+            })
         }
     }
 
@@ -336,18 +354,31 @@ impl Workspace {
         })
     }
 
-    /// Whether a given workspace member is required by another member.
-    pub fn required_members(&self) -> impl Iterator<Item = &PackageName> + '_ {
-        self.sources
+    /// The workspace members that are required my another member of the workspace.
+    pub fn required_members(&self) -> &BTreeSet<PackageName> {
+        &self.required_members
+    }
+
+    /// Compute the workspace members that are required by another member of the workspace.
+    ///
+    /// N.B. this checks if a workspace member is required by inspecting `tool.uv.source` entries,
+    /// but does not actually check if the source is _used_, which could result in false positives
+    /// but is easier to compute.
+    fn collect_required_members(
+        packages: &BTreeMap<PackageName, WorkspaceMember>,
+        sources: &BTreeMap<PackageName, Sources>,
+        pyproject_toml: &PyProjectToml,
+    ) -> BTreeSet<PackageName> {
+        sources
             .iter()
             .filter(|(name, _)| {
-                self.pyproject_toml
+                pyproject_toml
                     .project
                     .as_ref()
                     .is_none_or(|project| project.name != **name)
             })
             .chain(
-                self.packages
+                packages
                     .iter()
                     .filter_map(|(name, member)| {
                         member
@@ -369,13 +400,14 @@ impl Workspace {
                 sources
                     .iter()
                     .any(|source| matches!(source, Source::Workspace { .. }))
-                    .then_some(package)
+                    .then_some(package.clone())
             })
+            .collect()
     }
 
     /// Whether a given workspace member is required by another member.
     pub fn is_required_member(&self, name: &PackageName) -> bool {
-        self.required_members().any(|package| package == name)
+        self.required_members().contains(name)
     }
 
     /// Returns the set of all workspace member dependency groups.
@@ -795,9 +827,16 @@ impl Workspace {
             .and_then(|uv| uv.index)
             .unwrap_or_default();
 
+        let required_members = Self::collect_required_members(
+            &workspace_members,
+            &workspace_sources,
+            &workspace_pyproject_toml,
+        );
+
         Ok(Workspace {
             install_path: workspace_root,
             packages: workspace_members,
+            required_members,
             sources: workspace_sources,
             indexes: workspace_indexes,
             pyproject_toml: workspace_pyproject_toml,
@@ -1281,15 +1320,23 @@ impl ProjectWorkspace {
                 project.name.clone(),
                 current_project,
             )]));
+            let workspace_sources = BTreeMap::default();
+            let required_members = Workspace::collect_required_members(
+                &current_project_as_members,
+                &workspace_sources,
+                project_pyproject_toml,
+            );
+
             return Ok(Self {
                 project_root: project_path.clone(),
                 project_name: project.name.clone(),
                 workspace: Workspace {
                     install_path: project_path.clone(),
                     packages: current_project_as_members,
+                    required_members,
                     // There may be package sources, but we don't need to duplicate them into the
                     // workspace sources.
-                    sources: BTreeMap::default(),
+                    sources: workspace_sources,
                     indexes: Vec::default(),
                     pyproject_toml: project_pyproject_toml.clone(),
                 },
@@ -1741,6 +1788,7 @@ mod tests {
                 "pyproject_toml": "[PYPROJECT_TOML]"
               }
             },
+            "required_members": [],
             "sources": {},
             "indexes": [],
             "pyproject_toml": {
@@ -1794,6 +1842,7 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
+                "required_members": [],
                 "sources": {},
                 "indexes": [],
                 "pyproject_toml": {
@@ -1874,6 +1923,10 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
+                "required_members": [
+                  "bird-feeder",
+                  "seeds"
+                ],
                 "sources": {
                   "bird-feeder": [
                     {
@@ -1995,6 +2048,10 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
+                "required_members": [
+                  "bird-feeder",
+                  "seeds"
+                ],
                 "sources": {},
                 "indexes": [],
                 "pyproject_toml": {
@@ -2062,6 +2119,7 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
+                "required_members": [],
                 "sources": {},
                 "indexes": [],
                 "pyproject_toml": {
@@ -2196,6 +2254,7 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
+                "required_members": [],
                 "sources": {},
                 "indexes": [],
                 "pyproject_toml": {
@@ -2303,6 +2362,7 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
+                "required_members": [],
                 "sources": {},
                 "indexes": [],
                 "pyproject_toml": {
@@ -2424,6 +2484,7 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
+                "required_members": [],
                 "sources": {},
                 "indexes": [],
                 "pyproject_toml": {
@@ -2519,6 +2580,7 @@ mod tests {
                     "pyproject_toml": "[PYPROJECT_TOML]"
                   }
                 },
+                "required_members": [],
                 "sources": {},
                 "indexes": [],
                 "pyproject_toml": {
