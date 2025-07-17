@@ -166,6 +166,16 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    // TODO(zanieb): We should consider marking the Python installation as the default when
+    // `--default` is used. It's not clear how this overlaps with a global Python pin, but I'd be
+    // surprised if `uv python find` returned the "newest" Python version rather than the one I just
+    // installed with the `--default` flag.
+    if default && !preview.is_enabled() {
+        warn_user!(
+            "The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning"
+        );
+    }
+
     if upgrade && preview.is_disabled() {
         warn_user!(
             "`uv python upgrade` is experimental and may change without warning. Pass `--preview` to disable this warning"
@@ -214,6 +224,8 @@ pub(crate) async fn install(
             .map(PythonVersionFile::into_versions)
             .unwrap_or_else(|| {
                 // If no version file is found and no requests were made
+                // TODO(zanieb): We should consider differentiating between a global Python version
+                // file here, allowing a request from there to enable `is_default_install`.
                 is_default_install = true;
                 vec![if reinstall {
                     // On bare `--reinstall`, reinstall all Python versions
@@ -443,10 +455,10 @@ pub(crate) async fn install(
         }
     }
 
-    let bin_dir = if !matches!(bin, Some(false)) {
-        Some(python_executable_dir()?)
-    } else {
+    let bin_dir = if matches!(bin, Some(false)) {
         None
+    } else {
+        Some(python_executable_dir()?)
     };
 
     let installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
@@ -727,7 +739,10 @@ fn create_bin_links(
     errors: &mut Vec<(InstallErrorKind, PythonInstallationKey, Error)>,
     preview: PreviewMode,
 ) {
-    let targets = if (default || (is_default_install && !reinstall))
+    // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
+    // it. In particular, it may be confusing because it does not apply when versions are loaded
+    // from a `.python-version` file.
+    let targets = if (default || (is_default_install && preview.is_enabled()))
         && first_request.matches_installation(installation)
     {
         vec![

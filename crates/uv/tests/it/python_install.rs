@@ -30,7 +30,7 @@ fn python_install() {
 
     ----- stderr -----
     Installed Python 3.13.5 in [TIME]
-     + cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
+     + cpython-3.13.5-[PLATFORM] (python3.13)
     ");
 
     let bin_python = context
@@ -130,7 +130,7 @@ fn python_install() {
     ----- stderr -----
     Searching for Python versions matching: Python 3.13
     Uninstalled Python 3.13.5 in [TIME]
-     - cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
+     - cpython-3.13.5-[PLATFORM] (python3.13)
     ");
 
     // The executable should be removed
@@ -383,7 +383,7 @@ fn python_install_force() {
 
     ----- stderr -----
     Installed Python 3.13.5 in [TIME]
-     + cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
+     + cpython-3.13.5-[PLATFORM] (python3.13)
     ");
 
     let bin_python = context
@@ -398,7 +398,7 @@ fn python_install_force() {
 
     ----- stderr -----
     Installed Python 3.13.5 in [TIME]
-     + cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
+     + cpython-3.13.5-[PLATFORM] (python3.13)
     ");
 
     // The executable should still be present in the bin directory
@@ -647,7 +647,7 @@ fn python_install_preview() {
 
     ----- stderr -----
     Installed Python 3.13.5 in [TIME]
-     ~ cpython-3.13.5-[PLATFORM] (python3.13)
+     ~ cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
     ");
 
     // The executable should still be present in the bin directory
@@ -1185,6 +1185,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning
     Installed Python 3.13.5 in [TIME]
      + cpython-3.13.5-[PLATFORM] (python, python3)
     ");
@@ -1218,6 +1219,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning
     Installed Python 3.13.5 in [TIME]
      + cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
     ");
@@ -1296,14 +1298,15 @@ fn python_install_default() {
     bin_python_default.assert(predicate::path::missing());
 
     // Install multiple versions, with the `--default` flag
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("3.13").arg("--default"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("3.13").arg("--default"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning
     error: The `--default` flag cannot be used with multiple targets
-    "###);
+    ");
 
     // Install 3.12 as a new default
     uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--default"), @r"
@@ -1312,6 +1315,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning
     Installed Python 3.12.11 in [TIME]
      + cpython-3.12.11-[PLATFORM] (python, python3, python3.12)
     ");
@@ -2075,7 +2079,7 @@ fn python_install_cached() {
 
     ----- stderr -----
     Installed Python 3.13.5 in [TIME]
-     + cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
+     + cpython-3.13.5-[PLATFORM] (python3.13)
     ");
 
     let bin_python = context
@@ -2105,7 +2109,7 @@ fn python_install_cached() {
     ----- stderr -----
     Searching for Python versions matching: Python 3.13
     Uninstalled Python 3.13.5 in [TIME]
-     - cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
+     - cpython-3.13.5-[PLATFORM] (python3.13)
     ");
 
     // The cached archive can be installed offline
@@ -2119,7 +2123,7 @@ fn python_install_cached() {
 
     ----- stderr -----
     Installed Python 3.13.5 in [TIME]
-     + cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
+     + cpython-3.13.5-[PLATFORM] (python3.13)
     ");
 
     // 3.12 isn't cached, so it can't be installed
