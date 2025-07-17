@@ -224,7 +224,7 @@ impl TestContext {
                 .push((format!(r"python{exe_suffix}"), "[PYTHON]".to_string()));
             // Including ones where we'd already stripped the `.exe` in another filter
             self.filters
-                .push((r"\\python".to_string(), "[PYTHON]".to_string()));
+                .push((r"[\\/]python".to_string(), "/[PYTHON]".to_string()));
         } else {
             // On Unix, it's a little trickier — we don't want to clobber use of `python` in the
             // middle of something else, e.g., `cpython`. For this reason, we require a leading `/`.
