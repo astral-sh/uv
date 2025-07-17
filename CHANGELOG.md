@@ -5,6 +5,14 @@
 
 ## 0.8.0
 
+Since we released [0.7.0](https://github.com/astral-sh/uv/releases/tag/0.5.0) in April, we've
+accumulated various changes that improve correctness and user experience, but could break some
+workflows. This release contains those changes; many have been marked as breaking out of an
+abundance of caution. We expect most users to be able to upgrade without making changes.
+
+This release also includes the stabilization of a couple `uv python install` features, which have
+been available under preview since late last year.
+
 ### Breaking changes
 
 - **Install Python executables into the bin ([#14626](https://github.com/astral-sh/uv/pull/14626))**
