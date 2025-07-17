@@ -10,7 +10,6 @@ use std::{env, io};
 
 use futures::TryStreamExt;
 use itertools::Itertools;
-use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{RetryError, RetryPolicy};
@@ -497,11 +496,12 @@ impl PythonDownloadRequest {
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
     pub fn iter_downloads<'a>(
-        &'a self,
-        python_downloads_json_url: Option<&'a str>,
-    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'a>, Error> {
-        Ok(ManagedPythonDownload::iter_all(python_downloads_json_url)?
-            .filter(move |download| self.satisfied_by_download(download)))
+        &self,
+        download_list: &'a ManagedPythonDownloadList,
+    ) -> impl Iterator<Item = &'a ManagedPythonDownload> {
+        download_list
+            .iter_all()
+            .filter(move |download| self.satisfied_by_download(download))
     }
 
     /// Whether this request is satisfied by an installation key.
@@ -902,8 +902,10 @@ impl FromStr for PythonDownloadRequest {
 
 const BUILTIN_PYTHON_DOWNLOADS_JSON: &str =
     include_str!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
-static PYTHON_DOWNLOADS: OnceCell<std::borrow::Cow<'static, [ManagedPythonDownload]>> =
-    OnceCell::new();
+
+pub struct ManagedPythonDownloadList {
+    downloads: Vec<ManagedPythonDownload>,
+}
 
 #[derive(Debug, Deserialize, Clone)]
 struct JsonPythonDownload {
@@ -946,10 +948,10 @@ impl Display for ManagedPythonDownloadWithBuild<'_> {
     }
 }
 
-impl ManagedPythonDownload {
-    /// Return a display type that includes the build information.
-    pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
-        ManagedPythonDownloadWithBuild(self)
+impl ManagedPythonDownloadList {
+    /// Iterate over all [`ManagedPythonDownload`]s.
+    fn iter_all(&self) -> impl Iterator<Item = &ManagedPythonDownload> {
+        self.downloads.iter()
     }
 
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
@@ -957,10 +959,10 @@ impl ManagedPythonDownload {
     /// If there is no stable version matching the request, a compatible pre-release version will
     /// be searched for — even if a pre-release was not explicitly requested.
     pub fn from_request(
+        &self,
         request: &PythonDownloadRequest,
-        python_downloads_json_url: Option<&str>,
-    ) -> Result<&'static Self, Error> {
-        if let Some(download) = request.iter_downloads(python_downloads_json_url)?.next() {
+    ) -> Result<&ManagedPythonDownload, Error> {
+        if let Some(download) = request.iter_downloads(self).next() {
             return Ok(download);
         }
 
@@ -968,7 +970,7 @@ impl ManagedPythonDownload {
             if let Some(download) = request
                 .clone()
                 .with_prereleases(true)
-                .iter_downloads(python_downloads_json_url)?
+                .iter_downloads(self)
                 .next()
             {
                 return Ok(download);
@@ -977,16 +979,21 @@ impl ManagedPythonDownload {
 
         Err(Error::NoDownloadFound(request.clone()))
     }
-    //noinspection RsUnresolvedPath - RustRover can't see through the `include!`
 
-    /// Iterate over all [`ManagedPythonDownload`]s.
+    /// Load available Python distributions from a provided source or the compiled-in list.
     ///
-    /// Note: The list is generated on the first call to this function.
-    /// so `python_downloads_json_url` is only used in the first call to this function.
-    pub fn iter_all(
+    /// `python_downloads_json_url` can be either `None`, to use the default list (taken from
+    /// `crates/uv-python/download-metadata.json`), or `Some` local path
+    /// or file://, http://, or https:// URL.
+    ///
+    /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
+    /// does not parse into the expected data structure.
+    pub async fn new(
+        client: &BaseClient,
         python_downloads_json_url: Option<&str>,
-    ) -> Result<impl Iterator<Item = &'static Self>, Error> {
-        let downloads = PYTHON_DOWNLOADS.get_or_try_init(|| {
+    ) -> Result<Self, Error> {
+        // temporary block to preserve indentation while refactoring
+        {
             let json_downloads: HashMap<String, JsonPythonDownload> = if let Some(json_source) =
                 python_downloads_json_url
             {
@@ -1014,10 +1021,26 @@ impl ManagedPythonDownload {
             };
 
             let result = parse_json_downloads(json_downloads);
-            Ok(Cow::Owned(result))
-        })?;
+            Ok(Self { downloads: result })
+        }
+    }
 
-        Ok(downloads.iter())
+    /// Load available Python distributions from the compiled-in list only.
+    /// for testing purposes.
+    pub fn new_only_embedded() -> Result<Self, Error> {
+        let json_downloads: HashMap<String, JsonPythonDownload> =
+            serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
+                Error::InvalidPythonDownloadsJSON(PathBuf::from("EMBEDDED IN THE BINARY"), e)
+            })?;
+        let result = parse_json_downloads(json_downloads);
+        Ok(Self { downloads: result })
+    }
+}
+
+impl ManagedPythonDownload {
+    /// Return a display type that includes the build information.
+    pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
+        ManagedPythonDownloadWithBuild(self)
     }
 
     pub fn url(&self) -> &Cow<'static, str> {
@@ -1925,15 +1948,18 @@ mod tests {
     }
 
     /// Test that build filtering works correctly
-    #[test]
-    fn test_python_download_request_build_filtering() {
+    #[tokio::test]
+    async fn test_python_download_request_build_filtering() {
         let request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
             .with_implementation(ImplementationName::CPython)
             .with_build("20240814".to_string());
 
-        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
-            .unwrap()
+        let client = uv_client::BaseClientBuilder::default().build();
+        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+
+        let downloads: Vec<_> = download_list
+            .iter_all()
             .filter(|d| request.satisfied_by_download(d))
             .collect();
 
@@ -1947,17 +1973,20 @@ mod tests {
     }
 
     /// Test that an invalid build results in no matches
-    #[test]
-    fn test_python_download_request_invalid_build() {
+    #[tokio::test]
+    async fn test_python_download_request_invalid_build() {
         // Create a request with a non-existent build
         let request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
             .with_implementation(ImplementationName::CPython)
             .with_build("99999999".to_string());
 
+        let client = uv_client::BaseClientBuilder::default().build();
+        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+
         // Should find no matching downloads
-        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
-            .unwrap()
+        let downloads: Vec<_> = download_list
+            .iter_all()
             .filter(|d| request.satisfied_by_download(d))
             .collect();
 

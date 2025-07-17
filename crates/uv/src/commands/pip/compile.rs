@@ -10,6 +10,8 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
+use uv_python::downloads::ManagedPythonDownloadList;
+
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -292,13 +294,19 @@ pub(crate) async fn pip_compile(
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let python_preference = python_preference.with_system_flag(system);
+    let client = client_builder.clone().retries(0).build();
+    let download_list = ManagedPythonDownloadList::new(
+        &client,
+        install_mirrors.python_downloads_json_url.as_deref(),
+    )
+    .await?;
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
         PythonInstallation::find(
             &request,
             environment_preference,
             python_preference,
-            install_mirrors.python_downloads_json_url.as_deref(),
+            &download_list,
             &cache,
             preview,
         )
@@ -315,7 +323,7 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
-            install_mirrors.python_downloads_json_url.as_deref(),
+            &download_list,
             &cache,
             preview,
         )
