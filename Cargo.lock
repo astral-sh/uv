@@ -4637,6 +4637,7 @@ version = "0.7.21"
 dependencies = [
  "anstream",
  "anyhow",
+ "arrayvec",
  "assert_cmd",
  "assert_fs",
  "axoupdater",
@@ -4735,6 +4736,7 @@ dependencies = [
  "which",
  "whoami",
  "windows 0.59.0",
+ "windows-result 0.3.4",
  "wiremock",
  "zip",
 ]
