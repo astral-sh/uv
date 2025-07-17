@@ -37,6 +37,7 @@ fs-err = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
+petgraph = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }

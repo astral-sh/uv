@@ -6035,6 +6035,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "owo-colors",
+ "petgraph",
  "regex",
  "rustc-hash",
  "schemars",

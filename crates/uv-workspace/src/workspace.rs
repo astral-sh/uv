@@ -2,9 +2,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use glob::{GlobError, PatternError, glob};
+use petgraph::graph::DiGraph;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
@@ -222,9 +224,12 @@ impl Workspace {
             .project
             .clone()
             .map(|project| WorkspaceMember {
-                root: project_path,
-                project,
-                pyproject_toml,
+                project: WorkspaceMemberProject {
+                    root: project_path,
+                    project,
+                    pyproject_toml,
+                },
+                is_dependency: false,
             });
 
         Self::collect_members(
@@ -262,7 +267,7 @@ impl Workspace {
         let mut packages = self.packages;
         let member = Arc::make_mut(&mut packages).get_mut(package_name)?;
 
-        if member.root == self.install_path {
+        if member.project.root == self.install_path {
             // If the member is also the workspace root, update _both_ the member entry and the
             // root `pyproject.toml`.
             let workspace_pyproject_toml = pyproject_toml.clone();
@@ -277,7 +282,7 @@ impl Workspace {
                 .unwrap_or_default();
 
             // Set the `pyproject.toml` for the member.
-            member.pyproject_toml = pyproject_toml;
+            member.project.pyproject_toml = pyproject_toml;
 
             Some(Self {
                 pyproject_toml: workspace_pyproject_toml,
@@ -287,7 +292,7 @@ impl Workspace {
             })
         } else {
             // Set the `pyproject.toml` for the member.
-            member.pyproject_toml = pyproject_toml;
+            member.project.pyproject_toml = pyproject_toml;
 
             Some(Self { packages, ..self })
         }
@@ -304,24 +309,24 @@ impl Workspace {
     /// Returns the set of all workspace members.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.values().filter_map(|member| {
-            let url = VerbatimUrl::from_absolute_path(&member.root)
+            let url = VerbatimUrl::from_absolute_path(member.root())
                 .expect("path is valid URL")
-                .with_given(member.root.to_string_lossy());
+                .with_given(member.root().to_string_lossy());
             Some(Requirement {
-                name: member.pyproject_toml.project.as_ref()?.name.clone(),
+                name: member.project.pyproject_toml.project.as_ref()?.name.clone(),
                 extras: Box::new([]),
                 groups: Box::new([]),
                 marker: MarkerTree::TRUE,
-                source: if member.pyproject_toml.is_package() {
+                source: if member.project.pyproject_toml.is_package() {
                     RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
+                        install_path: member.root().clone().into_boxed_path(),
                         editable: Some(true),
                         r#virtual: Some(false),
                         url,
                     }
                 } else {
                     RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
+                        install_path: member.root().clone().into_boxed_path(),
                         editable: Some(false),
                         r#virtual: Some(true),
                         url,
@@ -335,19 +340,19 @@ impl Workspace {
     /// Returns the set of all workspace member dependency groups.
     pub fn group_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.values().filter_map(|member| {
-            let url = VerbatimUrl::from_absolute_path(&member.root)
+            let url = VerbatimUrl::from_absolute_path(member.root())
                 .expect("path is valid URL")
-                .with_given(member.root.to_string_lossy());
+                .with_given(member.root().to_string_lossy());
 
             let groups = {
                 let mut groups = member
-                    .pyproject_toml
+                    .pyproject_toml()
                     .dependency_groups
                     .as_ref()
                     .map(|groups| groups.keys().cloned().collect::<Vec<_>>())
                     .unwrap_or_default();
                 if member
-                    .pyproject_toml
+                    .pyproject_toml()
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
@@ -364,20 +369,20 @@ impl Workspace {
             }
 
             Some(Requirement {
-                name: member.pyproject_toml.project.as_ref()?.name.clone(),
+                name: member.project.pyproject_toml.project.as_ref()?.name.clone(),
                 extras: Box::new([]),
                 groups: groups.into_boxed_slice(),
                 marker: MarkerTree::TRUE,
-                source: if member.pyproject_toml.is_package() {
+                source: if member.project.pyproject_toml.is_package() {
                     RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
+                        install_path: member.root().clone().into_boxed_path(),
                         editable: Some(true),
                         r#virtual: Some(false),
                         url,
                     }
                 } else {
                     RequirementSource::Directory {
-                        install_path: member.root.clone().into_boxed_path(),
+                        install_path: member.root().clone().into_boxed_path(),
                         editable: Some(false),
                         r#virtual: Some(true),
                         url,
@@ -410,7 +415,7 @@ impl Workspace {
     pub fn conflicts(&self) -> Conflicts {
         let mut conflicting = Conflicts::empty();
         for member in self.packages.values() {
-            conflicting.append(&mut member.pyproject_toml.conflicts());
+            conflicting.append(&mut member.project.pyproject_toml.conflicts());
         }
         conflicting
     }
@@ -437,8 +442,10 @@ impl Workspace {
 
             // Get the requires-python for each enabled group on this package
             // We need to do full flattening here because include-group can transfer requires-python
-            let dependency_groups =
-                FlatDependencyGroups::from_pyproject_toml(member.root(), &member.pyproject_toml)?;
+            let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+                member.root(),
+                &member.project.pyproject_toml,
+            )?;
             let group_requires =
                 dependency_groups
                     .into_iter()
@@ -720,14 +727,14 @@ impl Workspace {
 
         // For the cases such as `MemberDiscovery::None`, add the current project if missing.
         if let Some(root_member) = current_project {
-            if !workspace_members.contains_key(&root_member.project.name) {
+            if !workspace_members.contains_key(root_member.name()) {
                 debug!(
                     "Adding current workspace member: `{}`",
-                    root_member.root.simplified_display()
+                    root_member.root().simplified_display()
                 );
 
                 Arc::make_mut(&mut workspace_members)
-                    .insert(root_member.project.name.clone(), root_member);
+                    .insert(root_member.name().clone(), root_member);
             }
         }
 
@@ -761,7 +768,7 @@ impl Workspace {
         workspace_pyproject_toml: &PyProjectToml,
         options: &DiscoveryOptions,
     ) -> Result<BTreeMap<PackageName, WorkspaceMember>, WorkspaceError> {
-        let mut workspace_members = BTreeMap::new();
+        let mut member_projects = BTreeMap::new();
         // Avoid reading a `pyproject.toml` more than once.
         let mut seen = FxHashSet::default();
 
@@ -779,9 +786,9 @@ impl Workspace {
             );
 
             seen.insert(workspace_root.clone());
-            workspace_members.insert(
+            member_projects.insert(
                 project.name.clone(),
-                WorkspaceMember {
+                WorkspaceMemberProject {
                     root: workspace_root.clone(),
                     project: project.clone(),
                     pyproject_toml,
@@ -902,9 +909,9 @@ impl Workspace {
                     member_root.simplified_display()
                 );
 
-                if let Some(existing) = workspace_members.insert(
+                if let Some(existing) = member_projects.insert(
                     project.name.clone(),
-                    WorkspaceMember {
+                    WorkspaceMemberProject {
                         root: member_root.clone(),
                         project,
                         pyproject_toml,
@@ -919,28 +926,29 @@ impl Workspace {
             }
         }
 
+        let workspace_members = members_from_member_projects(member_projects);
+
         // Test for nested workspaces.
         for member in workspace_members.values() {
             if member.root() != workspace_root
                 && member
-                    .pyproject_toml
+                    .pyproject_toml()
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
                     .and_then(|uv| uv.workspace.as_ref())
                     .is_some()
             {
-                return Err(WorkspaceError::NestedWorkspace(member.root.clone()));
+                return Err(WorkspaceError::NestedWorkspace(member.root().clone()));
             }
         }
         Ok(workspace_members)
     }
 }
 
-/// A project in a workspace.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(serde::Serialize))]
-pub struct WorkspaceMember {
+struct WorkspaceMemberProject {
     /// The path to the project root.
     root: PathBuf,
     /// The `[project]` table, from the `pyproject.toml` of the project found at
@@ -950,21 +958,36 @@ pub struct WorkspaceMember {
     pyproject_toml: PyProjectToml,
 }
 
+/// A project in a workspace.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(test, derive(serde::Serialize))]
+pub struct WorkspaceMember {
+    /// FIXME
+    project: WorkspaceMemberProject,
+    /// This workspace member is a dependency of another member.
+    is_dependency: bool,
+}
+
 impl WorkspaceMember {
     /// The path to the project root.
     pub fn root(&self) -> &PathBuf {
-        &self.root
+        &self.project.root
+    }
+
+    /// The project name.
+    pub fn name(&self) -> &PackageName {
+        &self.project.project.name
     }
 
     /// The `[project]` table, from the `pyproject.toml` of the project found at
     /// `<root>/pyproject.toml`.
     pub fn project(&self) -> &Project {
-        &self.project
+        &self.project.project
     }
 
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
-        &self.pyproject_toml
+        &self.project.pyproject_toml
     }
 }
 
@@ -1217,9 +1240,12 @@ impl ProjectWorkspace {
         }
 
         let current_project = WorkspaceMember {
-            root: project_path.clone(),
-            project: project.clone(),
-            pyproject_toml: project_pyproject_toml.clone(),
+            project: WorkspaceMemberProject {
+                root: project_path.clone(),
+                project: project.clone(),
+                pyproject_toml: project_pyproject_toml.clone(),
+            },
+            is_dependency: false,
         };
 
         let Some((workspace_root, workspace_definition, workspace_pyproject_toml)) = workspace
@@ -1604,6 +1630,54 @@ impl VirtualProject {
     pub fn is_non_project(&self) -> bool {
         matches!(self, VirtualProject::NonProject(_))
     }
+}
+
+/// FIXME
+fn members_from_member_projects(
+    member_projects: BTreeMap<PackageName, WorkspaceMemberProject>,
+) -> BTreeMap<PackageName, WorkspaceMember> {
+    let mut graph = DiGraph::new();
+    let mut node_indices = FxHashMap::default();
+
+    for package_name in member_projects.keys() {
+        let node_index = graph.add_node((*package_name).clone());
+        node_indices.insert((*package_name).clone(), node_index);
+    }
+
+    for (package_name, workspace_member_project) in &member_projects {
+        if let Some(dependencies) = &workspace_member_project.project.dependencies {
+            let source_node = node_indices[package_name];
+
+            for dependency in dependencies {
+                if let Ok(package_name) = PackageName::from_str(dependency) {
+                    if let Some(&target_node) = node_indices.get(&package_name) {
+                        graph.add_edge(source_node, target_node, ());
+                    }
+                }
+            }
+        }
+    }
+
+    member_projects
+        .into_iter()
+        .map(|(name, project)| {
+            let node_index = node_indices
+                .get(&name)
+                .expect("Member should be added to graph");
+            let is_source = graph
+                .edges_directed(*node_index, petgraph::Incoming)
+                .next()
+                .is_none();
+
+            (
+                name,
+                WorkspaceMember {
+                    project,
+                    is_dependency: !is_source,
+                },
+            )
+        })
+        .collect::<BTreeMap<PackageName, WorkspaceMember>>()
 }
 
 #[cfg(test)]
