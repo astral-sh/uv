@@ -159,10 +159,7 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn required_members(self) -> BTreeSet<&'lock PackageName> {
         match self {
             Self::Workspace(workspace) => workspace.required_members().collect(),
-            Self::Script(_) => {
-                static EMPTY: BTreeSet<&PackageName> = BTreeSet::new();
-                EMPTY.clone()
-            }
+            Self::Script(_) => BTreeSet::new(),
         }
     }
 
