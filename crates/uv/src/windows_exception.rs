@@ -187,7 +187,7 @@ fn dump_regs(e: &mut ExceptionSafeStderr, c: &CONTEXT) -> std::fmt::Result {
     // SAFETY: The two variants of this anonymous union are equivalent,
     // one's an array and one has named registers.
     let regs = unsafe { c.Anonymous.Anonymous };
-    let Windows::Win32::System::Diagnostics::Debug::CONTEXT_0_0 {
+    let windows::Win32::System::Diagnostics::Debug::CONTEXT_0_0 {
         X0,
         X1,
         X2,
