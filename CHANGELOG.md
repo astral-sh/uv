@@ -15,7 +15,7 @@ been available under preview since late last year.
 
 ### Breaking changes
 
-- **Install Python executables into the bin ([#14626](https://github.com/astral-sh/uv/pull/14626))**
+- **Install Python executables into a directory on the `PATH` ([#14626](https://github.com/astral-sh/uv/pull/14626))**
 
   `uv python install` now installs a versioned Python executable (e.g., `python3.13`) into a
   directory on the `PATH` (e.g., `~/.local/bin`) by default. This behavior has been available under
@@ -86,7 +86,7 @@ been available under preview since late last year.
   sources](https://docs.astral.sh/uv/concepts/projects/dependencies/#path) unless they declared a
   build system or set `tool.uv.package = true`. Now, dependencies with `path` sources are built and
   installed regardless of the presence of a build system. If a build system is not present, the
-  `setuptools.build_meta:__legacy__ ` backend will be used (per the standards).
+  `setuptools.build_meta:__legacy__ ` backend will be used (per [PEP 517](https://peps.python.org/pep-0517/#source-trees)).
 
   You can opt out of this behavior by setting `package = false` in the source declaration, e.g.:
 
@@ -123,14 +123,11 @@ been available under preview since late last year.
   resolution](https://docs.astral.sh/uv/concepts/resolution/#platform-specific-resolution) for
   explicit targets and provides short alias, e.g., `linux`, for common targets.
 
-  Previously, the default target for `--python-platform linux` was `manylinux_2_17`. Now, the
-  default is `manylinux_2_28`.
-
-  Only [0.2% of packages require `manylinux_2_17`](https://mayeut.github.io/manylinux-timeline/)
-  while support for `manylinux_2_28` is >90%. `cibuildwheel` changed their default to
-  `manylinux_2_28` in [Mar 2025](https://github.com/pypa/cibuildwheel/pull/2330). `manylinux_2_28`
-  offers better performance and support for modern architectures, and should reduce cases where uv
-  needs to build a wheel from source.
+  Previously, the default target for `--python-platform linux` was `manylinux_2_17`, which is
+  compatible with most Linux distributions from 2014 or newer. We now default to `manylinux_2_28`,
+  which is compatible with most Linux distributions from 2017 or newer.  This change follows the
+  lead of other tools, such as `cibuildwheel`, which changed their default to `manylinux_2_28` in
+  [Mar 2025](https://github.com/pypa/cibuildwheel/pull/2330). 
 
   You can opt out of this behavior by using `--python-platform x86_64-manylinux_2_17` instead.
 
@@ -178,7 +175,7 @@ been available under preview since late last year.
   not install tools into a directory on the `PATH` without additional configuration. Now, `UV_TOOL_BIN_DIR` is set to
   `/usr/local/bin` in all Docker derived images.
 
-  When the default image user is overwritten (e.g. `USER <UID>`) by a less privileged one, this may
+  When the default image user is overridden (e.g. `USER <UID>`) with a less privileged user, this may
   cause `uv tool install` to fail.
 
   You can opt out of this behavior by setting an alternative `UV_TOOL_BIN_DIR`.
