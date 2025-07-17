@@ -220,17 +220,30 @@ impl TestContext {
     /// and `.exe` suffixes.
     #[must_use]
     pub fn with_filtered_python_names(mut self) -> Self {
+        use env::consts::EXE_SUFFIX;
+        let exe_suffix = regex::escape(EXE_SUFFIX);
+
+        self.filters.push((
+            format!(r"python\d.\d\d{exe_suffix}"),
+            "[PYTHON]".to_string(),
+        ));
+        self.filters
+            .push((format!(r"python\d{exe_suffix}"), "[PYTHON]".to_string()));
+
         if cfg!(windows) {
+            // On Windows, we want to filter out all `python.exe` instances
             self.filters
-                .push((r"python\.exe".to_string(), "[PYTHON]".to_string()));
+                .push((format!(r"python{exe_suffix}"), "[PYTHON]".to_string()));
+            // Including ones where we'd already stripped the `.exe` in another filter
+            self.filters
+                .push((r"[\\/]python".to_string(), "/[PYTHON]".to_string()));
         } else {
+            // On Unix, it's a little trickier — we don't want to clobber use of `python` in the
+            // middle of something else, e.g., `cpython`. For this reason, we require a leading `/`.
             self.filters
-                .push((r"python\d.\d\d".to_string(), "[PYTHON]".to_string()));
-            self.filters
-                .push((r"python\d".to_string(), "[PYTHON]".to_string()));
-            self.filters
-                .push((r"/python".to_string(), "/[PYTHON]".to_string()));
+                .push((format!(r"/python{exe_suffix}"), "/[PYTHON]".to_string()));
         }
+
         self
     }
 

@@ -121,28 +121,17 @@ present, uv will install all the Python versions listed in the file.
 
 ### Installing Python executables
 
-!!! important
-
-    Support for installing Python executables is in _preview_. This means the behavior is experimental
-    and subject to change.
-
-To install Python executables into your `PATH`, provide the `--preview` option:
-
-```console
-$ uv python install 3.12 --preview
-```
-
-This will install a Python executable for the requested version into `~/.local/bin`, e.g., as
-`python3.12`.
+uv installs Python executables into your `PATH` by default, e.g., `uv python install 3.12` will
+install a Python executable into `~/.local/bin`, e.g., as `python3.12`.
 
 !!! tip
 
     If `~/.local/bin` is not in your `PATH`, you can add it with `uv tool update-shell`.
 
-To install `python` and `python3` executables, include the `--default` option:
+To install `python` and `python3` executables, include the experimental `--default` option:
 
 ```console
-$ uv python install 3.12 --default --preview
+$ uv python install 3.12 --default
 ```
 
 When installing Python executables, uv will only overwrite an existing executable if it is managed
@@ -153,9 +142,9 @@ uv will update executables that it manages. However, it will prefer the latest p
 Python minor version by default. For example:
 
 ```console
-$ uv python install 3.12.7 --preview  # Adds `python3.12` to `~/.local/bin`
-$ uv python install 3.12.6 --preview  # Does not update `python3.12`
-$ uv python install 3.12.8 --preview  # Updates `python3.12` to point to 3.12.8
+$ uv python install 3.12.7  # Adds `python3.12` to `~/.local/bin`
+$ uv python install 3.12.6  # Does not update `python3.12`
+$ uv python install 3.12.8  # Updates `python3.12` to point to 3.12.8
 ```
 
 ## Upgrading Python versions
