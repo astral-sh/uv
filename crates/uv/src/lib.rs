@@ -1523,6 +1523,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.python_downloads_json_url,
                 globals.python_preference,
                 globals.python_downloads,
+                &client_builder,
                 &cache,
                 printer,
                 globals.preview,
