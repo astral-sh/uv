@@ -91,27 +91,28 @@ pub async fn compile_tree(
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
 
     let timeout: Option<Duration> = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
-        Ok(value) => {
-            if value == "0" {
-                debug!("Disabling bytecode compilation timeout");
-                None
-            } else {
-                if let Ok(duration) = value.parse::<u64>().map(Duration::from_secs) {
-                    debug!(
-                        "Using bytecode compilation timeout of {}s",
-                        duration.as_secs()
-                    );
-                    Some(duration)
-                } else {
+        Ok(value) => match value.as_str() {
+            "0" => None,
+            _ => match value.parse::<u64>().map(Duration::from_secs) {
+                Ok(duration) => Some(duration),
+                Err(_) => {
                     return Err(CompileError::EnvironmentError {
                         var: "UV_COMPILE_BYTECODE_TIMEOUT",
                         message: format!("Expected an integer number of seconds, got \"{value}\""),
                     });
                 }
-            }
-        }
+            },
+        },
         Err(_) => Some(DEFAULT_COMPILE_TIMEOUT),
     };
+    if let Some(duration) = timeout {
+        debug!(
+            "Using bytecode compilation timeout of {}s",
+            duration.as_secs()
+        );
+    } else {
+        debug!("Disabling bytecode compilation timeout");
+    }
 
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::new();
