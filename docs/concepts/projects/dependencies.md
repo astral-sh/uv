@@ -867,7 +867,6 @@ would be.
 
 In contrast, if the parent declared a dependency on `child`:
 
-````
 ```toml title="pyproject.toml"
 [project]
 name = "parent"
@@ -879,7 +878,7 @@ child = { workspace = true }
 
 [tool.uv.workspace]
 members = ["child"]
-````
+```
 
 Then `child` would be built and installed.
 
