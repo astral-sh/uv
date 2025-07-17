@@ -84,6 +84,9 @@ fn confirm_inner(
 
     if hint.is_some() {
         term.clear_last_lines(2)?;
+        // It's not clear why we need to clear to the end of the screen here, but it fixes lingering
+        // display of the hint on `bash` (the issue did not reproduce on `zsh`).
+        term.clear_to_end_of_screen()?;
     } else {
         term.clear_line()?;
     }
