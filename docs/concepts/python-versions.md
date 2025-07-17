@@ -128,7 +128,7 @@ install a Python executable into `~/.local/bin`, e.g., as `python3.12`.
 
     If `~/.local/bin` is not in your `PATH`, you can add it with `uv tool update-shell`.
 
-To install `python` and `python3` executables, include the `--default` option:
+To install `python` and `python3` executables, include the experimental `--default` option:
 
 ```console
 $ uv python install 3.12 --default

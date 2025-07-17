@@ -469,9 +469,9 @@ fn help_subsubcommand() {
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
 
-    By default, Python executables are added to a directory on the path as `pythonX.y`. To install
-    `python3` and `python`, use the `--default` flag. Use `uv python dir --bin` to retrieve the target
-    directory.
+    By default, Python executables are added to a directory on the path with a minor version suffix,
+    e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use `uv python dir
+    --bin` to see the target directory.
 
     Multiple Python versions may be requested.
 

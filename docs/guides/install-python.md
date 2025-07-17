@@ -32,7 +32,7 @@ $ python3.13
 ```
 
 uv only installs a _versioned_ executable by default. To install `python` and `python3` executables,
-include the `--default` option:
+include the experimental `--default` option:
 
 ```console
 $ uv python install --default
