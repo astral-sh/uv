@@ -241,7 +241,7 @@ pub(crate) fn finalize_tool_install(
             hint_executable_from_dependency(&package, &site_packages, printer)?;
 
             // Clean up the environment we just created.
-            installed_tools.remove_environment(&name)?;
+            installed_tools.remove_environment(name)?;
 
             return Err(anyhow::anyhow!(
                 "Failed to install entrypoints for `{}`",
