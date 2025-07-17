@@ -340,10 +340,16 @@ impl Workspace {
     pub fn required_members(&self) -> impl Iterator<Item = &PackageName> + '_ {
         self.sources
             .iter()
+            .filter(|(name, _)| {
+                self.pyproject_toml
+                    .project
+                    .as_ref()
+                    .is_none_or(|project| project.name != **name)
+            })
             .chain(
                 self.packages
-                    .values()
-                    .filter_map(|member| {
+                    .iter()
+                    .filter_map(|(name, member)| {
                         member
                             .pyproject_toml
                             .tool
@@ -351,6 +357,11 @@ impl Workspace {
                             .and_then(|tool| tool.uv.as_ref())
                             .and_then(|uv| uv.sources.as_ref())
                             .map(ToolUvSources::inner)
+                            .map(move |sources| {
+                                sources
+                                    .iter()
+                                    .filter(move |(source_name, _)| name != *source_name)
+                            })
                     })
                     .flatten(),
             )

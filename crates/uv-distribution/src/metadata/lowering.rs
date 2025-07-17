@@ -306,9 +306,10 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            // We don't require a build system, because the workspace member is a
-                            // dependency
-                            } else if member.pyproject_toml().is_package(false) {
+                            } else if member
+                                .pyproject_toml()
+                                .is_package(!workspace.is_required_member(&requirement.name))
+                            {
                                 RequirementSource::Directory {
                                     install_path: install_path.into_boxed_path(),
                                     url,

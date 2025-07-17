@@ -10351,9 +10351,8 @@ fn add_self() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + anyio==0.1.0 (from file://[TEMP_DIR]/)
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + typing-extensions==4.10.0
     ");
 
@@ -10363,7 +10362,7 @@ fn add_self() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "anyio"
         version = "0.1.0"
@@ -10378,7 +10377,7 @@ fn add_self() -> Result<()> {
 
         [tool.uv.sources]
         anyio = { workspace = true }
-        "###
+        "#
         );
     });
 
@@ -10390,10 +10389,7 @@ fn add_self() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     ~ anyio==0.1.0 (from file://[TEMP_DIR]/)
+    Audited 1 package in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -10402,7 +10398,7 @@ fn add_self() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "anyio"
         version = "0.1.0"
@@ -10422,7 +10418,7 @@ fn add_self() -> Result<()> {
         dev = [
             "anyio[types]",
         ]
-        "###
+        "#
         );
     });
 
