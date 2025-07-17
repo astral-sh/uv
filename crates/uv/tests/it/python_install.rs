@@ -1995,8 +1995,13 @@ fn python_install_314() {
      + cpython-3.14.0a4-[PLATFORM]
     ");
 
-    // Add name filtering for the `find` tests, we avoid it previously because it clobbers the
-    // version suffixes which matter in the above install logs
+    // Add name filtering for the `find` tests, we avoid it in `install` tests because it clobbers
+    // the version suffixes which matter in the install logs
+    let filters = context
+        .filters()
+        .iter()
+        .map(|(a, b)| ((*a).to_string(), (*b).to_string()))
+        .collect::<Vec<_>>();
     let context = context
         .with_filtered_python_install_bin()
         .with_filtered_python_names();
@@ -2032,14 +2037,14 @@ fn python_install_314() {
     ");
 
     // If we install a stable version, that should be preferred though
-    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r"
+    uv_snapshot!(filters, context.python_install().arg("3.13"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed Python 3.13.5 in [TIME]
-     + cpython-3.13.5-[PLATFORM] ([PYTHON])
+     + cpython-3.13.5-[PLATFORM] (python3.13)
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @r"
