@@ -4810,10 +4810,9 @@ pub enum PythonCommand {
     /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
     /// python dir`.
     ///
-    /// A `python` executable is not made globally available, managed Python versions are only used
-    /// in uv commands or in active virtual environments. There is experimental support for adding
-    /// Python executables to a directory on the path — use the `--preview` flag to enable this
-    /// behavior and `uv python dir --bin` to retrieve the target directory.
+    /// By default, Python executables are added to a directory on the path with a minor version
+    /// suffix, e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use
+    /// `uv python dir --bin` to see the target directory.
     ///
     /// Multiple Python versions may be requested.
     ///
