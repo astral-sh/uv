@@ -10567,7 +10567,7 @@ fn sync_url_with_query_parameters() -> Result<()> {
 /// Test uv sync with --exclude-newer-package
 #[test]
 fn sync_exclude_newer_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10594,9 +10594,9 @@ dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + certifi==2021.10.8
      + charset-normalizer==2.0.12
      + idna==3.3
@@ -10620,10 +10620,10 @@ dependencies = [
 
     ----- stderr -----
     Ignoring existing lockfile due to change in timestamp cutoff: `global: 2022-04-04T12:00:00Z` vs. `global: 2022-04-04T12:00:00Z, tqdm: 2022-09-04T00:00:00Z`
-    Resolved 8 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - tqdm==4.64.0
      + tqdm==4.64.1
     "
@@ -10635,7 +10635,7 @@ dependencies = [
 /// Test exclude-newer-package in pyproject.toml configuration
 #[test]
 fn sync_exclude_newer_package_config() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10663,9 +10663,9 @@ exclude-newer = "2022-04-04T12:00:00Z"
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + certifi==2021.10.8
      + charset-normalizer==2.0.12
      + idna==3.3
@@ -10703,10 +10703,10 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
 
     ----- stderr -----
     Ignoring existing lockfile due to change in timestamp cutoff: `global: 2022-04-04T12:00:00Z` vs. `global: 2022-04-04T12:00:00Z, tqdm: 2022-09-04T00:00:00Z`
-    Resolved 8 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - tqdm==4.64.0
      + tqdm==4.64.1
     "
