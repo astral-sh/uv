@@ -654,8 +654,8 @@ jobs:
             ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uvx.exe
           retention-days: 1
 
-  cargo-build-msrv:
-    name: "cargo build (msrv)"
+  build-binary-msrv:
+    name: "build binary | msrv"
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: github-ubuntu-24.04-x86_64-8
