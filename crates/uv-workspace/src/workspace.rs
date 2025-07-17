@@ -109,8 +109,6 @@ pub struct Workspace {
     install_path: PathBuf,
     /// The members of the workspace.
     packages: WorkspaceMembers,
-    /// The members of the workspace that are required by another member.
-    required_members: BTreeSet<PackageName>,
     /// The sources table from the workspace `pyproject.toml`.
     ///
     /// This table is overridden by the project sources.
@@ -262,6 +260,7 @@ impl Workspace {
         pyproject_toml: PyProjectToml,
     ) -> Option<Self> {
         let mut packages = self.packages;
+
         let member = Arc::make_mut(&mut packages).get_mut(package_name)?;
 
         if member.root == self.install_path {
@@ -338,8 +337,34 @@ impl Workspace {
     }
 
     /// Whether a given workspace member is required by another member.
+    pub fn required_members(&self) -> impl Iterator<Item = &PackageName> + '_ {
+        self.sources
+            .iter()
+            .chain(
+                self.packages
+                    .values()
+                    .filter_map(|member| {
+                        member
+                            .pyproject_toml
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.uv.as_ref())
+                            .and_then(|uv| uv.sources.as_ref())
+                            .map(ToolUvSources::inner)
+                    })
+                    .flatten(),
+            )
+            .filter_map(|(package, sources)| {
+                sources
+                    .iter()
+                    .any(|source| matches!(source, Source::Workspace { .. }))
+                    .then_some(package)
+            })
+    }
+
+    /// Whether a given workspace member is required by another member.
     pub fn is_required_member(&self, name: &PackageName) -> bool {
-        self.required_members.contains(name)
+        self.required_members().any(|package| package == name)
     }
 
     /// Returns the set of all workspace member dependency groups.
@@ -642,11 +667,6 @@ impl Workspace {
         &self.packages
     }
 
-    /// The required members of the workspace.
-    pub fn required_members(&self) -> &BTreeSet<PackageName> {
-        &self.required_members
-    }
-
     /// The sources table from the workspace `pyproject.toml`.
     pub fn sources(&self) -> &BTreeMap<PackageName, Sources> {
         &self.sources
@@ -764,34 +784,9 @@ impl Workspace {
             .and_then(|uv| uv.index)
             .unwrap_or_default();
 
-        let required_members = workspace_sources
-            .iter()
-            .chain(
-                workspace_members
-                    .values()
-                    .filter_map(|member| {
-                        member
-                            .pyproject_toml
-                            .tool
-                            .as_ref()
-                            .and_then(|tool| tool.uv.as_ref())
-                            .and_then(|uv| uv.sources.as_ref())
-                            .map(ToolUvSources::inner)
-                    })
-                    .flatten(),
-            )
-            .filter_map(|(package, sources)| {
-                sources
-                    .iter()
-                    .any(|source| matches!(source, Source::Workspace { .. }))
-                    .then_some(package.clone())
-            })
-            .collect();
-
         Ok(Workspace {
             install_path: workspace_root,
             packages: workspace_members,
-            required_members,
             sources: workspace_sources,
             indexes: workspace_indexes,
             pyproject_toml: workspace_pyproject_toml,
@@ -1281,7 +1276,6 @@ impl ProjectWorkspace {
                 workspace: Workspace {
                     install_path: project_path.clone(),
                     packages: current_project_as_members,
-                    required_members: BTreeSet::default(),
                     // There may be package sources, but we don't need to duplicate them into the
                     // workspace sources.
                     sources: BTreeMap::default(),

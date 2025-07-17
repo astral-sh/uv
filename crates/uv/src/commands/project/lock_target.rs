@@ -156,12 +156,12 @@ impl<'lock> LockTarget<'lock> {
 
     /// Return the set of required workspace members, i.e., those that are required by other
     /// members.
-    pub(crate) fn required_members(self) -> &'lock BTreeSet<PackageName> {
+    pub(crate) fn required_members(self) -> BTreeSet<&'lock PackageName> {
         match self {
-            Self::Workspace(workspace) => workspace.required_members(),
+            Self::Workspace(workspace) => workspace.required_members().collect(),
             Self::Script(_) => {
-                static EMPTY: BTreeSet<PackageName> = BTreeSet::new();
-                &EMPTY
+                static EMPTY: BTreeSet<&PackageName> = BTreeSet::new();
+                EMPTY.clone()
             }
         }
     }

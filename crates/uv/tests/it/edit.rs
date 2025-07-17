@@ -10351,8 +10351,9 @@ fn add_self() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==0.1.0 (from file://[TEMP_DIR]/)
      + typing-extensions==4.10.0
     ");
 
@@ -10389,7 +10390,10 @@ fn add_self() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ anyio==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13320,7 +13324,9 @@ fn add_path_within_workspace_defaults_to_workspace() -> Result<()> {
     ----- stderr -----
     Added `dep` to workspace members
     Resolved 2 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
