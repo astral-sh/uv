@@ -5,7 +5,7 @@
 
 ## 0.8.0
 
-Since we released uv [0.7.0](https://github.com/astral-sh/uv/releases/tag/0.5.0) in April, we've accumulated various changes that improve correctness and user experience, but could break some workflows. This release contains those changes; many have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
+Since we released uv [0.7.0](https://github.com/astral-sh/uv/releases/tag/0.7.0) in April, we've accumulated various changes that improve correctness and user experience, but could break some workflows. This release contains those changes; many have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
 
 This release also includes the stabilization of a couple `uv python install` features, which have been available under preview since late last year.
 
@@ -25,7 +25,7 @@ This release also includes the stabilization of a couple `uv python install` fea
 
   See the [documentation on installing Python executables](https://docs.astral.sh/uv/concepts/python-versions/#installing-python-executables) for more details.
 
-- **Register Python versions with the Windows registry ([#14625](https://github.com/astral-sh/uv/pull/14625))**
+- **Register Python versions with the Windows Registry ([#14625](https://github.com/astral-sh/uv/pull/14625))**
 
   `uv python install` now registers the installed Python version with the Windows Registry as specified by [PEP 514](https://peps.python.org/pep-0514/). This allows using uv installed Python versions via the `py` launcher. This behavior has been available under the `--preview` flag since [Jan 2025](https://github.com/astral-sh/uv/pull/10634). This change should not be breaking, as using the uv Python versions with `py` requires explicit opt in.
 
