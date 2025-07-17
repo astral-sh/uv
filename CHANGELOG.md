@@ -5,7 +5,7 @@
 
 ## 0.8.0
 
-Since we released [0.7.0](https://github.com/astral-sh/uv/releases/tag/0.5.0) in April, we've
+Since we released uv [0.7.0](https://github.com/astral-sh/uv/releases/tag/0.5.0) in April, we've
 accumulated various changes that improve correctness and user experience, but could break some
 workflows. This release contains those changes; many have been marked as breaking out of an
 abundance of caution. We expect most users to be able to upgrade without making changes.
@@ -19,61 +19,83 @@ been available under preview since late last year.
 
   `uv python install` now installs a versioned Python executable (e.g., `python3.13`) into a
   directory on the `PATH` (e.g., `~/.local/bin`) by default. This behavior has been available under
-  the `--preview` flag since [Oct 2024](https://github.com/astral-sh/uv/pull/8458).
+  the `--preview` flag since [Oct 2024](https://github.com/astral-sh/uv/pull/8458). This change
+  should not be breaking unless it shadows a Python executable elsewhere on the `PATH`.
 
   To install unversioned executables, e.g., `python3` and `python`, use the `--default` flag. The
   `--default` flag has also been in preview, but is not stabilized in this release.
 
+  As with tool installation, the target directory respects common variables like `XDG_BIN_HOME` and
+  can be overridden with a `UV_PYTHON_BIN_DIR` variable.
+
   You can opt-out of this behavior with `uv python install --no-bin` or `UV_PYTHON_INSTALL_BIN=0`.
+
+  See the [documentation on installing Python
+  executables](https://docs.astral.sh/uv/concepts/python-versions/#installing-python-executables)
+  for more details.
 
 - **Register Python versions with the Windows registry ([#14625](https://github.com/astral-sh/uv/pull/14625))**
 
   `uv python install` now registers the installed Python version with the Windows Registry as
   specified by [PEP 514](https://peps.python.org/pep-0514/). This allows using uv installed Python
   versions via the `py` launcher. This behavior has been available under the `--preview` flag since
-  [Jan 2025](https://github.com/astral-sh/uv/pull/10634).
+  [Jan 2025](https://github.com/astral-sh/uv/pull/10634). This change should not be breaking, as
+  using the uv Python versions with `py` requires explicit opt-in.
 
   You can opt-out of this behavior with `uv python install --no-registry` or `UV_PYTHON_INSTALL_REGISTRY=0`.
 
 - **Prompt before removing an existing directory in `uv venv` ([#14309](https://github.com/astral-sh/uv/pull/14309))**
 
   Previously, `uv venv` would remove an existing virtual environment without confirmation. While
-  this is consistent with the behavior of project commands, like `uv sync`, it's surprising to users
-  that are using imperative workflows, like `uv pip`. Now, `uv venv` will prompt for confirmation
+  this is consistent with the behavior of project commands (e.g., `uv sync`), it's surprising to users
+  that are using imperative workflows (i.e., `uv pip`). Now, `uv venv` will prompt for confirmation
   before removing an existing virtual environment. **If not in an interactive context, uv will still
   remove the virtual environment for backwards compatibility. However, this behavior is likely to
   change in a future release.**
 
-  The behavior for other commands, like `uv sync`, is unchanged.
+  The behavior for other commands (e.g., `uv sync`) is unchanged.
 
   You can opt-out of this behavior by setting `UV_VENV_CLEAR=1` or passing the `--clear` flag.
 
 - **Validate that discovered interpreters meet the Python preference ([#7934](https://github.com/astral-sh/uv/pull/7934))**
 
   uv allows opting out of its managed Python versions with the `--no-managed-python` and
-  `python-preference` options. Previously, uv would not enforce this option for Python interpreters
-  discovered on the `PATH`. For example, if a symlink to a managed Python interpreter was added, uv
-  would allow it to be used even if `--no-managed-python` was provided. Now, uv ignores Python
-  interpreters that do not conform to the Python preference _unless_ they are in an active virtual
-  environment or are explicitly requested, e.g., with `--python /path/to/python3.13`.
+  `python-preference` options.
+  
+  Previously, uv would not enforce this option for Python interpreters discovered on the `PATH`. For
+  example, if a symlink to a managed Python interpreter was created, uv would allow it to be used
+  even if `--no-managed-python` was provided. Now, uv ignores Python interpreters that do not match
+  the Python preference _unless_ they are in an active virtual environment or are explicitly
+  requested, e.g., with `--python /path/to/python3.13`.
 
   Similarly, uv would previously not invalidate existing project environments if they did not match
   the Python preference. Now, uv will invalidate and recreate project environments when the Python
   preference changes.
 
-  You can opt-out of this behavior by providing the explicit path to the Python interpreter.
+  You can opt-out of this behavior by providing the explicit path to the Python interpreter
+  providing `--managed-python` / `--no-managed-python` matching the interpreter you want.
 
 - **Install dependencies without build systems when they are `path` sources ([#14413](https://github.com/astral-sh/uv/pull/14413))**
 
   When working a project, uv uses the [presence of a build
   system](https://docs.astral.sh/uv/concepts/projects/config/#build-systems) to determine if it
   should be built and installed into the environment. However, when a project is a dependency of
-  another project, it can be surprising for the dependency to be missing from the environment. Now,
-  dependencies with [`path` sources](https://docs.astral.sh/uv/concepts/projects/dependencies/#path)
-  are built and installed, regardless of the presence of a build system. If a build system is not
-  present, the `setuptools.build_meta:__legacy__ ` backend will be used (per the standards).
+  another project, it can be surprising for the dependency to be missing from the environment.
+  
+  Previously, uv would not build and install dependencies with [`path`
+  sources](https://docs.astral.sh/uv/concepts/projects/dependencies/#path) unless they declared a
+  build system or set `tool.uv.package = true`. Now, dependencies with `path` sources are built and
+  installed regardless of the presence of a build system. If a build system is not present, the
+  `setuptools.build_meta:__legacy__ ` backend will be used (per the standards).
 
-  You can opt-out of this behavior by setting `package = false` in the source declaration.
+  You can opt-out of this behavior by setting `package = false` in the source declaration, e.g.:
+
+  ```toml
+  [tool.uv.sources]
+  foo = { path = "./foo", package = false }
+  ```
+
+  Or, by setting `tool.uv.package = false` in the dependent `pyproject.toml`.
 
   See the documentation on [virtual
   dependencies](https://docs.astral.sh/uv/concepts/projects/dependencies/#virtual-dependencies) for
@@ -81,7 +103,7 @@ been available under preview since late last year.
 
 - **Install dependencies without build systems when they are workspace members ([#14663](https://github.com/astral-sh/uv/pull/14663))**
 
-  As with the change for dependencies with `path` sources, uv previously would not build and install
+  As described above for dependencies with `path` sources, uv previously would not build and install
   workspace members that did not declare a build system. Now, uv will build and install workspace
   members that are a dependency of _another_ workspace member regardless of the presence of a build
   system. The behavior is unchanged for workspace members that are not included in the
