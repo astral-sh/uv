@@ -1082,12 +1082,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     target_version,
                     token,
                     dry_run,
+                    output_format,
                 }),
         }) => {
             commands::self_update(
                 target_version,
                 token,
                 dry_run,
+                output_format,
                 printer,
                 globals.network_settings,
             )

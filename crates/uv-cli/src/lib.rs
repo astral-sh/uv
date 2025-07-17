@@ -67,6 +67,15 @@ pub enum ListFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum SelfUpdateFormat {
+    /// Output plain text messages.
+    #[default]
+    Text,
+    /// Output result as JSON.
+    Json,
+}
+
 fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     ExtraName::from_str(arg).map_err(|_err| {
         anyhow!(
@@ -704,6 +713,10 @@ pub struct SelfUpdateArgs {
     /// Run without performing the update.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// The format in which the result would be displayed.
+    #[arg(long, value_enum, default_value_t = SelfUpdateFormat::default())]
+    pub output_format: SelfUpdateFormat,
 }
 
 #[derive(Args)]

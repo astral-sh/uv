@@ -5353,7 +5353,12 @@ uv self update [OPTIONS] [TARGET_VERSION]
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-self-update--no-python-downloads"><a href="#uv-self-update--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-self-update--offline"><a href="#uv-self-update--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-self-update--project"><a href="#uv-self-update--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-self-update--output-format"><a href="#uv-self-update--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The format in which the result would be displayed</p>
+<p>[default: text]</p><p>Possible values:</p>
+<ul>
+<li><code>text</code>:  Output plain text messages</li>
+<li><code>json</code>:  Output result as JSON</li>
+</ul></dd><dt id="uv-self-update--project"><a href="#uv-self-update--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
 <p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
 <p>See <code>--directory</code> to change the working directory entirely.</p>
