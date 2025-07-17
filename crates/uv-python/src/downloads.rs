@@ -14,7 +14,7 @@ use owo_colors::OwoColorize;
 use reqwest_retry::{RetryError, RetryPolicy};
 use serde::Deserialize;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
@@ -98,10 +98,8 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error("Failed to determine the libc used on the current platform")]
     LibcDetection(#[from] LibcDetectionError),
-    #[error("Remote Python downloads JSON is not yet supported, please use a local path")]
-    RemoteJSONNotSupported,
     #[error("The JSON of the python downloads is invalid: {0}")]
-    InvalidPythonDownloadsJSON(PathBuf, #[source] serde_json::Error),
+    InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -594,7 +592,7 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-const BUILTIN_PYTHON_DOWNLOADS_JSON: &str = include_str!("download-metadata-minified.json");
+const BUILTIN_PYTHON_DOWNLOADS_JSON: &[u8] = include_bytes!("download-metadata-minified.json");
 
 pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
@@ -671,37 +669,61 @@ impl ManagedPythonDownloadList {
         client: &BaseClient,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
-        // temporary block to preserve indentation while refactoring
-        {
-            let json_downloads: HashMap<String, JsonPythonDownload> = if let Some(json_source) =
-                python_downloads_json_url
-            {
-                // Windows paths are also valid URLs
-                let json_source = if let Ok(url) = Url::parse(json_source) {
-                    if let Ok(path) = url.to_file_path() {
-                        Cow::Owned(path)
-                    } else if matches!(url.scheme(), "http" | "https") {
-                        return Err(Error::RemoteJSONNotSupported);
-                    } else {
-                        Cow::Borrowed(Path::new(json_source))
-                    }
-                } else {
-                    Cow::Borrowed(Path::new(json_source))
-                };
-
-                let file = fs_err::File::open(json_source.as_ref())?;
-
-                serde_json::from_reader(file)
-                    .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.to_path_buf(), e))?
-            } else {
-                serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
-                    Error::InvalidPythonDownloadsJSON(PathBuf::from("EMBEDDED IN THE BINARY"), e)
-                })?
-            };
-
-            let result = parse_json_downloads(json_downloads);
-            Ok(Self { downloads: result })
+        // Although read_url() handles file:// URLs and converts them to local file reads, here we
+        // want to also support parsing bare filenames like "/tmp/py.json", not just
+        // "file:///tmp/py.json". Note that "C:\Temp\py.json" should be considered a filename, even
+        // though Url::parse would successfully misparse it as a URL with scheme "C".
+        enum Source<'a> {
+            BuiltIn,
+            Path(Cow<'a, Path>),
+            Http(Url),
         }
+
+        let json_source = if let Some(url_or_path) = python_downloads_json_url {
+            if let Ok(url) = Url::parse(url_or_path) {
+                match url.scheme() {
+                    "http" | "https" => Source::Http(url),
+                    "file" => {
+                        if let Ok(path) = url.to_file_path() {
+                            Source::Path(Cow::Owned(path))
+                        } else {
+                            return Err(Error::InvalidUrlFormat(url));
+                        }
+                    }
+                    _ => Source::Path(Cow::Borrowed(Path::new(url_or_path))),
+                }
+            } else {
+                Source::Path(Cow::Borrowed(Path::new(url_or_path)))
+            }
+        } else {
+            Source::BuiltIn
+        };
+
+        let buf: Cow<'_, [u8]> = match json_source {
+            Source::BuiltIn => BUILTIN_PYTHON_DOWNLOADS_JSON.into(),
+            Source::Path(ref path) => fs_err::read(path.as_ref())?.into(),
+            Source::Http(ref url) => {
+                let (mut reader, size) = read_url(url, client).await?;
+                let capacity = size.and_then(|s| s.try_into().ok()).unwrap_or(1_048_576);
+                let mut buf = Vec::with_capacity(capacity);
+                reader.read_to_end(&mut buf).await?;
+                buf.into()
+            }
+        };
+        let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_slice(&buf)
+            .map_err(|e| {
+                Error::InvalidPythonDownloadsJSON(
+                    match json_source {
+                        Source::BuiltIn => "EMBEDDED IN THE BINARY".to_owned(),
+                        Source::Path(path) => path.to_string_lossy().to_string(),
+                        Source::Http(url) => url.to_string(),
+                    },
+                    e,
+                )
+            })?;
+
+        let result = parse_json_downloads(json_downloads);
+        Ok(Self { downloads: result })
     }
 }
 
