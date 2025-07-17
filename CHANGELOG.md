@@ -3,6 +3,40 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.22
+
+### Python
+
+- Upgrade GraalPy to 24.2.2
+
+See the [GraalPy release notes](https://github.com/oracle/graalpython/releases/tag/graal-24.2.2) for more details.
+
+### Configuration
+
+- Add `UV_COMPILE_BYTECODE_TIMEOUT` environment variable ([#14369](https://github.com/astral-sh/uv/pull/14369))
+- Allow users to override index `cache-control` headers ([#14620](https://github.com/astral-sh/uv/pull/14620))
+- Add `UV_LIBC` to override libc selection in multi-libc environment ([#14646](https://github.com/astral-sh/uv/pull/14646))
+
+### Bug fixes
+
+- Fix `--all-arches` when paired with `--only-downloads` ([#14629](https://github.com/astral-sh/uv/pull/14629))
+- Skip Windows Python interpreters that return a broken MSIX package code ([#14636](https://github.com/astral-sh/uv/pull/14636))
+- Warn on invalid `uv.toml` when provided via direct path ([#14653](https://github.com/astral-sh/uv/pull/14653))
+- Improve async signal safety in Windows exception handler ([#14619](https://github.com/astral-sh/uv/pull/14619))
+
+### Documentation
+
+- Mention the `revision` in the lockfile versioning doc ([#14634](https://github.com/astral-sh/uv/pull/14634))
+- Move "Conflicting dependencies" to the "Resolution" page ([#14633](https://github.com/astral-sh/uv/pull/14633))
+- Rename "Dependency specifiers" section to exclude PEP 508 reference ([#14631](https://github.com/astral-sh/uv/pull/14631))
+- Suggest `uv cache clean` prior to `--reinstall` ([#14659](https://github.com/astral-sh/uv/pull/14659))
+
+### Preview features
+
+- Make preview Python registration on Windows non-fatal ([#14614](https://github.com/astral-sh/uv/pull/14614))
+- Update preview installation of Python executables to be non-fatal ([#14612](https://github.com/astral-sh/uv/pull/14612))
+- Add `uv python update-shell` ([#14627](https://github.com/astral-sh/uv/pull/14627))
+
 ## 0.7.21
 
 ### Python
