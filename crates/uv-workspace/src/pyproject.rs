@@ -66,7 +66,7 @@ pub struct PyProjectToml {
 
     /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    build_system: Option<serde::de::IgnoredAny>,
+    pub build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
@@ -81,18 +81,18 @@ impl PyProjectToml {
 
     /// Returns `true` if the project should be considered a Python package, as opposed to a
     /// non-package ("virtual") project.
-    pub fn is_package(&self) -> bool {
+    pub fn is_package(&self, require_build_system: bool) -> bool {
         // If `tool.uv.package` is set, defer to that explicit setting.
         if let Some(is_package) = self.tool_uv_package() {
             return is_package;
         }
 
         // Otherwise, a project is assumed to be a package if `build-system` is present.
-        self.build_system.is_some()
+        self.build_system.is_some() || !require_build_system
     }
 
     /// Returns the value of `tool.uv.package` if set.
-    pub fn tool_uv_package(&self) -> Option<bool> {
+    fn tool_uv_package(&self) -> Option<bool> {
         self.tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())

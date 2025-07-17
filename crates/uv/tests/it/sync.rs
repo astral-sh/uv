@@ -3566,6 +3566,101 @@ fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
 }
 
 #[test]
+fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = [
+            "packages/*",
+        ]
+        "#,
+    )?;
+
+    let packages = context.temp_dir.child("packages");
+    packages.create_dir_all()?;
+
+    // Create three workspace members with transitive dependency from
+    // pkg-c -> pkg-b -> pkg-a
+    let pkg_a = packages.child("pkg-a");
+    pkg_a.create_dir_all()?;
+    let pkg_a_pyproject_toml = pkg_a.child("pyproject.toml");
+    pkg_a_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    let pkg_b = packages.child("pkg-b");
+    pkg_b.create_dir_all()?;
+    let pkg_b_pyproject_toml = pkg_b.child("pyproject.toml");
+    pkg_b_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { workspace = true }
+        "#,
+    )?;
+
+    let pkg_c = packages.child("pkg-c");
+    pkg_c.create_dir_all()?;
+    let pkg_c_pyproject_toml = pkg_c.child("pyproject.toml");
+    pkg_c_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-c"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-b"]
+
+        [tool.uv.sources]
+        pkg-b = { workspace = true }
+        "#,
+    )?;
+
+    // Syncing should build the two transitive dependencies pkg-a and pkg-b,
+    // but not pkg-c, which is not a dependency.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + pkg-a==0.0.1 (from file://[TEMP_DIR]/packages/pkg-a)
+     + pkg-b==0.0.1 (from file://[TEMP_DIR]/packages/pkg-b)
+     + sniffio==1.3.1
+    ");
+
+    // The lockfile should be valid.
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_non_existent_extra_workspace_member() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3626,9 +3721,10 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      + idna==3.6
      + sniffio==1.3.1
     ");

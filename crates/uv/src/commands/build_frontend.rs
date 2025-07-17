@@ -263,7 +263,7 @@ async fn build_impl(
             .get(package)
             .ok_or_else(|| anyhow::anyhow!("Package `{package}` not found in workspace"))?;
 
-        if !package.pyproject_toml().is_package() {
+        if !package.pyproject_toml().is_package(true) {
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
@@ -300,7 +300,7 @@ async fn build_impl(
         let packages: Vec<_> = workspace
             .packages()
             .values()
-            .filter(|package| package.pyproject_toml().is_package())
+            .filter(|package| package.pyproject_toml().is_package(true))
             .map(|package| AnnotatedSource {
                 source: Source::Directory(Cow::Borrowed(package.root())),
                 package: Some(package.project().name.clone()),

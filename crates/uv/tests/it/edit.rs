@@ -10362,7 +10362,7 @@ fn add_self() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "anyio"
         version = "0.1.0"
@@ -10377,7 +10377,7 @@ fn add_self() -> Result<()> {
 
         [tool.uv.sources]
         anyio = { workspace = true }
-        "###
+        "#
         );
     });
 
@@ -10398,7 +10398,7 @@ fn add_self() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "anyio"
         version = "0.1.0"
@@ -10418,7 +10418,7 @@ fn add_self() -> Result<()> {
         dev = [
             "anyio[types]",
         ]
-        "###
+        "#
         );
     });
 
@@ -13173,7 +13173,9 @@ fn add_path_with_existing_workspace() -> Result<()> {
     ----- stderr -----
     Added `dep` to workspace members
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13250,7 +13252,9 @@ fn add_path_with_workspace() -> Result<()> {
     ----- stderr -----
     Added `dep` to workspace members
     Resolved 2 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13316,7 +13320,9 @@ fn add_path_within_workspace_defaults_to_workspace() -> Result<()> {
     ----- stderr -----
     Added `dep` to workspace members
     Resolved 2 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
