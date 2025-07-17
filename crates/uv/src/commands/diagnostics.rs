@@ -128,7 +128,7 @@ impl OperationDiagnostic {
                 None
             }
             pip::operations::Error::OutdatedEnvironment => {
-                anstream::eprint!("{}", err);
+                anstream::eprintln!("{}", err);
                 None
             }
             err => Some(err),
