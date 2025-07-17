@@ -31,7 +31,7 @@ use windows::Win32::{
     },
 };
 
-/// Write to stderr in a way safe in an exception handler.
+/// A write target for standard error that can be safely used in an exception handler.
 ///
 /// The exception handler can be called at any point in the execution of machine code, perhaps
 /// halfway through a Rust operation. It needs to be robust to operating with unknown program
@@ -230,7 +230,7 @@ fn dump_regs(e: &mut ExceptionSafeStderr, c: &CONTEXT) -> std::fmt::Result {
     writeln!(e, " x18={X18 :016x} x19={X19:016x} x20={X20:016x}")?;
     writeln!(e, " x21={X21 :016x} x22={X22:016x} x23={X23:016x}")?;
     writeln!(e, " x24={X24 :016x} x25={X25:016x} x26={X26:016x}")?;
-    writeln!(e, " x27={X24 :016x} x28={X25:016x}")?;
+    writeln!(e, " x27={X27 :016x} x28={X28:016x}")?;
     writeln!(e, "  fp={Fp  :016x}  lr={Lr :016x}")?;
     Ok(())
 }
