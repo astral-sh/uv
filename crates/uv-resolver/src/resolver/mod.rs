@@ -25,8 +25,9 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PrioritizedDist, PythonRequirementKind,
+    RegistryVariantsJson, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist,
+    VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -82,6 +83,9 @@ use crate::{
 };
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
+use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::score_variant;
+use uv_variants::variants_json::VariantPropertyType;
 
 mod availability;
 mod batch_prefetch;
@@ -614,9 +618,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     next_id,
                     next_package,
                     &version,
+                    index.map(IndexMetadata::url),
                     &state.pins,
                     &state.fork_urls,
                     &state.env,
+                    &self.index,
                     &state.python_requirement,
                     &state.pubgrub,
                 )?;
@@ -1254,10 +1260,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         };
 
+        let variant_prioritized_dist =
+            self.variant_prioritized_dist(name, index, request_sink, &candidate)?;
+
+        let candidate = match &variant_prioritized_dist {
+            Some(variant_prioritized_dist) => {
+                candidate.select_best_variant_wheel(variant_prioritized_dist)
+            }
+            None => candidate,
+        };
+
         let dist = match candidate.dist() {
-            CandidateDist::Compatible(dist) => dist,
+            CandidateDist::Compatible(dist) => {
+                if variant_prioritized_dist.is_none()
+                    && dist
+                        .wheel()
+                        .is_some_and(|wheel| wheel.filename.variant().is_some())
+                {
+                    // If no variant prioritized distribution but this is a variant wheel, it's incompatible
+                    // TODO(konsti): List the existing variants?
+                    return Ok(Some(ResolverVersion::Unavailable(
+                        candidate.version().clone(),
+                        UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                            IncompatibleWheel::Variant,
+                        )),
+                    )));
+                }
+                dist
+            }
             CandidateDist::Incompatible(incompatibility) => {
-                // If the version is incompatible because no distributions are compatible, exit early.
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
                     // TODO(charlie): We can avoid this clone; the candidate is dropped here and
@@ -1350,6 +1381,110 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
+    }
+
+    fn variant_prioritized_dist(
+        &self,
+        name: &PackageName,
+        index: Option<&IndexUrl>,
+        request_sink: &Sender<Request>,
+        candidate: &Candidate,
+    ) -> Result<Option<PrioritizedDist>, ResolveError> {
+        // If there is no `PrioritizedDist`, our candidate is an installed package.
+        let Some(prioritized_dist) = candidate.prioritized() else {
+            return Ok(None);
+        };
+
+        // No variants.json, no variants
+        // TODO(konsti): Be more lenient, e.g. parse the wheel itself?
+        let Some(variants_json) = prioritized_dist.variants_json() else {
+            return Ok(None);
+        };
+
+        // Query the host for the applicable features and properties.
+        let version_id = VersionId::NameVersion(name.clone(), candidate.version().clone());
+        if self
+            .index
+            .variant_priorities()
+            .register((version_id.clone(), index.cloned()))
+        {
+            request_sink.blocking_send(Request::Variants(
+                version_id.clone(),
+                index.cloned(),
+                variants_json.clone(),
+            ))?;
+        }
+        let resolved_variants = self
+            .index
+            .variant_priorities()
+            .wait_blocking(&(version_id, index.cloned()));
+        let Some(resolved_variants) = &resolved_variants else {
+            panic!("We have variants, why didn't they resolve?");
+        };
+
+        let mut highest_priority_variant_wheel: Option<(usize, Vec<usize>)> = None;
+        for (wheel_index, (wheel, compatibility)) in prioritized_dist.wheels().enumerate() {
+            if !compatibility.is_compatible() {
+                continue;
+            }
+
+            let Some(variant) = wheel.filename.variant() else {
+                // The non-variant wheel is already supported
+                continue;
+            };
+
+            let Some(variants_properties) = resolved_variants.variants_json.variants.get(variant)
+            else {
+                // TODO(konsti): For production, this should be a warning.
+                panic!("Variant {variant} not found in variants.json");
+            };
+
+            let Some(scores) = score_variant(
+                &resolved_variants.variants_json.default_priorities,
+                &resolved_variants.target_variants,
+                variants_properties,
+            ) else {
+                // The wheel is not compatible.
+                continue;
+            };
+
+            if let Some((_, old_scores)) = &highest_priority_variant_wheel {
+                if let Some((new, old)) = scores
+                    .iter()
+                    .zip(old_scores.iter())
+                    .find(|(new, old)| new != old)
+                {
+                    if new > old {
+                        highest_priority_variant_wheel = Some((wheel_index, scores));
+                    }
+                }
+            } else {
+                highest_priority_variant_wheel = Some((wheel_index, scores));
+            }
+        }
+
+        if let Some((wheel_index, _)) = highest_priority_variant_wheel {
+            use owo_colors::OwoColorize;
+            debug!(
+                "{} {}",
+                "Selecting variant wheel".red(),
+                prioritized_dist
+                    .wheels()
+                    .nth(wheel_index)
+                    .unwrap()
+                    .0
+                    .filename
+                    .to_string()
+            );
+
+            Ok(Some(
+                prioritized_dist
+                    .clone()
+                    .select_best_variant_wheel(wheel_index),
+            ))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Determine whether a candidate covers all supported platforms; and, if not, generate a fork.
@@ -1667,9 +1802,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
+        index_url: Option<&IndexUrl>,
         pins: &FilePins,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
+        in_memory_index: &InMemoryIndex,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<ForkedDependencies, ResolveError> {
@@ -1677,9 +1814,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             id,
             package,
             version,
+            index_url,
             pins,
             fork_urls,
             env,
+            in_memory_index,
             python_requirement,
             pubgrub,
         );
@@ -1702,9 +1841,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
+        index_url: Option<&IndexUrl>,
         pins: &FilePins,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
+        in_memory_index: &InMemoryIndex,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
@@ -1719,6 +1860,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     None,
                     env,
+                    None,
                     python_requirement,
                 );
 
@@ -1751,6 +1893,64 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None => PubGrubDistribution::from_registry(name, version),
                 };
                 let version_id = dist.version_id();
+
+                // If we're resolving for a specific environment, use the host variants, otherwise resolve
+                // for all variants.
+                // TODO(konsti): Is that the right default?
+                // TODO(konsti): We determine this value in choose version, pass it a parameter
+                //   This is in the hot path!
+                // TODO(konsti): More control for the user.
+                let variants = if env.marker_environment().is_some() {
+                    let resolved_variants = in_memory_index
+                        .variant_priorities()
+                        .get(&(version_id.clone(), index_url.cloned()));
+                    if let Some(resolved_variants) = resolved_variants {
+                        // TODO(konsti): Handle installed dists too
+                        if let Some(variant_label) = pins
+                            .get(name, version)
+                            .unwrap()
+                            .wheel_filename()
+                            .and_then(|filename| filename.variant())
+                        {
+                            // Collect the host properties for marker filtering.
+                            let mut known_properties = BTreeSet::new();
+                            let namespaces = resolved_variants
+                                .variants_json
+                                .variants
+                                .get(variant_label)
+                                .expect("Missing previously select variant label");
+                            for (namespace, features) in namespaces {
+                                for (feature, values) in features {
+                                    for value in values {
+                                        known_properties.insert(VariantPropertyType {
+                                            namespace: namespace.clone(),
+                                            feature: feature.clone(),
+                                            value: value.clone(),
+                                        });
+                                    }
+                                }
+                            }
+                            // TODO(konsti): Use the proper type everywhere
+                            let known_properties: Vec<(String, String, String)> = known_properties
+                                .into_iter()
+                                .map(|known_property| {
+                                    (
+                                        known_property.namespace,
+                                        known_property.feature,
+                                        known_property.value,
+                                    )
+                                })
+                                .collect();
+                            Some(known_properties)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
@@ -1835,6 +2035,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dev.as_ref(),
                     Some(name),
                     env,
+                    variants.as_deref(),
                     python_requirement,
                 );
 
@@ -1936,6 +2137,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
         env: &'a ResolverEnvironment,
+        variants: Option<&'a [(String, String, String)]>,
         python_requirement: &'a PythonRequirement,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let python_marker = python_requirement.to_marker_tree();
@@ -1947,6 +2149,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dev_dependencies.get(dev).into_iter().flatten(),
                 extra,
                 env,
+                variants,
                 python_marker,
                 python_requirement,
             )))
@@ -1959,6 +2162,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 dependencies.iter(),
                 extra,
                 env,
+                variants,
                 python_marker,
                 python_requirement,
             )))
@@ -1968,6 +2172,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dependencies.iter(),
                     extra,
                     env,
+                    variants,
                     python_marker,
                     python_requirement,
                 )
@@ -1989,6 +2194,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dependencies,
                     Some(&extra),
                     env,
+                    variants,
                     python_marker,
                     python_requirement,
                 ) {
@@ -2058,6 +2264,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
+        variants: Option<&'parameters [(String, String, String)]>,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
@@ -2071,6 +2278,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     requirement,
                     extra,
                     env,
+                    variants,
                     python_marker,
                     python_requirement,
                 )
@@ -2080,18 +2288,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     requirement,
                     extra,
                     env,
+                    variants,
                     python_marker,
                     python_requirement,
                 ))
             })
     }
 
-    /// Whether a requirement is applicable for the Python version, the markers of this fork and the
-    /// requested extra.
+    /// Whether a requirement is applicable for the Python version, the markers of this fork, the
+    /// host variants if applicable and the requested extra.
     fn is_requirement_applicable(
         requirement: &Requirement,
         extra: Option<&ExtraName>,
         env: &ResolverEnvironment,
+        variants: Option<&[(String, String, String)]>,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
     ) -> bool {
@@ -2099,12 +2309,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         match extra {
             Some(source_extra) => {
                 // Only include requirements that are relevant for the current extra.
-                if requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if requirement.evaluate_markers(env.marker_environment(), variants, &[]) {
                     return false;
                 }
-                if !requirement
-                    .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                {
+                if !requirement.evaluate_markers(
+                    env.marker_environment(),
+                    variants,
+                    slice::from_ref(source_extra),
+                ) {
                     return false;
                 }
                 if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
@@ -2113,7 +2325,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
             None => {
-                if !requirement.evaluate_markers(env.marker_environment(), &[]) {
+                if !requirement.evaluate_markers(env.marker_environment(), variants, &[]) {
                     return false;
                 }
             }
@@ -2146,6 +2358,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
+        variants: Option<&'parameters [(String, String, String)]>,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
@@ -2153,108 +2366,108 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         'data: 'parameters,
     {
         self.constraints
-            .get(&requirement.name)
-            .into_iter()
-            .flatten()
-            .filter_map(move |constraint| {
-                // If the requirement would not be selected with any Python version
-                // supported by the root, skip it.
-                let constraint = if constraint.marker.is_true() {
-                    // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                    // and the constraint is `requests ; python_version == '3.6'`, the
-                    // constraint should only apply when _both_ markers are true.
-                    if requirement.marker.is_true() {
-                        Cow::Borrowed(constraint)
+                .get(&requirement.name)
+                .into_iter()
+                .flatten()
+                .filter_map(move |constraint| {
+                    // If the requirement would not be selected with any Python version
+                    // supported by the root, skip it.
+                    let constraint = if constraint.marker.is_true() {
+                        // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
+                        // and the constraint is `requests ; python_version == '3.6'`, the
+                        // constraint should only apply when _both_ markers are true.
+                        if requirement.marker.is_true() {
+                            Cow::Borrowed(constraint)
+                        } else {
+                            let mut marker = constraint.marker;
+                            marker.and(requirement.marker);
+
+                            if marker.is_false() {
+                                trace!(
+                                "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                constraint.marker.try_to_string().unwrap(),
+                                requirement.marker.try_to_string().unwrap(),
+                            );
+                                return None;
+                            }
+
+                            Cow::Owned(Requirement {
+                                name: constraint.name.clone(),
+                                extras: constraint.extras.clone(),
+                                groups: constraint.groups.clone(),
+                                source: constraint.source.clone(),
+                                origin: constraint.origin.clone(),
+                                marker,
+                            })
+                        }
                     } else {
+                        let requires_python = python_requirement.target();
+
                         let mut marker = constraint.marker;
                         marker.and(requirement.marker);
 
                         if marker.is_false() {
                             trace!(
-                                "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
-                                constraint.marker.try_to_string().unwrap(),
-                                requirement.marker.try_to_string().unwrap(),
-                            );
-                            return None;
-                        }
-
-                        Cow::Owned(Requirement {
-                            name: constraint.name.clone(),
-                            extras: constraint.extras.clone(),
-                            groups: constraint.groups.clone(),
-                            source: constraint.source.clone(),
-                            origin: constraint.origin.clone(),
-                            marker,
-                        })
-                    }
-                } else {
-                    let requires_python = python_requirement.target();
-
-                    let mut marker = constraint.marker;
-                    marker.and(requirement.marker);
-
-                    if marker.is_false() {
-                        trace!(
                             "Skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
                             constraint.marker.try_to_string().unwrap(),
                             requirement.marker.try_to_string().unwrap(),
                         );
-                        return None;
-                    }
+                            return None;
+                        }
 
-                    // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
-                    // and the constraint is `requests ; python_version == '3.6'`, the
-                    // constraint should only apply when _both_ markers are true.
-                    if python_marker.is_disjoint(marker) {
-                        trace!(
+                        // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
+                        // and the constraint is `requests ; python_version == '3.6'`, the
+                        // constraint should only apply when _both_ markers are true.
+                        if python_marker.is_disjoint(marker) {
+                            trace!(
                             "Skipping constraint {requirement} because of Requires-Python: {requires_python}"
                         );
+                            return None;
+                        }
+
+                        if marker == constraint.marker {
+                            Cow::Borrowed(constraint)
+                        } else {
+                            Cow::Owned(Requirement {
+                                name: constraint.name.clone(),
+                                extras: constraint.extras.clone(),
+                                groups: constraint.groups.clone(),
+                                source: constraint.source.clone(),
+                                origin: constraint.origin.clone(),
+                                marker,
+                            })
+                        }
+                    };
+
+                    // If we're in a fork in universal mode, ignore any dependency that isn't part of
+                    // this fork (but will be part of another fork).
+                    if !env.included_by_marker(constraint.marker) {
+                        trace!("Skipping {constraint} because of {env}");
                         return None;
                     }
 
-                    if marker == constraint.marker {
-                        Cow::Borrowed(constraint)
-                    } else {
-                        Cow::Owned(Requirement {
-                            name: constraint.name.clone(),
-                            extras: constraint.extras.clone(),
-                            groups: constraint.groups.clone(),
-                            source: constraint.source.clone(),
-                            origin: constraint.origin.clone(),
-                            marker,
-                        })
-                    }
-                };
-
-                // If we're in a fork in universal mode, ignore any dependency that isn't part of
-                // this fork (but will be part of another fork).
-                if !env.included_by_marker(constraint.marker) {
-                    trace!("Skipping {constraint} because of {env}");
-                    return None;
-                }
-
-                // If the constraint isn't relevant for the current platform, skip it.
-                match extra {
-                    Some(source_extra) => {
-                        if !constraint
-                            .evaluate_markers(env.marker_environment(), slice::from_ref(source_extra))
-                        {
-                            return None;
+                    // If the constraint isn't relevant for the current platform, skip it.
+                    match extra {
+                        Some(source_extra) => {
+                            if !constraint
+                                .evaluate_markers(env.marker_environment(), variants, slice::from_ref(source_extra))
+                            {
+                                return None;
+                            }
+                            if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
+                            {
+                                return None;
+                            }
                         }
-                        if !env.included_by_group(ConflictItemRef::from((&requirement.name, source_extra)))
-                        {
-                            return None;
+                        None => {
+                            if !constraint.evaluate_markers(env.marker_environment(), variants, &[]) {
+                                return None;
+                            }
                         }
                     }
-                    None => {
-                        if !constraint.evaluate_markers(env.marker_environment(), &[]) {
-                            return None;
-                        }
-                    }
-                }
 
-                Some(constraint)
-            })
+                    Some(constraint)
+                })
     }
 
     /// Fetch the metadata for a stream of packages and versions.
@@ -2306,6 +2519,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     self.index
                         .distributions()
                         .done(dist.version_id(), Arc::new(metadata));
+                }
+                Some(Response::Variants {
+                    version_id,
+                    index_url,
+                    resolved_variants,
+                }) => {
+                    trace!("Received variant metadata for: {version_id}");
+                    self.index
+                        .variant_priorities()
+                        .done((version_id, index_url), Arc::new(resolved_variants));
                 }
                 None => {}
             }
@@ -2509,7 +2732,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Ok(None)
                 }
             }
+            Request::Variants(version_id, index_url, variants_json) => self
+                .resolve_variants(variants_json, provider)
+                .await
+                .map(|resolved_variants| {
+                    Some(Response::Variants {
+                        version_id,
+                        index_url,
+                        resolved_variants,
+                    })
+                }),
         }
+    }
+
+    async fn resolve_variants<Provider: ResolverProvider>(
+        &self,
+        variants_json: RegistryVariantsJson,
+        provider: &Provider,
+    ) -> Result<ResolvedVariants, ResolveError> {
+        provider
+            .variant_priorities(&variants_json)
+            .await
+            .map_err(ResolveError::VariantFrontend)
     }
 
     fn convert_no_solution_err(
@@ -3307,6 +3551,8 @@ pub(crate) enum Request {
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
+    /// Resolve the variants for a package
+    Variants(VersionId, Option<IndexUrl>, RegistryVariantsJson),
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {
@@ -3361,6 +3607,13 @@ impl Display for Request {
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
+            Self::Variants(version_id, index_url, _) => {
+                if let Some(index_url) = index_url {
+                    write!(f, "Variants {version_id} {index_url}")
+                } else {
+                    write!(f, "Variants {version_id}")
+                }
+            }
         }
     }
 }
@@ -3379,6 +3632,12 @@ enum Response {
     Installed {
         dist: InstalledDist,
         metadata: MetadataResponse,
+    },
+    /// The returned variant compatibility.
+    Variants {
+        version_id: VersionId,
+        index_url: Option<IndexUrl>,
+        resolved_variants: ResolvedVariants,
     },
 }
 

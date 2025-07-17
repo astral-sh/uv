@@ -143,6 +143,7 @@ pub trait Installable<'lock> {
             {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
+                    None,
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {
@@ -206,7 +207,7 @@ pub trait Installable<'lock> {
         // Add any requirements that are exclusive to the workspace root (e.g., dependencies in
         // PEP 723 scripts).
         for dependency in self.lock().requirements() {
-            if !dependency.marker.evaluate(marker_env, &[]) {
+            if !dependency.marker.evaluate(marker_env, None, &[]) {
                 continue;
             }
 
@@ -258,7 +259,7 @@ pub trait Installable<'lock> {
             })
             .flatten()
         {
-            if !dependency.marker.evaluate(marker_env, &[]) {
+            if !dependency.marker.evaluate(marker_env, None, &[]) {
                 continue;
             }
 
@@ -367,6 +368,7 @@ pub trait Installable<'lock> {
                     }
                     if !dep.complexified_marker.evaluate(
                         marker_env,
+                        None,
                         activated_extras
                             .iter()
                             .chain(additional_activated_extras.iter())
@@ -454,6 +456,7 @@ pub trait Installable<'lock> {
             for dep in deps {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
+                    None,
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {

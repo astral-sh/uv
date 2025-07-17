@@ -3588,6 +3588,7 @@ version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "ryu",
@@ -5142,6 +5143,8 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-types",
+ "uv-variant-frontend",
+ "uv-variants",
  "uv-version",
  "uv-workspace",
 ]
@@ -5163,6 +5166,7 @@ dependencies = [
  "rmp-serde",
  "rustc-hash",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
@@ -5189,6 +5193,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-types",
+ "uv-variants",
  "uv-workspace",
  "walkdir",
  "zip",
@@ -5246,6 +5251,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
+ "uv-variants",
  "uv-warnings",
  "version-ranges",
 ]
@@ -5587,6 +5593,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.15.4",
  "indexmap",
+ "indoc",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -5757,6 +5764,7 @@ dependencies = [
 name = "uv-resolver"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "arcstr",
  "clap",
  "dashmap",
@@ -5807,6 +5815,7 @@ dependencies = [
  "uv-static",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -5988,7 +5997,49 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-variants",
  "uv-workspace",
+]
+
+[[package]]
+name = "uv-variant-frontend"
+version = "0.1.0"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "fs-err 3.1.1",
+ "indoc",
+ "owo-colors",
+ "rustc-hash",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-python",
+ "uv-static",
+ "uv-types",
+ "uv-variants",
+ "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-variants"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "indoc",
+ "insta",
+ "itertools 0.14.0",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uv-pep508",
+ "uv-pypi-types",
 ]
 
 [[package]]

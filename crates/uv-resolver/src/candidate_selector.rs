@@ -678,6 +678,15 @@ impl<'a> Candidate<'a> {
         }
     }
 
+    // TODO(konsti): Stop breaking isolation
+    pub(crate) fn select_best_variant_wheel(self, dist: &'a PrioritizedDist) -> Self {
+        Self {
+            prioritized: Some(dist),
+            dist: CandidateDist::from(dist),
+            ..self
+        }
+    }
+
     /// Return the name of the package.
     pub(crate) fn name(&self) -> &PackageName {
         self.name

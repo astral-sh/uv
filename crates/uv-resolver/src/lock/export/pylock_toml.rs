@@ -977,7 +977,7 @@ impl<'lock> PylockToml {
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
-            if !package.marker.evaluate(markers, &[]) {
+            if !package.marker.evaluate(markers, None, &[]) {
                 continue;
             }
 

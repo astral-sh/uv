@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
-
+use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::Yanked;
@@ -99,6 +99,20 @@ impl ResolvedDist {
         match self {
             Self::Installable { dist, .. } => dist.source_tree(),
             Self::Installed { .. } => None,
+        }
+    }
+
+    // TODO(konsti): That's the wrong "abstraction"
+    pub fn wheel_filename(&self) -> Option<&WheelFilename> {
+        match self {
+            ResolvedDist::Installed { .. } => {
+                // TODO(konsti): Support installed dists too
+                None
+            }
+            ResolvedDist::Installable { dist, .. } => match &**dist {
+                Dist::Built(dist) => Some(dist.wheel_filename()),
+                Dist::Source(_) => None,
+            },
         }
     }
 }

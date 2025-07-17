@@ -69,8 +69,14 @@ impl Requirement {
     /// When `env` is `None`, this specifically evaluates all marker
     /// expressions based on the environment to `true`. That is, this provides
     /// environment independent marker evaluation.
-    pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
-        self.marker.evaluate_optional_environment(env, extras)
+    pub fn evaluate_markers(
+        &self,
+        env: Option<&MarkerEnvironment>,
+        variants: Option<&[(String, String, String)]>,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.marker
+            .evaluate_optional_environment(env, variants, extras)
     }
 
     /// Returns `true` if the requirement is editable.

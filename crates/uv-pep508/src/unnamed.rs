@@ -82,17 +82,24 @@ pub struct UnnamedRequirement<ReqUrl: UnnamedRequirementUrl = VerbatimUrl> {
 
 impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
     /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        self.evaluate_optional_environment(Some(env), extras)
+    pub fn evaluate_markers(
+        &self,
+        env: &MarkerEnvironment,
+        variants: Option<&[(String, String, String)]>,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.evaluate_optional_environment(Some(env), variants, extras)
     }
 
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_optional_environment(
         &self,
         env: Option<&MarkerEnvironment>,
+        variants: Option<&[(String, String, String)]>,
         extras: &[ExtraName],
     ) -> bool {
-        self.marker.evaluate_optional_environment(env, extras)
+        self.marker
+            .evaluate_optional_environment(env, variants, extras)
     }
 
     /// Set the source file containing the requirement.
