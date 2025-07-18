@@ -1,6 +1,5 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
@@ -20,8 +19,8 @@ use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
-    ResolutionMode,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
+    PrereleaseMode, ResolutionMode,
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -652,7 +651,7 @@ pub struct ResolverInstallerOptions {
             exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
         "#
     )]
-    pub exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
@@ -1436,7 +1435,7 @@ pub struct PipOptions {
             exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
         "#
     )]
-    pub exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
     #[option(
@@ -1786,7 +1785,7 @@ pub struct ToolOptions {
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
     pub exclude_newer: Option<ExcludeNewerTimestamp>,
-    pub exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
@@ -1900,7 +1899,7 @@ pub struct OptionsWire {
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
     exclude_newer: Option<ExcludeNewerTimestamp>,
-    exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+    exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
     no_sources: Option<bool>,
