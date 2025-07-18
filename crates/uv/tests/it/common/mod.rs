@@ -795,6 +795,9 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+            // When installations are allowed, we don't want to write to global state, like the
+            // Windows registry
+            .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
             .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
