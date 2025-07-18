@@ -339,7 +339,17 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit
                 &DiscoveryOptions::default(),
                 &WorkspaceCache::default(),
             )
-            .await?
+            .await
+            .map_err(|err| {
+                if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
+                    anyhow!(
+                        "{}\n\nhint: If you meant to view uv's version, use `uv self version` instead",
+                        err
+                    )
+                } else {
+                    err.into()
+                }
+            })?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
