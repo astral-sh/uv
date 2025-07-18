@@ -441,6 +441,26 @@ impl<'a> IndexLocations {
             }
         }
     }
+
+    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.cache_control.as_ref()?.api.as_deref();
+            }
+        }
+        None
+    }
+
+    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.cache_control.as_ref()?.files.as_deref();
+            }
+        }
+        None
+    }
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
