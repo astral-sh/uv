@@ -6,12 +6,8 @@ All credentials on macOS are stored in secure stores called _keychains_.
 The OS automatically creates three of them that live on filesystem,
 called _User_ (aka login), _Common_, and _System_. In addition, removable
 media can contain a keychain which can be registered under the name _Dynamic_.
-Finally, on Apple Silicon devices, there is a more highly protected keychain
-(called the _Data Protection_ or simply _Protected_ keychain). This is the same
-keychain that is used by apps on iOS; so this module actually returns
-iOS credentials for entries in the Data Protection keychain.
 
-The target attribute of an [Entry](crate::Entry) determines (case-insensitive)
+The target attribute of an [`Entry`](crate::Entry) determines (case-insensitive)
 which keychain that entry's credential is created in or searched for.
 If the entry has no target, or the specified target doesn't name (case-insensitive)
 one of the keychains listed above, the 'User' keychain is used.
@@ -80,7 +76,7 @@ impl CredentialApi for MacCredential {
 
     /// Look up the password for this entry, if any.
     ///
-    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
+    /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_password(&self) -> Result<String> {
         let (password_bytes, _) =
@@ -91,7 +87,7 @@ impl CredentialApi for MacCredential {
 
     /// Look up the secret for this entry, if any.
     ///
-    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
+    /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_secret(&self) -> Result<Vec<u8>> {
         let (password_bytes, _) =
@@ -102,7 +98,7 @@ impl CredentialApi for MacCredential {
 
     /// Delete the underlying generic credential for this entry, if any.
     ///
-    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
+    /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn delete_credential(&self) -> Result<()> {
         let (_, item) =
@@ -113,7 +109,7 @@ impl CredentialApi for MacCredential {
     }
 
     /// Return the underlying concrete object with an `Any` type so that it can
-    /// be downgraded to a [MacCredential] for platform-specific processing.
+    /// be downgraded to a [`MacCredential`] for platform-specific processing.
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -141,7 +137,7 @@ impl MacCredential {
     ///
     /// Creating a credential does not put anything into the keychain.
     /// The keychain entry will be created
-    /// when [set_password](MacCredential::set_password) is
+    /// when [`set_password`](MacCredential::set_password) is
     /// called.
     ///
     /// This will fail if the service or user strings are empty,
@@ -178,7 +174,7 @@ impl MacCredential {
 }
 
 /// The builder for Mac keychain credentials
-pub struct MacCredentialBuilder {}
+pub struct MacCredentialBuilder;
 
 /// Returns an instance of the Mac credential builder.
 ///
@@ -189,7 +185,7 @@ pub fn default_credential_builder() -> Box<CredentialBuilder> {
 }
 
 impl CredentialBuilderApi for MacCredentialBuilder {
-    /// Build a [MacCredential] for the given target, service, and user.
+    /// Build a [`MacCredential`] for the given target, service, and user.
     ///
     /// If a target is specified but not recognized as a keychain name,
     /// the User keychain is selected.
@@ -207,7 +203,7 @@ impl CredentialBuilderApi for MacCredentialBuilder {
     }
 
     /// Return the underlying builder object with an `Any` type so that it can
-    /// be downgraded to a [MacCredentialBuilder] for platform-specific processing.
+    /// be downgraded to a [`MacCredentialBuilder`] for platform-specific processing.
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -301,7 +297,7 @@ mod tests {
         assert!(matches!(
             default_credential_builder().persistence(),
             CredentialPersistence::UntilDelete
-        ))
+        ));
     }
 
     fn entry_new(service: &str, user: &str) -> Entry {
@@ -399,7 +395,7 @@ mod tests {
                 assert!(
                     matches!(mac_cred.domain, super::MacKeychainDomain::User),
                     "wrong domain for unknown specifier"
-                )
+                );
             }
         }
     }

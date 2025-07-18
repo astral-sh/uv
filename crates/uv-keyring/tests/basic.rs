@@ -12,7 +12,7 @@ async fn test_missing_entry() {
     assert!(
         matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Missing entry has password"
-    )
+    );
 }
 
 #[tokio::test]
@@ -42,7 +42,7 @@ async fn test_empty_password() {
     assert!(
         matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted password"
-    )
+    );
 }
 
 #[tokio::test]
@@ -71,7 +71,7 @@ async fn test_round_trip_ascii_password() {
     assert!(
         matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted ascii password"
-    )
+    );
 }
 
 #[tokio::test]
@@ -100,7 +100,7 @@ async fn test_round_trip_non_ascii_password() {
     assert!(
         matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted non-ascii password"
-    )
+    );
 }
 
 #[tokio::test]
@@ -127,7 +127,7 @@ async fn test_round_trip_random_secret() {
     assert!(
         matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted random secret"
-    )
+    );
 }
 
 #[tokio::test]
@@ -169,5 +169,5 @@ async fn test_update() {
     assert!(
         matches!(entry.get_password().await, Err(Error::NoEntry)),
         "Able to read a deleted updated password"
-    )
+    );
 }

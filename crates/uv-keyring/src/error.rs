@@ -18,7 +18,7 @@ use crate::Credential;
 /// which may be platform-specific.
 ///
 /// This enum is non-exhaustive so that more values can be added to it
-/// without a SemVer break. Clients should always have default handling
+/// without a `SemVer` break. Clients should always have default handling
 /// for variants they don't understand.
 #[non_exhaustive]
 pub enum Error {

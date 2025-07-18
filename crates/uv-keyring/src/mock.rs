@@ -16,10 +16,10 @@ keyring::set_default_credential_builder(keyring::mock::default_credential_builde
 You can then create entries as you usually do, and call their usual methods
 to set, get, and delete passwords.  There is no persistence other than
 in the entry itself, so getting a password before setting it will always result
-in a [NoEntry](Error::NoEntry) error.
+in a [`NoEntry`](Error::NoEntry) error.
 
 If you want a method call on an entry to fail in a specific way, you can
-downcast the entry to a [MockCredential] and then call [set_error](MockCredential::set_error)
+downcast the entry to a [`MockCredential`] and then call [`set_error`](MockCredential::set_error)
 with the appropriate error.  The next entry method called on the credential
 will fail with the error you set.  The error will then be cleared, so the next
 call on the mock will operate as usual.  Here's a complete example:
@@ -53,7 +53,7 @@ pub struct MockCredential {
 impl Default for MockCredential {
     fn default() -> Self {
         Self {
-            inner: Mutex::new(RefCell::new(Default::default())),
+            inner: Mutex::new(RefCell::new(MockData::default())),
         }
     }
 }
@@ -187,8 +187,8 @@ impl MockCredential {
     ///
     /// Since mocks have no persistence between sessions,
     /// new mocks always have no password.
-    fn new_with_target(_target: Option<&str>, _service: &str, _user: &str) -> Result<Self> {
-        Ok(Default::default())
+    fn new_with_target(_target: Option<&str>, _service: &str, _user: &str) -> Self {
+        MockCredential::default()
     }
 
     /// Set an error to be returned from this mock credential.
@@ -207,7 +207,7 @@ impl MockCredential {
 }
 
 /// The builder for mock credentials.
-pub struct MockCredentialBuilder {}
+pub struct MockCredentialBuilder;
 
 impl CredentialBuilderApi for MockCredentialBuilder {
     /// Build a mock credential for the given target, service, and user.
@@ -215,7 +215,7 @@ impl CredentialBuilderApi for MockCredentialBuilder {
     /// Since mocks don't persist between sessions,  all mocks
     /// start off without passwords.
     fn build(&self, target: Option<&str>, service: &str, user: &str) -> Result<Box<Credential>> {
-        let credential = MockCredential::new_with_target(target, service, user)?;
+        let credential = MockCredential::new_with_target(target, service, user);
         Ok(Box::new(credential))
     }
 
@@ -246,11 +246,11 @@ mod tests {
         assert!(matches!(
             default_credential_builder().persistence(),
             CredentialPersistence::EntryOnly
-        ))
+        ));
     }
 
     fn entry_new(service: &str, user: &str) -> Entry {
-        let credential = MockCredential::new_with_target(None, service, user).unwrap();
+        let credential = MockCredential::new_with_target(None, service, user);
         Entry::new_with_credential(Box::new(credential))
     }
 
@@ -336,6 +336,6 @@ mod tests {
         assert!(
             matches!(entry.get_password().await, Err(Error::NoEntry)),
             "Able to read a deleted ascii password"
-        )
+        );
     }
 }

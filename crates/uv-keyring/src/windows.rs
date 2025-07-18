@@ -21,10 +21,10 @@ So if you have a custom algorithm you want to use for computing the Windows targ
 you can specify the target name directly.  (You still need to provide a service and username,
 because they are used in the credential's metadata.)
 
-The [get_attributes](crate::Entry::get_attributes)
+The [`get_attributes`](crate::Entry::get_attributes)
 call will return the values in the `username`, `comment`, and `target_alias` fields
 (using those strings as the attribute names),
-and the [update_attributes](crate::Entry::update_attributes)
+and the [`update_attributes`](crate::Entry::update_attributes)
 call allows setting those fields.
 
 ## Caveat
@@ -35,6 +35,8 @@ the order in which they were made.  Careful testing has
 shown that modifying the same entry in the same (almost simultaneous) order from
 different threads produces different results on different runs.
 */
+
+#![allow(unsafe_code)]
 
 use crate::credential::{Credential, CredentialApi, CredentialBuilder, CredentialBuilderApi};
 use crate::error::{Error as ErrorCode, Result};
@@ -71,6 +73,7 @@ pub struct WinCredential {
 // BOOL is i32 (false = 0, true = 1)
 // PCREDENTIALW = *mut CREDENTIALW
 
+#[async_trait::async_trait]
 impl CredentialApi for WinCredential {
     /// Create and write a credential with password for this entry.
     ///
@@ -86,7 +89,7 @@ impl CredentialApi for WinCredential {
         let mut blob_u16 = to_wstr_no_null(password);
         let mut blob = vec![0; blob_u16.len() * 2];
         LittleEndian::write_u16_into(&blob_u16, &mut blob);
-        let result = self.set_secret(&blob);
+        let result = self.set_secret(&blob).await;
         // make sure that the copies of the secret are erased
         blob_u16.zeroize();
         blob.zeroize();
@@ -105,7 +108,7 @@ impl CredentialApi for WinCredential {
 
     /// Look up the password for this entry, if any.
     ///
-    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
+    /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_password(&self) -> Result<String> {
         self.extract_from_platform(extract_password)
@@ -113,7 +116,7 @@ impl CredentialApi for WinCredential {
 
     /// Look up the secret for this entry, if any.
     ///
-    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
+    /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_secret(&self) -> Result<Vec<u8>> {
         self.extract_from_platform(extract_secret)
@@ -121,7 +124,7 @@ impl CredentialApi for WinCredential {
 
     /// Get the attributes from the credential for this entry, if it exists.
     ///
-    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
+    /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_attributes(&self) -> Result<HashMap<String, String>> {
         let cred = self.extract_from_platform(Self::extract_credential)?;
@@ -134,19 +137,19 @@ impl CredentialApi for WinCredential {
 
     /// Update the attributes on the credential for this entry, if it exists.
     ///
-    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
+    /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
         let secret = self.extract_from_platform(extract_secret)?;
         let mut cred = self.extract_from_platform(Self::extract_credential)?;
         if let Some(comment) = attributes.get(&"comment") {
-            cred.comment = comment.to_string();
+            cred.comment = (*comment).to_string();
         }
         if let Some(target_alias) = attributes.get(&"target_alias") {
-            cred.target_alias = target_alias.to_string();
+            cred.target_alias = (*target_alias).to_string();
         }
         if let Some(username) = attributes.get(&"username") {
-            cred.username = username.to_string();
+            cred.username = (*username).to_string();
         }
         cred.validate_attributes(Some(&secret), None)?;
         cred.save_credential(&secret)
@@ -154,7 +157,7 @@ impl CredentialApi for WinCredential {
 
     /// Delete the underlying generic credential for this entry, if any.
     ///
-    /// Returns a [NoEntry](ErrorCode::NoEntry) error if there is no
+    /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn delete_credential(&self) -> Result<()> {
         self.validate_attributes(None, None)?;
@@ -167,12 +170,12 @@ impl CredentialApi for WinCredential {
     }
 
     /// Return the underlying concrete object with an `Any` type so that it can
-    /// be downgraded to a [WinCredential] for platform-specific processing.
+    /// be downgraded to a [`WinCredential`] for platform-specific processing.
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
-    /// Expose the concrete debug formatter for use via the [Credential] trait
+    /// Expose the concrete debug formatter for use via the [`Credential`] trait
     fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Debug::fmt(self, f)
     }
@@ -234,6 +237,7 @@ impl WinCredential {
     /// Write this credential into the underlying store as a Generic credential
     ///
     /// You must always have validated attributes before you call this!
+    #[allow(clippy::cast_possible_truncation)]
     fn save_credential(&self, secret: &[u8]) -> Result<()> {
         let mut username = to_wstr(&self.username);
         let mut target_name = to_wstr(&self.target_name);
@@ -304,28 +308,26 @@ impl WinCredential {
                 )
             }
         };
-        match result {
-            0 => {
-                // `CredReadW` failed, so no allocation has been done, so no free needs to be done
-                Err(decode_error())
-            }
-            _ => {
-                // `CredReadW` succeeded, so p_credential points at an allocated credential.
-                // To do anything with it, we need to cast it to the right type.  That takes two steps:
-                // first we remove the "uninitialized" guard around it, then we reinterpret it as a
-                // pointer to the right structure type.
-                let p_credential = unsafe { p_credential.assume_init() };
-                let w_credential: CREDENTIALW = unsafe { *p_credential };
-                // Now we can apply the passed extractor function to the credential.
-                let result = f(&w_credential);
-                // Finally, we erase the secret and free the allocated credential.
-                erase_secret(&w_credential);
-                unsafe { CredFree(p_credential as *mut _) };
-                result
-            }
+        if result == 0 {
+            // `CredReadW` failed, so no allocation has been done, so no free needs to be done
+            Err(decode_error())
+        } else {
+            // `CredReadW` succeeded, so p_credential points at an allocated credential.
+            // To do anything with it, we need to cast it to the right type.  That takes two steps:
+            // first we remove the "uninitialized" guard around it, then we reinterpret it as a
+            // pointer to the right structure type.
+            let p_credential = unsafe { p_credential.assume_init() };
+            let w_credential: CREDENTIALW = unsafe { *p_credential };
+            // Now we can apply the passed extractor function to the credential.
+            let result = f(&w_credential);
+            // Finally, we erase the secret and free the allocated credential.
+            erase_secret(&w_credential);
+            unsafe { CredFree(p_credential as *mut _) };
+            result
         }
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn extract_credential(w_credential: &CREDENTIALW) -> Result<Self> {
         Ok(Self {
             username: unsafe { from_wstr(w_credential.UserName) },
@@ -340,7 +342,7 @@ impl WinCredential {
     /// Creating a credential does not create a matching Generic credential
     /// in the Windows Credential Manager.
     /// If there isn't already one there, it will be created only
-    /// when [set_password](WinCredential::set_password) is
+    /// when [`set_password`](WinCredential::set_password) is
     /// called.
     pub fn new_with_target(
         target: Option<&str>,
@@ -386,7 +388,7 @@ impl WinCredential {
 }
 
 /// The builder for Windows Generic credentials.
-pub struct WinCredentialBuilder {}
+pub struct WinCredentialBuilder;
 
 /// Returns an instance of the Windows credential builder.
 ///
@@ -397,7 +399,7 @@ pub fn default_credential_builder() -> Box<CredentialBuilder> {
 }
 
 impl CredentialBuilderApi for WinCredentialBuilder {
-    /// Build a [WinCredential] for the given target, service, and user.
+    /// Build a [`WinCredential`] for the given target, service, and user.
     fn build(&self, target: Option<&str>, service: &str, user: &str) -> Result<Box<Credential>> {
         Ok(Box::new(WinCredential::new_with_target(
             target, service, user,
@@ -405,7 +407,7 @@ impl CredentialBuilderApi for WinCredentialBuilder {
     }
 
     /// Return the underlying builder object with an `Any` type so that it can
-    /// be downgraded to a [WinCredentialBuilder] for platform-specific processing.
+    /// be downgraded to a [`WinCredentialBuilder`] for platform-specific processing.
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -435,6 +437,7 @@ fn extract_password(credential: &CREDENTIALW) -> Result<String> {
     result
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn extract_secret(credential: &CREDENTIALW) -> Result<Vec<u8>> {
     let blob_pointer: *const u8 = credential.CredentialBlob;
     let blob_len: usize = credential.CredentialBlobSize as usize;
@@ -463,6 +466,7 @@ fn to_wstr_no_null(s: &str) -> Vec<u16> {
     s.encode_utf16().collect()
 }
 
+#[allow(clippy::maybe_infinite_iter)]
 unsafe fn from_wstr(ws: *const u16) -> String {
     // null pointer case, return empty string
     if ws.is_null() {
