@@ -944,7 +944,7 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 min_version.release()[0] == 0,
                 "migrate to major version bumps"
             );
-            let max_version = Version::new([0, min_version.release()[1] + 1]);
+            let max_version = Version::new([0, min_version.release()[1] + 1, 0]);
             indoc::formatdoc! {r#"
                 [build-system]
                 requires = ["uv_build>={min_version},<{max_version}"]
