@@ -2,7 +2,7 @@ use anstream::eprintln;
 
 use uv_cache::Refresh;
 use uv_configuration::{ConfigSettings, PackageConfigSettings};
-use uv_resolver::{ExcludeNewer, PrereleaseMode};
+use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;
 
@@ -94,12 +94,7 @@ impl From<ResolverArgs> for PipOptions {
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
-            exclude_newer_package: exclude_newer_package.map(|entries| {
-                entries
-                    .into_iter()
-                    .map(|e| (e.package, e.timestamp))
-                    .collect()
-            }),
+            exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
             ..PipOptions::from(index_args)
@@ -142,12 +137,7 @@ impl From<InstallerArgs> for PipOptions {
             }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             exclude_newer,
-            exclude_newer_package: exclude_newer_package.map(|entries| {
-                entries
-                    .into_iter()
-                    .map(|e| (e.package, e.timestamp))
-                    .collect()
-            }),
+            exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
@@ -209,12 +199,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
-            exclude_newer_package: exclude_newer_package.map(|entries| {
-                entries
-                    .into_iter()
-                    .map(|e| (e.package, e.timestamp))
-                    .collect()
-            }),
+            exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
@@ -491,12 +476,7 @@ pub fn resolver_installer_options(
             Some(no_build_isolation_package)
         },
         exclude_newer,
-        exclude_newer_package: exclude_newer_package.map(|entries| {
-            entries
-                .into_iter()
-                .map(|e| (e.package, e.timestamp))
-                .collect()
-        }),
+        exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
         no_build: flag(no_build, build, "build"),

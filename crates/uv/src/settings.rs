@@ -35,7 +35,8 @@ use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode,
+    AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerPackage, ForkStrategy,
+    PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
     Combine, EnvironmentOptions, FilesystemOptions, Options, PipOptions, PublishOptions,
@@ -2686,12 +2687,8 @@ impl VenvSettings {
                     index_strategy,
                     keyring_provider,
                     exclude_newer,
-                    exclude_newer_package: exclude_newer_package.map(|entries| {
-                        entries
-                            .into_iter()
-                            .map(|e| (e.package, e.timestamp))
-                            .collect()
-                    }),
+                    exclude_newer_package: exclude_newer_package
+                        .map(ExcludeNewerPackage::from_iter),
                     link_mode,
                     ..PipOptions::from(index_args)
                 },

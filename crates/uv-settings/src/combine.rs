@@ -1,9 +1,7 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use rustc_hash::FxHashMap;
 use url::Url;
-use uv_normalize::PackageName;
 
 use uv_configuration::{
     ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, PackageConfigSettings,
@@ -15,8 +13,8 @@ use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
-    ResolutionMode,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
+    PrereleaseMode, ResolutionMode,
 };
 use uv_torch::TorchMode;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -126,12 +124,9 @@ impl<T> Combine for Option<Vec<T>> {
     }
 }
 
-impl Combine for Option<FxHashMap<PackageName, ExcludeNewerTimestamp>> {
-    /// Combine two hashmaps by merging them, with the values in `self` taking precedence.
-    fn combine(
-        self,
-        other: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
-    ) -> Option<FxHashMap<PackageName, ExcludeNewerTimestamp>> {
+impl Combine for Option<ExcludeNewerPackage> {
+    /// Combine two [`ExcludeNewerPackage`] instances by merging them, with the values in `self` taking precedence.
+    fn combine(self, other: Option<ExcludeNewerPackage>) -> Option<ExcludeNewerPackage> {
         match (self, other) {
             (Some(mut a), Some(b)) => {
                 // Extend with values from b, but a takes precedence (we don't overwrite existing keys)
