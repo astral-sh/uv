@@ -939,7 +939,9 @@ impl ProjectInterpreter {
                         ));
                     }
                     InvalidEnvironmentKind::MissingExecutable(_) => {
-                        if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
+                        if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some())
+                            && !root.join(".uv-partial-rm").try_exists().unwrap_or(false)
+                        {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
                                 root,
                                 "it is not a valid Python environment (no Python executable was found)"
@@ -1313,6 +1315,9 @@ impl ProjectEnvironment {
                         // Unless it's empty, in which case we just ignore it
                         if root.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
                             false
+                        // Or, if there's a marker file indicating a previous removal failed
+                        } else if root.join(".uv-partial-rm").try_exists().unwrap_or(false) {
+                            true
                         } else {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
                                 root,
@@ -1382,7 +1387,23 @@ impl ProjectEnvironment {
                             )?;
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(e) => return Err(e.into()),
+                        Err(e) => {
+                            // Try to write a marker to indicate that we failed to remove the entire
+                            // environment, so when the next command runs we can attempt to remove
+                            // it even if a `pyvenv.cfg` marker was removed
+                            match fs_err::write(root.join(".uv-partial-rm"), "") {
+                                Ok(()) => {
+                                    debug!(
+                                        "Wrote `.uv-partial-rm` marker to partially deleted environment: {}",
+                                        root.user_display().cyan()
+                                    );
+                                }
+                                Err(err) => {
+                                    debug!("Failed to write `.uv-partial-rm` marker: {err}");
+                                }
+                            }
+                            return Err(e.into());
+                        }
                     }
                 }
 
