@@ -920,7 +920,9 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
     }
 
     // IO Errors may be nested through custom IO errors.
+    let mut has_io_error = false;
     for io_err in find_sources::<io::Error>(&err) {
+        has_io_error = true;
         let retryable_io_err_kinds = [
             // https://github.com/astral-sh/uv/issues/12054
             io::ErrorKind::BrokenPipe,
@@ -943,7 +945,9 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
         );
     }
 
-    trace!("Cannot retry error: not an extended IO error");
+    if !has_io_error {
+        trace!("Cannot retry error: not an extended IO error");
+    }
     false
 }
 
