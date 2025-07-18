@@ -60,7 +60,8 @@ impl VerbatimUrl {
 
     /// Convert a [`VerbatimUrl`] from a path or a URL.
     ///
-    /// Allows relative paths if `root_dir` is given, otherwise it requires an absolute path.
+    /// If no root directory is provided, relative paths are resolved against the current working
+    /// directory.
     pub fn from_url_or_path(
         input: &str,
         root_dir: Option<&Path>,
