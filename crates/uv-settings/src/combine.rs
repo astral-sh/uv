@@ -1,7 +1,9 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
+use rustc_hash::FxHashMap;
 use url::Url;
+use uv_normalize::PackageName;
 
 use uv_configuration::{
     ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, PackageConfigSettings,
@@ -12,7 +14,10 @@ use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, ExcludeNewer, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
+    ResolutionMode,
+};
 use uv_torch::TorchMode;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
@@ -78,6 +83,7 @@ macro_rules! impl_combine_or {
 impl_combine_or!(AddBoundsKind);
 impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
+impl_combine_or!(ExcludeNewerTimestamp);
 impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);
 impl_combine_or!(Index);
@@ -120,6 +126,25 @@ impl<T> Combine for Option<Vec<T>> {
     }
 }
 
+impl Combine for Option<FxHashMap<PackageName, ExcludeNewerTimestamp>> {
+    /// Combine two hashmaps by merging them, with the values in `self` taking precedence.
+    fn combine(
+        self,
+        other: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+    ) -> Option<FxHashMap<PackageName, ExcludeNewerTimestamp>> {
+        match (self, other) {
+            (Some(mut a), Some(b)) => {
+                // Extend with values from b, but a takes precedence (we don't overwrite existing keys)
+                for (key, value) in b {
+                    a.entry(key).or_insert(value);
+                }
+                Some(a)
+            }
+            (a, b) => a.or(b),
+        }
+    }
+}
+
 impl Combine for Option<ConfigSettings> {
     /// Combine two maps by merging the map in `self` with the map in `other`, if they're both
     /// `Some`.
@@ -150,6 +175,25 @@ impl Combine for serde::de::IgnoredAny {
 
 impl Combine for Option<serde::de::IgnoredAny> {
     fn combine(self, _other: Self) -> Self {
+        self
+    }
+}
+
+impl Combine for ExcludeNewer {
+    fn combine(mut self, other: Self) -> Self {
+        self.global = self.global.combine(other.global);
+
+        if !other.package.is_empty() {
+            if self.package.is_empty() {
+                self.package = other.package;
+            } else {
+                // Merge package-specific timestamps, with self taking precedence
+                for (pkg, timestamp) in &other.package {
+                    self.package.entry(pkg.clone()).or_insert(*timestamp);
+                }
+            }
+        }
+
         self
     }
 }

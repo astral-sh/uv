@@ -10564,6 +10564,157 @@ fn sync_url_with_query_parameters() -> Result<()> {
     Ok(())
 }
 
+/// Test uv sync with --exclude-newer-package
+#[test]
+fn sync_exclude_newer_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+"#,
+    )?;
+
+    // First sync with only the global exclude-newer to show the baseline
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2021.10.8
+     + charset-normalizer==2.0.12
+     + idna==3.3
+     + requests==2.27.1
+     + tqdm==4.64.0
+     + urllib3==1.26.9
+    "
+    );
+
+    // Now sync with --exclude-newer-package to allow tqdm to use a newer version
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=2022-09-04T00:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in timestamp cutoff: `global: 2022-04-04T12:00:00Z` vs. `global: 2022-04-04T12:00:00Z, tqdm: 2022-09-04T00:00:00Z`
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - tqdm==4.64.0
+     + tqdm==4.64.1
+    "
+    );
+
+    Ok(())
+}
+
+/// Test exclude-newer-package in pyproject.toml configuration
+#[test]
+fn sync_exclude_newer_package_config() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+
+[tool.uv]
+exclude-newer = "2022-04-04T12:00:00Z"
+"#,
+    )?;
+
+    // First sync with only the global exclude-newer from the config
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + certifi==2021.10.8
+     + charset-normalizer==2.0.12
+     + idna==3.3
+     + requests==2.27.1
+     + tqdm==4.64.0
+     + urllib3==1.26.9
+    "
+    );
+
+    // Now add the package-specific exclude-newer to the config
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+
+[tool.uv]
+exclude-newer = "2022-04-04T12:00:00Z"
+exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
+"#,
+    )?;
+
+    // Sync again with the package-specific override
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in timestamp cutoff: `global: 2022-04-04T12:00:00Z` vs. `global: 2022-04-04T12:00:00Z, tqdm: 2022-09-04T00:00:00Z`
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - tqdm==4.64.0
+     + tqdm==4.64.1
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg(unix)]
 fn read_only() -> Result<()> {

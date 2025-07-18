@@ -1,5 +1,6 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
@@ -12,12 +13,16 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
+
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, ExcludeNewer, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
+    ResolutionMode,
+};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -333,7 +338,7 @@ pub struct InstallerOptions {
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub config_settings: Option<ConfigSettings>,
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub reinstall: Option<bool>,
@@ -362,7 +367,7 @@ pub struct ResolverOptions {
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
     pub upgrade: Option<bool>,
     pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
@@ -636,7 +641,18 @@ pub struct ResolverInstallerOptions {
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in a dictionary format.
+    #[option(
+        default = "None",
+        value_type = "dict",
+        example = r#"
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+        "#
+    )]
+    pub exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
@@ -1409,7 +1425,18 @@ pub struct PipOptions {
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in a dictionary format.
+    #[option(
+        default = "None",
+        value_type = "dict",
+        example = r#"
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+        "#
+    )]
+    pub exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
     #[option(
@@ -1675,7 +1702,15 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
-            exclude_newer: value.exclude_newer,
+            exclude_newer: ExcludeNewer::from_args(
+                value.exclude_newer,
+                value
+                    .exclude_newer_package
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
             link_mode: value.link_mode,
             upgrade: value.upgrade,
             upgrade_package: value.upgrade_package,
@@ -1701,7 +1736,16 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             config_settings: value.config_settings,
-            exclude_newer: value.exclude_newer,
+            exclude_newer: ExcludeNewer::from_args(
+                value.exclude_newer,
+                value
+                    .exclude_newer_package
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            )
+            .global,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             reinstall: value.reinstall,
@@ -1741,7 +1785,8 @@ pub struct ToolOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
@@ -1770,6 +1815,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             exclude_newer: value.exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
@@ -1800,6 +1846,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             exclude_newer: value.exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
@@ -1852,7 +1899,8 @@ pub struct OptionsWire {
     config_settings_package: Option<PackageConfigSettings>,
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: Option<ExcludeNewerTimestamp>,
+    exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
     no_sources: Option<bool>,
@@ -1943,6 +1991,7 @@ impl From<OptionsWire> for Options {
             no_build_isolation,
             no_build_isolation_package,
             exclude_newer,
+            exclude_newer_package,
             link_mode,
             compile_bytecode,
             no_sources,
@@ -2010,6 +2059,7 @@ impl From<OptionsWire> for Options {
                 no_build_isolation,
                 no_build_isolation_package,
                 exclude_newer,
+                exclude_newer_package,
                 link_mode,
                 compile_bytecode,
                 no_sources,
