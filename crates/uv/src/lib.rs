@@ -2065,6 +2065,7 @@ async fn run_project(
                 args.output_format,
                 project_dir,
                 args.package,
+                cli.top_level.global_args.project.is_some(),
                 args.dry_run,
                 args.locked,
                 args.frozen,

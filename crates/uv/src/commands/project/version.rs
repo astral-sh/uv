@@ -59,6 +59,7 @@ pub(crate) async fn project_version(
     output_format: VersionFormat,
     project_dir: &Path,
     package: Option<PackageName>,
+    explicit_project: bool,
     dry_run: bool,
     locked: bool,
     frozen: bool,
@@ -78,7 +79,7 @@ pub(crate) async fn project_version(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Read the metadata
-    let project = find_target(project_dir, package.as_ref()).await?;
+    let project = find_target(project_dir, package.as_ref(), explicit_project).await?;
 
     let pyproject_path = project.root().join("pyproject.toml");
     let Some(name) = project.project_name().cloned() else {
@@ -328,7 +329,7 @@ pub(crate) async fn project_version(
 /// Find the pyproject.toml we're modifying
 ///
 /// Note that `uv version` never needs to support PEP 723 scripts, as those are unversioned.
-async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Result<VirtualProject> {
+async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit_project: bool) -> Result<VirtualProject> {
     // Find the project in the workspace.
     // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
@@ -338,17 +339,7 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Resul
                 &DiscoveryOptions::default(),
                 &WorkspaceCache::default(),
             )
-            .await
-            .map_err(|err| {
-                if matches!(err, WorkspaceError::MissingPyprojectToml) {
-                    anyhow!(
-                        "{}\n\nhint: If you meant to view uv's version, use `uv self version` instead",
-                        err
-                    )
-                } else {
-                    err.into()
-                }
-            })?
+            .await?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
@@ -360,7 +351,7 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Resul
         )
         .await
         .map_err(|err| {
-            if matches!(err, WorkspaceError::MissingPyprojectToml) {
+            if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
                 anyhow!(
                     "{}\n\nhint: If you meant to view uv's version, use `uv self version` instead",
                     err
