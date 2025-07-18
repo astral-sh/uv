@@ -1702,7 +1702,7 @@ fn version_get_missing_with_hint() -> Result<()> {
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
 
-    hint: If you meant to view uv's version, use `uv self version` instead
+    [1m[36mhint[0m[0m[1m:[0m If you meant to view uv's version, use `[32muv self version[0m` instead
     ");
 
     Ok(())

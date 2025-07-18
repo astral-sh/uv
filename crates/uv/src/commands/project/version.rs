@@ -343,8 +343,11 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit
             .map_err(|err| {
                 if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
                     anyhow!(
-                        "{}\n\nhint: If you meant to view uv's version, use `uv self version` instead",
-                        err
+                        "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
+                        err,
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        "uv self version".green()
                     )
                 } else {
                     err.into()
@@ -363,8 +366,11 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit
         .map_err(|err| {
             if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
                 anyhow!(
-                    "{}\n\nhint: If you meant to view uv's version, use `uv self version` instead",
-                    err
+                    "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
+                    err,
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    "uv self version".green()
                 )
             } else {
                 err.into()
