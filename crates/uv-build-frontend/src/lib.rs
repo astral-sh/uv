@@ -530,10 +530,7 @@ impl SourceBuild {
                     .and_then(|name| extra_build_dependencies.get(name).cloned())
                     .unwrap_or_default();
 
-                let backend = if let Some(mut build_system) = pyproject_toml.build_system {
-                    // Apply extra-build-dependencies if there are any
-                    build_system.requires.extend(extra_build_dependencies);
-
+                let backend = if let Some(build_system) = pyproject_toml.build_system {
                     // If necessary, lower the requirements.
                     let requirements = match source_strategy {
                         SourceStrategy::Enabled => {
@@ -557,6 +554,9 @@ impl SourceBuild {
                                     .requires
                                     .into_iter()
                                     .map(Requirement::from)
+                                    .chain(
+                                        extra_build_dependencies.into_iter().map(Requirement::from),
+                                    )
                                     .collect()
                             }
                         }
@@ -564,6 +564,7 @@ impl SourceBuild {
                             .requires
                             .into_iter()
                             .map(Requirement::from)
+                            .chain(extra_build_dependencies.into_iter().map(Requirement::from))
                             .collect(),
                     };
 
@@ -617,8 +618,7 @@ impl SourceBuild {
                         }
                     }
                     let mut backend = default_backend.clone();
-                    // Apply extra_build_dependencies
-                    // TODO(Gankra): should Sources/Indexes be applied on this path?
+                    // Apply extra build dependencies
                     backend
                         .requirements
                         .extend(extra_build_dependencies.into_iter().map(Requirement::from));
@@ -638,8 +638,7 @@ impl SourceBuild {
                 // case,  but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
                 let mut backend = default_backend.clone();
-                // Apply extra_build_dependencies
-                // TODO(Gankra): should Sources/Indexes be applied on this path?
+                // Apply extra build dependencies
                 let extra_build_dependencies = package_name
                     .as_ref()
                     .and_then(|name| extra_build_dependencies.get(name).cloned())
