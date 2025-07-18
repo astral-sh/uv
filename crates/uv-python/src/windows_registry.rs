@@ -238,8 +238,7 @@ pub fn remove_registry_entry<'a>(
             } else {
                 errors.push((
                     installation.key().clone(),
-                    anyhow::Error::new(err)
-                        .context("Failed to clear registry entries under HKCU:\\{python_entry}"),
+                    format!("Failed to clear registry entries under HKCU:\\{python_entry}: {err}"),
                 ));
             }
         }
