@@ -326,6 +326,21 @@ pub(crate) async fn project_version(
     Ok(status)
 }
 
+/// Helper function to enhance workspace errors with helpful hints
+fn enhance_workspace_error(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
+    if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
+        anyhow!(
+            "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
+            err,
+            "hint".bold().cyan(),
+            ":".bold(),
+            "uv self version".green()
+        )
+    } else {
+        err.into()
+    }
+}
+
 /// Find the pyproject.toml we're modifying
 ///
 /// Note that `uv version` never needs to support PEP 723 scripts, as those are unversioned.
@@ -340,19 +355,7 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit
                 &WorkspaceCache::default(),
             )
             .await
-            .map_err(|err| {
-                if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
-                    anyhow!(
-                        "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
-                        err,
-                        "hint".bold().cyan(),
-                        ":".bold(),
-                        "uv self version".green()
-                    )
-                } else {
-                    err.into()
-                }
-            })?
+            .map_err(|err| enhance_workspace_error(err, explicit_project))?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
@@ -363,19 +366,7 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit
             &WorkspaceCache::default(),
         )
         .await
-        .map_err(|err| {
-            if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
-                anyhow!(
-                    "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
-                    err,
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    "uv self version".green()
-                )
-            } else {
-                err.into()
-            }
-        })?
+        .map_err(|err| enhance_workspace_error(err, explicit_project))?
     };
     Ok(project)
 }
