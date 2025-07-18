@@ -10494,7 +10494,7 @@ fn sync_required_environment_hint() -> Result<()> {
         [project]
         name = "example"
         version = "0.1.0"
-        requires-python = ">=3.13.2"
+        requires-python = ">=3.13"
         dependencies = ["no-sdist-no-wheels-with-matching-platform-a"]
 
         [[tool.uv.index]]
@@ -10544,7 +10544,7 @@ fn sync_url_with_query_parameters() -> Result<()> {
         [project]
         name = "example"
         version = "0.1.0"
-        requires-python = ">=3.13.2"
+        requires-python = ">=3.13"
         dependencies = ["source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar"]
         "#
     )?;
