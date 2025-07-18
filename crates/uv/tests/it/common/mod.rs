@@ -20,7 +20,7 @@ use predicates::prelude::predicate;
 use regex::Regex;
 
 use tokio::io::AsyncWriteExt;
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
@@ -420,6 +420,22 @@ impl TestContext {
     #[must_use]
     pub fn with_collapsed_whitespace(mut self) -> Self {
         self.filters.push((r"[ \t]+".to_string(), " ".to_string()));
+        self
+    }
+
+    /// Use a shared global cache for Python downloads.
+    #[must_use]
+    pub fn with_python_download_cache(mut self) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_PYTHON_CACHE_DIR.into(),
+            // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory
+            env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
+                uv_cache::Cache::from_settings(false, None)
+                    .unwrap()
+                    .bucket(CacheBucket::Python)
+                    .into()
+            }),
+        ));
         self
     }
 

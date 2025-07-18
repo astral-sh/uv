@@ -985,6 +985,8 @@ pub enum CacheBucket {
     Builds,
     /// Reusable virtual environments used to invoke Python tools.
     Environments,
+    /// Cached Python downloads
+    Python,
 }
 
 impl CacheBucket {
@@ -1007,6 +1009,7 @@ impl CacheBucket {
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
+            Self::Python => "python-v0",
         }
     }
 
@@ -1108,7 +1111,12 @@ impl CacheBucket {
                 let root = cache.bucket(self);
                 summary += rm_rf(root)?;
             }
-            Self::Git | Self::Interpreter | Self::Archive | Self::Builds | Self::Environments => {
+            Self::Git
+            | Self::Interpreter
+            | Self::Archive
+            | Self::Builds
+            | Self::Environments
+            | Self::Python => {
                 // Nothing to do.
             }
         }
