@@ -998,13 +998,9 @@ impl ManagedPythonDownloadList {
             if let Ok(url) = DisplaySafeUrl::parse(url_or_path) {
                 match url.scheme() {
                     "http" | "https" => Source::Http(url),
-                    "file" => {
-                        if let Ok(path) = url.to_file_path() {
-                            Source::Path(Cow::Owned(path))
-                        } else {
-                            return Err(Error::InvalidUrlFormat(url));
-                        }
-                    }
+                    "file" => Source::Path(Cow::Owned(
+                        url.to_file_path().or(Err(Error::InvalidUrlFormat(url)))?,
+                    )),
                     _ => Source::Path(Cow::Borrowed(Path::new(url_or_path))),
                 }
             } else {
