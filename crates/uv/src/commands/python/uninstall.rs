@@ -144,6 +144,7 @@ async fn do_uninstall(
 
     // Remove registry entries first, so we don't have dangling entries between the file removal
     // and the registry removal.
+    let mut errors = vec![];
     #[cfg(windows)]
     {
         uv_python::windows_registry::remove_registry_entry(
@@ -213,7 +214,6 @@ async fn do_uninstall(
     }
 
     let mut uninstalled = IndexSet::<PythonInstallationKey>::default();
-    let mut errors = vec![];
     while let Some((key, result)) = tasks.next().await {
         if let Err(err) = result {
             errors.push((key.clone(), anyhow::Error::new(err)));
