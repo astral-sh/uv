@@ -1527,6 +1527,353 @@ fn sync_build_isolation_extra() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_extra_build_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import sys
+
+        from hatchling.build import *
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Adding `extra-build-dependencies` with the wrong name should not
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        wrong_name = ["anyio"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Write a test package that arbitrarily bans `anyio` at build time
+    let bad_child = context.temp_dir.child("bad_child");
+    bad_child.create_dir_all()?;
+    let bad_child_pyproject_toml = bad_child.child("pyproject.toml");
+    bad_child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "bad_child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = bad_child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import sys
+
+        from hatchling.build import *
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            pass
+        else:
+            print("Found `anyio` module", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    bad_child.child("src/bad_child/__init__.py").touch()?;
+
+    // Depend on `bad_child` too
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child", "bad_child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        bad_child = { path = "bad_child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+        bad_child = ["anyio"]
+    "#})?;
+
+    // Confirm that `bad_child` fails if anyio is provided
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Found `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
+    ");
+
+    // But `anyio` is not provided to `bad_child` if scoped to `child`
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child", "bad_child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        bad_child = { path = "bad_child" }
+        
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + bad-child==0.1.0 (from file://[TEMP_DIR]/bad_child)
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+
+    // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(&formatdoc! {r#"
+        import sys
+
+        from hatchling.build import *
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+        
+        if not anyio.__file__.startswith("{0}"):
+            print("Found anyio at", anyio.__file__, file=sys.stderr)
+            print("Expected {0}", file=sys.stderr)
+            sys.exit(1)
+    "#, anyio_local.display()
+    })?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child"]
+
+            [tool.uv.sources]
+            anyio = {{ path = "{anyio_local}" }}
+            child = {{ path = "child" }}
+
+            [tool.uv.extra-build-dependencies]
+            child = ["anyio"]
+        "#,
+        anyio_local = anyio_local.portable_display(),
+    })?;
+
+    // Running `uv sync` should fail due to the unapplied source
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Found anyio at [CACHE_DIR]/builds-v0/[TMP]/__init__.py
+          Expected [WORKSPACE]/scripts/packages/anyio_local
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `project` (v0.1.0) depends on `child`
+    ");
+
+    // We also don't apply sources from the child
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.sources]
+        anyio = {{ path = "{}" }}
+    "#, anyio_local.display()
+    })?;
+
+    // Running `uv sync` should fail due to the unapplied source
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Found anyio at [CACHE_DIR]/builds-v0/[TMP]/__init__.py
+          Expected [WORKSPACE]/scripts/packages/anyio_local
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `project` (v0.1.0) depends on `child`
+    ");
+
+    Ok(())
+}
+
 /// Avoid using incompatible versions for build dependencies that are also part of the resolved
 /// environment. This is a very subtle issue, but: when locking, we don't enforce platform
 /// compatibility. So, if we reuse the resolver state to install, and the install itself has to
