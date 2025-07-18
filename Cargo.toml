@@ -172,8 +172,8 @@ tl = { git = "https://github.com/astral-sh/tl.git", rev = "6e25b2ee2513d75385101
 tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", "rt", "signal", "sync"] }
 tokio-stream = { version = "0.1.16" }
 tokio-util = { version = "0.7.12", features = ["compat", "io"] }
-toml = { version = "0.8.19" }
-toml_edit = { version = "0.22.21", features = ["serde"] }
+toml = { version = "0.9.2", features = ["fast_hash"] }
+toml_edit = { version = "0.23.2", features = ["serde"] }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.3.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }

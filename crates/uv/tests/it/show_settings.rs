@@ -4088,7 +4088,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4100,9 +4100,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     9 | ""
       |   ^
-    expected `.`, `=`
-
-    "###
+    key with no value, expected `=`
+    "#
     );
 
     Ok(())
