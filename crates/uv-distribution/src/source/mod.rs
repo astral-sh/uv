@@ -32,7 +32,7 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, PathSourceUrl,
+    BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl,
     SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
@@ -148,6 +148,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url(
                     source,
                     &url,
+                    Some(&dist.index),
                     &cache_shard,
                     None,
                     dist.ext,
@@ -168,6 +169,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url(
                     source,
                     &dist.url,
+                    None,
                     &cache_shard,
                     dist.subdirectory.as_deref(),
                     dist.ext,
@@ -213,6 +215,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url(
                     source,
                     resource.url,
+                    None,
                     &cache_shard,
                     resource.subdirectory,
                     resource.ext,
@@ -288,9 +291,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .await;
                 }
 
-                self.url_metadata(source, &url, &cache_shard, None, dist.ext, hashes, client)
-                    .boxed_local()
-                    .await?
+                self.url_metadata(
+                    source,
+                    &url,
+                    Some(&dist.index),
+                    &cache_shard,
+                    None,
+                    dist.ext,
+                    hashes,
+                    client,
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
                 // For direct URLs, cache directly under the hash of the URL itself.
@@ -302,6 +314,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url_metadata(
                     source,
                     &dist.url,
+                    None,
                     &cache_shard,
                     dist.subdirectory.as_deref(),
                     dist.ext,
@@ -340,6 +353,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.url_metadata(
                     source,
                     resource.url,
+                    None,
                     &cache_shard,
                     resource.subdirectory,
                     resource.ext,
@@ -395,6 +409,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'data>,
         url: &'data DisplaySafeUrl,
+        index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
@@ -406,7 +421,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Fetch the revision for the source distribution.
         let revision = self
-            .url_revision(source, ext, url, cache_shard, hashes, client)
+            .url_revision(source, ext, url, index, cache_shard, hashes, client)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -448,6 +463,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source,
                 ext,
                 url,
+                index,
                 &source_dist_entry,
                 revision,
                 hashes,
@@ -511,6 +527,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'data>,
         url: &'data Url,
+        index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
@@ -521,7 +538,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Fetch the revision for the source distribution.
         let revision = self
-            .url_revision(source, ext, url, cache_shard, hashes, client)
+            .url_revision(source, ext, url, index, cache_shard, hashes, client)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -578,6 +595,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source,
                 ext,
                 url,
+                index,
                 &source_dist_entry,
                 revision,
                 hashes,
@@ -689,18 +707,31 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         url: &Url,
+        index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(HTTP_REVISION);
+
+        // Determine the cache control policy for the request.
         let cache_control = match client.unmanaged.connectivity() {
-            Connectivity::Online => CacheControl::from(
-                self.build_context
-                    .cache()
-                    .freshness(&cache_entry, source.name(), source.source_tree())
-                    .map_err(Error::CacheRead)?,
-            ),
+            Connectivity::Online => {
+                if let Some(header) = index.and_then(|index| {
+                    self.build_context
+                        .locations()
+                        .artifact_cache_control_for(index)
+                }) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.build_context
+                            .cache()
+                            .freshness(&cache_entry, source.name(), source.source_tree())
+                            .map_err(Error::CacheRead)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -750,6 +781,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .skip_cache_with_retry(
                             Self::request(DisplaySafeUrl::from(url.clone()), client)?,
                             &cache_entry,
+                            cache_control,
                             download,
                         )
                         .await
@@ -2056,6 +2088,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         url: &Url,
+        index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
         hashes: HashPolicy<'_>,
@@ -2063,6 +2096,28 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<Revision, Error> {
         warn!("Re-downloading missing source distribution: {source}");
         let cache_entry = entry.shard().entry(HTTP_REVISION);
+
+        // Determine the cache control policy for the request.
+        let cache_control = match client.unmanaged.connectivity() {
+            Connectivity::Online => {
+                if let Some(header) = index.and_then(|index| {
+                    self.build_context
+                        .locations()
+                        .artifact_cache_control_for(index)
+                }) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.build_context
+                            .cache()
+                            .freshness(&cache_entry, source.name(), source.source_tree())
+                            .map_err(Error::CacheRead)?,
+                    )
+                }
+            }
+            Connectivity::Offline => CacheControl::AllowStale,
+        };
+
         let download = |response| {
             async {
                 // Take the union of the requested and existing hash algorithms.
@@ -2096,6 +2151,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .skip_cache_with_retry(
                         Self::request(DisplaySafeUrl::from(url.clone()), client)?,
                         &cache_entry,
+                        cache_control,
                         download,
                     )
                     .await
