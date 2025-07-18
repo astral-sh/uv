@@ -505,6 +505,7 @@ fn wrap(code: u32) -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(Error(code))
 }
 
+#[cfg(feature = "keyring-tests")]
 #[cfg(test)]
 mod tests {
     use super::*;

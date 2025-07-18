@@ -722,6 +722,7 @@ fn wrap(err: Error) -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(err)
 }
 
+#[cfg(feature = "keyring-tests")]
 #[cfg(test)]
 mod tests {
     use crate::credential::CredentialPersistence;

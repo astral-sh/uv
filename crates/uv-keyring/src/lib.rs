@@ -505,6 +505,7 @@ mod tests {
         repeat_with(|| fastrand::u8(..)).take(len).collect()
     }
 
+    #[cfg(feature = "keyring-tests")]
     pub(crate) async fn test_empty_service_and_user<F>(f: F)
     where
         F: Fn(&str, &str) -> Entry,
