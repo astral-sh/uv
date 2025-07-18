@@ -10670,6 +10670,8 @@ fn add_preserves_empty_comment() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [
+            # First line.
+            # Second line.
             "anyio==3.7.0",
         ]
         "#
