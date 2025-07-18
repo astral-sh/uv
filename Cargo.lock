@@ -5627,7 +5627,6 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.14.0",
- "once_cell",
  "owo-colors",
  "procfs",
  "ref-cast",
