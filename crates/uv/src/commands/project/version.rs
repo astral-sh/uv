@@ -327,7 +327,7 @@ pub(crate) async fn project_version(
 }
 
 /// Helper function to enhance workspace errors with helpful hints
-fn enhance_workspace_error(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
+fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
     if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
         anyhow!(
             "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
@@ -355,7 +355,7 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit
                 &WorkspaceCache::default(),
             )
             .await
-            .map_err(|err| enhance_workspace_error(err, explicit_project))?
+            .map_err(|err| hint_uv_self_version(err, explicit_project))?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
@@ -366,7 +366,7 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit
             &WorkspaceCache::default(),
         )
         .await
-        .map_err(|err| enhance_workspace_error(err, explicit_project))?
+        .map_err(|err| hint_uv_self_version(err, explicit_project))?
     };
     Ok(project)
 }
