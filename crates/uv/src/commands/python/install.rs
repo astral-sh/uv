@@ -237,14 +237,14 @@ pub(crate) async fn install(
                 }]
             })
             .into_iter()
-            .map(|a| InstallRequest::new(a, &download_list))
+            .map(|request| InstallRequest::new(request, &download_list))
             .collect::<Result<Vec<_>>>()?
         }
     } else {
         targets
             .iter()
             .map(|target| PythonRequest::parse(target.as_str()))
-            .map(|a| InstallRequest::new(a, &download_list))
+            .map(|request| InstallRequest::new(request, &download_list))
             .collect::<Result<Vec<_>>>()?
     };
 

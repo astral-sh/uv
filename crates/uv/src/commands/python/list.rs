@@ -115,7 +115,7 @@ pub(crate) async fn list(
             ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
         let downloads = download_request
             .as_ref()
-            .map(|a| PythonDownloadRequest::iter_downloads(a, &download_list))
+            .map(|request| PythonDownloadRequest::iter_downloads(request, &download_list))
             .into_iter()
             .flatten();
 
