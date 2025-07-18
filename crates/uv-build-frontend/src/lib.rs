@@ -4,6 +4,7 @@
 
 mod error;
 
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Formatter;
 use std::fmt::Write;
@@ -306,7 +307,6 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             source_strategy,
-            extra_build_dependencies,
             workspace_cache,
             &default_backend,
         )
@@ -323,6 +323,14 @@ impl SourceBuild {
             .and_then(|project| project.version.as_ref())
             .or(fallback_package_version)
             .cloned();
+
+        let extra_build_dependencies = package_name
+            .as_ref()
+            .and_then(|name| extra_build_dependencies.get(name).cloned())
+            .unwrap_or_default()
+            .into_iter()
+            .map(Requirement::from)
+            .collect();
 
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
@@ -351,10 +359,13 @@ impl SourceBuild {
                 source_build_context,
                 &default_backend,
                 &pep517_backend,
+                extra_build_dependencies,
                 build_stack,
             )
             .await?;
 
+            // TODO(zanieb): We'll report `build-system.requires` here but it may include
+            // `extra-build-dependencies`
             build_context
                 .install(&resolved_requirements, &venv, build_stack)
                 .await
@@ -473,10 +484,13 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         default_backend: &Pep517Backend,
         pep517_backend: &Pep517Backend,
+        extra_build_dependencies: Vec<Requirement>,
         build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
-            if pep517_backend.requirements == default_backend.requirements {
+            if pep517_backend.requirements == default_backend.requirements
+                && extra_build_dependencies.is_empty()
+            {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
                     resolved_requirements.clone()
@@ -491,8 +505,21 @@ impl SourceBuild {
                     resolved_requirements
                 }
             } else {
+                // TODO(zanieb): It's unclear if we actually want to solve these together. We might
+                // want to perform a separate solve to allow conflicts?
+                let requirements = if extra_build_dependencies.is_empty() {
+                    Cow::Borrowed(&pep517_backend.requirements)
+                } else {
+                    // If there are extra build dependencies, we need to resolve them together with
+                    // the backend requirements.
+                    let mut requirements = pep517_backend.requirements.clone();
+                    requirements.extend(extra_build_dependencies);
+                    Cow::Owned(requirements)
+                };
+                // TODO(zanieb): We'll report `build-system.requires` here but it may include
+                // `extra-build-dependencies`
                 build_context
-                    .resolve(&pep517_backend.requirements, build_stack)
+                    .resolve(&requirements, build_stack)
                     .await
                     .map_err(|err| {
                         Error::RequirementsResolve("`build-system.requires`", err.into())
@@ -508,7 +535,6 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
-        extra_build_dependencies: &ExtraBuildDependencies,
         workspace_cache: &WorkspaceCache,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
@@ -525,10 +551,6 @@ impl SourceBuild {
                     .as_ref()
                     .map(|project| &project.name)
                     .or(package_name);
-                let extra_build_dependencies = name
-                    .as_ref()
-                    .and_then(|name| extra_build_dependencies.get(name).cloned())
-                    .unwrap_or_default();
 
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     // If necessary, lower the requirements.
@@ -554,9 +576,6 @@ impl SourceBuild {
                                     .requires
                                     .into_iter()
                                     .map(Requirement::from)
-                                    .chain(
-                                        extra_build_dependencies.into_iter().map(Requirement::from),
-                                    )
                                     .collect()
                             }
                         }
@@ -564,7 +583,6 @@ impl SourceBuild {
                             .requires
                             .into_iter()
                             .map(Requirement::from)
-                            .chain(extra_build_dependencies.into_iter().map(Requirement::from))
                             .collect(),
                     };
 
@@ -617,12 +635,8 @@ impl SourceBuild {
                             );
                         }
                     }
-                    let mut backend = default_backend.clone();
-                    // Apply extra build dependencies
-                    backend
-                        .requirements
-                        .extend(extra_build_dependencies.into_iter().map(Requirement::from));
-                    backend
+
+                    default_backend.clone()
                 };
                 Ok((backend, pyproject_toml.project))
             }
@@ -637,15 +651,7 @@ impl SourceBuild {
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
                 // case,  but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                let mut backend = default_backend.clone();
-                // Apply extra build dependencies
-                let extra_build_dependencies = package_name
-                    .as_ref()
-                    .and_then(|name| extra_build_dependencies.get(name).cloned())
-                    .unwrap_or_default();
-                backend
-                    .requirements
-                    .extend(extra_build_dependencies.into_iter().map(Requirement::from));
+                let backend = default_backend.clone();
                 Ok((backend, None))
             }
             Err(err) => Err(Box::new(err.into())),
