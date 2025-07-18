@@ -4419,7 +4419,7 @@ pub struct ToolInstallArgs {
 
     /// Install executables from the following packages.
     #[arg(long)]
-    pub with_executables_from: Vec<PackageName>,
+    pub with_executables_from: Vec<comma::CommaSeparatedRequirements>,
 
     /// Constrain versions using the given requirements files.
     ///

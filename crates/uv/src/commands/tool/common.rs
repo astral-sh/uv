@@ -174,7 +174,7 @@ pub(crate) async fn refine_interpreter(
 pub(crate) fn finalize_tool_install(
     environment: &PythonEnvironment,
     name: &PackageName,
-    entrypoints: impl IntoIterator<Item = PackageName>,
+    entrypoints: &[PackageName],
     installed_tools: &InstalledTools,
     options: &ToolOptions,
     force: bool,
@@ -197,21 +197,21 @@ pub(crate) fn finalize_tool_install(
     let site_packages = SitePackages::from_environment(environment)?;
     let ordered_packages = entrypoints
         // Install dependencies first
-        .into_iter()
-        .filter(|pkg| pkg != name)
+        .iter()
+        .filter(|pkg| *pkg != name)
         .collect::<BTreeSet<_>>()
-        // Then install the main package last
+        // Then install the root package last
         .into_iter()
-        .chain(iter::once(name.clone()));
+        .chain(iter::once(name));
 
     for package in ordered_packages {
-        if package == *name {
+        if package == name {
             debug!("Installing entrypoints for tool `{package}`");
         } else {
             debug!("Installing entrypoints for `{package}` as part of tool `{name}`");
         }
 
-        let installed = site_packages.get_packages(&package);
+        let installed = site_packages.get_packages(package);
         let dist = installed
             .first()
             .context("Expected at least one requirement")?;
@@ -232,13 +232,29 @@ pub(crate) fn finalize_tool_install(
             .collect::<BTreeSet<_>>();
 
         if target_entrypoints.is_empty() {
+            // If package is not the root package, suggest to install it as a dependency.
+            if package != name {
+                writeln!(
+                    printer.stdout(),
+                    "No executables are provided by package `{}`\n{}{} If you want to include `{}` as a dependency without installing its executables, use `--with {}` instead of `--with-executables-from {}`.",
+                    package.cyan(),
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    package.cyan(),
+                    package.cyan(),
+                )?;
+                continue;
+            }
+
+            // For the root package, this is a fatal error
             writeln!(
                 printer.stdout(),
                 "No executables are provided by package `{}`; removing tool `{name}`",
                 package.cyan()
             )?;
 
-            hint_executable_from_dependency(&package, &site_packages, printer)?;
+            hint_executable_from_dependency(package, &site_packages, printer)?;
 
             // Clean up the environment we just created.
             installed_tools.remove_environment(name)?;
@@ -303,7 +319,7 @@ pub(crate) fn finalize_tool_install(
         }
 
         let s = if names.len() == 1 { "" } else { "s" };
-        let from_pkg = if *name == package {
+        let from_pkg = if name == package {
             String::new()
         } else {
             format!(" from `{package}`")

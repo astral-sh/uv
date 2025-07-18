@@ -1232,13 +1232,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
+            let with_executables_from = args
+                .with_executables_from
+                .iter()
+                .map(|pkg| RequirementsSource::from_package(pkg))
+                .collect::<Result<Vec<_>, _>>()?;
+
             let mut requirements = Vec::new();
             for pkg in args.with {
                 requirements.push(RequirementsSource::from_with_package_argument(&pkg)?);
             }
-            for pkg in &args.with_executables_from {
-                requirements.push(RequirementsSource::from_package_name(pkg)?);
-            }
+            requirements.extend_from_slice(&with_executables_from);
             for pkg in args.with_editable {
                 requirements.push(RequirementsSource::from_editable(&pkg)?);
             }
@@ -1267,7 +1271,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 args.from,
                 &requirements,
-                args.with_executables_from,
+                &with_executables_from,
                 &constraints,
                 &overrides,
                 &build_constraints,

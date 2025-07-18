@@ -21,6 +21,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
@@ -48,7 +49,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
-    mut with_executables_from: Vec<PackageName>,
+    with_executables_from: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
@@ -221,11 +222,11 @@ pub(crate) async fn install(
         }
         // Ex) `python`
         ToolRequest::Python { .. } => {
-            return Err(anyhow::anyhow!(
+            bail!(
                 "Cannot install Python with `{}`. Did you mean to use `{}`?",
                 "uv tool install".cyan(),
                 "uv python install".cyan(),
-            ));
+            );
         }
     };
 
@@ -605,12 +606,30 @@ pub(crate) async fn install(
         }
     };
 
-    with_executables_from.push(package_name.clone());
+    let entrypoints = with_executables_from
+        .iter()
+        .map(|source| match source {
+            RequirementsSource::Package(name) => {
+                if let RequirementsTxtRequirement::Named(requirement) = name {
+                    Ok(requirement.name.clone())
+                } else {
+                    bail!(
+                        "Expected a named requirement, but got: {}",
+                        source.to_string().cyan()
+                    )
+                }
+            }
+            _ => bail!(
+                "Expected a package requirement, but got: {}",
+                source.to_string().cyan()
+            ),
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     finalize_tool_install(
         &environment,
         package_name,
-        with_executables_from,
+        &entrypoints,
         &installed_tools,
         &options,
         force || invalid_tool_receipt,

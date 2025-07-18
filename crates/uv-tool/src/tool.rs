@@ -167,9 +167,10 @@ impl Tool {
         overrides: Vec<Requirement>,
         build_constraints: Vec<Requirement>,
         python: Option<PythonRequest>,
-        mut entrypoints: Vec<ToolEntrypoint>,
+        entrypoints: impl IntoIterator<Item = ToolEntrypoint>,
         options: ToolOptions,
     ) -> Self {
+        let mut entrypoints: Vec<_> = entrypoints.into_iter().collect();
         entrypoints.sort();
         Self {
             requirements,

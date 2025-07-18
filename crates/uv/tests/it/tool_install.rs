@@ -3633,10 +3633,9 @@ fn tool_install_mismatched_name() {
     "###);
 }
 
-/// Test installing a tool together with some additional entrypoints
-/// from other packages.
+/// Test installing a tool with `--with-executables-from`.
 #[test]
-fn tool_install_additional_entrypoints() {
+fn tool_install_with_executables_from() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -3645,9 +3644,7 @@ fn tool_install_additional_entrypoints() {
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--with-executables-from")
-        .arg("ansible-core")
-        .arg("--with-executables-from")
-        .arg("black")
+        .arg("ansible-core,black")
         .arg("ansible==9.3.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
@@ -3726,5 +3723,48 @@ fn tool_install_additional_entrypoints() {
 
     ----- stderr -----
     Uninstalled 14 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault, black, blackd
+    "###);
+}
+
+/// Test installing a tool with `--with-executables-from`, but the package has no entrypoints.
+#[test]
+fn tool_install_with_executables_from_no_entrypoints() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Try to install flask with executables from requests (which has no executables)
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-executables-from")
+        .arg("requests")
+        .arg("flask")
+        .env("UV_TOOL_DIR", tool_dir.as_os_str())
+        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env("PATH", bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    No executables are provided by package `requests`
+    hint: If you want to include `requests` as a dependency without installing its executables, use `--with requests` instead of `--with-executables-from requests`.
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + click==8.1.7
+     + flask==3.0.2
+     + idna==3.6
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + requests==2.31.0
+     + urllib3==2.2.1
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
     "###);
 }
