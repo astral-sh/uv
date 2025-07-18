@@ -365,16 +365,6 @@ impl PythonDownloadRequest {
         self.libc.as_ref()
     }
 
-    /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads<'a>(
-        &self,
-        download_list: &'a ManagedPythonDownloadList,
-    ) -> impl Iterator<Item = &'a ManagedPythonDownload> {
-        download_list
-            .iter_all()
-            .filter(move |download| self.satisfied_by_download(download))
-    }
-
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
         if let Some(os) = &self.os {
@@ -631,23 +621,27 @@ impl ManagedPythonDownloadList {
         self.downloads.iter()
     }
 
+    /// Iterate over all [`ManagedPythonDownload`]s that match the request.
+    pub fn iter_matching(
+        &self,
+        request: &PythonDownloadRequest,
+    ) -> impl Iterator<Item = &ManagedPythonDownload> {
+        self.iter_all()
+            .filter(move |download| request.satisfied_by_download(download))
+    }
+
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
     ///
     /// If there is no stable version matching the request, a compatible pre-release version will
     /// be searched for — even if a pre-release was not explicitly requested.
-    pub fn from_request(
-        &self,
-        request: &PythonDownloadRequest,
-    ) -> Result<&ManagedPythonDownload, Error> {
-        if let Some(download) = request.iter_downloads(self).next() {
+    pub fn find(&self, request: &PythonDownloadRequest) -> Result<&ManagedPythonDownload, Error> {
+        if let Some(download) = self.iter_matching(request).next() {
             return Ok(download);
         }
 
         if !request.allows_prereleases() {
-            if let Some(download) = request
-                .clone()
-                .with_prereleases(true)
-                .iter_downloads(self)
+            if let Some(download) = self
+                .iter_matching(&request.clone().with_prereleases(true))
                 .next()
             {
                 return Ok(download);
