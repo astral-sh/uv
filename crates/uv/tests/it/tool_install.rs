@@ -3747,7 +3747,7 @@ fn tool_install_with_executables_from_no_entrypoints() {
     exit_code: 0
     ----- stdout -----
     No executables are provided by package `requests`
-    hint: If you want to include `requests` as a dependency without installing its executables, use `--with requests` instead of `--with-executables-from requests`.
+    hint: Use `--with requests` to include `requests` as a dependency without installing its executables.
 
     ----- stderr -----
     Resolved [N] packages in [TIME]

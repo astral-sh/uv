@@ -236,11 +236,10 @@ pub(crate) fn finalize_tool_install(
             if package != name {
                 writeln!(
                     printer.stdout(),
-                    "No executables are provided by package `{}`\n{}{} If you want to include `{}` as a dependency without installing its executables, use `--with {}` instead of `--with-executables-from {}`.",
+                    "No executables are provided by package `{}`\n{}{} Use `--with {}` to include `{}` as a dependency without installing its executables.",
                     package.cyan(),
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.cyan(),
                     package.cyan(),
                     package.cyan(),
                 )?;
