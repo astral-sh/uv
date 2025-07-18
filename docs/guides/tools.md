@@ -218,7 +218,7 @@ Multiple related executables can be installed together in the same tool environm
 `ansible`, plus those ones provided by `ansible-core` and `ansible-lint`:
 
 ```console
-$ uv tool install --with-executables-from ansible-core --with-executables-from ansible-lint ansible
+$ uv tool install --with-executables-from ansible-core,ansible-lint ansible
 ```
 
 ## Upgrading tools

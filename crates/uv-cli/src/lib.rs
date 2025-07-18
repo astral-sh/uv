@@ -4417,9 +4417,7 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Install executables from an additional package.
-    ///
-    /// May be provided multiple times.
+    /// Install executables from the following packages.
     #[arg(long)]
     pub with_executables_from: Vec<PackageName>,
 
