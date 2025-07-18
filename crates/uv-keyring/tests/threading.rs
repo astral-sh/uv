@@ -1,3 +1,5 @@
+#![cfg(feature = "keyring-tests")]
+
 use common::{generate_random_string, init_logger};
 use uv_keyring::{Entry, Error};
 
@@ -9,50 +11,45 @@ async fn test_create_then_move() {
 
     let name = generate_random_string();
     let entry = Entry::new(&name, &name).unwrap();
-    let test = move || {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        runtime.block_on(async move {
-            let password = "test ascii password";
-            entry
-                .set_password(password)
-                .await
-                .expect("Can't set initial ascii password");
-            let stored_password = entry
-                .get_password()
-                .await
-                .expect("Can't get ascii password");
-            assert_eq!(
-                stored_password, password,
-                "Retrieved and set initial ascii passwords don't match"
-            );
-            let password = "このきれいな花は桜です";
-            entry
-                .set_password(password)
-                .await
-                .expect("Can't set non-ascii password");
-            let stored_password = entry
-                .get_password()
-                .await
-                .expect("Can't get non-ascii password");
-            assert_eq!(
-                stored_password, password,
-                "Retrieved and set non-ascii passwords don't match"
-            );
-            entry
-                .delete_credential()
-                .await
-                .expect("Can't delete non-ascii password");
-            assert!(
-                matches!(entry.get_password().await, Err(Error::NoEntry)),
-                "Able to read a deleted non-ascii password"
-            );
-        });
-    };
-    let handle = std::thread::spawn(test);
-    assert!(handle.join().is_ok(), "Couldn't execute on thread")
+
+    let handle = tokio::spawn(async move {
+        let password = "test ascii password";
+        entry
+            .set_password(password)
+            .await
+            .expect("Can't set initial ascii password");
+        let stored_password = entry
+            .get_password()
+            .await
+            .expect("Can't get ascii password");
+        assert_eq!(
+            stored_password, password,
+            "Retrieved and set initial ascii passwords don't match"
+        );
+        let password = "このきれいな花は桜です";
+        entry
+            .set_password(password)
+            .await
+            .expect("Can't set non-ascii password");
+        let stored_password = entry
+            .get_password()
+            .await
+            .expect("Can't get non-ascii password");
+        assert_eq!(
+            stored_password, password,
+            "Retrieved and set non-ascii passwords don't match"
+        );
+        entry
+            .delete_credential()
+            .await
+            .expect("Can't delete non-ascii password");
+        assert!(
+            matches!(entry.get_password().await, Err(Error::NoEntry)),
+            "Able to read a deleted non-ascii password"
+        );
+    });
+
+    handle.await.expect("Task failed");
 }
 
 #[tokio::test]
@@ -63,38 +60,34 @@ async fn test_simultaneous_create_then_move() {
     for i in 0..10 {
         let name = format!("{}-{}", generate_random_string(), i);
         let entry = Entry::new(&name, &name).expect("Can't create entry");
-        let test = move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            runtime.block_on(async move {
-                entry
-                    .set_password(&name)
-                    .await
-                    .expect("Can't set ascii password");
-                let stored_password = entry
-                    .get_password()
-                    .await
-                    .expect("Can't get ascii password");
-                assert_eq!(
-                    stored_password, name,
-                    "Retrieved and set ascii passwords don't match"
-                );
-                entry
-                    .delete_credential()
-                    .await
-                    .expect("Can't delete ascii password");
-                assert!(
-                    matches!(entry.get_password().await, Err(Error::NoEntry)),
-                    "Able to read a deleted ascii password"
-                );
-            });
-        };
-        handles.push(std::thread::spawn(test))
+
+        let handle = tokio::spawn(async move {
+            entry
+                .set_password(&name)
+                .await
+                .expect("Can't set ascii password");
+            let stored_password = entry
+                .get_password()
+                .await
+                .expect("Can't get ascii password");
+            assert_eq!(
+                stored_password, name,
+                "Retrieved and set ascii passwords don't match"
+            );
+            entry
+                .delete_credential()
+                .await
+                .expect("Can't delete ascii password");
+            assert!(
+                matches!(entry.get_password().await, Err(Error::NoEntry)),
+                "Able to read a deleted ascii password"
+            );
+        });
+        handles.push(handle);
     }
+
     for handle in handles {
-        handle.join().expect("Couldn't execute on thread")
+        handle.await.expect("Task failed");
     }
 }
 
@@ -110,32 +103,27 @@ async fn test_create_set_then_move() {
         .set_password(password)
         .await
         .expect("Can't set ascii password");
-    let test = move || {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        runtime.block_on(async move {
-            let stored_password = entry
-                .get_password()
-                .await
-                .expect("Can't get ascii password");
-            assert_eq!(
-                stored_password, password,
-                "Retrieved and set ascii passwords don't match"
-            );
-            entry
-                .delete_credential()
-                .await
-                .expect("Can't delete ascii password");
-            assert!(
-                matches!(entry.get_password().await, Err(Error::NoEntry)),
-                "Able to read a deleted ascii password"
-            );
-        });
-    };
-    let handle = std::thread::spawn(test);
-    assert!(handle.join().is_ok(), "Couldn't execute on thread")
+
+    let handle = tokio::spawn(async move {
+        let stored_password = entry
+            .get_password()
+            .await
+            .expect("Can't get ascii password");
+        assert_eq!(
+            stored_password, password,
+            "Retrieved and set ascii passwords don't match"
+        );
+        entry
+            .delete_credential()
+            .await
+            .expect("Can't delete ascii password");
+        assert!(
+            matches!(entry.get_password().await, Err(Error::NoEntry)),
+            "Able to read a deleted ascii password"
+        );
+    });
+
+    handle.await.expect("Task failed");
 }
 
 #[tokio::test]
@@ -151,34 +139,30 @@ async fn test_simultaneous_create_set_then_move() {
             .set_password(&name)
             .await
             .expect("Can't set ascii password");
-        let test = move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            runtime.block_on(async move {
-                let stored_password = entry
-                    .get_password()
-                    .await
-                    .expect("Can't get ascii password");
-                assert_eq!(
-                    stored_password, name,
-                    "Retrieved and set ascii passwords don't match"
-                );
-                entry
-                    .delete_credential()
-                    .await
-                    .expect("Can't delete ascii password");
-                assert!(
-                    matches!(entry.get_password().await, Err(Error::NoEntry)),
-                    "Able to read a deleted ascii password"
-                );
-            });
-        };
-        handles.push(std::thread::spawn(test))
+
+        let handle = tokio::spawn(async move {
+            let stored_password = entry
+                .get_password()
+                .await
+                .expect("Can't get ascii password");
+            assert_eq!(
+                stored_password, name,
+                "Retrieved and set ascii passwords don't match"
+            );
+            entry
+                .delete_credential()
+                .await
+                .expect("Can't delete ascii password");
+            assert!(
+                matches!(entry.get_password().await, Err(Error::NoEntry)),
+                "Able to read a deleted ascii password"
+            );
+        });
+        handles.push(handle);
     }
+
     for handle in handles {
-        handle.join().expect("Couldn't execute on thread")
+        handle.await.expect("Task failed");
     }
 }
 
@@ -189,39 +173,34 @@ async fn test_simultaneous_independent_create_set() {
     let mut handles = vec![];
     for i in 0..10 {
         let name = format!("thread_entry{i}");
-        let test = move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            runtime.block_on(async move {
-                let entry = Entry::new(&name, &name).expect("Can't create entry");
-                entry
-                    .set_password(&name)
-                    .await
-                    .expect("Can't set ascii password");
-                let stored_password = entry
-                    .get_password()
-                    .await
-                    .expect("Can't get ascii password");
-                assert_eq!(
-                    stored_password, name,
-                    "Retrieved and set ascii passwords don't match"
-                );
-                entry
-                    .delete_credential()
-                    .await
-                    .expect("Can't delete ascii password");
-                assert!(
-                    matches!(entry.get_password().await, Err(Error::NoEntry)),
-                    "Able to read a deleted ascii password"
-                );
-            });
-        };
-        handles.push(std::thread::spawn(test))
+        let handle = tokio::spawn(async move {
+            let entry = Entry::new(&name, &name).expect("Can't create entry");
+            entry
+                .set_password(&name)
+                .await
+                .expect("Can't set ascii password");
+            let stored_password = entry
+                .get_password()
+                .await
+                .expect("Can't get ascii password");
+            assert_eq!(
+                stored_password, name,
+                "Retrieved and set ascii passwords don't match"
+            );
+            entry
+                .delete_credential()
+                .await
+                .expect("Can't delete ascii password");
+            assert!(
+                matches!(entry.get_password().await, Err(Error::NoEntry)),
+                "Able to read a deleted ascii password"
+            );
+        });
+        handles.push(handle);
     }
+
     for handle in handles {
-        handle.join().expect("Couldn't execute on thread")
+        handle.await.expect("Task failed");
     }
 }
 
@@ -265,42 +244,37 @@ async fn test_simultaneous_multiple_create_delete_single_thread() {
     let mut handles = vec![];
     for t in 0..10 {
         let name = generate_random_string();
-        let test = move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            runtime.block_on(async move {
-                let name = format!("{name}-{t}");
-                let entry = Entry::new(&name, &name).expect("Can't create entry");
-                let repeats = 10;
-                for _i in 0..repeats {
-                    entry
-                        .set_password(&name)
-                        .await
-                        .expect("Can't set ascii password");
-                    let stored_password = entry
-                        .get_password()
-                        .await
-                        .expect("Can't get ascii password");
-                    assert_eq!(
-                        stored_password, name,
-                        "Retrieved and set ascii passwords don't match"
-                    );
-                    entry
-                        .delete_credential()
-                        .await
-                        .expect("Can't delete ascii password");
-                    assert!(
-                        matches!(entry.get_password().await, Err(Error::NoEntry)),
-                        "Able to read a deleted ascii password"
-                    );
-                }
-            });
-        };
-        handles.push(std::thread::spawn(test))
+        let handle = tokio::spawn(async move {
+            let name = format!("{name}-{t}");
+            let entry = Entry::new(&name, &name).expect("Can't create entry");
+            let repeats = 10;
+            for _i in 0..repeats {
+                entry
+                    .set_password(&name)
+                    .await
+                    .expect("Can't set ascii password");
+                let stored_password = entry
+                    .get_password()
+                    .await
+                    .expect("Can't get ascii password");
+                assert_eq!(
+                    stored_password, name,
+                    "Retrieved and set ascii passwords don't match"
+                );
+                entry
+                    .delete_credential()
+                    .await
+                    .expect("Can't delete ascii password");
+                assert!(
+                    matches!(entry.get_password().await, Err(Error::NoEntry)),
+                    "Able to read a deleted ascii password"
+                );
+            }
+        });
+        handles.push(handle);
     }
+
     for handle in handles {
-        handle.join().expect("Couldn't execute on thread")
+        handle.await.expect("Task failed");
     }
 }

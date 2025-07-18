@@ -11,8 +11,9 @@ workspace = true
 
 [features]
 default = ["apple-native", "secret-service", "windows-native"]
+keyring-tests = []
 
-## Use the built-in Keychain Services on macOS and iOS
+## Use the built-in Keychain Services on macOS
 apple-native = ["dep:security-framework"]
 ## Use the secret-service on *nix.
 secret-service = ["dep:secret-service"]
@@ -21,10 +22,9 @@ windows-native = ["dep:windows-sys", "dep:byteorder"]
 
 [dependencies]
 async-trait = { workspace = true }
-log = "0.4"
 tokio = { workspace = true }
 
-[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+[target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "3", optional = true }
 
 [target.'cfg(any(target_os = "linux",target_os = "freebsd", target_os = "openbsd"))'.dependencies]
@@ -35,26 +35,11 @@ byteorder = { version = "1", optional = true }
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"], optional = true }
 zeroize = "1.8.1"
 
-[[example]]
-name = "iostest"
-path = "examples/ios.rs"
-crate-type = ["staticlib"]
-
-[[example]]
-name = "keyring-cli"
-path = "examples/cli.rs"
-
 [dev-dependencies]
-base64 = { workspace = true }
-clap = { workspace = true }
 doc-comment = "0.3"
 env_logger = "0.11.5"
 fastrand = "2"
-rpassword = "7"
-rprompt = "2"
-tokio = { workspace = true }
-whoami = "1.5"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
-targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "aarch64-apple-ios", "x86_64-pc-windows-msvc"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]

@@ -18,7 +18,7 @@ use crate::Credential;
 /// which may be platform-specific.
 ///
 /// This enum is non-exhaustive so that more values can be added to it
-/// without a SemVer break. Clients should always have default handling
+/// without a `SemVer` break. Clients should always have default handling
 /// for variants they don't understand.
 #[non_exhaustive]
 pub enum Error {
@@ -64,27 +64,27 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Error::PlatformFailure(err) => write!(f, "Platform secure storage failure: {err}"),
-            Error::NoStorageAccess(err) => {
+            Self::PlatformFailure(err) => write!(f, "Platform secure storage failure: {err}"),
+            Self::NoStorageAccess(err) => {
                 write!(f, "Couldn't access platform secure storage: {err}")
             }
-            Error::NoEntry => write!(f, "No matching entry found in secure storage"),
-            Error::BadEncoding(_) => write!(f, "Data is not UTF-8 encoded"),
-            Error::TooLong(name, len) => write!(
+            Self::NoEntry => write!(f, "No matching entry found in secure storage"),
+            Self::BadEncoding(_) => write!(f, "Data is not UTF-8 encoded"),
+            Self::TooLong(name, len) => write!(
                 f,
                 "Attribute '{name}' is longer than platform limit of {len} chars"
             ),
-            Error::Invalid(attr, reason) => {
+            Self::Invalid(attr, reason) => {
                 write!(f, "Attribute {attr} is invalid: {reason}")
             }
-            Error::Ambiguous(items) => {
+            Self::Ambiguous(items) => {
                 write!(
                     f,
                     "Entry is matched by {} credentials: {items:?}",
                     items.len(),
                 )
             }
-            Error::NoDefaultCredentialBuilder => {
+            Self::NoDefaultCredentialBuilder => {
                 write!(
                     f,
                     "No default credential builder is available; set one before creating entries"
@@ -97,8 +97,8 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::PlatformFailure(err) => Some(err.as_ref()),
-            Error::NoStorageAccess(err) => Some(err.as_ref()),
+            Self::PlatformFailure(err) => Some(err.as_ref()),
+            Self::NoStorageAccess(err) => Some(err.as_ref()),
             _ => None,
         }
     }
