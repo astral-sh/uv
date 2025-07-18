@@ -267,12 +267,15 @@ impl ManagedPythonInstallations {
         let iter = ManagedPythonInstallations::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
-                installation.key.os == os
-                    && (arch.supports(installation.key.arch)
+                // Emscripten works on every non-windows platform
+                installation.key.os == Os(target_lexicon::OperatingSystem::Emscripten)
+                    && os != Os(target_lexicon::OperatingSystem::Windows)
+                    || installation.key.os == os
+                        && (arch.supports(installation.key.arch)
                         // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
                         // implement this yet. See https://github.com/astral-sh/uv/pull/9788
                         || arch.family == installation.key.arch.family)
-                    && installation.key.libc == libc
+                        && installation.key.libc == libc
             });
 
         Ok(iter)
@@ -544,6 +547,11 @@ impl ManagedPythonInstallation {
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
+        if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Emscripten)) {
+            // Emscripten's stdlib is a zip file so we can't put an
+            // EXTERNALLY-MANAGED inside.
+            return Ok(());
+        }
         // Construct the path to the `stdlib` directory.
         let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
             self.python_dir().join("Lib")
@@ -569,6 +577,11 @@ impl ManagedPythonInstallation {
     /// Ensure that the `sysconfig` data is patched to match the installation path.
     pub fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
         if cfg!(unix) {
+            if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Emscripten)) {
+                // Emscripten's stdlib is a zip file so we can't update the
+                // sysconfig directly
+                return Ok(());
+            }
             if *self.implementation() == ImplementationName::CPython {
                 sysconfig::update_sysconfig(
                     self.path(),
