@@ -1682,6 +1682,8 @@ fn version_get_fallback_missing_strict() -> Result<()> {
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
+
+    hint: If you meant to view uv's version, use `uv self version` instead
     ");
 
     Ok(())
@@ -1701,6 +1703,27 @@ fn version_get_fallback_missing_strict_preview() -> Result<()> {
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
+
+    hint: If you meant to view uv's version, use `uv self version` instead
+    ");
+
+    Ok(())
+}
+
+// Should error with hint if pyproject.toml is missing in normal mode
+#[test]
+fn version_get_missing_with_hint() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.version(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `pyproject.toml` found in current directory or any parent directory
+
+    hint: If you meant to view uv's version, use `uv self version` instead
     ");
 
     Ok(())

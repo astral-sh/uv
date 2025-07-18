@@ -21,7 +21,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
-    DiscoveryOptions, WorkspaceCache,
+    DiscoveryOptions, WorkspaceCache, WorkspaceError,
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 use uv_workspace::{VirtualProject, Workspace};
@@ -338,7 +338,17 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Resul
                 &DiscoveryOptions::default(),
                 &WorkspaceCache::default(),
             )
-            .await?
+            .await
+            .map_err(|err| {
+                if matches!(err, WorkspaceError::MissingPyprojectToml) {
+                    anyhow!(
+                        "{}\n\nhint: If you meant to view uv's version, use `uv self version` instead",
+                        err
+                    )
+                } else {
+                    err.into()
+                }
+            })?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
@@ -348,7 +358,17 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Resul
             &DiscoveryOptions::default(),
             &WorkspaceCache::default(),
         )
-        .await?
+        .await
+        .map_err(|err| {
+            if matches!(err, WorkspaceError::MissingPyprojectToml) {
+                anyhow!(
+                    "{}\n\nhint: If you meant to view uv's version, use `uv self version` instead",
+                    err
+                )
+            } else {
+                err.into()
+            }
+        })?
     };
     Ok(project)
 }
