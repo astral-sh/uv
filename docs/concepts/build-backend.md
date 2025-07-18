@@ -66,8 +66,7 @@ an `__init__.py`. By default, a single root module is expected at `src/<package_
 
 For example, the structure for a project named `foo` would be:
 
-```text
-pyproject.toml
+``` title="pyproject.toml"
 src
 └── foo
     └── __init__.py
@@ -81,8 +80,7 @@ The `src/` directory is the default directory for module discovery.
 These defaults can be changed with the `module-name` and `module-root` settings. For example, to use
 a `FOO` module in the root directory, as in the project structure:
 
-```text
-pyproject.toml
+``` title="pyproject.toml"
 FOO
 └── __init__.py
 ```
@@ -103,8 +101,7 @@ namespace.
 Namespace package modules are identified by a `.` in the `module-name`. For example, to package the
 module `bar` in the shared namespace `foo`, the project structure would be:
 
-```text
-pyproject.toml
+``` title="pyproject.toml"
 src
 └── foo
     └── bar
@@ -125,8 +122,7 @@ module-name = "foo.bar"
 It's also possible to have a complex namespace package with more than one root module, e.g., with
 the project structure:
 
-```text
-pyproject.toml
+``` title="pyproject.toml"
 src
 ├── foo
 │   └── __init__.py
@@ -158,8 +154,7 @@ namespace = true
 The `namespace` option can also be used with `module-name` to explicitly declare the root, e.g., for
 the project structure:
 
-```text
-pyproject.toml
+``` title="pyproject.toml"
 src
 └── foo
     ├── bar
@@ -183,8 +178,7 @@ suffix on the package or module name, e.g., `foo-stubs`. The module name for typ
 end in `-stubs`, so uv will not normalize the `-` to an underscore. Additionally, uv will search for
 a `__init__.pyi` file. For example, the project structure would be:
 
-```text
-pyproject.toml
+``` title="pyproject.toml"
 src
 └── foo-stubs
     └── __init__.pyi
