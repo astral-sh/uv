@@ -111,7 +111,7 @@ pub(crate) async fn list(
 
         let downloads = download_request
             .as_ref()
-            .map(|a| PythonDownloadRequest::iter_downloads(a, &download_list))
+            .map(|request| PythonDownloadRequest::iter_downloads(request, &download_list))
             .into_iter()
             .flatten()
             // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
