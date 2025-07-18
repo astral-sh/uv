@@ -62,7 +62,7 @@ impl<'a> InstallRequest<'a> {
             .fill()?;
 
         // Find a matching download
-        let download = match download_list.from_request(&download_request) {
+        let download = match download_list.find(&download_request) {
             Ok(download) => download,
             Err(downloads::Error::NoDownloadFound(request))
                 if request.libc().is_some_and(Libc::is_musl)

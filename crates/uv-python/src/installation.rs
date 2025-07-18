@@ -148,7 +148,7 @@ impl PythonInstallation {
         let download = download_request
             .clone()
             .fill()
-            .map(|request| download_list.from_request(&request));
+            .map(|request| download_list.find(&request));
 
         // Regardless of whether downloads are enabled, we want to determine if the download is
         // available to power error messages. However, if downloads aren't enabled, we don't want to
@@ -407,7 +407,7 @@ impl PythonInstallation {
         let download_request = download_request.with_prereleases(false);
 
         let has_stable_download = {
-            let mut downloads = download_request.iter_downloads(download_list);
+            let mut downloads = download_list.iter_matching(&download_request);
 
             downloads.any(|download| {
                 let download_version = download.key().version().into_version();
