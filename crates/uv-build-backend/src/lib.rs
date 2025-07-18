@@ -355,12 +355,15 @@ mod tests {
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
+    use regex::Regex;
     use sha2::Digest;
     use std::io::{BufReader, Read};
     use std::iter;
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_fs::{copy_dir_all, relative_to};
+
+    const MOCK_UV_VERSION: &str = "1.0.0+test";
 
     fn format_err(err: &Error) -> String {
         let context = iter::successors(std::error::Error::source(&err), |&err| err.source())
@@ -388,19 +391,19 @@ mod tests {
     fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
-        let (_name, direct_wheel_list_files) = list_wheel(source_root, "1.0.0+test")?;
-        let direct_wheel_filename = build_wheel(source_root, dist, None, "1.0.0+test")?;
+        let (_name, direct_wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION)?;
+        let direct_wheel_filename = build_wheel(source_root, dist, None, MOCK_UV_VERSION)?;
         let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
         let direct_wheel_contents = wheel_contents(&direct_wheel_path);
         let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
         fs_err::remove_file(&direct_wheel_path)?;
 
         // Build a source distribution.
-        let (_name, source_dist_list_files) = list_source_dist(source_root, "1.0.0+test")?;
+        let (_name, source_dist_list_files) = list_source_dist(source_root, MOCK_UV_VERSION)?;
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
-        let (_name, wheel_list_files) = list_wheel(source_root, "1.0.0+test")?;
-        let source_dist_filename = build_source_dist(source_root, dist, "1.0.0+test")?;
+        let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION)?;
+        let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION)?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
@@ -414,7 +417,7 @@ mod tests {
             source_dist_filename.name.as_dist_info_name(),
             source_dist_filename.version
         ));
-        let wheel_filename = build_wheel(&sdist_top_level_directory, dist, None, "1.0.0+test")?;
+        let wheel_filename = build_wheel(&sdist_top_level_directory, dist, None, MOCK_UV_VERSION)?;
         let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
 
         // Check that direct and indirect wheels are identical.
@@ -515,14 +518,14 @@ mod tests {
         ] {
             copy_dir_all(built_by_uv.join(dir), src.path().join(dir)).unwrap();
         }
-        for dir in [
+        for filename in [
             "pyproject.toml",
             "README.md",
             "uv.lock",
             "LICENSE-APACHE",
             "LICENSE-MIT",
         ] {
-            fs_err::copy(built_by_uv.join(dir), src.path().join(dir)).unwrap();
+            fs_err::copy(built_by_uv.join(filename), src.path().join(filename)).unwrap();
         }
 
         // Clear executable bit on Unix to build the same archive between Unix and Windows.
@@ -538,6 +541,14 @@ mod tests {
             perms.set_mode(perms.mode() & !0o111);
             fs_err::set_permissions(&path, perms).unwrap();
         }
+
+        // Redact the uv_build version to keep the hash stable across releases
+        let pyproject_toml = fs_err::read_to_string(src.path().join("pyproject.toml")).unwrap();
+        let current_requires =
+            Regex::new(r#"requires = \["uv_build>=[0-9.]+,<[0-9.]+"\]"#).unwrap();
+        let mocked_requires = r#"requires = ["uv_build>=1,<2"]"#;
+        let pyproject_toml = current_requires.replace(pyproject_toml.as_str(), mocked_requires);
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml.as_bytes()).unwrap();
 
         // Add some files to be excluded
         let module_root = src.path().join("src").join("built_by_uv");
@@ -557,7 +568,7 @@ mod tests {
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"9a7f7181c5e69ac14e411a2500fed153a1e6ea41cd5da6f24f226c4cddacf6b7"
+            @"871d1f859140721b67cbeaca074e7a2740c88c38028d0509eba87d1285f1da9e"
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @r"
