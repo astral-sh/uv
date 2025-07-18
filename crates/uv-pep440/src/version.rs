@@ -292,7 +292,7 @@ impl Version {
     ///
     /// When the iterator yields no elements.
     #[inline]
-    pub fn new<I, R>(release_numbers: I) -> Self
+    pub fn new<I, R>(release_segments: I) -> Self
     where
         I: IntoIterator<Item = R>,
         R: Borrow<u64>,
@@ -302,7 +302,7 @@ impl Version {
                 small: VersionSmall::new(),
             },
         }
-        .with_release(release_numbers)
+        .with_release(release_segments)
     }
 
     /// Whether this is an alpha/beta/rc or dev version
