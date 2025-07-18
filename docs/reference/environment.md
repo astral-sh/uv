@@ -537,10 +537,11 @@ Equivalent to the
 
 Managed Python installations information is hardcoded in the `uv` binary.
 
-This variable can be set to a URL pointing to JSON to use as a list for Python installations.
-This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
+This variable can be set to a local path or file://, http://, or / https:// URL pointing to
+a JSON list of Python installations to override the hardcoded list.
 
-Note that currently, only local paths are supported.
+This allows customizing the URLs for downloads or using slightly older or newer versions
+of Python than the ones hardcoded into this build of `uv`.
 
 ### `UV_PYTHON_GRAALPY_BUILD`
 <small class="added-in">added in `0.8.14`</small>
