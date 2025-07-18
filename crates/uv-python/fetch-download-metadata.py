@@ -255,8 +255,7 @@ class CPythonFinder(Finder):
                 # Sort the assets to ensure deterministic results
                 row["assets"].sort(key=lambda asset: asset["browser_download_url"])
                 for asset in row["assets"]:
-                    # On more recent versions we don't have files with hashes anymore,
-                    # but on older versions GitHub didn't backfill the digest.
+                    # On older versions, GitHub didn't backfill the digest.
                     if digest := asset["digest"]:
                         sha256 = digest.removeprefix("sha256:")
                     else:
