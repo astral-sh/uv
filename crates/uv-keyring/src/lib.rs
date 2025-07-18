@@ -12,7 +12,7 @@ Linux,
 FreeBSD,
 OpenBSD,
 Windows,
-macOS, and iOS.
+and macOS.
 
 ## Design
 
@@ -33,13 +33,13 @@ as well as which values are allowed for _target_ by that store.
 The abstract behavior of entries and credential stores are captured
 by two types (with associated traits):
 
-- a _credential builder_, represented by the [CredentialBuilder] type
-  (and [CredentialBuilderApi](credential::CredentialBuilderApi) trait).  Credential
+- a _credential builder_, represented by the [`CredentialBuilder`] type
+  (and [`CredentialBuilderApi`](credential::CredentialBuilderApi) trait).  Credential
   builders are given the identifying information (and target, if any)
   provided for an entry and map
   it to the identifying information for a platform-specific credential.
-- a _credential_, represented by the [Credential] type
-  (and [CredentialApi](credential::CredentialApi) trait).  The platform-specific credential
+- a _credential_, represented by the [`Credential`] type
+  (and [`CredentialApi`](credential::CredentialApi) trait).  The platform-specific credential
   identified by the builder for an entry is what provides the secure storage
   for that entry's password/secret.
 
@@ -47,7 +47,7 @@ by two types (with associated traits):
 
 This crate runs on several different platforms, and on each one
 it provides (by default) an implementation of a default credential store used
-on that platform (see [default_credential_builder]).
+on that platform (see [`default_credential_builder`]).
 These implementations work by mapping the data used to identify an entry
 to data used to identify platform-specific storage objects.
 For example, on macOS, the service and user provided for an entry
@@ -60,9 +60,9 @@ the one used by this crate to identify entries.
 These keystores expose their specific model in the
 concrete credential objects they use to implement the Credential trait.
 In order to allow clients to access this richer model, the Credential trait
-has an [as_any](credential::CredentialApi::as_any) method that returns a
+has an [`as_any`](credential::CredentialApi::as_any) method that returns a
 reference to the underlying
-concrete object typed as [Any](std::any::Any), so that it can be downgraded to
+concrete object typed as [`Any`](std::any::Any), so that it can be downgraded to
 its concrete type.
 
 ### Credential store features
@@ -76,23 +76,15 @@ is built with a macOS target.
 The available credential store features, listed here, are all included in the
 default feature set:
 
-- `apple-native`: Provides access to the Keychain credential store on macOS and iOS.
+- `apple-native`: Provides access to the Keychain credential store on macOS.
 
 - `windows-native`: Provides access to the Windows Credential Store on Windows.
 
-- `secret-service`: Provides access to the DBus-based
-  [Secret Service](https://specifications.freedesktop.org/secret-service/latest/)
-  storage on Linux, FreeBSD, and OpenBSD.  This keystore provides
-  support for encrypting secrets when they are transferred across the bus,
-  specify the `encrypted` feature if you want to use this support.
-  By default, this keystore requires that the DBus library be
-  installed on the user's machine,
-  but you can avoid this requirement by specifying the `vendored` feature
-  (which will cause the build to include a static build of the dbus library).
+- `secret-service`: Provides access to Secret Service.
 
 If you suppress the default feature set when building this crate, and you
 don't separately specify one of the included keystore features for your platform,
-then no keystore will be built in, and calls to [Entry::new] and [Entry::new_with_target]
+then no keystore will be built in, and calls to [`Entry::new`] and [`Entry::new_with_target`]
 will fail unless the client brings their own keystore (see next section).
 
 ## Client-provided Credential Stores
@@ -102,13 +94,13 @@ are free to provide their own keystores and use those.  There are
 two mechanisms provided for this:
 
 - Clients can give their desired credential builder to the crate
-  for use by the [Entry::new] and [Entry::new_with_target] calls.
-  This is done by making a call to [set_default_credential_builder].
+  for use by the [`Entry::new`] and [`Entry::new_with_target`] calls.
+  This is done by making a call to [`set_default_credential_builder`].
   The major advantage of this approach is that client code remains
   independent of the credential builder being used.
 
 - Clients can construct their concrete credentials directly and
-  then turn them into entries by using the [Entry::new_with_credential]
+  then turn them into entries by using the [`Entry::new_with_credential`]
   call. The major advantage of this approach is that credentials
   can be identified however clients want, rather than being restricted
   to the simple model used by this crate.
@@ -119,7 +111,7 @@ In addition to the platform-specific credential stores, this crate
 always provides a mock credential store that clients can use to
 test their code in a platform independent way.  The mock credential
 store allows for pre-setting errors as well as password values to
-be returned from [Entry] method calls. If you want to use the mock
+be returned from [`Entry`] method calls. If you want to use the mock
 credential store as your default in tests, make this call:
 ```
 uv_keyring::set_default_credential_builder(uv_keyring::mock::default_credential_builder())
@@ -145,11 +137,11 @@ view the storage module documentation for your desired platform.)
 This module expects passwords to be UTF-8 encoded strings,
 so if a third party has stored an arbitrary byte string
 then retrieving that as a password will return a
-[BadEncoding](Error::BadEncoding) error.
+[`BadEncoding`](Error::BadEncoding) error.
 The returned error will have the raw bytes attached,
 so you can access them, but you can also just fetch
-them directly using [get_secret](Entry::get_secret) rather than
-[get_password](Entry::get_password).
+them directly using [`get_secret`](Entry::get_secret) rather than
+[`get_password`](Entry::get_password).
 
 While this crate's code is thread-safe, the underlying credential
 stores may not handle access from different threads reliably.
@@ -161,7 +153,6 @@ Service, accesses from multiple threads (and even the same thread very quickly)
 are not recommended, as they may cause the RPC mechanism to fail.
  */
 
-use log::debug;
 use std::collections::HashMap;
 
 pub use credential::{Credential, CredentialBuilder};
@@ -212,7 +203,7 @@ static DEFAULT_BUILDER: std::sync::RwLock<EntryBuilder> =
 /// This is really meant for use by clients who bring their own credential
 /// store and want to use it everywhere.  If you are using multiple credential
 /// stores and want precise control over which credential is in which store,
-/// then use [new_with_credential](Entry::new_with_credential).
+/// then use [`new_with_credential`](Entry::new_with_credential).
 ///
 /// This will block waiting for all other threads currently creating entries
 /// to complete what they are doing. It's really meant to be called
@@ -233,8 +224,6 @@ pub fn default_credential_builder() -> Box<CredentialBuilder> {
     return secret_service::default_credential_builder();
     #[cfg(all(target_os = "macos", feature = "apple-native"))]
     return macos::default_credential_builder();
-    #[cfg(all(target_os = "ios", feature = "apple-native"))]
-    return ios::default_credential_builder();
     #[cfg(all(target_os = "windows", feature = "windows-native"))]
     return windows::default_credential_builder();
     #[cfg(not(any(
@@ -242,7 +231,6 @@ pub fn default_credential_builder() -> Box<CredentialBuilder> {
         all(target_os = "freebsd", feature = "secret-service"),
         all(target_os = "openbsd", feature = "secret-service"),
         all(target_os = "macos", feature = "apple-native"),
-        all(target_os = "ios", feature = "apple-native"),
         all(target_os = "windows", feature = "windows-native"),
     )))]
     credential::nop_credential_builder()
@@ -271,86 +259,77 @@ impl Entry {
     ///
     /// # Errors
     ///
-    /// This function will return an [Error] if the `service` or `user` values are invalid.
+    /// This function will return an [`Error`] if the `service` or `user` values are invalid.
     /// The specific reasons for invalidity are platform-dependent, but include length constraints.
     ///
     /// # Panics
     ///
-    /// In the very unlikely event that the internal credential builder's `RwLock`` is poisoned, this function
+    /// In the very unlikely event that the internal credential builder's `RwLock` is poisoned, this function
     /// will panic. If you encounter this, and especially if you can reproduce it, please report a bug with the
     /// details (and preferably a backtrace) so the developers can investigate.
-    pub fn new(service: &str, user: &str) -> Result<Entry> {
-        debug!("creating entry with service {service}, user {user}, and no target");
+    pub fn new(service: &str, user: &str) -> Result<Self> {
         let entry = build_default_credential(None, service, user)?;
-        debug!("created entry {:?}", entry.inner);
         Ok(entry)
     }
 
     /// Create an entry for the given target, service, and user.
     ///
     /// The default credential builder is used.
-    pub fn new_with_target(target: &str, service: &str, user: &str) -> Result<Entry> {
-        debug!("creating entry with service {service}, user {user}, and target {target}");
+    pub fn new_with_target(target: &str, service: &str, user: &str) -> Result<Self> {
         let entry = build_default_credential(Some(target), service, user)?;
-        debug!("created entry {:?}", entry.inner);
         Ok(entry)
     }
 
     /// Create an entry from a credential that may be in any credential store.
-    pub fn new_with_credential(credential: Box<Credential>) -> Entry {
-        debug!("create entry from {credential:?}");
-        Entry { inner: credential }
+    pub fn new_with_credential(credential: Box<Credential>) -> Self {
+        Self { inner: credential }
     }
 
     /// Set the password for this entry.
     ///
-    /// Can return an [Ambiguous](Error::Ambiguous) error
+    /// Can return an [`Ambiguous`](Error::Ambiguous) error
     /// if there is more than one platform credential
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
     pub async fn set_password(&self, password: &str) -> Result<()> {
-        debug!("set password for entry {:?}", self.inner);
         self.inner.set_password(password).await
     }
 
     /// Set the secret for this entry.
     ///
-    /// Can return an [Ambiguous](Error::Ambiguous) error
+    /// Can return an [`Ambiguous`](Error::Ambiguous) error
     /// if there is more than one platform credential
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
     pub async fn set_secret(&self, secret: &[u8]) -> Result<()> {
-        debug!("set secret for entry {:?}", self.inner);
         self.inner.set_secret(secret).await
     }
 
     /// Retrieve the password saved for this entry.
     ///
-    /// Returns a [NoEntry](Error::NoEntry) error if there isn't one.
+    /// Returns a [`NoEntry`](Error::NoEntry) error if there isn't one.
     ///
-    /// Can return an [Ambiguous](Error::Ambiguous) error
+    /// Can return an [`Ambiguous`](Error::Ambiguous) error
     /// if there is more than one platform credential
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
     pub async fn get_password(&self) -> Result<String> {
-        debug!("get password from entry {:?}", self.inner);
         self.inner.get_password().await
     }
 
     /// Retrieve the secret saved for this entry.
     ///
-    /// Returns a [NoEntry](Error::NoEntry) error if there isn't one.
+    /// Returns a [`NoEntry`](Error::NoEntry) error if there isn't one.
     ///
-    /// Can return an [Ambiguous](Error::Ambiguous) error
+    /// Can return an [`Ambiguous`](Error::Ambiguous) error
     /// if there is more than one platform credential
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
     pub async fn get_secret(&self) -> Result<Vec<u8>> {
-        debug!("get secret from entry {:?}", self.inner);
         self.inner.get_secret().await
     }
 
@@ -360,15 +339,14 @@ impl Entry {
     /// that can be set to string values. See the documentation for each credential store
     /// for a list of which attribute names are supported by that store.
     ///
-    /// Returns a [NoEntry](Error::NoEntry) error if there isn't a credential for this entry.
+    /// Returns a [`NoEntry`](Error::NoEntry) error if there isn't a credential for this entry.
     ///
-    /// Can return an [Ambiguous](Error::Ambiguous) error
+    /// Can return an [`Ambiguous`](Error::Ambiguous) error
     /// if there is more than one platform credential
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
     pub async fn get_attributes(&self) -> Result<HashMap<String, String>> {
-        debug!("get attributes from entry {:?}", self.inner);
         self.inner.get_attributes().await
     }
 
@@ -380,26 +358,22 @@ impl Entry {
     /// cross-platform use, each credential store ignores (without error) any specified attributes
     /// that aren't supported by that store.
     ///
-    /// Returns a [NoEntry](Error::NoEntry) error if there isn't a credential for this entry.
+    /// Returns a [`NoEntry`](Error::NoEntry) error if there isn't a credential for this entry.
     ///
-    /// Can return an [Ambiguous](Error::Ambiguous) error
+    /// Can return an [`Ambiguous`](Error::Ambiguous) error
     /// if there is more than one platform credential
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
     pub async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
-        debug!(
-            "update attributes for entry {:?} from map {attributes:?}",
-            self.inner
-        );
         self.inner.update_attributes(attributes).await
     }
 
     /// Delete the underlying credential for this entry.
     ///
-    /// Returns a [NoEntry](Error::NoEntry) error if there isn't one.
+    /// Returns a [`NoEntry`](Error::NoEntry) error if there isn't one.
     ///
-    /// Can return an [Ambiguous](Error::Ambiguous) error
+    /// Can return an [`Ambiguous`](Error::Ambiguous) error
     /// if there is more than one platform credential
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
@@ -409,7 +383,6 @@ impl Entry {
     /// structure, which is controlled by Rust.  It only
     /// affects the underlying credential store.
     pub async fn delete_credential(&self) -> Result<()> {
-        debug!("delete entry {:?}", self.inner);
         self.inner.delete_credential().await
     }
 
@@ -430,9 +403,6 @@ doc_comment::doctest!("../README.md", readme);
 /// There are no actual tests in this module.
 /// Instead, it contains generics that each keystore invokes in their tests,
 /// passing their store-specific parameters for the generic ones.
-//
-// Since iOS doesn't use any of these generics, we allow dead code.
-#[allow(dead_code)]
 mod tests {
     use super::{Entry, Error, Result, credential::CredentialApi};
     use std::collections::HashMap;
@@ -444,25 +414,6 @@ mod tests {
         T: 'static + CredentialApi + Send + Sync,
     {
         match f(None, service, user) {
-            Ok(credential) => Entry::new_with_credential(Box::new(credential)),
-            Err(err) => {
-                panic!("Couldn't create entry (service: {service}, user: {user}): {err:?}")
-            }
-        }
-    }
-
-    /// Create a platform-specific credential given the constructor, service, user, and attributes
-    pub(crate) fn entry_from_constructor_and_attributes<F, T>(
-        f: F,
-        service: &str,
-        user: &str,
-        attrs: &HashMap<&str, &str>,
-    ) -> Entry
-    where
-        F: FnOnce(Option<&str>, &str, &str, &HashMap<&str, &str>) -> Result<T>,
-        T: 'static + CredentialApi + Send + Sync,
-    {
-        match f(None, service, user, attrs) {
             Ok(credential) => Entry::new_with_credential(Box::new(credential)),
             Err(err) => {
                 panic!("Couldn't create entry (service: {service}, user: {user}): {err:?}")
@@ -482,7 +433,7 @@ mod tests {
         assert_eq!(
             in_pass, out_pass,
             "Passwords don't match for {case}: set='{in_pass}', get='{out_pass}'",
-        )
+        );
     }
 
     /// A basic round-trip unit test given an entry and a password.
@@ -555,7 +506,7 @@ mod tests {
         assert!(
             matches!(entry.get_password().await, Err(Error::NoEntry)),
             "Missing entry has password"
-        )
+        );
     }
 
     pub(crate) async fn test_empty_password<F>(f: F)

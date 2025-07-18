@@ -3,10 +3,10 @@
 # Platform-independent secure storage model
 
 This module defines a plug and play model for platform-specific credential stores.
-The model comprises two traits: [CredentialBuilderApi] for the underlying store
-and [CredentialApi] for the entries in the store.  These traits must be implemented
-in a thread-safe way, a requirement captured in the [CredentialBuilder] and
-[Credential] types that wrap them.
+The model comprises two traits: [`CredentialBuilderApi`] for the underlying store
+and [`CredentialApi`] for the entries in the store.  These traits must be implemented
+in a thread-safe way, a requirement captured in the [`CredentialBuilder`] and
+[`Credential`] types that wrap them.
  */
 use std::any::Any;
 use std::collections::HashMap;
@@ -117,7 +117,7 @@ impl std::fmt::Debug for Credential {
 }
 
 /// A descriptor for the lifetime of stored credentials, returned from
-/// a credential store's [persistence](CredentialBuilderApi::persistence) call.
+/// a credential store's [`persistence`](CredentialBuilderApi::persistence) call.
 #[non_exhaustive]
 pub enum CredentialPersistence {
     /// Credentials vanish when the entry vanishes (stored in the entry)
@@ -161,7 +161,7 @@ impl std::fmt::Debug for CredentialBuilder {
     }
 }
 
-/// A thread-safe implementation of the [CredentialBuilder API](CredentialBuilderApi).
+/// A thread-safe implementation of the [`CredentialBuilder` API](CredentialBuilderApi).
 pub type CredentialBuilder = dyn CredentialBuilderApi + Send + Sync;
 
 struct NopCredentialBuilder;
