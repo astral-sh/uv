@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
-    ExtrasSpecification, Overrides, Reinstall, Upgrade,
+    ExtrasSpecification, Overrides, PackageConfigSettings, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -445,6 +445,7 @@ pub(crate) async fn install(
     compile: bool,
     index_urls: &IndexLocations,
     config_settings: &ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -470,6 +471,7 @@ pub(crate) async fn install(
             hasher,
             index_urls,
             config_settings,
+            config_settings_package,
             cache,
             venv,
             tags,

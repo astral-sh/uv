@@ -10,8 +10,9 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ConfigSettingEntry, ConfigSettingPackageEntry, ExportFormat, IndexStrategy,
+    KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend, TargetTriple, TrustedHost,
+    TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
@@ -4693,6 +4694,14 @@ pub struct ToolUpgradeArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -5484,6 +5493,14 @@ pub struct InstallerArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -5670,6 +5687,14 @@ pub struct ResolverArgs {
         help_heading = "Build options"
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
     /// Disable isolation when building source distributions.
     ///
@@ -5859,6 +5884,14 @@ pub struct ResolverInstallerArgs {
         help_heading = "Build options"
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
     /// Disable isolation when building source distributions.
     ///

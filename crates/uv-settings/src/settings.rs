@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion,
-    TargetTriple, TrustedHost, TrustedPublishing,
+    ConfigSettings, IndexStrategy, KeyringProviderType, PackageConfigSettings,
+    PackageNameSpecifier, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
     Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
@@ -361,6 +361,7 @@ pub struct ResolverOptions {
     pub fork_strategy: Option<ForkStrategy>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
+    pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
     pub upgrade: Option<bool>,
@@ -587,6 +588,18 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
+    /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+    /// specified as `KEY=VALUE` pairs.
+    ///
+    /// Accepts a map from package names to string key-value pairs.
+    #[option(
+        default = "{}",
+        value_type = "dict",
+        example = r#"
+            config-settings-package = { numpy = { editable_mode = "compat" } }
+        "#
+    )]
+    pub config_settings_package: Option<PackageConfigSettings>,
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -1333,6 +1346,16 @@ pub struct PipOptions {
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
+    /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+    /// specified as `KEY=VALUE` pairs.
+    #[option(
+        default = "{}",
+        value_type = "dict",
+        example = r#"
+            config-settings-package = { numpy = { editable_mode = "compat" } }
+        "#
+    )]
+    pub config_settings_package: Option<PackageConfigSettings>,
     /// The minimum Python version that should be supported by the resolved requirements (e.g.,
     /// `3.8` or `3.8.17`).
     ///
@@ -1651,6 +1674,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
             upgrade: value.upgrade,
@@ -1714,6 +1738,7 @@ pub struct ToolOptions {
     pub fork_strategy: Option<ForkStrategy>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
+    pub config_settings_package: Option<PackageConfigSettings>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
     pub exclude_newer: Option<ExcludeNewer>,
@@ -1741,6 +1766,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             exclude_newer: value.exclude_newer,
@@ -1770,6 +1796,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             exclude_newer: value.exclude_newer,
@@ -1822,6 +1849,7 @@ pub struct OptionsWire {
     fork_strategy: Option<ForkStrategy>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
+    config_settings_package: Option<PackageConfigSettings>,
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
     exclude_newer: Option<ExcludeNewer>,
@@ -1911,6 +1939,7 @@ impl From<OptionsWire> for Options {
             fork_strategy,
             dependency_metadata,
             config_settings,
+            config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
             exclude_newer,
@@ -1977,6 +2006,7 @@ impl From<OptionsWire> for Options {
                 fork_strategy,
                 dependency_metadata,
                 config_settings,
+                config_settings_package,
                 no_build_isolation,
                 no_build_isolation_package,
                 exclude_newer,

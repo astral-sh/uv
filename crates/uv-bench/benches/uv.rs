@@ -86,8 +86,8 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, PreviewMode,
-        SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy,
+        PackageConfigSettings, PreviewMode, SourceStrategy,
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
@@ -144,6 +144,7 @@ mod resolver {
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
+        let config_settings_package = PackageConfigSettings::default();
         let exclude_newer = Some(
             jiff::civil::date(2024, 9, 1)
                 .to_zoned(jiff::tz::TimeZone::UTC)
@@ -184,6 +185,7 @@ mod resolver {
             state,
             IndexStrategy::default(),
             &config_settings,
+            &config_settings_package,
             build_isolation,
             LinkMode::default(),
             &build_options,

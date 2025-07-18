@@ -29,7 +29,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, PathSourceUrl,
@@ -373,6 +373,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(metadata)
     }
 
+    /// Determine the [`ConfigSettings`] for the given package name.
+    fn config_settings_for(&self, name: Option<&PackageName>) -> Cow<'_, ConfigSettings> {
+        if let Some(name) = name {
+            if let Some(package_settings) = self.build_context.config_settings_package().get(name) {
+                Cow::Owned(
+                    package_settings
+                        .clone()
+                        .merge(self.build_context.config_settings().clone()),
+                )
+            } else {
+                Cow::Borrowed(self.build_context.config_settings())
+            }
+        } else {
+            Cow::Borrowed(self.build_context.config_settings())
+        }
+    }
+
     /// Build a source distribution from a remote URL.
     async fn url<'data>(
         &self,
@@ -407,11 +424,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let source_dist_entry = cache_shard.entry(SOURCE);
 
         // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
+        let config_settings = self.config_settings_for(source.name());
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(config_settings))
+            cache_shard.shard(cache_digest(&&config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -580,11 +597,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
+        let config_settings = self.config_settings_for(source.name());
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(config_settings))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         // Otherwise, we either need to build the metadata.
@@ -779,11 +796,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let source_entry = cache_shard.entry(SOURCE);
 
         // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
+        let config_settings = self.config_settings_for(source.name());
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(config_settings))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -941,11 +958,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
+        let config_settings = self.config_settings_for(source.name());
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(config_settings))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         // Otherwise, we need to build a wheel.
@@ -1083,11 +1100,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
 
         // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
+        let config_settings = self.config_settings_for(source.name());
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(config_settings))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -1271,11 +1288,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
+        let config_settings = self.config_settings_for(source.name());
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(config_settings))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         // Otherwise, we need to build a wheel.
@@ -1476,11 +1493,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
         // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
+        let config_settings = self.config_settings_for(source.name());
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(config_settings))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -1779,11 +1796,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.build_context.config_settings();
+        let config_settings = self.config_settings_for(source.name());
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(config_settings))
+            cache_shard.shard(cache_digest(&config_settings))
         };
 
         // Otherwise, we need to build a wheel.

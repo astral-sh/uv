@@ -11126,3 +11126,146 @@ fn sync_python_preference() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sync_config_settings_package() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-07-25T00:00:00Z");
+
+    // Create a child project that uses `setuptools`.
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    dependency
+        .child("dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install the `dependency` without `editable_mode=compat`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency", editable = true }
+        "#,
+    )?;
+
+    // Lock the project
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+    ");
+
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___dependency_0_1_0_finder.py");
+    assert!(finder.exists());
+
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // Install the `dependency` with `editable_mode=compat` scoped to the package.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency", editable = true }
+
+        [tool.uv.config-settings-package]
+        dependency = { editable_mode = "compat" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+    ");
+
+    // When installed with `editable_mode=compat`, the `finder.py` file should _not_ be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___dependency_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // Install the `dependency` with `editable_mode=compat` scoped to another package.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency", editable = true }
+
+        [tool.uv.config-settings-package]
+        setuptools = { editable_mode = "compat" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+    ");
+
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___dependency_0_1_0_finder.py");
+    assert!(finder.exists());
+
+    Ok(())
+}

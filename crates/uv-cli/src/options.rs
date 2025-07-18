@@ -1,7 +1,7 @@
 use anstream::eprintln;
 
 use uv_cache::Refresh;
-use uv_configuration::ConfigSettings;
+use uv_configuration::{ConfigSettings, PackageConfigSettings};
 use uv_resolver::PrereleaseMode;
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;
@@ -62,6 +62,7 @@ impl From<ResolverArgs> for PipOptions {
             pre,
             fork_strategy,
             config_setting,
+            config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
             build_isolation,
@@ -84,6 +85,11 @@ impl From<ResolverArgs> for PipOptions {
             },
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            config_settings_package: config_settings_package.map(|config_settings| {
+                config_settings
+                    .into_iter()
+                    .collect::<PackageConfigSettings>()
+            }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
@@ -104,6 +110,7 @@ impl From<InstallerArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             config_setting,
+            config_settings_package,
             no_build_isolation,
             build_isolation,
             exclude_newer,
@@ -120,6 +127,11 @@ impl From<InstallerArgs> for PipOptions {
             keyring_provider,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            config_settings_package: config_settings_package.map(|config_settings| {
+                config_settings
+                    .into_iter()
+                    .collect::<PackageConfigSettings>()
+            }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             exclude_newer,
             link_mode,
@@ -147,6 +159,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             pre,
             fork_strategy,
             config_setting,
+            config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
             build_isolation,
@@ -173,6 +186,11 @@ impl From<ResolverInstallerArgs> for PipOptions {
             fork_strategy,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+            config_settings_package: config_settings_package.map(|config_settings| {
+                config_settings
+                    .into_iter()
+                    .collect::<PackageConfigSettings>()
+            }),
             no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
             no_build_isolation_package: Some(no_build_isolation_package),
             exclude_newer,
@@ -260,6 +278,7 @@ pub fn resolver_options(
         pre,
         fork_strategy,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
         build_isolation,
@@ -321,6 +340,11 @@ pub fn resolver_options(
         dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        config_settings_package: config_settings_package.map(|config_settings| {
+            config_settings
+                .into_iter()
+                .collect::<PackageConfigSettings>()
+        }),
         no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
         no_build_isolation_package: Some(no_build_isolation_package),
         exclude_newer,
@@ -353,6 +377,7 @@ pub fn resolver_installer_options(
         pre,
         fork_strategy,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
         build_isolation,
@@ -428,6 +453,11 @@ pub fn resolver_installer_options(
         dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
+        config_settings_package: config_settings_package.map(|config_settings| {
+            config_settings
+                .into_iter()
+                .collect::<PackageConfigSettings>()
+        }),
         no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
         no_build_isolation_package: if no_build_isolation_package.is_empty() {
             None

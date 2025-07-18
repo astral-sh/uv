@@ -1006,6 +1006,33 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
+### [`config-settings-package`](#config-settings-package) {: #config-settings-package }
+
+Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+specified as `KEY=VALUE` pairs.
+
+Accepts a map from package names to string key-value pairs.
+
+**Default value**: `{}`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+=== "uv.toml"
+
+    ```toml
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+
+---
+
 ### [`dependency-metadata`](#dependency-metadata) {: #dependency-metadata }
 
 Pre-defined static metadata for dependencies of the project (direct or transitive). When
@@ -2240,6 +2267,33 @@ specified as `KEY=VALUE` pairs.
     ```toml
     [pip]
     config-settings = { editable_mode = "compat" }
+    ```
+
+---
+
+#### [`config-settings-package`](#pip_config-settings-package) {: #pip_config-settings-package }
+<span id="config-settings-package"></span>
+
+Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+specified as `KEY=VALUE` pairs.
+
+**Default value**: `{}`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
     ```
 
 ---
