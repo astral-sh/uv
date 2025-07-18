@@ -142,6 +142,19 @@ async fn do_uninstall(
         return Ok(ExitStatus::Failure);
     }
 
+    // Remove registry entries first, so we don't have dangling entries between the file removal
+    // and the registry removal.
+    let mut errors = vec![];
+    #[cfg(windows)]
+    {
+        uv_python::windows_registry::remove_registry_entry(
+            &matching_installations,
+            all,
+            &mut errors,
+        );
+        uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
+    }
+
     // Find and remove all relevant Python executables
     let mut uninstalled_executables: FxHashMap<PythonInstallationKey, FxHashSet<PathBuf>> =
         FxHashMap::default();
@@ -201,23 +214,12 @@ async fn do_uninstall(
     }
 
     let mut uninstalled = IndexSet::<PythonInstallationKey>::default();
-    let mut errors = vec![];
     while let Some((key, result)) = tasks.next().await {
         if let Err(err) = result {
             errors.push((key.clone(), anyhow::Error::new(err)));
         } else {
             uninstalled.insert(key.clone());
         }
-    }
-
-    #[cfg(windows)]
-    {
-        uv_python::windows_registry::remove_registry_entry(
-            &matching_installations,
-            all,
-            &mut errors,
-        );
-        uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
     }
 
     // Read all existing managed installations and find the highest installed patch

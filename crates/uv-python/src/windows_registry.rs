@@ -268,6 +268,9 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     // Separate assignment since `keys()` creates a borrow.
     let subkeys = match key.keys() {
         Ok(subkeys) => subkeys,
+        Err(err) if err.code() == ERROR_NOT_FOUND => {
+            return;
+        }
         Err(err) => {
             // TODO(konsti): We don't have an installation key here.
             warn_user_once!("Failed to list subkeys of HKCU:\\{astral_key}: {err}");
@@ -281,6 +284,9 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
         let python_entry = format!("{astral_key}\\{subkey}");
         debug!("Removing orphan registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
+            if err.code() == ERROR_NOT_FOUND {
+                continue;
+            }
             // TODO(konsti): We don't have an installation key here.
             warn_user_once!("Failed to remove orphan registry key HKCU:\\{python_entry}: {err}");
         }
