@@ -182,7 +182,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             python_requirement.target(),
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
-            options.exclude_newer,
+            options.exclude_newer.clone(),
             build_context.build_options(),
             build_context.capabilities(),
         );
@@ -366,7 +366,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_indexes,
                                     state.env,
                                     self.current_environment.clone(),
-                                    self.options.exclude_newer,
+                                    Some(&self.options.exclude_newer),
                                     &visited,
                                 ));
                             }
@@ -2520,7 +2520,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
-        exclude_newer: Option<ExcludeNewer>,
+        exclude_newer: Option<&ExcludeNewer>,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2585,7 +2585,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 };
                                 if prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_none_or(|upload_time| {
-                                        upload_time >= exclude_newer.timestamp_millis()
+                                        upload_time
+                                            >= exclude_newer.timestamp_millis(name).unwrap_or(0)
                                     })
                                 }) {
                                     continue;

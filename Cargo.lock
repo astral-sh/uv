@@ -5852,6 +5852,7 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "fs-err 3.1.1",
+ "rustc-hash",
  "schemars",
  "serde",
  "textwrap",

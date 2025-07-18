@@ -60,7 +60,8 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
+    ExcludeNewer, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse, PrereleaseMode,
+    ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -278,11 +279,23 @@ impl Lock {
         }
 
         let packages = packages.into_values().collect();
+        let (exclude_newer, exclude_newer_package) = {
+            let exclude_newer = &resolution.options.exclude_newer;
+            let global_exclude_newer = exclude_newer.global;
+            let package_exclude_newer = if exclude_newer.package.is_empty() {
+                None
+            } else {
+                Some(exclude_newer.package.clone().into_inner())
+            };
+            (global_exclude_newer, package_exclude_newer)
+        };
+
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
             fork_strategy: resolution.options.fork_strategy,
-            exclude_newer: resolution.options.exclude_newer,
+            exclude_newer,
+            exclude_newer_package,
         };
         let lock = Self::new(
             VERSION,
@@ -643,8 +656,8 @@ impl Lock {
     }
 
     /// Returns the exclude newer setting used to generate this lock.
-    pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
-        self.options.exclude_newer
+    pub fn exclude_newer(&self) -> ExcludeNewer {
+        self.options.exclude_newer()
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
@@ -890,8 +903,21 @@ impl Lock {
                     value(self.options.fork_strategy.to_string()),
                 );
             }
-            if let Some(exclude_newer) = self.options.exclude_newer {
-                options_table.insert("exclude-newer", value(exclude_newer.to_string()));
+            let exclude_newer = &self.options.exclude_newer();
+            if !exclude_newer.is_empty() {
+                // Always serialize global exclude-newer as a string
+                if let Some(global) = exclude_newer.global {
+                    options_table.insert("exclude-newer", value(global.to_string()));
+                }
+
+                // Serialize package-specific exclusions as a separate field
+                if !exclude_newer.package.is_empty() {
+                    let mut package_table = toml_edit::Table::new();
+                    for (name, timestamp) in &exclude_newer.package {
+                        package_table.insert(name.as_ref(), value(timestamp.to_string()));
+                    }
+                    options_table.insert("exclude-newer-package", Item::Table(package_table));
+                }
             }
 
             if !options_table.is_empty() {
@@ -1838,8 +1864,25 @@ struct ResolverOptions {
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
-    /// The [`ExcludeNewer`] used to generate this lock.
-    exclude_newer: Option<ExcludeNewer>,
+    /// The global [`ExcludeNewer`] timestamp.
+    exclude_newer: Option<ExcludeNewerTimestamp>,
+    /// Package-specific [`ExcludeNewer`] timestamps.
+    exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+}
+
+impl ResolverOptions {
+    /// Get the combined exclude-newer configuration.
+    fn exclude_newer(&self) -> ExcludeNewer {
+        ExcludeNewer::from_args(
+            self.exclude_newer,
+            self.exclude_newer_package
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        )
+    }
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
