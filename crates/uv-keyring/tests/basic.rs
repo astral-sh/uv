@@ -1,3 +1,5 @@
+#![cfg(feature = "keyring-tests")]
+
 use common::{generate_random_bytes_of_len, generate_random_string, init_logger};
 use uv_keyring::{Entry, Error};
 
