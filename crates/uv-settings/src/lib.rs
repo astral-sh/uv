@@ -120,10 +120,9 @@ impl FilesystemOptions {
                     .ok()
                     .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
                 {
-                    if pyproject.tool.is_some_and(|tool| tool.uv.is_some()) {
-                        warn_user!(
-                            "Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file."
-                        );
+                    if let Some(options) = pyproject.tool.as_ref().and_then(|tool| tool.uv.as_ref())
+                    {
+                        warn_uv_toml_masked_fields(options);
                     }
                 }
 
@@ -267,6 +266,253 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         ));
     }
     Ok(())
+}
+
+/// Validate that an [`Options`] contains no fields that `uv.toml` would mask
+///
+/// This is essentially the inverse of [`validated_uv_toml`][].
+fn warn_uv_toml_masked_fields(options: &Options) {
+    let Options {
+        globals:
+            GlobalOptions {
+                required_version,
+                native_tls,
+                offline,
+                no_cache,
+                cache_dir,
+                preview,
+                python_preference,
+                python_downloads,
+                concurrent_downloads,
+                concurrent_builds,
+                concurrent_installs,
+                allow_insecure_host,
+            },
+        top_level:
+            ResolverInstallerOptions {
+                index,
+                index_url,
+                extra_index_url,
+                no_index,
+                find_links,
+                index_strategy,
+                keyring_provider,
+                resolution,
+                prerelease,
+                fork_strategy,
+                dependency_metadata,
+                config_settings,
+                no_build_isolation,
+                no_build_isolation_package,
+                exclude_newer,
+                link_mode,
+                compile_bytecode,
+                no_sources,
+                upgrade,
+                upgrade_package,
+                reinstall,
+                reinstall_package,
+                no_build,
+                no_build_package,
+                no_binary,
+                no_binary_package,
+            },
+        install_mirrors:
+            PythonInstallMirrors {
+                python_install_mirror,
+                pypy_install_mirror,
+                python_downloads_json_url,
+            },
+        publish:
+            PublishOptions {
+                publish_url,
+                trusted_publishing,
+                check_url,
+            },
+        add: AddOptions { add_bounds },
+        pip,
+        cache_keys,
+        override_dependencies,
+        constraint_dependencies,
+        build_constraint_dependencies,
+        environments,
+        required_environments,
+        conflicts: _,
+        workspace: _,
+        sources: _,
+        dev_dependencies: _,
+        default_groups: _,
+        dependency_groups: _,
+        managed: _,
+        package: _,
+        build_backend: _,
+    } = options;
+
+    let mut masked_fields = vec![];
+
+    if required_version.is_some() {
+        masked_fields.push("required-version");
+    }
+    if native_tls.is_some() {
+        masked_fields.push("native-tls");
+    }
+    if offline.is_some() {
+        masked_fields.push("offline");
+    }
+    if no_cache.is_some() {
+        masked_fields.push("no-cache");
+    }
+    if cache_dir.is_some() {
+        masked_fields.push("cache-dir");
+    }
+    if preview.is_some() {
+        masked_fields.push("preview");
+    }
+    if python_preference.is_some() {
+        masked_fields.push("python-preference");
+    }
+    if python_downloads.is_some() {
+        masked_fields.push("python-downloads");
+    }
+    if concurrent_downloads.is_some() {
+        masked_fields.push("concurrent-downloads");
+    }
+    if concurrent_builds.is_some() {
+        masked_fields.push("concurrent-builds");
+    }
+    if concurrent_installs.is_some() {
+        masked_fields.push("concurrent-installs");
+    }
+    if allow_insecure_host.is_some() {
+        masked_fields.push("allow-insecure-host");
+    }
+    if index.is_some() {
+        masked_fields.push("index");
+    }
+    if index_url.is_some() {
+        masked_fields.push("index-url");
+    }
+    if extra_index_url.is_some() {
+        masked_fields.push("extra-index-url");
+    }
+    if no_index.is_some() {
+        masked_fields.push("no-index");
+    }
+    if find_links.is_some() {
+        masked_fields.push("find-links");
+    }
+    if index_strategy.is_some() {
+        masked_fields.push("index-strategy");
+    }
+    if keyring_provider.is_some() {
+        masked_fields.push("keyring-provider");
+    }
+    if resolution.is_some() {
+        masked_fields.push("resolution");
+    }
+    if prerelease.is_some() {
+        masked_fields.push("prerelease");
+    }
+    if fork_strategy.is_some() {
+        masked_fields.push("fork-strategy");
+    }
+    if dependency_metadata.is_some() {
+        masked_fields.push("dependency-metadata");
+    }
+    if config_settings.is_some() {
+        masked_fields.push("config-settings");
+    }
+    if no_build_isolation.is_some() {
+        masked_fields.push("no-build-isolation");
+    }
+    if no_build_isolation_package.is_some() {
+        masked_fields.push("no-build-isolation-package");
+    }
+    if exclude_newer.is_some() {
+        masked_fields.push("exclude-newer");
+    }
+    if link_mode.is_some() {
+        masked_fields.push("link-mode");
+    }
+    if compile_bytecode.is_some() {
+        masked_fields.push("compile-bytecode");
+    }
+    if no_sources.is_some() {
+        masked_fields.push("no-sources");
+    }
+    if upgrade.is_some() {
+        masked_fields.push("upgrade");
+    }
+    if upgrade_package.is_some() {
+        masked_fields.push("upgrade-package");
+    }
+    if reinstall.is_some() {
+        masked_fields.push("reinstall");
+    }
+    if reinstall_package.is_some() {
+        masked_fields.push("reinstall-package");
+    }
+    if no_build.is_some() {
+        masked_fields.push("no-build");
+    }
+    if no_build_package.is_some() {
+        masked_fields.push("no-build-package");
+    }
+    if no_binary.is_some() {
+        masked_fields.push("no-binary");
+    }
+    if no_binary_package.is_some() {
+        masked_fields.push("no-binary-package");
+    }
+    if python_install_mirror.is_some() {
+        masked_fields.push("python-install-mirror");
+    }
+    if pypy_install_mirror.is_some() {
+        masked_fields.push("pypy-install-mirror");
+    }
+    if python_downloads_json_url.is_some() {
+        masked_fields.push("python-downloads-json-url");
+    }
+    if publish_url.is_some() {
+        masked_fields.push("publish-url");
+    }
+    if trusted_publishing.is_some() {
+        masked_fields.push("trusted-publishing");
+    }
+    if check_url.is_some() {
+        masked_fields.push("check-url");
+    }
+    if add_bounds.is_some() {
+        masked_fields.push("add-bounds");
+    }
+    if pip.is_some() {
+        masked_fields.push("pip");
+    }
+    if cache_keys.is_some() {
+        masked_fields.push("cache_keys");
+    }
+    if override_dependencies.is_some() {
+        masked_fields.push("override-dependencies");
+    }
+    if constraint_dependencies.is_some() {
+        masked_fields.push("constraint-dependencies");
+    }
+    if build_constraint_dependencies.is_some() {
+        masked_fields.push("build-constraint-dependencies");
+    }
+    if environments.is_some() {
+        masked_fields.push("environments");
+    }
+    if required_environments.is_some() {
+        masked_fields.push("required-environments");
+    }
+    if !masked_fields.is_empty() {
+        let field_listing = masked_fields.join("\n- ");
+        warn_user!(
+            "Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:\n- {}",
+            field_listing,
+        );
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
