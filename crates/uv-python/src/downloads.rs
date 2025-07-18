@@ -98,8 +98,10 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error("Failed to determine the libc used on the current platform")]
     LibcDetection(#[from] LibcDetectionError),
-    #[error("The JSON of the python downloads is invalid: {0}")]
+    #[error("Unable to parse the JSON Python download list at {0}")]
     InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
+    #[error("This version of uv is too old to support the JSON Python download list at {0}")]
+    UnsupportedPythonDownloadsJSON(String),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -701,16 +703,30 @@ impl ManagedPythonDownloadList {
             }
         };
         let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_slice(&buf)
-            .map_err(|e| {
-                Error::InvalidPythonDownloadsJSON(
-                    match json_source {
+            .map_err(
+                // As an explicit compatibility mechanism, if there's a top-level "version" key, it
+                // means it's a newer format than we know how to deal with.  Before reporting a
+                // parse error about the format of JsonPythonDownload, check for that key. We can do
+                // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
+                // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
+                // have the same parsing effect.)
+                #[allow(clippy::zero_sized_map_values)]
+                |e| {
+                    let source = match json_source {
                         Source::BuiltIn => "EMBEDDED IN THE BINARY".to_owned(),
                         Source::Path(path) => path.to_string_lossy().to_string(),
                         Source::Http(url) => url.to_string(),
-                    },
-                    e,
-                )
-            })?;
+                    };
+                    if let Ok(keys) =
+                        serde_json::from_slice::<HashMap<String, serde::de::IgnoredAny>>(&buf)
+                        && keys.contains_key("version")
+                    {
+                        Error::UnsupportedPythonDownloadsJSON(source)
+                    } else {
+                        Error::InvalidPythonDownloadsJSON(source, e)
+                    }
+                },
+            )?;
 
         let result = parse_json_downloads(json_downloads);
         Ok(Self { downloads: result })
