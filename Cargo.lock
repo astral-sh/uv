@@ -5942,6 +5942,7 @@ dependencies = [
  "clap",
  "either",
  "fs-err 3.1.1",
+ "nix 0.30.1",
  "schemars",
  "serde",
  "thiserror 2.0.12",
