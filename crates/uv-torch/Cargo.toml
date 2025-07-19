@@ -19,6 +19,7 @@ uv-static = { workspace = true }
 clap = { workspace = true, optional = true }
 either = { workspace = true }
 fs-err = { workspace = true }
+nix = { workspace = true, features = ["ioctl"] }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
