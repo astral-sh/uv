@@ -1,7 +1,8 @@
 use std::fmt::{Display, Formatter};
 
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, GroupName};
 
+use crate::marker::tree::MarkerValueDependencyGroup;
 use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
@@ -128,7 +129,7 @@ impl Display for CanonicalMarkerValueString {
     }
 }
 
-/// The [`ExtraName`] value used in `extra` markers.
+/// The [`ExtraName`] value used in `extra` and `extras` markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerValueExtra {
     /// A valid [`ExtraName`].
@@ -156,6 +157,38 @@ impl Display for CanonicalMarkerValueExtra {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Extra(extra) => extra.fmt(f),
+        }
+    }
+}
+
+/// The [`GroupName`] value used in `dependency_group` markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum CanonicalMarkerValueDependencyGroup {
+    /// A valid [`GroupName`].
+    Group(GroupName),
+}
+
+impl CanonicalMarkerValueDependencyGroup {
+    /// Returns the [`GroupName`] value.
+    pub fn group(&self) -> &GroupName {
+        match self {
+            Self::Group(group) => group,
+        }
+    }
+}
+
+impl From<CanonicalMarkerValueDependencyGroup> for MarkerValueDependencyGroup {
+    fn from(value: CanonicalMarkerValueDependencyGroup) -> Self {
+        match value {
+            CanonicalMarkerValueDependencyGroup::Group(group) => Self::Group(group),
+        }
+    }
+}
+
+impl Display for CanonicalMarkerValueDependencyGroup {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Group(group) => group.fmt(f),
         }
     }
 }
