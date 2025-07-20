@@ -367,9 +367,9 @@ in the deployed environment without a dependency on the originating source code.
 
 ## Conflicting dependencies
 
-uv requires resolves all project dependencies together, including optional dependencies ("extras")
-and dependency groups. If dependencies declared in one section are not compatible with those in
-another section, uv will fail to resolve the requirements of the project with an error.
+uv resolves all project dependencies together, including optional dependencies ("extras") and
+dependency groups. If dependencies declared in one section are not compatible with those in another
+section, uv will fail to resolve the requirements of the project with an error.
 
 uv supports explicit declaration of conflicting dependency groups. For example, to declare that the
 `optional-dependency` groups `extra1` and `extra2` are incompatible:
