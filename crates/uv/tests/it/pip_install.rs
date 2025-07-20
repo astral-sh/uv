@@ -10731,6 +10731,64 @@ fn change_layout_custom_directory() -> Result<()> {
 }
 
 #[test]
+fn pep_751_reject_additional_requirements() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("pylock.toml").touch()?;
+    context.temp_dir.child("requirements.txt").touch()?;
+
+    // Disallow `pylock.toml` and `requirements.txt` in a single command.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml")
+        .arg("-r")
+        .arg("requirements.txt"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify additional requirements with a `pylock.toml` file
+    "
+    );
+
+    // Disallow multiple `pylock.toml` files in a single command.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml")
+        .arg("-r")
+        .arg("pylock.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify additional requirements with a `pylock.toml` file
+    "
+    );
+
+    // Disallow `pylock.toml` and a constraint in a single command.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml")
+        .arg("-c")
+        .arg("requirements.txt"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify constraints with a `pylock.toml` file
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn pep_751_install_registry_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
 

@@ -254,22 +254,19 @@ impl RequirementsSpecification {
             .iter()
             .any(|source| matches!(source, RequirementsSource::PylockToml(..)))
         {
-            if requirements
-                .iter()
-                .any(|source| !matches!(source, RequirementsSource::PylockToml(..)))
-            {
+            if requirements.len() > 1 {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify additional requirements alongside a `pylock.toml` file",
+                    "Cannot specify additional requirements with a `pylock.toml` file",
                 ));
             }
             if !constraints.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify additional requirements with a `pylock.toml` file"
+                    "Cannot specify constraints with a `pylock.toml` file"
                 ));
             }
             if !overrides.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify constraints with a `pylock.toml` file"
+                    "Cannot specify overrides with a `pylock.toml` file"
                 ));
             }
             if !groups.is_empty() {
