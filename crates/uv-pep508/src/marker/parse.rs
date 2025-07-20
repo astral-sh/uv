@@ -1,10 +1,11 @@
 use arcstr::ArcStr;
 use std::str::FromStr;
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
 use crate::marker::MarkerValueExtra;
+use crate::marker::tree::{ContainerOperator, MarkerValueDependencyGroup};
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
     MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -208,6 +209,8 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
         MarkerValue::MarkerEnvString(key) => {
             let value = match r_value {
                 MarkerValue::Extra
+                | MarkerValue::Extras
+                | MarkerValue::DependencyGroups
                 | MarkerValue::MarkerEnvVersion(_)
                 | MarkerValue::MarkerEnvString(_) => {
                     reporter.report(
@@ -242,7 +245,9 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
             let value = match r_value {
                 MarkerValue::MarkerEnvVersion(_)
                 | MarkerValue::MarkerEnvString(_)
-                | MarkerValue::Extra => {
+                | MarkerValue::Extra
+                | MarkerValue::Extras
+                | MarkerValue::DependencyGroups => {
                     reporter.report(
                         MarkerWarningKind::ExtraInvalidComparison,
                         "Comparing extra with something other than a quoted string is wrong,
@@ -257,7 +262,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
 
             parse_extra_expr(operator, &value, reporter)
         }
-        // This is either MarkerEnvVersion, MarkerEnvString or Extra inverted
+        // This is either MarkerEnvVersion, MarkerEnvString, Extra (inverted), or Extras
         MarkerValue::QuotedString(l_string) => {
             match r_value {
                 // The only sound choice for this is `<quoted PEP 440 version> <version op>` <version key>
@@ -273,6 +278,12 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 }),
                 // `'...' == extra`
                 MarkerValue::Extra => parse_extra_expr(operator, &l_string, reporter),
+                // `'...' in extras`
+                MarkerValue::Extras => parse_extras_expr(operator, &l_string, reporter),
+                // `'...' in dependency_groups`
+                MarkerValue::DependencyGroups => {
+                    parse_dependency_groups_expr(operator, &l_string, reporter)
+                }
                 // `'...' == '...'`, doesn't make much sense
                 MarkerValue::QuotedString(_) => {
                     // Not even pypa/packaging 22.0 supports this
@@ -288,6 +299,26 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     None
                 }
             }
+        }
+        MarkerValue::Extras => {
+            reporter.report(
+                MarkerWarningKind::Pep440Error,
+                format!(
+                    "The `extras` marker must be used as '...' in extras' or '... not in extras',
+                    found `{l_value} {operator} {r_value}`, will be ignored"
+                ),
+            );
+            return Ok(None);
+        }
+        MarkerValue::DependencyGroups => {
+            reporter.report(
+                MarkerWarningKind::Pep440Error,
+                format!(
+                    "The `dependency_groups` marker must be used as '...' in dependency_groups' or '... not in dependency_groups',
+                    found `{l_value} {operator} {r_value}`, will be ignored"
+                ),
+            );
+            return Ok(None);
         }
     };
 
@@ -491,8 +522,69 @@ fn parse_extra_expr(
 
     reporter.report(
         MarkerWarningKind::ExtraInvalidComparison,
-        "Comparing extra with something other than a quoted string is wrong,
-        will be ignored"
+        "Comparing `extra` with any operator other than `==` or `!=` is wrong and will be ignored"
+            .to_string(),
+    );
+
+    None
+}
+
+/// Creates an instance of [`MarkerExpression::Extras`] with the given values, falling back to
+/// [`MarkerExpression::Arbitrary`] on failure.
+fn parse_extras_expr(
+    operator: MarkerOperator,
+    value: &str,
+    reporter: &mut impl Reporter,
+) -> Option<MarkerExpression> {
+    let name = match ExtraName::from_str(value) {
+        Ok(name) => MarkerValueExtra::Extra(name),
+        Err(err) => {
+            reporter.report(
+                MarkerWarningKind::ExtrasInvalidComparison,
+                format!("Expected extra name (found `{value}`): {err}"),
+            );
+            MarkerValueExtra::Arbitrary(value.to_string())
+        }
+    };
+
+    if let Some(operator) = ContainerOperator::from_marker_operator(operator) {
+        return Some(MarkerExpression::Extras { operator, name });
+    }
+
+    reporter.report(
+        MarkerWarningKind::ExtrasInvalidComparison,
+        "Comparing `extras` with any operator other than `in` or `not in` is wrong and will be ignored"
+            .to_string(),
+    );
+
+    None
+}
+
+/// Creates an instance of [`MarkerExpression::DependencyGroups`] with the given values, falling
+/// back to [`MarkerExpression::Arbitrary`] on failure.
+fn parse_dependency_groups_expr(
+    operator: MarkerOperator,
+    value: &str,
+    reporter: &mut impl Reporter,
+) -> Option<MarkerExpression> {
+    let name = match GroupName::from_str(value) {
+        Ok(name) => MarkerValueDependencyGroup::Group(name),
+        Err(err) => {
+            reporter.report(
+                MarkerWarningKind::ExtrasInvalidComparison,
+                format!("Expected extra name (found `{value}`): {err}"),
+            );
+            MarkerValueDependencyGroup::Arbitrary(value.to_string())
+        }
+    };
+
+    if let Some(operator) = ContainerOperator::from_marker_operator(operator) {
+        return Some(MarkerExpression::DependencyGroups { operator, name });
+    }
+
+    reporter.report(
+        MarkerWarningKind::ExtrasInvalidComparison,
+        "Comparing `extras` with any operator other than `in` or `not in` is wrong and will be ignored"
             .to_string(),
     );
 

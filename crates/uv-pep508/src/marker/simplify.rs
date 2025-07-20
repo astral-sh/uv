@@ -9,6 +9,7 @@ use version_ranges::Ranges;
 
 use uv_pep440::{Version, VersionSpecifier};
 
+use crate::marker::tree::ContainerOperator;
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 
 /// Returns a simplified DNF expression for a given marker tree.
@@ -170,6 +171,42 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::Extra {
+                    name: marker.name().clone().into(),
+                    operator,
+                };
+
+                path.push(expr);
+                collect_dnf(tree, dnf, path);
+                path.pop();
+            }
+        }
+        MarkerTreeKind::Extras(marker) => {
+            for (value, tree) in marker.children() {
+                let operator = if value {
+                    ContainerOperator::In
+                } else {
+                    ContainerOperator::NotIn
+                };
+
+                let expr = MarkerExpression::Extras {
+                    name: marker.name().clone().into(),
+                    operator,
+                };
+
+                path.push(expr);
+                collect_dnf(tree, dnf, path);
+                path.pop();
+            }
+        }
+        MarkerTreeKind::DependencyGroups(marker) => {
+            for (value, tree) in marker.children() {
+                let operator = if value {
+                    ContainerOperator::In
+                } else {
+                    ContainerOperator::NotIn
+                };
+
+                let expr = MarkerExpression::DependencyGroups {
                     name: marker.name().clone().into(),
                     operator,
                 };
@@ -439,6 +476,28 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
             };
 
             name == name2 && operator.negate() == *operator2
+        }
+        MarkerExpression::Extras { name, operator } => {
+            let MarkerExpression::Extras {
+                name: name2,
+                operator: operator2,
+            } = right
+            else {
+                return false;
+            };
+
+            name == name2 && *operator == operator2.negate()
+        }
+        MarkerExpression::DependencyGroups { name, operator } => {
+            let MarkerExpression::DependencyGroups {
+                name: name2,
+                operator: operator2,
+            } = right
+            else {
+                return false;
+            };
+
+            name == name2 && *operator == operator2.negate()
         }
     }
 }

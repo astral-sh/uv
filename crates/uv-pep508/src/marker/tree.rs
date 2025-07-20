@@ -9,14 +9,15 @@ use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use version_ranges::Ranges;
 
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
 use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
-    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+    CanonicalMarkerValueDependencyGroup, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
+    CanonicalMarkerValueVersion,
 };
 use crate::marker::parse;
 use crate::{
@@ -32,6 +33,12 @@ pub enum MarkerWarningKind {
     /// Doing an operation other than `==` and `!=` on a quoted string with `extra`, such as
     /// `extra > "perf"` or `extra == os_name`
     ExtraInvalidComparison,
+    /// Doing an operation other than `in` and `not in` on a quoted string with `extra`, such as
+    /// `extras > "perf"` or `extras == os_name`
+    ExtrasInvalidComparison,
+    /// Doing an operation other than `in` and `not in` on a quoted string with `dependency_groups`,
+    /// such as `dependency_groups > "perf"` or `dependency_groups == os_name`
+    DependencyGroupsInvalidComparison,
     /// Comparing a string valued marker and a string lexicographically, such as `"3.9" > "3.10"`
     LexicographicComparison,
     /// Comparing two markers, such as `os_name != sys_implementation`
@@ -128,8 +135,12 @@ pub enum MarkerValue {
     MarkerEnvVersion(MarkerValueVersion),
     /// Those environment markers with an arbitrary string as value such as `sys_platform`
     MarkerEnvString(MarkerValueString),
-    /// `extra`. This one is special because it's a list and not env but user given
+    /// `extra`. This one is special because it's a list, and user-provided
     Extra,
+    /// `extras`. This one is special because it's a list, and user-provided
+    Extras,
+    /// `dependency_groups`. This one is special because it's a list, and user-provided
+    DependencyGroups,
     /// Not a constant, but a user given quoted string with a value inside such as '3.8' or "windows"
     QuotedString(ArcStr),
 }
@@ -170,6 +181,8 @@ impl FromStr for MarkerValue {
             "sys_platform" => Self::MarkerEnvString(MarkerValueString::SysPlatform),
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
             "extra" => Self::Extra,
+            "extras" => Self::Extras,
+            "dependency_groups" => Self::DependencyGroups,
             _ => return Err(format!("Invalid key: {s}")),
         };
         Ok(value)
@@ -182,6 +195,8 @@ impl Display for MarkerValue {
             Self::MarkerEnvVersion(marker_value_version) => marker_value_version.fmt(f),
             Self::MarkerEnvString(marker_value_string) => marker_value_string.fmt(f),
             Self::Extra => f.write_str("extra"),
+            Self::Extras => f.write_str("extras"),
+            Self::DependencyGroups => f.write_str("dependency_groups"),
             Self::QuotedString(value) => write!(f, "'{value}'"),
         }
     }
@@ -433,7 +448,7 @@ impl Deref for StringVersion {
     }
 }
 
-/// The [`ExtraName`] value used in `extra` markers.
+/// The [`ExtraName`] value used in `extra` and `extras` markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueExtra {
     /// A valid [`ExtraName`].
@@ -464,6 +479,24 @@ impl Display for MarkerValueExtra {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Extra(extra) => extra.fmt(f),
+            Self::Arbitrary(string) => string.fmt(f),
+        }
+    }
+}
+
+/// The [`GroupName`] value used in `dependency_group` markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum MarkerValueDependencyGroup {
+    /// A valid [`GroupName`].
+    Group(GroupName),
+    /// An invalid name, preserved as an arbitrary string.
+    Arbitrary(String),
+}
+
+impl Display for MarkerValueDependencyGroup {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Group(group) => group.fmt(f),
             Self::Arbitrary(string) => string.fmt(f),
         }
     }
@@ -504,8 +537,18 @@ pub enum MarkerExpression {
     },
     /// `extra <extra op> '...'` or `'...' <extra op> extra`.
     Extra {
-        operator: ExtraOperator,
         name: MarkerValueExtra,
+        operator: ExtraOperator,
+    },
+    /// `'...' in extras`
+    Extras {
+        name: MarkerValueExtra,
+        operator: ContainerOperator,
+    },
+    /// `'...' in dependency_groups`
+    DependencyGroups {
+        name: MarkerValueDependencyGroup,
+        operator: ContainerOperator,
     },
 }
 
@@ -520,6 +563,10 @@ pub(crate) enum MarkerExpressionKind {
     String(MarkerValueString),
     /// An extra expression, e.g. `extra == '...'`.
     Extra,
+    /// An extras expression, e.g. `'...' in extras`.
+    Extras,
+    /// A dependency groups expression, e.g. `'...' in dependency_groups`.
+    DependencyGroups,
 }
 
 /// The operator for an extra expression, either '==' or '!='.
@@ -557,6 +604,45 @@ impl Display for ExtraOperator {
         f.write_str(match self {
             Self::Equal => "==",
             Self::NotEqual => "!=",
+        })
+    }
+}
+
+/// The operator for a container expression, either 'in' or 'not in'.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum ContainerOperator {
+    /// `in`
+    In,
+    /// `not in`
+    NotIn,
+}
+
+impl ContainerOperator {
+    /// Creates a [`ContainerOperator`] from an equivalent [`MarkerOperator`].
+    ///
+    /// Returns `None` if the operator is not supported for containers.
+    pub(crate) fn from_marker_operator(operator: MarkerOperator) -> Option<ContainerOperator> {
+        match operator {
+            MarkerOperator::In => Some(ContainerOperator::In),
+            MarkerOperator::NotIn => Some(ContainerOperator::NotIn),
+            _ => None,
+        }
+    }
+
+    /// Negates this operator.
+    pub(crate) fn negate(&self) -> ContainerOperator {
+        match *self {
+            ContainerOperator::In => ContainerOperator::NotIn,
+            ContainerOperator::NotIn => ContainerOperator::In,
+        }
+    }
+}
+
+impl Display for ContainerOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::In => "in",
+            Self::NotIn => "not in",
         })
     }
 }
@@ -600,6 +686,8 @@ impl MarkerExpression {
             MarkerExpression::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
             MarkerExpression::String { key, .. } => MarkerExpressionKind::String(*key),
             MarkerExpression::Extra { .. } => MarkerExpressionKind::Extra,
+            MarkerExpression::Extras { .. } => MarkerExpressionKind::Extras,
+            MarkerExpression::DependencyGroups { .. } => MarkerExpressionKind::DependencyGroups,
         }
     }
 }
@@ -640,6 +728,12 @@ impl Display for MarkerExpression {
             }
             MarkerExpression::Extra { operator, name } => {
                 write!(f, "extra {operator} '{name}'")
+            }
+            MarkerExpression::Extras { operator, name } => {
+                write!(f, "'{name}' {operator} extras")
+            }
+            MarkerExpression::DependencyGroups { operator, name } => {
+                write!(f, "'{name}' {operator} dependency_groups")
             }
         }
     }
@@ -862,6 +956,26 @@ impl MarkerTree {
                     low: low.negate(self.0),
                 })
             }
+            Variable::Extras(name) => {
+                let Edges::Boolean { low, high } = node.children else {
+                    unreachable!()
+                };
+                MarkerTreeKind::Extras(ExtrasMarkerTree {
+                    name,
+                    high: high.negate(self.0),
+                    low: low.negate(self.0),
+                })
+            }
+            Variable::DependencyGroups(name) => {
+                let Edges::Boolean { low, high } = node.children else {
+                    unreachable!()
+                };
+                MarkerTreeKind::DependencyGroups(DependencyGroupsMarkerTree {
+                    name,
+                    high: high.negate(self.0),
+                    low: low.negate(self.0),
+                })
+            }
         }
     }
 
@@ -962,6 +1076,10 @@ impl MarkerTree {
                     .edge(extras.contains(marker.name().extra()))
                     .evaluate_reporter_impl(env, extras, reporter);
             }
+            // TODO(charlie): Add support for evaluating container extras in PEP 751 lockfiles.
+            MarkerTreeKind::Extras(..) | MarkerTreeKind::DependencyGroups(..) => {
+                return false;
+            }
         }
 
         false
@@ -989,6 +1107,12 @@ impl MarkerTree {
             MarkerTreeKind::Extra(marker) => marker
                 .edge(extras.contains(marker.name().extra()))
                 .evaluate_extras(extras),
+            MarkerTreeKind::Extras(marker) => marker
+                .children()
+                .any(|(_, tree)| tree.evaluate_extras(extras)),
+            MarkerTreeKind::DependencyGroups(marker) => marker
+                .children()
+                .any(|(_, tree)| tree.evaluate_extras(extras)),
         }
     }
 
@@ -1226,6 +1350,16 @@ impl MarkerTree {
                         imp(tree, f);
                     }
                 }
+                MarkerTreeKind::Extras(kind) => {
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::DependencyGroups(kind) => {
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
             }
         }
         imp(self, &mut f);
@@ -1348,6 +1482,36 @@ impl MarkerTree {
                 write!(f, "extra != {} -> ", kind.name())?;
                 kind.edge(false).fmt_graph(f, level + 1)?;
             }
+            MarkerTreeKind::Extras(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in extras -> ", kind.name())?;
+                kind.edge(true).fmt_graph(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} not in extras -> ", kind.name())?;
+                kind.edge(false).fmt_graph(f, level + 1)?;
+            }
+            MarkerTreeKind::DependencyGroups(kind) => {
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} in dependency_groups -> ", kind.name())?;
+                kind.edge(true).fmt_graph(f, level + 1)?;
+
+                writeln!(f)?;
+                for _ in 0..level {
+                    write!(f, "  ")?;
+                }
+                write!(f, "{} not in dependency_groups -> ", kind.name())?;
+                kind.edge(false).fmt_graph(f, level + 1)?;
+            }
         }
 
         Ok(())
@@ -1417,8 +1581,12 @@ pub enum MarkerTreeKind<'a> {
     In(InMarkerTree<'a>),
     /// A string expression with the `contains` operator.
     Contains(ContainsMarkerTree<'a>),
-    /// A string expression.
+    /// A string expression (e.g., `extra == 'dev'`).
     Extra(ExtraMarkerTree<'a>),
+    /// A string expression (e.g., `'dev' in extras`).
+    Extras(ExtrasMarkerTree<'a>),
+    /// A string expression (e.g., `'dev' in dependency_groups`).
+    DependencyGroups(DependencyGroupsMarkerTree<'a>),
 }
 
 /// A version marker node, such as `python_version < '3.7'`.
@@ -1629,6 +1797,93 @@ impl PartialOrd for ExtraMarkerTree<'_> {
 }
 
 impl Ord for ExtraMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name()
+            .cmp(other.name())
+            .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
+/// A node representing the existence or absence of a given extra, such as `'bar' in extras`.
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct ExtrasMarkerTree<'a> {
+    name: &'a CanonicalMarkerValueExtra,
+    high: NodeId,
+    low: NodeId,
+}
+
+impl ExtrasMarkerTree<'_> {
+    /// Returns the name of the extra in this expression.
+    pub fn name(&self) -> &CanonicalMarkerValueExtra {
+        self.name
+    }
+
+    /// The edges of this node, corresponding to the boolean evaluation of the expression.
+    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+        [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
+    }
+
+    /// Returns the subtree associated with the given edge value.
+    pub fn edge(&self, value: bool) -> MarkerTree {
+        if value {
+            MarkerTree(self.high)
+        } else {
+            MarkerTree(self.low)
+        }
+    }
+}
+
+impl PartialOrd for ExtrasMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ExtrasMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name()
+            .cmp(other.name())
+            .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
+/// A node representing the existence or absence of a given dependency group, such as
+/// `'bar' in dependency_groups`.
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct DependencyGroupsMarkerTree<'a> {
+    name: &'a CanonicalMarkerValueDependencyGroup,
+    high: NodeId,
+    low: NodeId,
+}
+
+impl DependencyGroupsMarkerTree<'_> {
+    /// Returns the name of the group in this expression.
+    pub fn name(&self) -> &CanonicalMarkerValueDependencyGroup {
+        self.name
+    }
+
+    /// The edges of this node, corresponding to the boolean evaluation of the expression.
+    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+        [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
+    }
+
+    /// Returns the subtree associated with the given edge value.
+    pub fn edge(&self, value: bool) -> MarkerTree {
+        if value {
+            MarkerTree(self.high)
+        } else {
+            MarkerTree(self.low)
+        }
+    }
+}
+
+impl PartialOrd for DependencyGroupsMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DependencyGroupsMarkerTree<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.name()
             .cmp(other.name())
