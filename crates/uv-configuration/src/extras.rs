@@ -155,7 +155,8 @@ impl ExtrasSpecificationInner {
         self.include.names().chain(&self.exclude)
     }
 
-    /// Returns `true` if the specification includes the given extra.
+    /// Returns an iterator over all extras that are included in the specification,
+    /// assuming `all_names` is an iterator over all extras.
     pub fn extra_names<'a, Names>(
         &'a self,
         all_names: Names,
