@@ -242,6 +242,16 @@ pub(crate) fn create(
                 interpreter.python_minor(),
             )),
         )?;
+        if interpreter.gil_disabled() {
+            uv_fs::replace_symlink(
+                "python",
+                scripts.join(format!(
+                    "python{}.{}t",
+                    interpreter.python_major(),
+                    interpreter.python_minor(),
+                )),
+            )?;
+        }
 
         if interpreter.markers().implementation_name() == "pypy" {
             uv_fs::replace_symlink(
