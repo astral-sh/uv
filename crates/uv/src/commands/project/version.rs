@@ -326,7 +326,8 @@ pub(crate) async fn project_version(
     Ok(status)
 }
 
-/// Helper function to enhance workspace errors with helpful hints
+/// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
+/// and --project was not explicitly passed
 fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
     if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
         anyhow!(
