@@ -1202,6 +1202,14 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
+    /// Install the specified dependency group from a `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pyproject.toml` in the working directory is used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
@@ -1215,14 +1223,6 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
-
-    /// Install the specified dependency group from a `pyproject.toml`.
-    ///
-    /// If no path is provided, the `pyproject.toml` in the working directory is used.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, group = "sources")]
-    pub group: Vec<PipGroupName>,
 
     /// Write the compiled requirements to the given `requirements.txt` or `pylock.toml` file.
     ///
@@ -1518,6 +1518,30 @@ pub struct PipSyncArgs {
     #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
+    /// Include optional dependencies from the specified extra name; may be provided more than once.
+    ///
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    ///
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
+    pub all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub no_all_extras: bool,
+
+    /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
+    /// used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
+
     #[command(flatten)]
     pub installer: InstallerArgs,
 
@@ -1798,18 +1822,27 @@ pub struct PipInstallArgs {
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
     pub all_extras: bool,
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
+
+    /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
+    /// used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -1824,14 +1857,6 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
-
-    /// Install the specified dependency group from a `pyproject.toml`.
-    ///
-    /// If no path is provided, the `pyproject.toml` in the working directory is used.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, group = "sources")]
-    pub group: Vec<PipGroupName>,
 
     /// Require a matching hash for each requirement.
     ///

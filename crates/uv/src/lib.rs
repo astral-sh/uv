@@ -566,11 +566,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             commands::pip_sync(
                 &requirements,
                 &constraints,
                 &build_constraints,
+                &args.settings.extras,
+                &groups,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,

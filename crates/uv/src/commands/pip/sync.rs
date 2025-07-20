@@ -18,13 +18,14 @@ use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, Origin, R
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::SitePackages;
+use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,
 };
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
@@ -48,6 +49,8 @@ pub(crate) async fn pip_sync(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
+    extras: &ExtrasSpecification,
+    groups: &GroupsSpecification,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -91,8 +94,6 @@ pub(crate) async fn pip_sync(
 
     // Initialize a few defaults.
     let overrides = &[];
-    let extras = ExtrasSpecification::default();
-    let groups = None;
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -118,8 +119,8 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        &extras,
-        groups,
+        extras,
+        Some(groups),
         &client_builder,
     )
     .await?;
@@ -377,11 +378,35 @@ pub(crate) async fn pip_sync(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content)
-            .with_context(|| format!("Not a valid pylock.toml file: {}", pylock.user_display()))?;
+        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
+            format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
+        })?;
 
-        let resolution =
-            lock.to_resolution(install_path, marker_env.markers(), &tags, &build_options)?;
+        // Convert the extras and groups specifications into a concrete form.
+        let extras = extras.with_defaults(DefaultExtras::default());
+        let extras = extras
+            .extra_names(lock.extras.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let groups = groups
+            .get(&pylock)
+            .cloned()
+            .unwrap_or_default()
+            .with_defaults(DefaultGroups::List(lock.default_groups.clone()));
+        let groups = groups
+            .group_names(lock.dependency_groups.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let resolution = lock.to_resolution(
+            install_path,
+            marker_env.markers(),
+            &extras,
+            &groups,
+            &tags,
+            &build_options,
+        )?;
         let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         (resolution, hasher)
@@ -406,7 +431,7 @@ pub(crate) async fn pip_sync(
             source_trees,
             project,
             BTreeSet::default(),
-            &extras,
+            extras,
             &groups,
             preferences,
             site_packages.clone(),

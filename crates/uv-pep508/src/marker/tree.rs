@@ -739,6 +739,51 @@ impl Display for MarkerExpression {
     }
 }
 
+/// The extra and dependency group names to use when evaluating a marker tree.
+#[derive(Debug, Copy, Clone)]
+enum ExtrasEnvironment<'a> {
+    /// E.g., `extra == '...'`
+    Extras(&'a [ExtraName]),
+    /// E.g., `'...' in extras` or `'...' in dependency_groups`
+    Pep751(&'a [ExtraName], &'a [GroupName]),
+}
+
+impl<'a> ExtrasEnvironment<'a> {
+    /// Creates a new [`ExtrasEnvironment`] for the given `extra` names.
+    fn from_extras(extras: &'a [ExtraName]) -> Self {
+        Self::Extras(extras)
+    }
+
+    /// Creates a new [`ExtrasEnvironment`] for the given PEP 751 `extras` and `dependency_groups`.
+    fn from_pep751(extras: &'a [ExtraName], dependency_groups: &'a [GroupName]) -> Self {
+        Self::Pep751(extras, dependency_groups)
+    }
+
+    /// Returns the `extra` names in this environment.
+    fn extra(&self) -> &[ExtraName] {
+        match self {
+            ExtrasEnvironment::Extras(extra) => extra,
+            ExtrasEnvironment::Pep751(..) => &[],
+        }
+    }
+
+    /// Returns the `extras` names in this environment, as in a PEP 751 lockfile.
+    fn extras(&self) -> &[ExtraName] {
+        match self {
+            ExtrasEnvironment::Extras(..) => &[],
+            ExtrasEnvironment::Pep751(extras, ..) => extras,
+        }
+    }
+
+    /// Returns the `dependency_group` group names in this environment, as in a PEP 751 lockfile.
+    fn dependency_groups(&self) -> &[GroupName] {
+        match self {
+            ExtrasEnvironment::Extras(..) => &[],
+            ExtrasEnvironment::Pep751(.., groups) => groups,
+        }
+    }
+}
+
 /// Represents one or more nested marker expressions with and/or/parentheses.
 ///
 /// Marker trees are canonical, meaning any two functionally equivalent markers
@@ -986,7 +1031,27 @@ impl MarkerTree {
 
     /// Does this marker apply in the given environment?
     pub fn evaluate(self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        self.evaluate_reporter_impl(env, extras, &mut TracingReporter)
+        self.evaluate_reporter_impl(
+            env,
+            ExtrasEnvironment::from_extras(extras),
+            &mut TracingReporter,
+        )
+    }
+
+    /// Evaluate a marker in the context of a PEP 751 lockfile, which exposes several additional
+    /// markers (`extras` and `dependency_groups`) that are not available in any other context,
+    /// per the spec.
+    pub fn evaluate_pep751(
+        self,
+        env: &MarkerEnvironment,
+        extras: &[ExtraName],
+        groups: &[GroupName],
+    ) -> bool {
+        self.evaluate_reporter_impl(
+            env,
+            ExtrasEnvironment::from_pep751(extras, groups),
+            &mut TracingReporter,
+        )
     }
 
     /// Evaluates this marker tree against an optional environment and a
@@ -1003,7 +1068,11 @@ impl MarkerTree {
     ) -> bool {
         match env {
             None => self.evaluate_extras(extras),
-            Some(env) => self.evaluate_reporter_impl(env, extras, &mut TracingReporter),
+            Some(env) => self.evaluate_reporter_impl(
+                env,
+                ExtrasEnvironment::from_extras(extras),
+                &mut TracingReporter,
+            ),
         }
     }
 
@@ -1015,13 +1084,13 @@ impl MarkerTree {
         extras: &[ExtraName],
         reporter: &mut impl Reporter,
     ) -> bool {
-        self.evaluate_reporter_impl(env, extras, reporter)
+        self.evaluate_reporter_impl(env, ExtrasEnvironment::from_extras(extras), reporter)
     }
 
     fn evaluate_reporter_impl(
         self,
         env: &MarkerEnvironment,
-        extras: &[ExtraName],
+        extras: ExtrasEnvironment,
         reporter: &mut impl Reporter,
     ) -> bool {
         match self.kind() {
@@ -1073,12 +1142,18 @@ impl MarkerTree {
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
-                    .edge(extras.contains(marker.name().extra()))
+                    .edge(extras.extra().contains(marker.name().extra()))
                     .evaluate_reporter_impl(env, extras, reporter);
             }
-            // TODO(charlie): Add support for evaluating container extras in PEP 751 lockfiles.
-            MarkerTreeKind::Extras(..) | MarkerTreeKind::DependencyGroups(..) => {
-                return false;
+            MarkerTreeKind::Extras(marker) => {
+                return marker
+                    .edge(extras.extras().contains(marker.name().extra()))
+                    .evaluate_reporter_impl(env, extras, reporter);
+            }
+            MarkerTreeKind::DependencyGroups(marker) => {
+                return marker
+                    .edge(extras.dependency_groups().contains(marker.name().group()))
+                    .evaluate_reporter_impl(env, extras, reporter);
             }
         }
 
