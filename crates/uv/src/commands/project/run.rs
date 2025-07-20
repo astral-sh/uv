@@ -1071,6 +1071,51 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 requirements_site_packages.escape_for_python(),
             ))?;
 
+            for interpreter in [&base_interpreter, requirements_env.interpreter()] {
+                // Copy every binary from the base environment to the ephemeral environment.
+                for entry in fs_err::read_dir(interpreter.scripts())? {
+                    let entry = entry?;
+
+                    if !entry.file_type()?.is_file() {
+                        continue;
+                    }
+
+                    // Read the whole file.
+                    let contents = fs_err::read_to_string(&entry.path())?;
+
+                    let expected = r#"#!/bin/sh
+'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
+' '''
+"#;
+                    // let expected = format!("#!{}\n", interpreter.sys_executable().display());
+                    // println!("Expected shebang: {expected}");
+
+                    // Must start with a shebang.
+                    if let Some(contents) = contents.strip_prefix(&expected) {
+                        let contents = format!(
+                            "#!{}\n{}",
+                            ephemeral_env.sys_executable().display(),
+                            contents
+                        );
+                        // Write the file to the ephemeral environment's scripts directory.
+                        let target_path = ephemeral_env.scripts().join(entry.file_name());
+                        fs_err::write(&target_path, &contents)?;
+
+                        // Set the permissions to be executable.
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::PermissionsExt;
+                            let mut perms = fs_err::metadata(&target_path)?.permissions();
+                            perms.set_mode(0o755);
+                            fs_err::set_permissions(&target_path, perms)?;
+                        }
+
+                        println!("Writing to: {}", target_path.display());
+                        // println!("{contents}");
+                    }
+                }
+            }
+
             // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
             // file. This helps out static-analysis tools such as ty (see docs on
             // `CachedEnvironment::set_parent_environment`).
@@ -1094,6 +1139,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     // Cast to `PythonEnvironment`.
     let ephemeral_env = ephemeral_env.map(PythonEnvironment::from);
+
+    if let Some(e) = ephemeral_env.as_ref() {
+        println!("Using ephemeral environment at: {}", e.scripts().display());
+    }
 
     // Determine the Python interpreter to use for the command, if necessary.
     let interpreter = ephemeral_env
@@ -1181,13 +1230,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .as_ref()
             .map(PythonEnvironment::scripts)
             .into_iter()
-            .chain(
-                requirements_env
-                    .as_ref()
-                    .map(PythonEnvironment::scripts)
-                    .into_iter(),
-            )
-            .chain(std::iter::once(base_interpreter.scripts()))
+            // .chain(
+            //     requirements_env
+            //         .as_ref()
+            //         .map(PythonEnvironment::scripts)
+            //         .into_iter(),
+            // )
+            // .chain(std::iter::once(base_interpreter.scripts()))
             .chain(
                 // On Windows, non-virtual Python distributions put `python.exe` in the top-level
                 // directory, rather than in the `Scripts` subdirectory.
@@ -1205,6 +1254,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .flat_map(std::env::split_paths),
             ),
     )?;
+    println!("New PATH: {}", new_path.display());
     process.env(EnvVars::PATH, new_path);
 
     // Increment recursion depth counter.
