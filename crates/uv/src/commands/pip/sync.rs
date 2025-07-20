@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use anyhow::{Context, Result};
@@ -92,7 +92,7 @@ pub(crate) async fn pip_sync(
     // Initialize a few defaults.
     let overrides = &[];
     let extras = ExtrasSpecification::default();
-    let groups = BTreeMap::default();
+    let groups = None;
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();

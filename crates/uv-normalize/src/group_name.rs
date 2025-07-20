@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -96,17 +96,6 @@ impl AsRef<str> for GroupName {
 pub struct PipGroupName {
     pub path: Option<PathBuf>,
     pub name: GroupName,
-}
-
-impl PipGroupName {
-    /// Gets the path to use, applying the default if it's missing
-    pub fn path(&self) -> &Path {
-        if let Some(path) = &self.path {
-            path
-        } else {
-            Path::new("pyproject.toml")
-        }
-    }
 }
 
 impl FromStr for PipGroupName {

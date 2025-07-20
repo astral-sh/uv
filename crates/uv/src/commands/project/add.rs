@@ -345,7 +345,7 @@ pub(crate) async fn add(
         &requirements,
         &constraints,
         &[],
-        BTreeMap::default(),
+        None,
         &client_builder,
     )
     .await?;
