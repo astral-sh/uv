@@ -277,6 +277,14 @@ pub(crate) fn create(
             let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
             create_link_to_executable(targetw.as_path(), &executable_target)
                 .map_err(Error::Python)?;
+            if interpreter.gil_disabled() {
+                let targett = scripts.join(WindowsExecutable::PythonMajorMinort.exe(interpreter));
+                create_link_to_executable(targett.as_path(), &executable_target)
+                    .map_err(Error::Python)?;
+                let targetwt = scripts.join(WindowsExecutable::PythonwMajorMinort.exe(interpreter));
+                create_link_to_executable(targetwt.as_path(), &executable_target)
+                    .map_err(Error::Python)?;
+            }
         } else {
             // Always copy `python.exe`.
             copy_launcher_windows(
@@ -373,6 +381,24 @@ pub(crate) fn create(
                         &scripts,
                         python_home,
                     )?;
+
+                    // If the GIL is disabled, copy `venvlaunchert.exe` and `venvwlaunchert.exe`.
+                    if interpreter.gil_disabled() {
+                        copy_launcher_windows(
+                            WindowsExecutable::PythonMajorMinort,
+                            interpreter,
+                            &base_python,
+                            &scripts,
+                            python_home,
+                        )?;
+                        copy_launcher_windows(
+                            WindowsExecutable::PythonwMajorMinort,
+                            interpreter,
+                            &base_python,
+                            &scripts,
+                            python_home,
+                        )?;
+                    }
                 }
             }
         }
@@ -590,8 +616,12 @@ enum WindowsExecutable {
     PythonMajor,
     /// The `python3.<minor>.exe` executable (or `venvlauncher.exe` launcher shim).
     PythonMajorMinor,
+    /// The `python3.<minor>t.exe` executable (or `venvlaunchert.exe` launcher shim).
+    PythonMajorMinort,
     /// The `pythonw.exe` executable (or `venvwlauncher.exe` launcher shim).
     Pythonw,
+    /// The `pythonw3.<minor>t.exe` executable (or `venvwlaunchert.exe` launcher shim).
+    PythonwMajorMinort,
     /// The `pypy.exe` executable.
     PyPy,
     /// The `pypy3.exe` executable.
@@ -602,7 +632,7 @@ enum WindowsExecutable {
     PyPyw,
     /// The `pypy3.<minor>w.exe` executable.
     PyPyMajorMinorw,
-    // The `graalpy.exe` executable
+    /// The `graalpy.exe` executable.
     GraalPy,
 }
 
@@ -621,7 +651,21 @@ impl WindowsExecutable {
                     interpreter.python_minor()
                 )
             }
+            WindowsExecutable::PythonMajorMinort => {
+                format!(
+                    "python{}.{}t.exe",
+                    interpreter.python_major(),
+                    interpreter.python_minor()
+                )
+            }
             WindowsExecutable::Pythonw => String::from("pythonw.exe"),
+            WindowsExecutable::PythonwMajorMinort => {
+                format!(
+                    "pythonw{}.{}t.exe",
+                    interpreter.python_major(),
+                    interpreter.python_minor()
+                )
+            }
             WindowsExecutable::PyPy => String::from("pypy.exe"),
             WindowsExecutable::PyPyMajor => {
                 format!("pypy{}.exe", interpreter.python_major())
@@ -656,6 +700,8 @@ impl WindowsExecutable {
             Self::Python | Self::PythonMajor | Self::PythonMajorMinor => "venvlauncher.exe",
             Self::Pythonw if interpreter.gil_disabled() => "venvwlaunchert.exe",
             Self::Pythonw => "venvwlauncher.exe",
+            Self::PythonMajorMinort => "venvlaunchert.exe",
+            Self::PythonwMajorMinort => "venvwlaunchert.exe",
             // From 3.13 on these should replace the `python.exe` and `pythonw.exe` shims.
             // These are not relevant as of now for PyPy as it doesn't yet support Python 3.13.
             Self::PyPy | Self::PyPyMajor | Self::PyPyMajorMinor => "venvlauncher.exe",
