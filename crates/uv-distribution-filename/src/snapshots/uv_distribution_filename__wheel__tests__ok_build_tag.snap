@@ -28,6 +28,7 @@ Ok(
                 platform_tag: [
                     Any,
                 ],
+                variant: None,
                 repr: "202206090410-py3-none-any",
             },
         },

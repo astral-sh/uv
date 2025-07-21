@@ -8,6 +8,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 use tracing::warn;
+
 use uv_cache::Cache;
 use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -17,14 +18,14 @@ use uv_configuration::{
     TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, resolve_variants};
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pep508::{MarkerTree, MarkerVariantsUniversal, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -722,7 +723,7 @@ pub(super) async fn do_sync(
     if !environments.is_empty() {
         if !environments
             .iter()
-            .any(|env| env.evaluate(&marker_env, &[]))
+            .any(|env| env.evaluate(&marker_env, &MarkerVariantsUniversal, &[]))
         {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 // For error reporting, we use the "simplified"
@@ -743,25 +744,6 @@ pub(super) async fn do_sync(
 
     // Determine the tags to use for the resolution.
     let tags = resolution_tags(None, python_platform, venv.interpreter())?;
-
-    // Read the lockfile.
-    let resolution = target.to_resolution(
-        &marker_env,
-        &tags,
-        extras,
-        groups,
-        build_options,
-        &install_options,
-    )?;
-
-    // Always skip virtual projects, which shouldn't be built or installed.
-    let resolution = apply_no_virtual_project(resolution);
-
-    // If necessary, convert editable to non-editable distributions.
-    let resolution = apply_editable_mode(resolution, editable);
-
-    // Constrain any build requirements marked as `match-runtime = true`.
-    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
     // Populate credentials from the target.
     store_credentials_from_target(target, &client_builder);
@@ -785,6 +767,71 @@ pub(super) async fn do_sync(
 
     // Read the build constraints from the lockfile.
     let build_constraints = target.build_constraints();
+
+    // TODO(konsti): Don't do this twice, find a better way to resolve the current build_dispatch
+    // -> resolution -> hasher -> flat_index -> resolution loop.
+    let build_hasher = HashStrategy::default();
+    let hasher = HashStrategy::default();
+    let flat_index = {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await?;
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
+    };
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &build_constraints,
+        venv.interpreter(),
+        index_locations,
+        &flat_index,
+        dependency_metadata,
+        state.clone().into_inner(),
+        index_strategy,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        link_mode,
+        build_options,
+        &build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        workspace_cache.clone(),
+        concurrency,
+        preview,
+    );
+
+    // TODO(konsti): Pass this into operations::install
+    let distribution_database =
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
+
+    // Read the lockfile.
+    let resolution = target
+        .to_resolution(
+            &marker_env,
+            &tags,
+            extras,
+            groups,
+            build_options,
+            &install_options,
+            distribution_database,
+            state.index().variant_priorities(),
+        )
+        .await?;
+
+    // Always skip virtual projects, which shouldn't be built or installed.
+    let resolution = apply_no_virtual_project(resolution);
+
+    // If necessary, convert editable to non-editable distributions.
+    let resolution = apply_editable_mode(resolution, editable);
+
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
@@ -827,6 +874,18 @@ pub(super) async fn do_sync(
         concurrency,
         preview,
     );
+
+    // TODO(konsti): Pass this into operations::install
+    let distribution_database =
+        DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
+    let resolution = resolve_variants(
+        resolution,
+        &marker_env,
+        distribution_database,
+        state.index().variant_priorities(),
+        &tags,
+    )
+    .await?;
 
     let site_packages = SitePackages::from_environment(venv)?;
 
@@ -886,7 +945,12 @@ fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -
 
         // Filter out any non-editable distributions.
         Some(EditableMode::Editable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
+            let ResolvedDist::Installable {
+                dist,
+                version,
+                variants_json,
+            } = dist
+            else {
                 return None;
             };
             let Dist::Source(SourceDist::Directory(DirectorySourceDist {
@@ -908,13 +972,19 @@ fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -
                     r#virtual: *r#virtual,
                     url: url.clone(),
                 }))),
+                variants_json: variants_json.clone(),
                 version: version.clone(),
             })
         }),
 
         // Filter out any editable distributions.
         Some(EditableMode::NonEditable) => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
+            let ResolvedDist::Installable {
+                dist,
+                variants_json,
+                version,
+            } = dist
+            else {
                 return None;
             };
             let Dist::Source(SourceDist::Directory(DirectorySourceDist {
@@ -936,6 +1006,7 @@ fn apply_editable_mode(resolution: Resolution, editable: Option<EditableMode>) -
                     r#virtual: *r#virtual,
                     url: url.clone(),
                 }))),
+                variants_json: variants_json.clone(),
                 version: version.clone(),
             })
         }),

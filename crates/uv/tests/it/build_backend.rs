@@ -1363,52 +1363,52 @@ fn build_with_all_metadata() -> Result<()> {
     let metadata_json: serde_json::Value = serde_json::from_str(&metadata_json)?;
     assert_json_snapshot!(metadata_json, @r#"
     {
-      "author": "Jane Doe, John Doe",
-      "author_email": "Jane Doe <jane@example.com>, info@example.com",
-      "classifiers": [
-        "Development Status :: 4 - Beta",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.12"
-      ],
+      "metadata_version": "2.4",
+      "name": "foo",
+      "version": "1.0.0",
+      "platforms": [],
+      "supported_platforms": [],
+      "summary": "A Python package with all metadata fields",
       "description": "Hello World!",
       "description_content_type": "text/markdown",
-      "download_url": null,
-      "dynamic": [],
-      "home_page": null,
       "keywords": [
         "example",
         "test",
         "metadata"
       ],
+      "home_page": null,
+      "download_url": null,
+      "author": "Jane Doe, John Doe",
+      "author_email": "Jane Doe <jane@example.com>, info@example.com",
+      "maintainer": "ferris",
+      "maintainer_email": "ferris <ferris@example.com>",
       "license": null,
       "license_expression": "MIT OR Apache-2.0",
       "license_files": [
         "License.txt"
       ],
-      "maintainer": "ferris",
-      "maintainer_email": "ferris <ferris@example.com>",
-      "metadata_version": "2.4",
-      "name": "foo",
-      "obsoletes_dist": [],
-      "platforms": [],
-      "project_urls": {
-        "Changelog": "https://github.com/octocat/Spoon-Knife/blob/main/CHANGELOG.md",
-        "Homepage": "https://octocat.github.io/spoon-knife",
-        "Repository": "https://github.com/octocat/Spoon-Knife"
-      },
-      "provides_dist": [],
-      "provides_extra": [
-        "dev"
+      "classifiers": [
+        "Development Status :: 4 - Beta",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.12"
       ],
       "requires_dist": [
         "anyio>=4,<5",
         "pytest>=7.0 ; extra == 'dev'"
       ],
-      "requires_external": [],
+      "provides_dist": [],
+      "obsoletes_dist": [],
       "requires_python": ">=3.12",
-      "summary": "A Python package with all metadata fields",
-      "supported_platforms": [],
-      "version": "1.0.0"
+      "requires_external": [],
+      "project_urls": {
+        "Homepage": "https://octocat.github.io/spoon-knife",
+        "Repository": "https://github.com/octocat/Spoon-Knife",
+        "Changelog": "https://github.com/octocat/Spoon-Knife/blob/main/CHANGELOG.md"
+      },
+      "provides_extra": [
+        "dev"
+      ],
+      "dynamic": []
     }
     "#);
     let wheel = fs_err::read_to_string(
@@ -1434,12 +1434,12 @@ fn build_with_all_metadata() -> Result<()> {
     let wheel_json: serde_json::Value = serde_json::from_str(&wheel_json)?;
     assert_json_snapshot!(wheel_json, @r#"
     {
+      "wheel-version": "1.0",
       "generator": "uv [VERSION]",
       "root-is-purelib": true,
       "tags": [
         "py3-none-any"
-      ],
-      "wheel-version": "1.0"
+      ]
     }
     "#);
 

@@ -36,7 +36,9 @@ pub use crate::marker::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
-    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerValueVersion, MarkerVariantsEnvironment, MarkerVariantsUniversal, MarkerWarningKind,
+    StringMarkerTree, StringVersion, VariantFeature, VariantNamespace, VariantValue,
+    VersionMarkerTree,
 };
 pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -49,6 +51,8 @@ pub use crate::verbatim_url::{
 // https://github.com/konstin/pep508_rs/issues/19
 pub use uv_pep440;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+
+use crate::marker::VariantParseError;
 
 mod cursor;
 pub mod marker;
@@ -82,6 +86,20 @@ pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
     /// The version requirement is not supported.
     #[error("{0}")]
     UnsupportedRequirement(String),
+    /// The operator is not supported with the variant marker.
+    #[error(
+        "The operator {0} is not supported with the marker {1}, only the `in` and `not in` operators are supported"
+    )]
+    ListOperator(MarkerOperator, MarkerValueList),
+    /// The value is not a quoted string.
+    #[error("Only quoted strings are supported with the variant marker {1}, not {0}")]
+    ListValue(MarkerValue, MarkerValueList),
+    /// The variant marker is on the left hand side of the expression.
+    #[error("The marker {0} must be on the right hand side of the expression")]
+    ListLValue(MarkerValueList),
+    /// A variant segment uses invalid characters.
+    #[error(transparent)]
+    InvalidVariantSegment(VariantParseError),
 }
 
 impl<T: Pep508Url> Display for Pep508Error<T> {
@@ -298,8 +316,13 @@ impl<T: Pep508Url> CacheKey for Requirement<T> {
 
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
-    pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        self.marker.evaluate(env, extras)
+    pub fn evaluate_markers(
+        &self,
+        env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.marker.evaluate(env, variants, extras)
     }
 
     /// Return the requirement with an additional marker added, to require the given extra.
