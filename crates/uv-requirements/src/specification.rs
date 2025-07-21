@@ -250,10 +250,13 @@ impl RequirementsSpecification {
 
         // If we have a `pylock.toml`, don't allow additional requirements, constraints, or
         // overrides.
-        if requirements
-            .iter()
-            .any(|source| matches!(source, RequirementsSource::PylockToml(..)))
-        {
+        if let Some(pylock_toml) = requirements.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
             if requirements
                 .iter()
                 .any(|source| !matches!(source, RequirementsSource::PylockToml(..)))
@@ -272,22 +275,38 @@ impl RequirementsSpecification {
                     "Cannot specify constraints with a `pylock.toml` file"
                 ));
             }
-            if groups.is_some_and(|groups| !groups.groups.is_empty()) {
-                return Err(anyhow::anyhow!(
-                    "Cannot specify groups with a `pylock.toml` file"
-                ));
+
+            // If we have a `pylock.toml`, disallow specifying paths for groups; instead, require
+            // that all groups refer to the `pylock.toml` file.
+            if let Some(groups) = groups {
+                let mut names = Vec::new();
+                for group in &groups.groups {
+                    if group.path.is_some() {
+                        return Err(anyhow::anyhow!(
+                            "Cannot specify paths for groups with a `pylock.toml` file; all groups must refer to the `pylock.toml` file"
+                        ));
+                    }
+                    names.push(group.name.clone());
+                }
+
+                if !names.is_empty() {
+                    spec.groups.insert(
+                        pylock_toml.clone(),
+                        DependencyGroups::from_args(
+                            false,
+                            false,
+                            false,
+                            Vec::new(),
+                            Vec::new(),
+                            false,
+                            names,
+                            false,
+                        ),
+                    );
+                }
             }
-        }
-
-        // Resolve sources into specifications so we know their `source_tree`.
-        let mut requirement_sources = Vec::new();
-        for source in requirements {
-            let source = Self::from_source(source, client_builder).await?;
-            requirement_sources.push(source);
-        }
-
-        // pip `--group` flags specify their own sources, which we need to process here
-        if let Some(groups) = groups {
+        } else if let Some(groups) = groups {
+            // pip `--group` flags specify their own sources, which we need to process here.
             // First, we collect all groups by their path.
             let mut groups_by_path = BTreeMap::new();
             for group in &groups.groups {
@@ -318,6 +337,13 @@ impl RequirementsSpecification {
                 group_specs.insert(path, group_spec);
             }
             spec.groups = group_specs;
+        }
+
+        // Resolve sources into specifications so we know their `source_tree`.
+        let mut requirement_sources = Vec::new();
+        for source in requirements {
+            let source = Self::from_source(source, client_builder).await?;
+            requirement_sources.push(source);
         }
 
         // Read all requirements, and keep track of all requirements _and_ constraints.

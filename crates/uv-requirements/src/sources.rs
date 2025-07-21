@@ -273,13 +273,13 @@ impl RequirementsSource {
     pub fn allows_extras(&self) -> bool {
         matches!(
             self,
-            Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
+            Self::PylockToml(_) | Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
         )
     }
 
     /// Returns `true` if the source allows groups to be specified.
     pub fn allows_groups(&self) -> bool {
-        matches!(self, Self::PyprojectToml(_))
+        matches!(self, Self::PylockToml(_) | Self::PyprojectToml(_))
     }
 }
 
