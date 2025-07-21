@@ -1082,40 +1082,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         continue;
                     }
 
-                    let contents = fs_err::read_to_string(entry.path())?;
-                    let expected = r#"#!/bin/sh
-'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
-' '''
-"#;
-
-                    // Only rewrite entrypoints that use the expected shebang.
-                    let Some(contents) = contents.strip_prefix(expected) else {
-                        continue;
-                    };
-
-                    let contents = format!(
-                        "#!{}\n{}",
-                        ephemeral_env.sys_executable().display(),
-                        contents
-                    );
-                    // Write the file to the ephemeral environment's scripts directory.
-                    let target_path = ephemeral_env.scripts().join(entry.file_name());
-                    fs_err::write(&target_path, &contents)?;
-
-                    match fs_err::write(&target_path, &contents) {
-                        Ok(()) => trace!("Updated entrypoint at {}", target_path.user_display()),
-                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
-                        Err(err) => return Err(err.into()),
-                    }
-
-                    // Set the permissions to be executable.
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        let mut perms = fs_err::metadata(&target_path)?.permissions();
-                        perms.set_mode(0o755);
-                        fs_err::set_permissions(&target_path, perms)?;
-                    }
+                    copy_entrypoint(
+                        &entry.path(),
+                        &ephemeral_env.scripts().join(entry.file_name()),
+                        ephemeral_env.sys_executable(),
+                    )?;
                 }
 
                 // Link common data directories from the base environment to the ephemeral
@@ -1765,4 +1736,55 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
     envvar
         .parse::<u32>()
         .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+}
+
+#[cfg(unix)]
+fn copy_entrypoint(source: &Path, target: &Path, python_executable: &Path) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let contents = fs_err::read_to_string(source)?;
+    let expected = r#"#!/bin/sh
+'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
+' '''
+"#;
+
+    // Only rewrite entrypoints that use the expected shebang.
+    let Some(contents) = contents.strip_prefix(expected) else {
+        return Ok(());
+    };
+
+    let contents = format!("#!{}\n{}", python_executable.display(), contents);
+    fs_err::write(target, &contents)?;
+
+    match fs_err::write(target, &contents) {
+        Ok(()) => trace!("Updated entrypoint at {}", target.user_display()),
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    let mut perms = fs_err::metadata(target)?.permissions();
+    perms.set_mode(0o755);
+    fs_err::set_permissions(target, perms)?;
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn copy_entrypoint(source: &Path, target: &Path, python_executable: &Path) -> anyhow::Result<()> {
+    use uv_trampoline_builder::Launcher;
+
+    let Some(launcher) = Launcher::try_from_path(source)? else {
+        return Ok(());
+    };
+
+    let launcher = launcher.with_python_path(python_executable.to_path_buf());
+
+    match launcher.to_file(target) {
+        Ok(()) => trace!("Updated entrypoint at {}", target.user_display()),
+        Err(uv_trampoline_builder::Error::Io(err))
+            if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    Ok(())
 }
