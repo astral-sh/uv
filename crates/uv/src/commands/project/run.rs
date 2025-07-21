@@ -10,7 +10,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use url::Url;
 
 use uv_cache::Cache;
@@ -22,7 +22,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
-use uv_fs::{PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified, create_symlink, symlink_or_copy_file};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{
@@ -1071,8 +1071,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 requirements_site_packages.escape_for_python(),
             ))?;
 
-            for interpreter in [&base_interpreter, requirements_env.interpreter()] {
-                // Copy every binary from the base environment to the ephemeral environment.
+            // N.B. The order here matters — earlier interpreters take precedence over the
+            // later ones.
+            for interpreter in [requirements_env.interpreter(), &base_interpreter] {
+                // Copy each entrypoint from the base environments to the ephemeral environment.
                 for entry in fs_err::read_dir(interpreter.scripts())? {
                     let entry = entry?;
 
@@ -1080,38 +1082,84 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         continue;
                     }
 
-                    // Read the whole file.
-                    let contents = fs_err::read_to_string(&entry.path())?;
-
+                    let contents = fs_err::read_to_string(entry.path())?;
                     let expected = r#"#!/bin/sh
 '''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
 ' '''
 "#;
-                    // let expected = format!("#!{}\n", interpreter.sys_executable().display());
-                    // println!("Expected shebang: {expected}");
 
-                    // Must start with a shebang.
-                    if let Some(contents) = contents.strip_prefix(&expected) {
-                        let contents = format!(
-                            "#!{}\n{}",
-                            ephemeral_env.sys_executable().display(),
-                            contents
-                        );
-                        // Write the file to the ephemeral environment's scripts directory.
-                        let target_path = ephemeral_env.scripts().join(entry.file_name());
-                        fs_err::write(&target_path, &contents)?;
+                    // Only rewrite entrypoints that use the expected shebang.
+                    let Some(contents) = contents.strip_prefix(expected) else {
+                        continue;
+                    };
 
-                        // Set the permissions to be executable.
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::fs::PermissionsExt;
-                            let mut perms = fs_err::metadata(&target_path)?.permissions();
-                            perms.set_mode(0o755);
-                            fs_err::set_permissions(&target_path, perms)?;
+                    let contents = format!(
+                        "#!{}\n{}",
+                        ephemeral_env.sys_executable().display(),
+                        contents
+                    );
+                    // Write the file to the ephemeral environment's scripts directory.
+                    let target_path = ephemeral_env.scripts().join(entry.file_name());
+                    fs_err::write(&target_path, &contents)?;
+
+                    match fs_err::write(&target_path, &contents) {
+                        Ok(()) => trace!("Updated entrypoint at {}", target_path.user_display()),
+                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+                        Err(err) => return Err(err.into()),
+                    }
+
+                    // Set the permissions to be executable.
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let mut perms = fs_err::metadata(&target_path)?.permissions();
+                        perms.set_mode(0o755);
+                        fs_err::set_permissions(&target_path, perms)?;
+                    }
+                }
+
+                // Link common data directories from the base environment to the ephemeral
+                // environment. This is critical for Jupyter Lab, which cannot operate without the
+                // files it writes to `<prefix>/share`.
+                //
+                // We only perform a shallow merge here, so `<prefix>/share/<name>` will only be
+                // written once and contents beyond the first level, e.g.,
+                // `<prefix>/share/<name>/foo` will not be merged across parent interpreters.
+                for dir in &["etc", "share"] {
+                    let entries = match fs_err::read_dir(interpreter.sys_prefix().join(dir)) {
+                        Ok(entries) => entries,
+                        // Skip missing directories
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                        Err(err) => return Err(err.into()),
+                    };
+                    fs_err::create_dir_all(ephemeral_env.sys_prefix().join(dir))?;
+                    for entry in entries {
+                        let entry = entry?;
+                        let target = ephemeral_env.sys_prefix().join(dir).join(entry.file_name());
+
+                        if entry.file_type()?.is_file() {
+                            match symlink_or_copy_file(entry.path(), &target) {
+                                Ok(()) => trace!(
+                                    "Created link for {} -> {}",
+                                    target.user_display(),
+                                    entry.path().user_display()
+                                ),
+                                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+                                Err(err) => return Err(err.into()),
+                            }
+                        } else if entry.file_type()?.is_dir() {
+                            match create_symlink(entry.path(), &target) {
+                                Ok(()) => trace!(
+                                    "Created link for {} -> {}",
+                                    target.user_display(),
+                                    entry.path().user_display()
+                                ),
+                                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+                                Err(err) => return Err(err.into()),
+                            }
+                        } else {
+                            trace!("Skipping link of entry: {}", entry.path().user_display());
                         }
-
-                        println!("Writing to: {}", target_path.display());
-                        // println!("{contents}");
                     }
                 }
             }
@@ -1141,7 +1189,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let ephemeral_env = ephemeral_env.map(PythonEnvironment::from);
 
     if let Some(e) = ephemeral_env.as_ref() {
-        println!("Using ephemeral environment at: {}", e.scripts().display());
+        debug!("Using ephemeral environment at: {}", e.scripts().display());
     }
 
     // Determine the Python interpreter to use for the command, if necessary.
@@ -1230,13 +1278,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .as_ref()
             .map(PythonEnvironment::scripts)
             .into_iter()
-            // .chain(
-            //     requirements_env
-            //         .as_ref()
-            //         .map(PythonEnvironment::scripts)
-            //         .into_iter(),
-            // )
-            // .chain(std::iter::once(base_interpreter.scripts()))
+            .chain(
+                requirements_env
+                    .as_ref()
+                    .map(PythonEnvironment::scripts)
+                    .into_iter(),
+            )
+            .chain(std::iter::once(base_interpreter.scripts()))
             .chain(
                 // On Windows, non-virtual Python distributions put `python.exe` in the top-level
                 // directory, rather than in the `Scripts` subdirectory.
@@ -1254,7 +1302,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .flat_map(std::env::split_paths),
             ),
     )?;
-    println!("New PATH: {}", new_path.display());
     process.env(EnvVars::PATH, new_path);
 
     // Increment recursion depth counter.

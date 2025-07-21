@@ -138,6 +138,36 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     }
 }
 
+/// Create a symlink at `dst` pointing to `src`.
+///
+/// On Windows, this uses the `junction` crate to create a junction point.
+///
+/// Note that because junctions are used, the source must be a directory.
+#[cfg(windows)]
+pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    // If the source is a file, we can't create a junction
+    if src.as_ref().is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Cannot create a junction for {}: is not a directory",
+                src.as_ref().display()
+            ),
+        ));
+    }
+
+    junction::create(
+        dunce::simplified(src.as_ref()),
+        dunce::simplified(dst.as_ref()),
+    )
+}
+
+/// Create a symlink at `dst` pointing to `src`.
+#[cfg(unix)]
+pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())
+}
+
 #[cfg(unix)]
 pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
