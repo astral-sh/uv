@@ -1,10 +1,5 @@
 # The uv build backend
 
-!!! note
-
-    Currently, the default build backend for `uv init` is
-    [hatchling](https://pypi.org/project/hatchling/). This will change to `uv` in a future version.
-
 A build backend transforms a source tree (i.e., a directory) into a source distribution or a wheel.
 
 uv supports all build backends (as specified by [PEP 517](https://peps.python.org/pep-0517/)), but
@@ -36,7 +31,7 @@ To use uv as a build backend in an existing project, add `uv_build` to the
 
 ```toml title="pyproject.toml"
 [build-system]
-requires = ["uv_build>=0.7.21,<0.8.0"]
+requires = ["uv_build>=0.8.0,<0.9.0"]
 build-backend = "uv_build"
 ```
 
@@ -49,7 +44,7 @@ build-backend = "uv_build"
 To create a new project that uses the uv build backend, use `uv init`:
 
 ```console
-$ uv init --build-backend uv
+$ uv init
 ```
 
 When the project is built, e.g., with [`uv build`](../guides/package.md), the uv build backend will

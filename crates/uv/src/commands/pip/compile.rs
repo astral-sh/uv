@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
@@ -14,7 +14,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, PreviewMode, Reinstall,
+    SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -25,7 +26,7 @@ use uv_distribution_types::{
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
@@ -33,7 +34,8 @@ use uv_python::{
 };
 use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
-    RequirementsSource, RequirementsSpecification, is_pylock_toml, upgrade::read_requirements_txt,
+    GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
+    upgrade::read_requirements_txt,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
@@ -63,7 +65,7 @@ pub(crate) async fn pip_compile(
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
-    groups: BTreeMap<PathBuf, Vec<GroupName>>,
+    groups: GroupsSpecification,
     output_file: Option<&Path>,
     format: Option<ExportFormat>,
     resolution_mode: ResolutionMode,
@@ -90,6 +92,7 @@ pub(crate) async fn pip_compile(
     keyring_provider: KeyringProviderType,
     network_settings: &NetworkSettings,
     config_settings: ConfigSettings,
+    config_settings_package: PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
@@ -205,7 +208,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
-        groups,
+        Some(&groups),
         &client_builder,
     )
     .await?;
@@ -477,6 +480,7 @@ pub(crate) async fn pip_compile(
         state,
         index_strategy,
         &config_settings,
+        &config_settings_package,
         build_isolation,
         link_mode,
         &build_options,

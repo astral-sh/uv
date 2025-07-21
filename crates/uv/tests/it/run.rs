@@ -1302,7 +1302,6 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
     uv = [UV_VERSION]
     version_info = 3.12.[X]
     include-system-site-packages = false
-    relocatable = true
     extends-environment = [PARENT_VENV]
 
 
@@ -4778,7 +4777,6 @@ fn run_groups_include_requires_python() -> Result<()> {
         baz = ["iniconfig"]
         dev = ["sniffio", {include-group = "foo"}, {include-group = "baz"}]
 
-
         [tool.uv.dependency-groups]
         foo = {requires-python="<3.13"}
         bar = {requires-python=">=3.13"}
@@ -4923,8 +4921,8 @@ fn run_repeated() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    // Re-running as a tool does require reinstalling `typing-extensions`, since the base venv is
-    // different.
+    // Re-running as a tool doesn't require reinstalling `typing-extensions`, since the environment
+    // is cached.
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
@@ -4934,8 +4932,6 @@ fn run_repeated() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + typing-extensions==4.10.0
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
         import typing_extensions; import iniconfig
@@ -4982,8 +4978,7 @@ fn run_without_overlay() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
-    // Import `iniconfig` in the context of a `tool run` command, which should fail. Note that
-    // typing-extensions gets installed again, because the venv is not shared.
+    // Import `iniconfig` in the context of a `tool run` command, which should fail.
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
@@ -4993,8 +4988,6 @@ fn run_without_overlay() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + typing-extensions==4.10.0
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
         import typing_extensions; import iniconfig
@@ -5506,4 +5499,50 @@ fn run_no_sync_incompatible_python() -> Result<()> {
     ");
 
     Ok(())
+}
+
+#[test]
+fn run_python_preference_no_project() {
+    let context =
+        TestContext::new_with_versions(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
+
+    context.venv().assert().success();
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--managed-python").arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    // `VIRTUAL_ENV` is set here, so we'll ignore the flag
+    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    // If we remove the `VIRTUAL_ENV` variable, we should get the unmanaged Python
+    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version").env_remove("VIRTUAL_ENV"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    ");
 }

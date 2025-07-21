@@ -1,6 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anyhow::Context;
 use itertools::Itertools;
@@ -11,7 +10,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    HashCheckingMode, IndexStrategy, PackageConfigSettings, PreviewMode, Reinstall, SourceStrategy,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -22,14 +22,13 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::GroupName;
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,
 };
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
@@ -58,7 +57,7 @@ pub(crate) async fn pip_install(
     overrides_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
-    groups: BTreeMap<PathBuf, Vec<GroupName>>,
+    groups: &GroupsSpecification,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
@@ -75,6 +74,7 @@ pub(crate) async fn pip_install(
     hash_checking: Option<HashCheckingMode>,
     installer_metadata: bool,
     config_settings: &ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
@@ -126,7 +126,7 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         extras,
-        groups,
+        Some(groups),
         &client_builder,
     )
     .await?;
@@ -422,6 +422,7 @@ pub(crate) async fn pip_install(
         state.clone(),
         index_strategy,
         config_settings,
+        config_settings_package,
         build_isolation,
         link_mode,
         &build_options,
@@ -513,6 +514,7 @@ pub(crate) async fn pip_install(
         compile,
         &index_locations,
         config_settings,
+        config_settings_package,
         &hasher,
         &tags,
         &client,

@@ -117,7 +117,7 @@ pub(crate) async fn sync(
         // TODO(lucab): improve warning content
         // <https://github.com/astral-sh/uv/issues/7428>
         if project.workspace().pyproject_toml().has_scripts()
-            && !project.workspace().pyproject_toml().is_package()
+            && !project.workspace().pyproject_toml().is_package(true)
         {
             warn_user!(
                 "Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`"
@@ -330,10 +330,19 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
-            // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
-            // sync operation, but exit with a non-zero status.
-            Outcome::LockMismatch(lock)
+        Err(ProjectError::LockMismatch(prev, cur)) => {
+            if dry_run.enabled() {
+                // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
+                // sync operation, but exit with a non-zero status.
+                Outcome::LockMismatch(prev, cur)
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    ProjectError::LockMismatch(prev, cur).to_string().bold()
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
         }
         Err(err) => return Err(err.into()),
     };
@@ -398,7 +407,14 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(lock) => Err(ProjectError::LockMismatch(lock).into()),
+        Outcome::LockMismatch(prev, cur) => {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                ProjectError::LockMismatch(prev, cur).to_string().bold()
+            )?;
+            Ok(ExitStatus::Failure)
+        }
     }
 }
 
@@ -409,15 +425,18 @@ enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>),
 }
 
 impl Outcome {
     /// Return the [`Lock`] associated with this outcome.
     fn lock(&self) -> &Lock {
         match self {
-            Self::Success(lock) => lock.lock(),
-            Self::LockMismatch(lock) => lock,
+            Self::Success(lock) => match lock {
+                LockResult::Changed(_, lock) => lock,
+                LockResult::Unchanged(lock) => lock,
+            },
+            Self::LockMismatch(_prev, cur) => cur,
         }
     }
 }
@@ -554,6 +573,7 @@ pub(super) async fn do_sync(
         keyring_provider,
         dependency_metadata,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
         exclude_newer,
@@ -690,6 +710,7 @@ pub(super) async fn do_sync(
         state.clone().into_inner(),
         index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
         link_mode,
         build_options,
@@ -714,6 +735,7 @@ pub(super) async fn do_sync(
         compile_bytecode,
         index_locations,
         config_setting,
+        config_settings_package,
         &hasher,
         &tags,
         &client,
@@ -747,7 +769,7 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
             return true;
         };
 
-        !dist.r#virtual
+        !dist.r#virtual.unwrap_or(false)
     })
 }
 
@@ -765,8 +787,8 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
             let Dist::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
                 install_path,
-                editable: true,
-                r#virtual: false,
+                editable: Some(true),
+                r#virtual,
                 url,
             })) = dist.as_ref()
             else {
@@ -777,8 +799,8 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
                 dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
                     name: name.clone(),
                     install_path: install_path.clone(),
-                    editable: false,
-                    r#virtual: false,
+                    editable: Some(false),
+                    r#virtual: *r#virtual,
                     url: url.clone(),
                 }))),
                 version: version.clone(),
@@ -1179,7 +1201,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                     }
                 }
                 // TODO(zanieb): We don't have a way to report the outcome of the lock yet
-                Outcome::LockMismatch(_) => LockAction::Check,
+                Outcome::LockMismatch(..) => LockAction::Check,
             },
             dry_run: matches!(mode, LockMode::DryRun(_)),
         }

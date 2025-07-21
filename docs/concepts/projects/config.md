@@ -116,8 +116,9 @@ with the default build system.
     the presence of a `[build-system]` table is not required in other packages. For legacy reasons,
     if a build system is not defined, then `setuptools.build_meta:__legacy__` is used to build the
     package. Packages you depend on may not explicitly declare their build system but are still
-    installable. Similarly, if you add a dependency on a local package or install it with `uv pip`,
-    uv will always attempt to build and install it.
+    installable. Similarly, if you [add a dependency on a local project](./dependencies.md#path)
+    or install it with `uv pip`, uv will attempt to build and install it regardless of the presence
+    of a `[build-system]` table.
 
 ### Build system options
 
@@ -366,9 +367,9 @@ in the deployed environment without a dependency on the originating source code.
 
 ## Conflicting dependencies
 
-uv requires resolves all project dependencies together, including optional dependencies ("extras")
-and dependency groups. If dependencies declared in one section are not compatible with those in
-another section, uv will fail to resolve the requirements of the project with an error.
+uv resolves all project dependencies together, including optional dependencies ("extras") and
+dependency groups. If dependencies declared in one section are not compatible with those in another
+section, uv will fail to resolve the requirements of the project with an error.
 
 uv supports explicit declaration of conflicting dependency groups. For example, to declare that the
 `optional-dependency` groups `extra1` and `extra2` are incompatible:

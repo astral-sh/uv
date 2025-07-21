@@ -88,12 +88,12 @@ fn locked() -> Result<()> {
     // Running with `--locked` should error.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     let updated = context.read("uv.lock");
@@ -424,12 +424,12 @@ fn sync_json() -> Result<()> {
         .arg("--locked")
         .arg("--output-format").arg("json"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -894,7 +894,7 @@ fn check() -> Result<()> {
     // Running `uv sync --check` should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--check"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -904,7 +904,7 @@ fn check() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    error: The environment is outdated; run `uv sync` to update the environment
+    The environment is outdated; run `uv sync` to update the environment
     ");
 
     // Sync the environment.
@@ -3566,6 +3566,101 @@ fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
 }
 
 #[test]
+fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = [
+            "packages/*",
+        ]
+        "#,
+    )?;
+
+    let packages = context.temp_dir.child("packages");
+    packages.create_dir_all()?;
+
+    // Create three workspace members with transitive dependency from
+    // pkg-c -> pkg-b -> pkg-a
+    let pkg_a = packages.child("pkg-a");
+    pkg_a.create_dir_all()?;
+    let pkg_a_pyproject_toml = pkg_a.child("pyproject.toml");
+    pkg_a_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    let pkg_b = packages.child("pkg-b");
+    pkg_b.create_dir_all()?;
+    let pkg_b_pyproject_toml = pkg_b.child("pyproject.toml");
+    pkg_b_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { workspace = true }
+        "#,
+    )?;
+
+    let pkg_c = packages.child("pkg-c");
+    pkg_c.create_dir_all()?;
+    let pkg_c_pyproject_toml = pkg_c.child("pyproject.toml");
+    pkg_c_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-c"
+        version = "0.0.1"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-b"]
+
+        [tool.uv.sources]
+        pkg-b = { workspace = true }
+        "#,
+    )?;
+
+    // Syncing should build the two transitive dependencies pkg-a and pkg-b,
+    // but not pkg-c, which is not a dependency.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + pkg-a==0.0.1 (from file://[TEMP_DIR]/packages/pkg-a)
+     + pkg-b==0.0.1 (from file://[TEMP_DIR]/packages/pkg-b)
+     + sniffio==1.3.1
+    ");
+
+    // The lockfile should be valid.
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_non_existent_extra_workspace_member() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3626,9 +3721,10 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      + idna==3.6
      + sniffio==1.3.1
     ");
@@ -5936,6 +6032,91 @@ fn sync_override_package() -> Result<()> {
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      - core==0.1.0 (from file://[TEMP_DIR]/core)
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Update the source `tool.uv` to `package = true`
+    let pyproject_toml = context.temp_dir.child("core").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "core"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        package = true
+        "#,
+    )?;
+
+    // Mark the source as `package = false`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["core"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        core = { path = "./core", package = false }
+        "#,
+    )?;
+
+    // Syncing the project should _not_ install `core`.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Remove the `package = false` mark.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["core"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        core = { path = "./core" }
+        "#,
+    )?;
+
+    // Syncing the project _should_ install `core`.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + core==0.1.0 (from file://[TEMP_DIR]/core)
      ~ project==0.0.0 (from file://[TEMP_DIR]/)
     ");
 
@@ -8626,7 +8807,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
     // Running with `--locked` and `--dry-run` should error.
     uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--dry-run"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -8635,7 +8816,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     let updated = context.read("uv.lock");
@@ -8962,13 +9143,13 @@ fn sync_locked_script() -> Result<()> {
     // Re-run with `--locked`.
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
@@ -9064,14 +9245,14 @@ fn sync_locked_script() -> Result<()> {
     // Re-run with `--locked`.
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Updating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
@@ -9944,12 +10125,12 @@ fn sync_build_constraints() -> Result<()> {
     // This should fail, given that the build constraints have changed.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Changing the build constraints should lead to a re-resolve.
@@ -9987,6 +10168,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     context
         .venv()
         .arg(context.venv.as_os_str())
+        .arg("--clear")
         .arg("--python")
         .arg("3.12")
         .assert()
@@ -10312,7 +10494,7 @@ fn sync_required_environment_hint() -> Result<()> {
         [project]
         name = "example"
         version = "0.1.0"
-        requires-python = ">=3.13.2"
+        requires-python = ">=3.13"
         dependencies = ["no-sdist-no-wheels-with-matching-platform-a"]
 
         [[tool.uv.index]]
@@ -10362,7 +10544,7 @@ fn sync_url_with_query_parameters() -> Result<()> {
         [project]
         name = "example"
         version = "0.1.0"
-        requires-python = ">=3.13.2"
+        requires-python = ">=3.13"
         dependencies = ["source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz?foo=bar"]
         "#
     )?;
@@ -10468,6 +10650,622 @@ fn sync_python_platform() -> Result<()> {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     ");
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11648>
+#[test]
+#[cfg(not(windows))]
+fn conflicting_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        [dependency-groups]
+        foo = [
+            "child",
+        ]
+        bar = [
+            "child",
+        ]
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "foo" },
+            { group = "bar" },
+          ],
+        ]
+        [tool.uv.sources]
+        child = [
+            { path = "./child", editable = true, group = "foo" },
+            { path = "./child", editable = false, group = "bar" },
+        ]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+        )?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { directory = "child" }
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.dev-dependencies]
+        bar = [
+            { name = "child", version = "0.1.0", source = { directory = "child" } },
+        ]
+        foo = [
+            { name = "child", version = "0.1.0", source = { editable = "child" } },
+        ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        bar = [{ name = "child", directory = "child" }]
+        foo = [{ name = "child", editable = "child" }]
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"child","version":"0.1.0","editable_project_location":"[TEMP_DIR]/child"}]
+
+    ----- stderr -----
+    "#);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"child","version":"0.1.0"}]
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11648>
+#[test]
+#[cfg(not(windows))]
+fn undeclared_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        [dependency-groups]
+        foo = [
+            "child",
+        ]
+        bar = [
+            "child",
+        ]
+        [tool.uv]
+        conflicts = [
+          [
+            { group = "foo" },
+            { group = "bar" },
+          ],
+        ]
+        [tool.uv.sources]
+        child = [
+            { path = "./child", editable = true, group = "foo" },
+            { path = "./child", group = "bar" },
+        ]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+        )?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { directory = "child" }
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "child" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.dev-dependencies]
+        bar = [
+            { name = "child", version = "0.1.0", source = { directory = "child" } },
+        ]
+        foo = [
+            { name = "child", version = "0.1.0", source = { editable = "child" } },
+        ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        bar = [{ name = "child", directory = "child" }]
+        foo = [{ name = "child", editable = "child" }]
+        "#
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"child","version":"0.1.0","editable_project_location":"[TEMP_DIR]/child"}]
+
+    ----- stderr -----
+    "#);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_list().arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"child","version":"0.1.0"}]
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn sync_python_preference() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        "#,
+    )?;
+
+    // Run an initial sync, with 3.12 as an "unmanaged" interpreter
+    context.sync().assert().success();
+
+    // Mark 3.12 as a managed interpreter for the rest of the tests
+    let context = context.with_versions_as_managed(&["3.12"]);
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // We should invalidate the environment and switch to 3.11
+    uv_snapshot!(context.filters(), context.sync().arg("--no-managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // We will use the environment if it exists
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // Unless the user requests a Python preference that is incompatible
+    uv_snapshot!(context.filters(), context.sync().arg("--managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // If a interpreter cannot be found, we'll fail
+    uv_snapshot!(context.filters(), context.sync().arg("--managed-python").arg("-p").arg("3.11"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.11 in managed installations
+
+    hint: A managed Python download is available for Python 3.11, but Python downloads are set to 'never'
+    ");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+
+        [tool.uv]
+        python-preference = "only-system"
+        "#,
+    )?;
+
+    // We'll respect a `python-preference` in the `pyproject.toml` file
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // But it can be overridden via the CLI
+    uv_snapshot!(context.filters(), context.sync().arg("--managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // `uv run` will invalidate the environment too
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_config_settings_package() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-07-25T00:00:00Z");
+
+    // Create a child project that uses `setuptools`.
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    dependency
+        .child("dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install the `dependency` without `editable_mode=compat`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency", editable = true }
+        "#,
+    )?;
+
+    // Lock the project
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+    ");
+
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___dependency_0_1_0_finder.py");
+    assert!(finder.exists());
+
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // Install the `dependency` with `editable_mode=compat` scoped to the package.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency", editable = true }
+
+        [tool.uv.config-settings-package]
+        dependency = { editable_mode = "compat" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+    ");
+
+    // When installed with `editable_mode=compat`, the `finder.py` file should _not_ be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___dependency_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // Install the `dependency` with `editable_mode=compat` scoped to another package.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "dependency", editable = true }
+
+        [tool.uv.config-settings-package]
+        setuptools = { editable_mode = "compat" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+    ");
+
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___dependency_0_1_0_finder.py");
+    assert!(finder.exists());
 
     Ok(())
 }

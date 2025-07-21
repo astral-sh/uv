@@ -255,8 +255,13 @@ class CPythonFinder(Finder):
                 # Sort the assets to ensure deterministic results
                 row["assets"].sort(key=lambda asset: asset["browser_download_url"])
                 for asset in row["assets"]:
+                    # On older versions, GitHub didn't backfill the digest.
+                    if digest := asset["digest"]:
+                        sha256 = digest.removeprefix("sha256:")
+                    else:
+                        sha256 = None
                     url = asset["browser_download_url"]
-                    download = self._parse_download_url(url)
+                    download = self._parse_download_url(url, sha256)
                     if download is None:
                         continue
                     if (
@@ -305,6 +310,9 @@ class CPythonFinder(Finder):
         """Fetch the checksums for the given downloads."""
         checksum_urls = set()
         for download in downloads:
+            # Skip the newer releases where we got the hash from the GitHub API
+            if download.sha256:
+                continue
             release_base_url = download.url.rsplit("/", maxsplit=1)[0]
             checksum_url = release_base_url + "/SHA256SUMS"
             checksum_urls.add(checksum_url)
@@ -343,9 +351,13 @@ class CPythonFinder(Finder):
                 checksums[filename] = checksum
 
         for download in downloads:
+            if download.sha256:
+                continue
             download.sha256 = checksums.get(download.filename)
 
-    def _parse_download_url(self, url: str) -> PythonDownload | None:
+    def _parse_download_url(
+        self, url: str, sha256: str | None
+    ) -> PythonDownload | None:
         """Parse an indygreg download URL into a PythonDownload object."""
         # Ex)
         # https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
@@ -391,6 +403,7 @@ class CPythonFinder(Finder):
             url=url,
             build_options=build_options,
             variant=variant,
+            sha256=sha256,
         )
 
     def _normalize_triple(self, triple: str) -> PlatformTriple | None:

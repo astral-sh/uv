@@ -59,8 +59,10 @@ use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range}
 
 use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
-    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+    CanonicalMarkerValueDependencyGroup, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
+    CanonicalMarkerValueVersion,
 };
+use crate::marker::tree::{ContainerOperator, MarkerValueDependencyGroup};
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
@@ -328,9 +330,51 @@ impl InternerGuard<'_> {
                 Variable::Extra(CanonicalMarkerValueExtra::Extra(extra)),
                 Edges::from_bool(false),
             ),
-            // Invalid extras are always `false`.
+            // Invalid `extra` names are always `false`.
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Arbitrary(_),
+                ..
+            } => return NodeId::FALSE,
+            // A variable representing the existence or absence of a particular extra, in the
+            // context of a PEP 751 lockfile.
+            MarkerExpression::Extras {
+                name: MarkerValueExtra::Extra(extra),
+                operator: ContainerOperator::In,
+            } => (
+                Variable::Extras(CanonicalMarkerValueExtra::Extra(extra)),
+                Edges::from_bool(true),
+            ),
+            MarkerExpression::Extras {
+                name: MarkerValueExtra::Extra(extra),
+                operator: ContainerOperator::NotIn,
+            } => (
+                Variable::Extras(CanonicalMarkerValueExtra::Extra(extra)),
+                Edges::from_bool(false),
+            ),
+            // Invalid `extras` names are always `false`.
+            MarkerExpression::Extras {
+                name: MarkerValueExtra::Arbitrary(_),
+                ..
+            } => return NodeId::FALSE,
+            // A variable representing the existence or absence of a particular extra, in the
+            // context of a PEP 751 lockfile.
+            MarkerExpression::DependencyGroups {
+                name: MarkerValueDependencyGroup::Group(group),
+                operator: ContainerOperator::In,
+            } => (
+                Variable::DependencyGroups(CanonicalMarkerValueDependencyGroup::Group(group)),
+                Edges::from_bool(true),
+            ),
+            MarkerExpression::DependencyGroups {
+                name: MarkerValueDependencyGroup::Group(group),
+                operator: ContainerOperator::NotIn,
+            } => (
+                Variable::DependencyGroups(CanonicalMarkerValueDependencyGroup::Group(group)),
+                Edges::from_bool(false),
+            ),
+            // Invalid `dependency_group` names are always `false`.
+            MarkerExpression::DependencyGroups {
+                name: MarkerValueDependencyGroup::Arbitrary(_),
                 ..
             } => return NodeId::FALSE,
         };
@@ -1046,6 +1090,18 @@ pub(crate) enum Variable {
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     Extra(CanonicalMarkerValueExtra),
+    /// A variable representing the existence or absence of a given extra, in the context of a
+    /// PEP 751 lockfile marker.
+    ///
+    /// We keep extras at the leaves of the tree, so when simplifying extras we can
+    /// trivially remove the leaves without having to reconstruct the entire tree.
+    Extras(CanonicalMarkerValueExtra),
+    /// A variable representing the existence or absence of a given dependency group, in the context of a
+    /// PEP 751 lockfile marker.
+    ///
+    /// We keep groups at the leaves of the tree, so when simplifying groups we can
+    /// trivially remove the leaves without having to reconstruct the entire tree.
+    DependencyGroups(CanonicalMarkerValueDependencyGroup),
 }
 
 impl Variable {

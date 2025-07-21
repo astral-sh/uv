@@ -4,7 +4,7 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
-use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
+use uv_configuration::{BuildOptions, ConfigSettings, PackageConfigSettings, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
@@ -52,6 +52,7 @@ impl<'a> Planner<'a> {
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
         config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
@@ -59,7 +60,13 @@ impl<'a> Planner<'a> {
         // Index all the already-downloaded wheels in the cache.
         let mut registry_index =
             RegistryWheelIndex::new(cache, tags, index_locations, hasher, config_settings);
-        let built_index = BuiltWheelIndex::new(cache, tags, hasher, config_settings);
+        let built_index = BuiltWheelIndex::new(
+            cache,
+            tags,
+            hasher,
+            config_settings,
+            config_settings_package,
+        );
 
         let mut cached = vec![];
         let mut remote = vec![];

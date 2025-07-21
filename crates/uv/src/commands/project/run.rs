@@ -45,7 +45,7 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
@@ -465,7 +465,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     false,
@@ -670,7 +670,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     false,
@@ -907,7 +907,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     false,
@@ -944,7 +944,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     // If necessary, create an environment for the ephemeral requirements or command.
     let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;
-    let ephemeral_env = match spec {
+    let requirements_env = match spec {
         None => None,
         Some(spec)
             if can_skip_ephemeral(&spec, &base_interpreter, &base_site_packages, &settings) =>
@@ -952,7 +952,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             None
         }
         Some(spec) => {
-            debug!("Syncing ephemeral requirements");
+            debug!("Syncing `--with` requirements to cached environment");
 
             // Read the build constraints from the lock file.
             let build_constraints = base_lock
@@ -1013,54 +1013,92 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 Err(err) => return Err(err.into()),
             };
 
-            Some(environment)
+            Some(PythonEnvironment::from(environment))
         }
     };
 
-    // If we're running in an ephemeral environment, add a path file to enable loading of
-    // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
-    // resolve `.pth` files in the base environment.
+    // If we're layering requirements atop the project environment, run the command in an ephemeral,
+    // isolated environment. Otherwise, modifications to the "active virtual environment" would
+    // poison the cache.
+    let ephemeral_dir = requirements_env
+        .as_ref()
+        .map(|_| cache.venv_dir())
+        .transpose()?;
+
+    let ephemeral_env = ephemeral_dir
+        .as_ref()
+        .map(|dir| {
+            debug!(
+                "Creating ephemeral environment at: `{}`",
+                dir.path().simplified_display()
+            );
+
+            uv_virtualenv::create_venv(
+                dir.path(),
+                base_interpreter.clone(),
+                uv_virtualenv::Prompt::None,
+                false,
+                uv_virtualenv::OnExisting::Remove,
+                false,
+                false,
+                false,
+                preview,
+            )
+        })
+        .transpose()?
+        .map(EphemeralEnvironment::from);
+
+    // If we're running in an ephemeral environment, add a path file to enable loading from the
+    // `--with` requirements environment and the project environment site packages.
     //
-    // `sitecustomize.py` would be an alternative, but it can be shadowed by an existing such
-    // module in the python installation.
+    // Setting `PYTHONPATH` is insufficient, as it doesn't resolve `.pth` files in the base
+    // environment. Adding `sitecustomize.py` would be an alternative, but it can be shadowed by an
+    // existing such module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
-        let site_packages = base_interpreter
-            .site_packages()
-            .next()
-            .ok_or_else(|| ProjectError::NoSitePackages)?;
-        ephemeral_env.set_overlay(format!(
-            "import site; site.addsitedir(\"{}\")",
-            site_packages.escape_for_python()
-        ))?;
+        if let Some(requirements_env) = requirements_env.as_ref() {
+            let requirements_site_packages =
+                requirements_env.site_packages().next().ok_or_else(|| {
+                    anyhow!("Requirements environment has no site packages directory")
+                })?;
+            let base_site_packages = base_interpreter
+                .site_packages()
+                .next()
+                .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
 
-        // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
-        // file. This helps out static-analysis tools such as ty (see docs on
-        // `CachedEnvironment::set_parent_environment`).
-        //
-        // Note that we do this even if the parent environment is not a virtual environment.
-        // For ephemeral environments created by `uv run --with`, the parent environment's
-        // `site-packages` directory is added to `sys.path` even if the parent environment is not
-        // a virtual environment and even if `--system-site-packages` was not explicitly selected.
-        ephemeral_env.set_parent_environment(base_interpreter.sys_prefix())?;
+            ephemeral_env.set_overlay(format!(
+                "import site; site.addsitedir(\"{}\"); site.addsitedir(\"{}\");",
+                base_site_packages.escape_for_python(),
+                requirements_site_packages.escape_for_python(),
+            ))?;
 
-        // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
-        // environment.
-        if base_interpreter.is_virtualenv()
-            && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
-                .is_ok_and(|cfg| cfg.include_system_site_packages())
-        {
-            ephemeral_env.set_system_site_packages()?;
-        } else {
-            ephemeral_env.clear_system_site_packages()?;
+            // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
+            // file. This helps out static-analysis tools such as ty (see docs on
+            // `CachedEnvironment::set_parent_environment`).
+            //
+            // Note that we do this even if the parent environment is not a virtual environment.
+            // For ephemeral environments created by `uv run --with`, the parent environment's
+            // `site-packages` directory is added to `sys.path` even if the parent environment is not
+            // a virtual environment and even if `--system-site-packages` was not explicitly selected.
+            ephemeral_env.set_parent_environment(base_interpreter.sys_prefix())?;
+
+            // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
+            // environment.
+            if base_interpreter.is_virtualenv()
+                && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
+                    .is_ok_and(|cfg| cfg.include_system_site_packages())
+            {
+                ephemeral_env.set_system_site_packages()?;
+            }
         }
     }
 
-    // Cast from `CachedEnvironment` to `PythonEnvironment`.
+    // Cast to `PythonEnvironment`.
     let ephemeral_env = ephemeral_env.map(PythonEnvironment::from);
 
     // Determine the Python interpreter to use for the command, if necessary.
     let interpreter = ephemeral_env
         .as_ref()
+        .or(requirements_env.as_ref())
         .map_or_else(|| &base_interpreter, |env| env.interpreter());
 
     // Check if any run command is given.
@@ -1143,6 +1181,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .as_ref()
             .map(PythonEnvironment::scripts)
             .into_iter()
+            .chain(
+                requirements_env
+                    .as_ref()
+                    .map(PythonEnvironment::scripts)
+                    .into_iter(),
+            )
             .chain(std::iter::once(base_interpreter.scripts()))
             .chain(
                 // On Windows, non-virtual Python distributions put `python.exe` in the top-level

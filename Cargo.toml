@@ -75,6 +75,7 @@ uv-workspace = { path = "crates/uv-workspace" }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
+arrayvec = { version = "0.7.6" }
 astral-tokio-tar = { version = "0.5.1" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
@@ -184,7 +185,7 @@ url = { version = "2.5.2", features = ["serde"] }
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "06ec5a5f59ffaeb6cf5079c6cb184467da06c9db" }
 walkdir = { version = "2.5.0" }
 which = { version = "8.0.0", features = ["regex"] }
-windows = { version = "0.59.0", features = ["Win32_System_Kernel", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem"] }
+windows = { version = "0.59.0", features = ["Win32_Globalization", "Win32_System_Console", "Win32_System_Kernel", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem"] }
 windows-core = { version = "0.59.0" }
 windows-registry = { version = "0.5.0" }
 windows-result = { version = "0.3.0" }

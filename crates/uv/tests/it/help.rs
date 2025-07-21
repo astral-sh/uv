@@ -469,10 +469,9 @@ fn help_subsubcommand() {
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
 
-    A `python` executable is not made globally available, managed Python versions are only used in uv
-    commands or in active virtual environments. There is experimental support for adding Python
-    executables to a directory on the path — use the `--preview` flag to enable this behavior and `uv
-    python dir --bin` to retrieve the target directory.
+    By default, Python executables are added to a directory on the path with a minor version suffix,
+    e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use `uv python dir
+    --bin` to see the target directory.
 
     Multiple Python versions may be requested.
 
@@ -506,10 +505,14 @@ fn help_subsubcommand() {
               [env: UV_PYTHON_INSTALL_DIR=]
 
           --no-bin
-              Do not install a Python executable into the `bin` directory
+              Do not install a Python executable into the `bin` directory.
+              
+              This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
 
           --no-registry
-              Do not register the Python installation in the Windows registry
+              Do not register the Python installation in the Windows registry.
+              
+              This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
 
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations.

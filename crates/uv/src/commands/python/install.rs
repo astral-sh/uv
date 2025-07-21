@@ -166,12 +166,14 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    // TODO(zanieb): We should consider marking the Python installation as the default when
+    // `--default` is used. It's not clear how this overlaps with a global Python pin, but I'd be
+    // surprised if `uv python find` returned the "newest" Python version rather than the one I just
+    // installed with the `--default` flag.
     if default && !preview.is_enabled() {
-        writeln!(
-            printer.stderr(),
-            "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`"
-        )?;
-        return Ok(ExitStatus::Failure);
+        warn_user!(
+            "The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning"
+        );
     }
 
     if upgrade && preview.is_disabled() {
@@ -222,6 +224,8 @@ pub(crate) async fn install(
             .map(PythonVersionFile::into_versions)
             .unwrap_or_else(|| {
                 // If no version file is found and no requests were made
+                // TODO(zanieb): We should consider differentiating between a global Python version
+                // file here, allowing a request from there to enable `is_default_install`.
                 is_default_install = true;
                 vec![if reinstall {
                     // On bare `--reinstall`, reinstall all Python versions
@@ -451,10 +455,10 @@ pub(crate) async fn install(
         }
     }
 
-    let bin_dir = if matches!(bin, Some(true)) || preview.is_enabled() {
-        Some(python_executable_dir()?)
-    } else {
+    let bin_dir = if matches!(bin, Some(false)) {
         None
+    } else {
+        Some(python_executable_dir()?)
     };
 
     let installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
@@ -469,20 +473,10 @@ pub(crate) async fn install(
             e.warn_user(installation);
         }
 
-        if preview.is_disabled() {
-            debug!("Skipping installation of Python executables, use `--preview` to enable.");
-            continue;
-        }
-
-        let bin_dir = bin_dir
-            .as_ref()
-            .expect("We should have a bin directory with preview enabled")
-            .as_path();
-
         let upgradeable = (default || is_default_install)
             || requested_minor_versions.contains(&installation.key().version().python_version());
 
-        if !matches!(bin, Some(false)) {
+        if let Some(bin_dir) = bin_dir.as_ref() {
             create_bin_links(
                 installation,
                 bin_dir,
@@ -501,7 +495,7 @@ pub(crate) async fn install(
             );
         }
 
-        if preview.is_enabled() && !matches!(registry, Some(false)) {
+        if !matches!(registry, Some(false)) {
             #[cfg(windows)]
             {
                 match uv_python::windows_registry::create_registry_entry(installation) {
@@ -661,11 +655,7 @@ pub(crate) async fn install(
             }
         }
 
-        if preview.is_enabled() && !matches!(bin, Some(false)) {
-            let bin_dir = bin_dir
-                .as_ref()
-                .expect("We should have a bin directory with preview enabled")
-                .as_path();
+        if let Some(bin_dir) = bin_dir.as_ref() {
             warn_if_not_on_path(bin_dir);
         }
     }
@@ -749,16 +739,20 @@ fn create_bin_links(
     errors: &mut Vec<(InstallErrorKind, PythonInstallationKey, Error)>,
     preview: PreviewMode,
 ) {
-    let targets =
-        if (default || is_default_install) && first_request.matches_installation(installation) {
-            vec![
-                installation.key().executable_name_minor(),
-                installation.key().executable_name_major(),
-                installation.key().executable_name(),
-            ]
-        } else {
-            vec![installation.key().executable_name_minor()]
-        };
+    // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
+    // it. In particular, it may be confusing because it does not apply when versions are loaded
+    // from a `.python-version` file.
+    let targets = if (default || (is_default_install && preview.is_enabled()))
+        && first_request.matches_installation(installation)
+    {
+        vec![
+            installation.key().executable_name_minor(),
+            installation.key().executable_name_major(),
+            installation.key().executable_name(),
+        ]
+    } else {
+        vec![installation.key().executable_name_minor()]
+    };
 
     for target in targets {
         let target = bin.join(target);

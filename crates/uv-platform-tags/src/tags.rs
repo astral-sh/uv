@@ -771,7 +771,7 @@ mod tests {
     /// A reference list can be generated with:
     /// ```text
     /// $ python -c "from packaging import tags; [print(tag) for tag in tags.platform_tags()]"`
-    /// ````
+    /// ```
     #[test]
     fn test_platform_tags_manylinux() {
         let tags = compatible_tags(&Platform::new(

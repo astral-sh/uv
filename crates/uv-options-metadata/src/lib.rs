@@ -69,11 +69,19 @@ impl Display for OptionEntry {
 ///
 /// It extracts the options by calling the [`OptionsMetadata::record`] of a type implementing
 /// [`OptionsMetadata`].
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone)]
 pub struct OptionSet {
     record: fn(&mut dyn Visit),
     doc: fn() -> Option<&'static str>,
 }
+
+impl PartialEq for OptionSet {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::fn_addr_eq(self.record, other.record) && std::ptr::fn_addr_eq(self.doc, other.doc)
+    }
+}
+
+impl Eq for OptionSet {}
 
 impl OptionSet {
     pub fn of<T>() -> Self

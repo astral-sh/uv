@@ -1094,18 +1094,19 @@ fn extra_unconditional() -> Result<()> {
     "###);
     // This is fine because we are only enabling one
     // extra, and thus, there is no conflict.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.1.0
      + idna==3.6
+     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
      + sniffio==1.3.1
-    "###);
+    ");
 
     // And same thing for the other extra.
     root_pyproject_toml.write_str(
@@ -1215,18 +1216,19 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
     // `uv sync` wasn't correctly propagating extras in a way
     // that would satisfy the conflict markers that got added
     // to the `proxy1[extra1]` dependency.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.1.0
      + idna==3.6
+     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -1301,16 +1303,17 @@ fn extra_unconditional_in_optional() -> Result<()> {
     "###);
 
     // This should install `sortedcontainers==2.3.0`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
      + sortedcontainers==2.3.0
-    "###);
+    ");
 
     // This should install `sortedcontainers==2.4.0`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=x2"), @r###"
@@ -4460,19 +4463,20 @@ conflicts = [
     error: Extra `x2` is not defined in the project's `optional-dependencies` table
     "###);
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
+     + proxy1==0.1.0 (from file://[TEMP_DIR]/proxy1)
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -4558,14 +4562,14 @@ conflicts = [
         requires-dist = [
             { name = "anyio", specifier = ">=4" },
             { name = "idna", marker = "extra == 'x1'", specifier = "==3.6" },
-            { name = "proxy1", virtual = "proxy1" },
+            { name = "proxy1", editable = "proxy1" },
         ]
         provides-extras = ["x1"]
 
         [[package]]
         name = "proxy1"
         version = "0.1.0"
-        source = { virtual = "proxy1" }
+        source = { editable = "proxy1" }
 
         [package.optional-dependencies]
         x2 = [

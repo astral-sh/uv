@@ -10,8 +10,9 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ConfigSettingEntry, ConfigSettingPackageEntry, ExportFormat, IndexStrategy,
+    KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend, TargetTriple, TrustedHost,
+    TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
@@ -2615,16 +2616,23 @@ pub struct VenvArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_SEED)]
     pub seed: bool,
 
+    /// Remove any existing files or directories at the target path.
+    ///
+    /// By default, `uv venv` will exit with an error if the given path is non-empty. The
+    /// `--clear` option will instead clear a non-empty path before creating a new virtual
+    /// environment.
+    #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
+    pub clear: bool,
+
     /// Preserve any existing files or directories at the target path.
     ///
-    /// By default, `uv venv` will remove an existing virtual environment at the given path, and
-    /// exit with an error if the path is non-empty but _not_ a virtual environment. The
+    /// By default, `uv venv` will exit with an error if the given path is non-empty. The
     /// `--allow-existing` option will instead write to the given path, regardless of its contents,
     /// and without clearing it beforehand.
     ///
     /// WARNING: This option can lead to unexpected behavior if the existing virtual environment and
     /// the newly-created virtual environment are linked to different Python interpreters.
-    #[clap(long)]
+    #[clap(long, overrides_with = "clear")]
     pub allow_existing: bool,
 
     /// The path to the virtual environment to create.
@@ -3726,10 +3734,19 @@ pub struct AddArgs {
 
     /// Add the dependency as a workspace member.
     ///
-    /// When used with a path dependency, the package will be added to the workspace's `members`
-    /// list in the root `pyproject.toml` file.
-    #[arg(long)]
+    /// By default, uv will add path dependencies that are within the workspace directory
+    /// as workspace members. When used with a path dependency, the package will be added
+    /// to the workspace's `members` list in the root `pyproject.toml` file.
+    #[arg(long, overrides_with = "no_workspace")]
     pub workspace: bool,
+
+    /// Don't add the dependency as a workspace member.
+    ///
+    /// By default, when adding a dependency that's a local path and is within the workspace
+    /// directory, uv will add it as a workspace member; pass `--no-workspace` to add the package
+    /// as direct path dependency instead.
+    #[arg(long, overrides_with = "workspace")]
+    pub no_workspace: bool,
 }
 
 #[derive(Args)]
@@ -4677,6 +4694,14 @@ pub struct ToolUpgradeArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -4794,10 +4819,9 @@ pub enum PythonCommand {
     /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
     /// python dir`.
     ///
-    /// A `python` executable is not made globally available, managed Python versions are only used
-    /// in uv commands or in active virtual environments. There is experimental support for adding
-    /// Python executables to a directory on the path — use the `--preview` flag to enable this
-    /// behavior and `uv python dir --bin` to retrieve the target directory.
+    /// By default, Python executables are added to a directory on the path with a minor version
+    /// suffix, e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use
+    /// `uv python dir --bin` to see the target directory.
     ///
     /// Multiple Python versions may be requested.
     ///
@@ -4959,11 +4983,15 @@ pub struct PythonInstallArgs {
     /// This is the default behavior. If this flag is provided explicitly, uv will error if the
     /// executable cannot be installed.
     ///
+    /// This can also be set with `UV_PYTHON_INSTALL_BIN=1`.
+    ///
     /// See `UV_PYTHON_BIN_DIR` to customize the target directory.
     #[arg(long, overrides_with("no_bin"), hide = true)]
     pub bin: bool,
 
     /// Do not install a Python executable into the `bin` directory.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
     #[arg(long, overrides_with("bin"), conflicts_with("default"))]
     pub no_bin: bool,
 
@@ -4971,10 +4999,14 @@ pub struct PythonInstallArgs {
     ///
     /// This is the default behavior on Windows. If this flag is provided explicitly, uv will error if the
     /// registry entry cannot be created.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=1`.
     #[arg(long, overrides_with("no_registry"), hide = true)]
     pub registry: bool,
 
     /// Do not register the Python installation in the Windows registry.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
     #[arg(long, overrides_with("registry"))]
     pub no_registry: bool,
 
@@ -5461,6 +5493,14 @@ pub struct InstallerArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -5647,6 +5687,14 @@ pub struct ResolverArgs {
         help_heading = "Build options"
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
     /// Disable isolation when building source distributions.
     ///
@@ -5836,6 +5884,14 @@ pub struct ResolverInstallerArgs {
         help_heading = "Build options"
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
     /// Disable isolation when building source distributions.
     ///

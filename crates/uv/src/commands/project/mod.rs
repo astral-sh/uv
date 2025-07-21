@@ -30,8 +30,8 @@ use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest, satisfies_python_preference,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -75,7 +75,7 @@ pub(crate) enum ProjectError {
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
     )]
-    LockMismatch(Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>),
 
     #[error(
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
@@ -199,9 +199,6 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to parse PEP 723 script metadata")]
     Pep723ScriptTomlParse(#[source] toml::de::Error),
-
-    #[error("Failed to remove ephemeral overlay")]
-    OverlayRemoval(#[source] std::io::Error),
 
     #[error("Failed to find `site-packages` directory for environment")]
     NoSitePackages,
@@ -667,6 +664,7 @@ impl ScriptInterpreter {
                     &venv,
                     EnvironmentKind::Script,
                     python_request.as_ref(),
+                    python_preference,
                     requires_python
                         .as_ref()
                         .map(|(requires_python, _)| requires_python),
@@ -797,6 +795,9 @@ pub(crate) enum EnvironmentIncompatibilityError {
         "The interpreter in the {0} environment has a different version ({1}) than it was created with ({2})"
     )]
     PyenvVersionConflict(EnvironmentKind, Version, Version),
+
+    #[error("The {0} environment's Python interpreter does not meet the Python preference: `{1}`")]
+    PythonPreference(EnvironmentKind, PythonPreference),
 }
 
 /// Whether an environment is usable for a project or script, i.e., if it matches the requirements.
@@ -804,6 +805,7 @@ fn environment_is_usable(
     environment: &PythonEnvironment,
     kind: EnvironmentKind,
     python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
     requires_python: Option<&RequiresPython>,
     cache: &Cache,
 ) -> Result<(), EnvironmentIncompatibilityError> {
@@ -837,6 +839,22 @@ fn environment_is_usable(
                 requires_python.clone(),
             ));
         }
+    }
+
+    if satisfies_python_preference(
+        PythonSource::DiscoveredEnvironment,
+        environment.interpreter(),
+        python_preference,
+    ) {
+        trace!(
+            "The virtual environment's Python interpreter meets the Python preference: `{}`",
+            python_preference
+        );
+    } else {
+        return Err(EnvironmentIncompatibilityError::PythonPreference(
+            kind,
+            python_preference,
+        ));
     }
 
     Ok(())
@@ -892,6 +910,7 @@ impl ProjectInterpreter {
                     &venv,
                     EnvironmentKind::Project,
                     python_request.as_ref(),
+                    python_preference,
                     requires_python.as_ref(),
                     cache,
                 ) {
@@ -1339,7 +1358,7 @@ impl ProjectEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        false,
+                        uv_virtualenv::OnExisting::Remove,
                         false,
                         false,
                         upgradeable,
@@ -1378,7 +1397,7 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    false,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     upgradeable,
@@ -1530,7 +1549,7 @@ impl ScriptEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        false,
+                        uv_virtualenv::OnExisting::Remove,
                         false,
                         false,
                         upgradeable,
@@ -1566,7 +1585,7 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    false,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     upgradeable,
@@ -1655,6 +1674,7 @@ pub(crate) async fn resolve_names(
             ResolverSettings {
                 build_options,
                 config_setting,
+                config_settings_package,
                 dependency_metadata,
                 exclude_newer,
                 fork_strategy: _,
@@ -1723,6 +1743,7 @@ pub(crate) async fn resolve_names(
         state.clone(),
         *index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
         *link_mode,
         build_options,
@@ -1813,6 +1834,7 @@ pub(crate) async fn resolve_environment(
         fork_strategy,
         dependency_metadata,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
         exclude_newer,
@@ -1929,6 +1951,7 @@ pub(crate) async fn resolve_environment(
         state.clone().into_inner(),
         *index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
         *link_mode,
         build_options,
@@ -1994,6 +2017,7 @@ pub(crate) async fn sync_environment(
         keyring_provider,
         dependency_metadata,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
         exclude_newer,
@@ -2065,6 +2089,7 @@ pub(crate) async fn sync_environment(
         state.clone().into_inner(),
         index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
         link_mode,
         build_options,
@@ -2087,6 +2112,7 @@ pub(crate) async fn sync_environment(
         compile_bytecode,
         index_locations,
         config_setting,
+        config_settings_package,
         &hasher,
         tags,
         &client,
@@ -2150,6 +2176,7 @@ pub(crate) async fn update_environment(
             ResolverSettings {
                 build_options,
                 config_setting,
+                config_settings_package,
                 dependency_metadata,
                 exclude_newer,
                 fork_strategy,
@@ -2286,6 +2313,7 @@ pub(crate) async fn update_environment(
         state.clone(),
         *index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
         *link_mode,
         build_options,
@@ -2343,6 +2371,7 @@ pub(crate) async fn update_environment(
         *compile_bytecode,
         index_locations,
         config_setting,
+        config_settings_package,
         &hasher,
         tags,
         &client,

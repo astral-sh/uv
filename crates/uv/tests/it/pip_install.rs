@@ -2858,7 +2858,7 @@ fn install_no_binary_cache() {
     );
 
     // Re-create the virtual environment.
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // Re-install. The distribution should be installed from the cache.
     uv_snapshot!(
@@ -2876,7 +2876,7 @@ fn install_no_binary_cache() {
     );
 
     // Re-create the virtual environment.
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // Install with `--no-binary`. The distribution should be built from source, despite a binary
     // distribution being available in the cache.
@@ -3087,7 +3087,7 @@ fn cache_priority() {
     );
 
     // Re-create the virtual environment.
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // Install `idna` without a version specifier.
     uv_snapshot!(
@@ -4053,13 +4053,13 @@ fn config_settings_path() -> Result<()> {
     "###
     );
 
-    // When installed without `--editable_mode=compat`, the `finder.py` file should be present.
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
     let finder = context
         .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Reinstalling with `--editable_mode=compat` should be a no-op; changes in build configuration
+    // Reinstalling with `editable_mode=compat` should be a no-op; changes in build configuration
     // don't invalidate the environment.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -4088,7 +4088,7 @@ fn config_settings_path() -> Result<()> {
      - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
     "###);
 
-    // Install the editable package with `--editable_mode=compat`. We should ignore the cached
+    // Install the editable package with `editable_mode=compat`. We should ignore the cached
     // build configuration and rebuild.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -4108,7 +4108,7 @@ fn config_settings_path() -> Result<()> {
     "###
     );
 
-    // When installed without `--editable_mode=compat`, the `finder.py` file should _not_ be present.
+    // When installed without `editable_mode=compat`, the `finder.py` file should _not_ be present.
     let finder = context
         .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
@@ -8251,6 +8251,7 @@ fn install_relocatable() -> Result<()> {
     context
         .venv()
         .arg(context.venv.as_os_str())
+        .arg("--clear")
         .arg("--python")
         .arg("3.12")
         .arg("--relocatable")
@@ -11679,6 +11680,172 @@ fn strip_shebang_arguments() -> Result<()> {
         print(f"Hello from GUI script: {sys.executable}")
         "#);
     });
+
+    Ok(())
+}
+
+#[test]
+fn install_python_preference() {
+    let context =
+        TestContext::new_with_versions(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
+
+    // Create a managed interpreter environment
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    // Install a package, requesting managed Python
+    uv_snapshot!(context.filters(), context.pip_install().arg("anyio").arg("--managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Install a package, requesting unmanaged Python
+    // This is allowed, because the virtual environment already exists
+    uv_snapshot!(context.filters(), context.pip_install().arg("anyio").arg("--no-managed-python"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    ");
+
+    // This also works with `VIRTUAL_ENV` unset
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio").arg("--no-managed-python").env_remove("VIRTUAL_ENV"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    ");
+}
+
+#[test]
+fn config_settings_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {}",
+        context
+            .workspace_root
+            .join("scripts/packages/setuptools_editable")
+            .display()
+    ))?;
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###
+    );
+
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(finder.exists());
+
+    // Uninstall the package.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("setuptools-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###);
+
+    // Install the editable package with `editable_mode=compat`, scoped to the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--config-settings-package")
+        .arg("setuptools-editable:editable_mode=compat"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "
+    );
+
+    // When installed with `editable_mode=compat`, the `finder.py` file should _not_ be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(!finder.exists());
+
+    // Uninstall the package.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("setuptools-editable"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "###);
+
+    // Install the editable package with `editable_mode=compat`, by scoped to a different package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--config-settings-package")
+        .arg("setuptools:editable_mode=compat")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "
+    );
+
+    // When installed without `editable_mode=compat`, the `finder.py` file should be present.
+    let finder = context
+        .site_packages()
+        .join("__editable___setuptools_editable_0_1_0_finder.py");
+    assert!(finder.exists());
 
     Ok(())
 }

@@ -698,6 +698,16 @@ impl ResolverOutput {
                         add_marker_params_from_tree(tree, set);
                     }
                 }
+                MarkerTreeKind::Extras(marker) => {
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(tree, set);
+                    }
+                }
+                MarkerTreeKind::DependencyGroups(marker) => {
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(tree, set);
+                    }
+                }
             }
         }
 

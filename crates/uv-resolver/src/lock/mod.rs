@@ -1255,6 +1255,7 @@ impl Lock {
         root: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
+        required_members: &BTreeSet<PackageName>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
@@ -1282,7 +1283,10 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            let expected = !member.pyproject_toml().is_package();
+            // We don't require a build system, if the workspace member is a dependency
+            let expected = !member
+                .pyproject_toml()
+                .is_package(!required_members.contains(name));
             let actual = self
                 .find_by_name(name)
                 .ok()
@@ -2396,8 +2400,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: false,
-                    r#virtual: false,
+                    editable: Some(false),
+                    r#virtual: Some(false),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -2407,8 +2411,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: true,
-                    r#virtual: false,
+                    editable: Some(true),
+                    r#virtual: Some(false),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -2418,8 +2422,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: false,
-                    r#virtual: true,
+                    editable: Some(false),
+                    r#virtual: Some(true),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -3250,9 +3254,9 @@ impl Source {
         let path = relative_to(&directory_dist.install_path, root)
             .or_else(|_| std::path::absolute(&directory_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        if directory_dist.editable {
+        if directory_dist.editable.unwrap_or(false) {
             Ok(Source::Editable(path.into_boxed_path()))
-        } else if directory_dist.r#virtual {
+        } else if directory_dist.r#virtual.unwrap_or(false) {
             Ok(Source::Virtual(path.into_boxed_path()))
         } else {
             Ok(Source::Directory(path.into_boxed_path()))
@@ -4800,8 +4804,8 @@ fn normalize_requirement(
                 marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Directory {
                     install_path,
-                    editable,
-                    r#virtual,
+                    editable: Some(editable.unwrap_or(false)),
+                    r#virtual: Some(r#virtual.unwrap_or(false)),
                     url,
                 },
                 origin: None,

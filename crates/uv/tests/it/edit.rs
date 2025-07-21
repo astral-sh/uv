@@ -2491,9 +2491,9 @@ fn add_workspace_path() -> Result<()> {
     Ok(())
 }
 
-/// Add a path dependency.
+/// Add a path dependency, which should be implicitly added to the workspace.
 #[test]
-fn add_path() -> Result<()> {
+fn add_path_implicit_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let workspace = context.temp_dir.child("workspace");
@@ -2533,6 +2533,7 @@ fn add_path() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
+    Added `packages/child` to workspace members
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2545,7 +2546,134 @@ fn add_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.workspace]
+        members = [
+            "packages/child",
+        ]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#
+        );
+    });
+
+    // `uv add` implies a full lock and sync, including development dependencies.
+    let lock = fs_err::read_to_string(workspace.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "parent",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "packages/child" }
+
+        [[package]]
+        name = "parent"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child", editable = "packages/child" }]
+        "#
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(workspace.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Add a path dependency with `--no-workspace`, which should not be added to the workspace.
+#[test]
+fn add_path_no_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let child = workspace.child("packages").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    workspace
+        .child("packages")
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.add().arg(Path::new("packages").join("child")).current_dir(workspace.path()).arg("--no-workspace"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(workspace.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
         [project]
         name = "parent"
         version = "0.1.0"
@@ -2556,7 +2684,7 @@ fn add_path() -> Result<()> {
 
         [tool.uv.sources]
         child = { path = "packages/child" }
-        "###
+        "#
         );
     });
 
@@ -2603,6 +2731,110 @@ fn add_path() -> Result<()> {
     ----- stderr -----
     Audited 1 package in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Add a path dependency in an adjacent directory, which should not be added to the workspace.
+#[test]
+fn add_path_adjacent_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    dependency
+        .child("src")
+        .child("dependency")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.add().arg(dependency.path()).current_dir(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "dependency",
+        ]
+
+        [tool.uv.sources]
+        dependency = { path = "../dependency" }
+        "#
+        );
+    });
+
+    // `uv add` implies a full lock and sync, including development dependencies.
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "dependency"
+        version = "0.1.0"
+        source = { directory = "../dependency" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "dependency" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "dependency", directory = "../dependency" }]
+        "#
+        );
+    });
 
     Ok(())
 }
@@ -7249,7 +7481,7 @@ fn fail_to_add_revert_project() -> Result<()> {
         .child("setup.py")
         .write_str("1/0")?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./child"), @r#"
+    uv_snapshot!(context.filters(), context.add().arg("./child").arg("--no-workspace"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7351,7 +7583,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
         .child("setup.py")
         .write_str("1/0")?;
 
-    uv_snapshot!(context.filters(), context.add().arg("./child"), @r#"
+    uv_snapshot!(context.filters(), context.add().arg("./child").arg("--no-workspace"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7460,7 +7692,7 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
         .child("setup.py")
         .write_str("1/0")?;
 
-    uv_snapshot!(context.filters(), context.add().arg("--workspace").arg("./broken"), @r#"
+    uv_snapshot!(context.filters(), context.add().arg("./broken"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7575,7 +7807,7 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
         .child("setup.py")
         .write_str("1/0")?;
 
-    uv_snapshot!(context.filters(), context.add().current_dir(&project).arg("--workspace").arg("../broken"), @r#"
+    uv_snapshot!(context.filters(), context.add().current_dir(&project).arg("../broken"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -10130,7 +10362,7 @@ fn add_self() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "anyio"
         version = "0.1.0"
@@ -10145,7 +10377,7 @@ fn add_self() -> Result<()> {
 
         [tool.uv.sources]
         anyio = { workspace = true }
-        "###
+        "#
         );
     });
 
@@ -10166,7 +10398,7 @@ fn add_self() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "anyio"
         version = "0.1.0"
@@ -10186,7 +10418,7 @@ fn add_self() -> Result<()> {
         dev = [
             "anyio[types]",
         ]
-        "###
+        "#
         );
     });
 
@@ -12928,12 +13160,12 @@ fn add_path_with_existing_workspace() -> Result<()> {
         dependencies = []
     "#})?;
 
-    // Add the dependency with `--workspace` flag from the project directory.
+    // Add the dependency from the project directory. It should automatically be added as a
+    // workspace member, since it's in the same directory as the workspace.
     uv_snapshot!(context.filters(), context
         .add()
         .current_dir(&project_dir)
-        .arg("../dep")
-        .arg("--workspace"), @r"
+        .arg("../dep"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12941,7 +13173,9 @@ fn add_path_with_existing_workspace() -> Result<()> {
     ----- stderr -----
     Added `dep` to workspace members
     Resolved 3 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13018,7 +13252,9 @@ fn add_path_with_workspace() -> Result<()> {
     ----- stderr -----
     Added `dep` to workspace members
     Resolved 2 packages in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -13039,6 +13275,212 @@ fn add_path_with_workspace() -> Result<()> {
 
     [tool.uv.sources]
     dep = { workspace = true }
+    "#
+    );
+
+    Ok(())
+}
+
+/// Add a path dependency within the workspace directory without --workspace flag.
+/// It should automatically be added as a workspace member.
+#[test]
+fn add_path_within_workspace_defaults_to_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = []
+    "#})?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Add the dependency without --workspace flag - it should still be added as workspace member
+    // since it's within the workspace directory.
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./dep"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Added `dep` to workspace members
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "parent"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dep",
+    ]
+
+    [tool.uv.workspace]
+    members = [
+        "dep",
+    ]
+
+    [tool.uv.sources]
+    dep = { workspace = true }
+    "#
+    );
+
+    Ok(())
+}
+
+/// Add a path dependency within the workspace directory with --no-workspace flag.
+/// It should be added as a direct path dependency.
+#[test]
+fn add_path_with_no_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace_toml = context.temp_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = []
+    "#})?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Add the dependency with --no-workspace flag - it should be added as direct path dependency.
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("./dep")
+        .arg("--no-workspace"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "parent"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dep",
+    ]
+
+    [tool.uv.workspace]
+    members = []
+
+    [tool.uv.sources]
+    dep = { path = "dep" }
+    "#
+    );
+
+    Ok(())
+}
+
+/// Add a path dependency outside the workspace directory.
+/// It should be added as a direct path dependency, not a workspace member.
+#[test]
+fn add_path_outside_workspace_no_default() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace directory
+    let workspace_dir = context.temp_dir.child("workspace");
+    workspace_dir.create_dir_all()?;
+
+    let workspace_toml = workspace_dir.child("pyproject.toml");
+    workspace_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = []
+    "#})?;
+
+    // Create a dependency outside the workspace
+    let dep_dir = context.temp_dir.child("external_dep");
+    dep_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Add the dependency without --workspace flag - it should be a direct path dependency
+    // since it's outside the workspace directory.
+    uv_snapshot!(context.filters(), context
+        .add()
+        .current_dir(&workspace_dir)
+        .arg("../external_dep"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/external_dep)
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(workspace_toml)?;
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "parent"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dep",
+    ]
+
+    [tool.uv.workspace]
+    members = []
+
+    [tool.uv.sources]
+    dep = { path = "../external_dep" }
     "#
     );
 

@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::Path;
@@ -871,7 +870,7 @@ async fn get_or_create_environment(
         with,
         constraints,
         overrides,
-        BTreeMap::default(),
+        None,
         &client_builder,
     )
     .await?;
@@ -1080,10 +1079,6 @@ async fn get_or_create_environment(
             err => return Err(err),
         },
     };
-
-    // Clear any existing overlay.
-    environment.clear_overlay()?;
-    environment.clear_system_site_packages()?;
 
     Ok((from, environment.into()))
 }

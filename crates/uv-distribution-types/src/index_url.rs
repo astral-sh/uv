@@ -39,33 +39,8 @@ impl IndexUrl {
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
     pub fn parse(path: &str, root_dir: Option<&Path>) -> Result<Self, IndexUrlError> {
-        let url = match split_scheme(path) {
-            Some((scheme, ..)) => {
-                match Scheme::parse(scheme) {
-                    Some(_) => {
-                        // Ex) `https://pypi.org/simple`
-                        VerbatimUrl::parse_url(path)?
-                    }
-                    None => {
-                        // Ex) `C:\Users\user\index`
-                        if let Some(root_dir) = root_dir {
-                            VerbatimUrl::from_path(path, root_dir)?
-                        } else {
-                            VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
-                        }
-                    }
-                }
-            }
-            None => {
-                // Ex) `/Users/user/index`
-                if let Some(root_dir) = root_dir {
-                    VerbatimUrl::from_path(path, root_dir)?
-                } else {
-                    VerbatimUrl::from_absolute_path(std::path::absolute(path)?)?
-                }
-            }
-        };
-        Ok(Self::from(url.with_given(path)))
+        let url = VerbatimUrl::from_url_or_path(path, root_dir)?;
+        Ok(Self::from(url))
     }
 
     /// Return the root [`Url`] of the index, if applicable.
@@ -465,6 +440,26 @@ impl<'a> IndexLocations {
                 }
             }
         }
+    }
+
+    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
+    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.cache_control.as_ref()?.api.as_deref();
+            }
+        }
+        None
+    }
+
+    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
+    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.cache_control.as_ref()?.files.as_deref();
+            }
+        }
+        None
     }
 }
 

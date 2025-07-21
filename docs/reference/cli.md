@@ -84,6 +84,7 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-run--config-file"><a href="#uv-run--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-run--config-setting"><a href="#uv-run--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-run--config-settings-package"><a href="#uv-run--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-run--default-index"><a href="#uv-run--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
@@ -442,6 +443,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-add--config-file"><a href="#uv-add--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-add--config-setting"><a href="#uv-add--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-add--config-settings-package"><a href="#uv-add--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-add--constraints"><a href="#uv-add--constraints"><code>--constraints</code></a>, <code>--constraint</code>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
 <p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that's installed. The constraints will <em>not</em> be added to the project's <code>pyproject.toml</code> file, but <em>will</em> be respected during dependency resolution.</p>
 <p>This is equivalent to pip's <code>--constraint</code> option.</p>
@@ -535,7 +537,9 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-add--no-python-downloads"><a href="#uv-add--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-add--no-sources"><a href="#uv-add--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
 </dd><dt id="uv-add--no-sync"><a href="#uv-add--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment</p>
-<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-add--offline"><a href="#uv-add--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-add--no-workspace"><a href="#uv-add--no-workspace"><code>--no-workspace</code></a></dt><dd><p>Don't add the dependency as a workspace member.</p>
+<p>By default, when adding a dependency that's a local path and is within the workspace directory, uv will add it as a workspace member; pass <code>--no-workspace</code> to add the package as direct path dependency instead.</p>
+</dd><dt id="uv-add--offline"><a href="#uv-add--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-add--optional"><a href="#uv-add--optional"><code>--optional</code></a> <i>optional</i></dt><dd><p>Add the requirements to the package's optional dependencies for the specified extra.</p>
 <p>The group may then be activated when installing the project with the <code>--extra</code> flag.</p>
@@ -583,7 +587,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt id="uv-add--verbose"><a href="#uv-add--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd><dt id="uv-add--workspace"><a href="#uv-add--workspace"><code>--workspace</code></a></dt><dd><p>Add the dependency as a workspace member.</p>
-<p>When used with a path dependency, the package will be added to the workspace's <code>members</code> list in the root <code>pyproject.toml</code> file.</p>
+<p>By default, uv will add path dependencies that are within the workspace directory as workspace members. When used with a path dependency, the package will be added to the workspace's <code>members</code> list in the root <code>pyproject.toml</code> file.</p>
 </dd></dl>
 
 ## uv remove
@@ -637,6 +641,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-remove--config-file"><a href="#uv-remove--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-remove--config-setting"><a href="#uv-remove--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-remove--config-settings-package"><a href="#uv-remove--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-remove--default-index"><a href="#uv-remove--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
@@ -815,6 +820,7 @@ uv version [OPTIONS] [VALUE]
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-version--config-file"><a href="#uv-version--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-version--config-setting"><a href="#uv-version--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-version--config-settings-package"><a href="#uv-version--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-version--default-index"><a href="#uv-version--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
@@ -999,6 +1005,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-sync--config-file"><a href="#uv-sync--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-sync--config-setting"><a href="#uv-sync--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-sync--config-settings-package"><a href="#uv-sync--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-sync--default-index"><a href="#uv-sync--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
@@ -1154,10 +1161,10 @@ environment in the project.</p>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
-<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
 <li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
-<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
@@ -1246,6 +1253,7 @@ uv lock [OPTIONS]
 </ul></dd><dt id="uv-lock--config-file"><a href="#uv-lock--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-lock--config-setting"><a href="#uv-lock--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-lock--config-settings-package"><a href="#uv-lock--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-lock--default-index"><a href="#uv-lock--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
@@ -1409,6 +1417,7 @@ uv export [OPTIONS]
 </ul></dd><dt id="uv-export--config-file"><a href="#uv-export--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-export--config-setting"><a href="#uv-export--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-export--config-settings-package"><a href="#uv-export--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-export--default-index"><a href="#uv-export--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
@@ -1603,6 +1612,7 @@ uv tree [OPTIONS]
 </ul></dd><dt id="uv-tree--config-file"><a href="#uv-tree--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-tree--config-setting"><a href="#uv-tree--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-tree--config-settings-package"><a href="#uv-tree--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-tree--default-index"><a href="#uv-tree--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
@@ -1736,10 +1746,10 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
-<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
 <li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
-<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
@@ -1861,6 +1871,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-tool-run--config-file"><a href="#uv-tool-run--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-tool-run--config-setting"><a href="#uv-tool-run--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-tool-run--config-settings-package"><a href="#uv-tool-run--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-tool-run--constraints"><a href="#uv-tool-run--constraints"><code>--constraints</code></a>, <code>--constraint</code>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
 <p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that's installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
 <p>This is equivalent to pip's <code>--constraint</code> option.</p>
@@ -2033,6 +2044,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-tool-install--config-file"><a href="#uv-tool-install--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-tool-install--config-setting"><a href="#uv-tool-install--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-tool-install--config-settings-package"><a href="#uv-tool-install--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-tool-install--constraints"><a href="#uv-tool-install--constraints"><code>--constraints</code></a>, <code>--constraint</code>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
 <p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that's installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
 <p>This is equivalent to pip's <code>--constraint</code> option.</p>
@@ -2200,6 +2212,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-tool-upgrade--config-file"><a href="#uv-tool-upgrade--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-tool-upgrade--config-setting"><a href="#uv-tool-upgrade--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-tool-upgrade--config-setting-package"><a href="#uv-tool-upgrade--config-setting-package"><code>--config-setting-package</code></a>, <code>--config-settings-package</code> <i>config-setting-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-tool-upgrade--default-index"><a href="#uv-tool-upgrade--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
@@ -2737,7 +2750,7 @@ Supports CPython and PyPy. CPython distributions are downloaded from the Astral 
 
 Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`.
 
-A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments. There is experimental support for adding Python executables to a directory on the path — use the `--preview` flag to enable this behavior and `uv python dir --bin` to retrieve the target directory.
+By default, Python executables are added to a directory on the path with a minor version suffix, e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use `uv python dir --bin` to see the target directory.
 
 Multiple Python versions may be requested.
 
@@ -2796,7 +2809,8 @@ uv python install [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_PYTHON_INSTALL_MIRROR</code> environment variable.</p></dd><dt id="uv-python-install--native-tls"><a href="#uv-python-install--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
 <p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
-<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-python-install--no-bin"><a href="#uv-python-install--no-bin"><code>--no-bin</code></a></dt><dd><p>Do not install a Python executable into the <code>bin</code> directory</p>
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-python-install--no-bin"><a href="#uv-python-install--no-bin"><code>--no-bin</code></a></dt><dd><p>Do not install a Python executable into the <code>bin</code> directory.</p>
+<p>This can also be set with <code>UV_PYTHON_INSTALL_BIN=0</code>.</p>
 </dd><dt id="uv-python-install--no-cache"><a href="#uv-python-install--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-python-install--no-config"><a href="#uv-python-install--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
@@ -2805,7 +2819,8 @@ uv python install [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-python-install--no-progress"><a href="#uv-python-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-python-install--no-python-downloads"><a href="#uv-python-install--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
-</dd><dt id="uv-python-install--no-registry"><a href="#uv-python-install--no-registry"><code>--no-registry</code></a></dt><dd><p>Do not register the Python installation in the Windows registry</p>
+</dd><dt id="uv-python-install--no-registry"><a href="#uv-python-install--no-registry"><code>--no-registry</code></a></dt><dd><p>Do not register the Python installation in the Windows registry.</p>
+<p>This can also be set with <code>UV_PYTHON_INSTALL_REGISTRY=0</code>.</p>
 </dd><dt id="uv-python-install--offline"><a href="#uv-python-install--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-python-install--project"><a href="#uv-python-install--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
@@ -3341,6 +3356,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 </ul></dd><dt id="uv-pip-compile--config-file"><a href="#uv-pip-compile--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-pip-compile--config-setting"><a href="#uv-pip-compile--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-pip-compile--config-settings-package"><a href="#uv-pip-compile--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-pip-compile--constraints"><a href="#uv-pip-compile--constraints"><code>--constraints</code></a>, <code>--constraint</code>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
 <p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that's installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
 <p>This is equivalent to pip's <code>--constraint</code> option.</p>
@@ -3488,10 +3504,10 @@ by <code>--python-version</code>.</p>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
-<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
 <li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
-<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
@@ -3646,6 +3662,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-pip-sync--config-file"><a href="#uv-pip-sync--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-pip-sync--config-setting"><a href="#uv-pip-sync--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-pip-sync--config-settings-package"><a href="#uv-pip-sync--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-pip-sync--constraints"><a href="#uv-pip-sync--constraints"><code>--constraints</code></a>, <code>--constraint</code>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
 <p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that's installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
 <p>This is equivalent to pip's <code>--constraint</code> option.</p>
@@ -3745,10 +3762,10 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
-<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
 <li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
-<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
@@ -3896,6 +3913,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p></dd><dt id="uv-pip-install--config-file"><a href="#uv-pip-install--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-pip-install--config-setting"><a href="#uv-pip-install--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-pip-install--config-settings-package"><a href="#uv-pip-install--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-pip-install--constraints"><a href="#uv-pip-install--constraints"><code>--constraints</code></a>, <code>--constraint</code>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
 <p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that's installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
 <p>This is equivalent to pip's <code>--constraint</code> option.</p>
@@ -4027,10 +4045,10 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
-<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_17</code></li>
+<li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
 <li><code>x86_64-apple-darwin</code>:  An x86 macOS target</li>
-<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_17</code></li>
+<li><code>aarch64-unknown-linux-gnu</code>:  An ARM64 Linux target. Equivalent to <code>aarch64-manylinux_2_28</code></li>
 <li><code>aarch64-unknown-linux-musl</code>:  An ARM64 Linux target</li>
 <li><code>x86_64-unknown-linux-musl</code>:  An <code>x86_64</code> Linux target</li>
 <li><code>x86_64-manylinux2014</code>:  An <code>x86_64</code> target for the <code>manylinux2014</code> platform. Equivalent to <code>x86_64-manylinux_2_17</code></li>
@@ -4679,7 +4697,7 @@ uv venv [OPTIONS] [PATH]
 <h3 class="cli-reference">Options</h3>
 
 <dl class="cli-reference"><dt id="uv-venv--allow-existing"><a href="#uv-venv--allow-existing"><code>--allow-existing</code></a></dt><dd><p>Preserve any existing files or directories at the target path.</p>
-<p>By default, <code>uv venv</code> will remove an existing virtual environment at the given path, and exit with an error if the path is non-empty but <em>not</em> a virtual environment. The <code>--allow-existing</code> option will instead write to the given path, regardless of its contents, and without clearing it beforehand.</p>
+<p>By default, <code>uv venv</code> will exit with an error if the given path is non-empty. The <code>--allow-existing</code> option will instead write to the given path, regardless of its contents, and without clearing it beforehand.</p>
 <p>WARNING: This option can lead to unexpected behavior if the existing virtual environment and the newly-created virtual environment are linked to different Python interpreters.</p>
 </dd><dt id="uv-venv--allow-insecure-host"><a href="#uv-venv--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
@@ -4688,7 +4706,9 @@ uv venv [OPTIONS] [PATH]
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-venv--cache-dir"><a href="#uv-venv--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
-<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-venv--color"><a href="#uv-venv--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-venv--clear"><a href="#uv-venv--clear"><code>--clear</code></a>, <code>-c</code></dt><dd><p>Remove any existing files or directories at the target path.</p>
+<p>By default, <code>uv venv</code> will exit with an error if the given path is non-empty. The <code>--clear</code> option will instead clear a non-empty path before creating a new virtual environment.</p>
+<p>May also be set with the <code>UV_VENV_CLEAR</code> environment variable.</p></dd><dt id="uv-venv--color"><a href="#uv-venv--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 <p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
 <p>Possible values:</p>
 <ul>
@@ -4839,6 +4859,7 @@ uv build [OPTIONS] [SRC]
 </ul></dd><dt id="uv-build--config-file"><a href="#uv-build--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-build--config-setting"><a href="#uv-build--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+</dd><dt id="uv-build--config-settings-package"><a href="#uv-build--config-settings-package"><code>--config-settings-package</code></a>, <code>--config-settings-package</code> <i>config-settings-package</i></dt><dd><p>Settings to pass to the PEP 517 build backend for a specific package, specified as <code>PACKAGE:KEY=VALUE</code> pairs</p>
 </dd><dt id="uv-build--default-index"><a href="#uv-build--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: <a href="https://pypi.org/simple">https://pypi.org/simple</a>).</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>

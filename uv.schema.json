@@ -119,6 +119,17 @@
         }
       ]
     },
+    "config-settings-package": {
+      "description": "Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,\nspecified as `KEY=VALUE` pairs.\n\nAccepts a map from package names to string key-value pairs.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageConfigSettings"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "conflicts": {
       "description": "A list of sets of conflicting groups or extras.",
       "anyOf": [
@@ -1104,6 +1115,13 @@
         }
       ]
     },
+    "PackageConfigSettings": {
+      "description": "Settings to pass to PEP 517 build backends on a per-package basis.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/ConfigSettings"
+      }
+    },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
@@ -1179,6 +1197,17 @@
           "anyOf": [
             {
               "$ref": "#/definitions/ConfigSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "config-settings-package": {
+          "description": "Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,\nspecified as `KEY=VALUE` pairs.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PackageConfigSettings"
             },
             {
               "type": "null"
@@ -2114,7 +2143,7 @@
           "const": "i686-pc-windows-msvc"
         },
         {
-          "description": "An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.",
+          "description": "An x86 Linux target. Equivalent to `x86_64-manylinux_2_28`.",
           "type": "string",
           "const": "x86_64-unknown-linux-gnu"
         },
@@ -2129,7 +2158,7 @@
           "const": "x86_64-apple-darwin"
         },
         {
-          "description": "An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_17`.",
+          "description": "An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_28`.",
           "type": "string",
           "const": "aarch64-unknown-linux-gnu"
         },

@@ -3,6 +3,189 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.0
+
+Since we released uv [0.7.0](https://github.com/astral-sh/uv/releases/tag/0.7.0) in April, we've accumulated various changes that improve correctness and user experience, but could break some workflows. This release contains those changes; many have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
+
+This release also includes the stabilization of a couple `uv python install` features, which have been available under preview since late last year.
+
+### Breaking changes
+
+- **Install Python executables into a directory on the `PATH` ([#14626](https://github.com/astral-sh/uv/pull/14626))**
+
+  `uv python install` now installs a versioned Python executable (e.g., `python3.13`) into a directory on the `PATH` (e.g., `~/.local/bin`) by default. This behavior has been available under the `--preview` flag since [Oct 2024](https://github.com/astral-sh/uv/pull/8458). This change should not be breaking unless it shadows a Python executable elsewhere on the `PATH`.
+
+  To install unversioned executables, i.e., `python3` and `python`, use the `--default` flag. The `--default` flag has also been in preview, but is not stabilized in this release.
+
+  Note that these executables point to the base Python installation and only include the standard library. That means they will not include dependencies from your current project (use `uv run python` instead) and you cannot install packages into their environment (use `uvx --with <package> python` instead).
+
+  As with tool installation, the target directory respects common variables like `XDG_BIN_HOME` and can be overridden with a `UV_PYTHON_BIN_DIR` variable.
+
+  You can opt out of this behavior with `uv python install --no-bin` or `UV_PYTHON_INSTALL_BIN=0`.
+
+  See the [documentation on installing Python executables](https://docs.astral.sh/uv/concepts/python-versions/#installing-python-executables) for more details.
+
+- **Register Python versions with the Windows Registry ([#14625](https://github.com/astral-sh/uv/pull/14625))**
+
+  `uv python install` now registers the installed Python version with the Windows Registry as specified by [PEP 514](https://peps.python.org/pep-0514/). This allows using uv installed Python versions via the `py` launcher. This behavior has been available under the `--preview` flag since [Jan 2025](https://github.com/astral-sh/uv/pull/10634). This change should not be breaking, as using the uv Python versions with `py` requires explicit opt in.
+
+  You can opt out of this behavior with `uv python install --no-registry` or `UV_PYTHON_INSTALL_REGISTRY=0`.
+
+- **Prompt before removing an existing directory in `uv venv` ([#14309](https://github.com/astral-sh/uv/pull/14309))**
+
+  Previously, `uv venv` would remove an existing virtual environment without confirmation. While this is consistent with the behavior of project commands (e.g., `uv sync`), it's surprising to users that are using imperative workflows (i.e., `uv pip`). Now, `uv venv` will prompt for confirmation before removing an existing virtual environment. **If not in an interactive context, uv will still remove the virtual environment for backwards compatibility. However, this behavior is likely to change in a future release.**
+
+  The behavior for other commands (e.g., `uv sync`) is unchanged.
+
+  You can opt out of this behavior by setting `UV_VENV_CLEAR=1` or passing the `--clear` flag.
+
+- **Validate that discovered interpreters meet the Python preference ([#7934](https://github.com/astral-sh/uv/pull/7934))**
+
+  uv allows opting out of its managed Python versions with the `--no-managed-python` and `python-preference` options.
+
+  Previously, uv would not enforce this option for Python interpreters discovered on the `PATH`. For example, if a symlink to a managed Python interpreter was created, uv would allow it to be used even if `--no-managed-python` was provided. Now, uv ignores Python interpreters that do not match the Python preference _unless_ they are in an active virtual environment or are explicitly requested, e.g., with `--python /path/to/python3.13`.
+
+  Similarly, uv would previously not invalidate existing project environments if they did not match the Python preference. Now, uv will invalidate and recreate project environments when the Python preference changes.
+
+  You can opt out of this behavior by providing the explicit path to the Python interpreter providing `--managed-python` / `--no-managed-python` matching the interpreter you want.
+
+- **Install dependencies without build systems when they are `path` sources ([#14413](https://github.com/astral-sh/uv/pull/14413))**
+
+  When working on a project, uv uses the [presence of a build system](https://docs.astral.sh/uv/concepts/projects/config/#build-systems) to determine if it should be built and installed into the environment. However, when a project is a dependency of another project, it can be surprising for the dependency to be missing from the environment.
+
+  Previously, uv would not build and install dependencies with [`path` sources](https://docs.astral.sh/uv/concepts/projects/dependencies/#path) unless they declared a build system or set `tool.uv.package = true`. Now, dependencies with `path` sources are built and installed regardless of the presence of a build system. If a build system is not present, the `setuptools.build_meta:__legacy__ ` backend will be used (per [PEP 517](https://peps.python.org/pep-0517/#source-trees)).
+
+  You can opt out of this behavior by setting `package = false` in the source declaration, e.g.:
+
+  ```toml
+  [tool.uv.sources]
+  foo = { path = "./foo", package = false }
+  ```
+
+  Or, by setting `tool.uv.package = false` in the dependent `pyproject.toml`.
+
+  See the documentation on [virtual dependencies](https://docs.astral.sh/uv/concepts/projects/dependencies/#virtual-dependencies) for details.
+
+- **Install dependencies without build systems when they are workspace members ([#14663](https://github.com/astral-sh/uv/pull/14663))**
+
+  As described above for dependencies with `path` sources, uv previously would not build and install workspace members that did not declare a build system. Now, uv will build and install workspace members that are a dependency of _another_ workspace member regardless of the presence of a build system. The behavior is unchanged for workspace members that are not included in the `project.dependencies`, `project.optional-dependencies`, or `dependency-groups` tables of another workspace member.
+
+  You can opt out of this behavior by setting `tool.uv.package = false` in the workspace member's `pyproject.toml`.
+
+  See the documentation on [virtual dependencies](https://docs.astral.sh/uv/concepts/projects/dependencies/#virtual-dependencies) for details.
+
+- **Bump `--python-platform linux` to `manylinux_2_28` ([#14300](https://github.com/astral-sh/uv/pull/14300))**
+
+  uv allows performing [platform-specific resolution](https://docs.astral.sh/uv/concepts/resolution/#platform-specific-resolution) for explicit targets and provides short aliases, e.g., `linux`, for common targets.
+
+  Previously, the default target for `--python-platform linux` was `manylinux_2_17`, which is compatible with most Linux distributions from 2014 or newer. We now default to `manylinux_2_28`, which is compatible with most Linux distributions from 2019 or newer.  This change follows the lead of other tools, such as `cibuildwheel`, which changed their default to `manylinux_2_28` in [Mar 2025](https://github.com/pypa/cibuildwheel/pull/2330).
+
+  This change only affects users requesting a specific target platform. Otherwise, uv detects the `manylinux` target from your local glibc version.
+
+  You can opt out of this behavior by using `--python-platform x86_64-manylinux_2_17` instead.
+
+- **Remove `uv version` fallback ([#14161](https://github.com/astral-sh/uv/pull/14161))**
+
+  In [Apr 2025](https://github.com/astral-sh/uv/pull/12349), uv changed the `uv version` command to an interface for viewing and updating the version of the current project. However, when outside a project, `uv version` would continue to display uv's version for backwards compatibility. Now, when used outside of a project, `uv version` will fail.
+
+  You cannot opt out of this behavior. Use `uv self version` instead.
+
+- **Require `--global` for removal of the global Python pin ([#14169](https://github.com/astral-sh/uv/pull/14169))**
+
+  Previously, `uv python pin --rm` would allow you to remove the global Python pin without opt in. Now, uv requires the `--global` flag to remove the global Python pin.
+
+  You cannot opt out of this behavior. Use the `--global` flag instead.
+
+- **Support conflicting editable settings across groups ([#14197](https://github.com/astral-sh/uv/pull/14197))**
+
+  Previously, uv would always treat a package as editable if any requirement requested it as editable. However, this prevented users from declaring `path` sources that toggled the `editable` setting across dependency groups. Now, uv allows declaring different `editable` values for conflicting groups. However, if a project includes a path dependency twice, once with `editable = true` and once without any editable annotation, those are now considered conflicting, and uv will exit with an error.
+
+  You cannot opt out of this behavior. Use consistent `editable` settings or [mark groups as conflicting](https://docs.astral.sh/uv/concepts/projects/config/#conflicting-dependencies).
+
+- **Make `uv_build` the default build backend in `uv init` ([#14661](https://github.com/astral-sh/uv/pull/14661))**
+
+  The uv build backend (`uv_build`) was [stabilized in uv 0.7.19](https://github.com/astral-sh/uv/releases/tag/0.7.19). Now, it is the default build backend for `uv init --package` and `uv init --lib`. Previously, `hatchling` was the default build backend. A build backend is still not used without opt-in in `uv init`, but we expect to change this in a future release.
+
+  You can opt out of this behavior with `uv init --build-backend hatchling`.
+
+- **Set default `UV_TOOL_BIN_DIR` on Docker images ([#13391](https://github.com/astral-sh/uv/pull/13391))**
+
+  Previously, `UV_TOOL_BIN_DIR` was not set in Docker images which meant that `uv tool install` did not install tools into a directory on the `PATH` without additional configuration. Now, `UV_TOOL_BIN_DIR` is set to `/usr/local/bin` in all Docker derived images.
+
+  When the default image user is overridden (e.g. `USER <UID>`) with a less privileged user, this may cause `uv tool install` to fail.
+
+  You can opt out of this behavior by setting an alternative `UV_TOOL_BIN_DIR`.
+
+- **Update `--check` to return an exit code of 1 ([#14167](https://github.com/astral-sh/uv/pull/14167))**
+
+  uv uses an exit code of 1 to indicate a "successful failure" and an exit code of 2 to indicate an "error".
+
+  Previously, `uv lock --check` and `uv sync --check` would exit with a code of 2 when the lockfile or environment were outdated. Now, uv will exit with a code of 1.
+
+  You cannot opt out of this behavior.
+
+- **Use an ephemeral environment for `uv run --with` invocations ([#14447](https://github.com/astral-sh/uv/pull/14447))**
+
+  When using `uv run --with`, uv layers the requirements requested using `--with` into another virtual environment and caches it. Previously, uv would invoke the Python interpreter in this layered environment. However, this allows poisoning the cached environment and introduces race conditions for concurrent invocations. Now, uv will layer _another_ empty virtual environment on top of the cached environment and invoke the Python interpreter there. This should only cause breakage in cases where the environment is being inspected at runtime.
+
+  You cannot opt out of this behavior.
+
+- **Restructure the `uv venv` command output and exit codes ([#14546](https://github.com/astral-sh/uv/pull/14546))**
+
+  Previously, uv used `miette` to format the `uv venv` output. However, this was inconsistent with most of the uv CLI. Now, the output is a little different and the exit code has switched from 1 to 2 for some error cases.
+
+  You cannot opt out of this behavior.
+
+- **Default to `--workspace` when adding subdirectories ([#14529](https://github.com/astral-sh/uv/pull/14529))**
+
+  When using `uv add` to add a subdirectory in a workspace, uv now defaults to adding the target as a workspace member.
+
+  You can opt out of this behavior by providing `--no-workspace`.
+
+- **Add missing validations for disallowed `uv.toml` fields ([#14322](https://github.com/astral-sh/uv/pull/14322))**
+
+  uv does not allow some settings in the `uv.toml`. Previously, some settings were silently ignored when present in the `uv.toml`. Now, uv will error.
+
+  You cannot opt out of this behavior. Use `--no-config` or remove the invalid settings.
+
+### Configuration
+
+- Add support for toggling Python bin and registry install options via env vars ([#14662](https://github.com/astral-sh/uv/pull/14662))
+
+## 0.7.22
+
+### Python
+
+- Upgrade GraalPy to 24.2.2
+
+See the [GraalPy release notes](https://github.com/oracle/graalpython/releases/tag/graal-24.2.2) for more details.
+
+### Configuration
+
+- Add `UV_COMPILE_BYTECODE_TIMEOUT` environment variable ([#14369](https://github.com/astral-sh/uv/pull/14369))
+- Allow users to override index `cache-control` headers ([#14620](https://github.com/astral-sh/uv/pull/14620))
+- Add `UV_LIBC` to override libc selection in multi-libc environment ([#14646](https://github.com/astral-sh/uv/pull/14646))
+
+### Bug fixes
+
+- Fix `--all-arches` when paired with `--only-downloads` ([#14629](https://github.com/astral-sh/uv/pull/14629))
+- Skip Windows Python interpreters that return a broken MSIX package code ([#14636](https://github.com/astral-sh/uv/pull/14636))
+- Warn on invalid `uv.toml` when provided via direct path ([#14653](https://github.com/astral-sh/uv/pull/14653))
+- Improve async signal safety in Windows exception handler ([#14619](https://github.com/astral-sh/uv/pull/14619))
+
+### Documentation
+
+- Mention the `revision` in the lockfile versioning doc ([#14634](https://github.com/astral-sh/uv/pull/14634))
+- Move "Conflicting dependencies" to the "Resolution" page ([#14633](https://github.com/astral-sh/uv/pull/14633))
+- Rename "Dependency specifiers" section to exclude PEP 508 reference ([#14631](https://github.com/astral-sh/uv/pull/14631))
+- Suggest `uv cache clean` prior to `--reinstall` ([#14659](https://github.com/astral-sh/uv/pull/14659))
+
+### Preview features
+
+- Make preview Python registration on Windows non-fatal ([#14614](https://github.com/astral-sh/uv/pull/14614))
+- Update preview installation of Python executables to be non-fatal ([#14612](https://github.com/astral-sh/uv/pull/14612))
+- Add `uv python update-shell` ([#14627](https://github.com/astral-sh/uv/pull/14627))
+
 ## 0.7.21
 
 ### Python
@@ -119,7 +302,7 @@ See the [python-build-standalone release](https://github.com/astral-sh/python-bu
 ### Python
 
 - Added arm64 Windows Python 3.11, 3.12, 3.13, and 3.14
-  
+
   These are not downloaded by default, since x86-64 Python has broader ecosystem support on Windows.
 However, they can be requested with `cpython-<version>-windows-aarch64`.
 
@@ -599,11 +782,11 @@ This release contains various changes that improve correctness and user experien
 ### Breaking changes
 
 - **Update `uv version` to display and update project versions ([#12349](https://github.com/astral-sh/uv/pull/12349))**
-  
+
   Previously, `uv version` displayed uv's version. Now, `uv version` will display or update the project's version. This interface was [heavily requested](https://github.com/astral-sh/uv/issues/6298) and, after much consideration, we decided that transitioning the top-level command was the best option.
-  
+
   Here's a brief example:
-  
+
   ```console
   $ uv init example
   Initialized project `example` at `./example`
@@ -615,72 +798,72 @@ This release contains various changes that improve correctness and user experien
   $ uv version --short
   1.0.0
   ```
-  
+
   If used outside of a project, uv will fallback to showing its own version still:
-  
+
   ```console
   $ uv version
   warning: failed to read project: No `pyproject.toml` found in current directory or any parent directory
     running `uv self version` for compatibility with old `uv version` command.
     this fallback will be removed soon, pass `--preview` to make this an error.
-  
+
   uv 0.7.0 (4433f41c9 2025-04-29)
   ```
-  
+
   As described in the warning, `--preview` can be used to error instead:
-  
+
   ```console
   $ uv version --preview
   error: No `pyproject.toml` found in current directory or any parent directory
   ```
-  
+
   The previous functionality of `uv version` was moved to `uv self version`.
 - **Avoid fallback to subsequent indexes on authentication failure ([#12805](https://github.com/astral-sh/uv/pull/12805))**
-  
+
   When using the `first-index` strategy (the default), uv will stop searching indexes for a package once it is found on a single index. Previously, uv considered a package as "missing" from an index during authentication failures, such as an HTTP 401 or HTTP 403 (normally, missing packages are represented by an HTTP 404). This behavior was motivated by unusual responses from some package indexes, but reduces the safety of uv's index strategy when authentication fails. Now, uv will consider an authentication failure as a stop-point when searching for a package across indexes. The `index.ignore-error-codes` option can be used to recover the existing behavior, e.g.:
-  
+
   ```toml
   [[tool.uv.index]]
   name = "pytorch"
   url = "https://download.pytorch.org/whl/cpu"
   ignore-error-codes = [401, 403]
   ```
-  
+
   Since PyTorch's indexes always return a HTTP 403 for missing packages, uv special-cases indexes on the `pytorch.org` domain to ignore that error code by default.
 - **Require the command in `uvx <name>` to be available in the Python environment ([#11603](https://github.com/astral-sh/uv/pull/11603))**
-  
+
   Previously, `uvx` would attempt to execute a command even if it was not provided by a Python package. For example, if we presume `foo` is an empty Python package which provides no command, `uvx foo` would invoke the `foo` command on the `PATH` (if present). Now, uv will error early if the `foo` executable is not provided by the requested Python package. This check is not enforced when `--from` is used, so patterns like `uvx --from foo bash -c "..."` are still valid. uv also still allows `uvx foo` where the `foo` executable is provided by a dependency of `foo` instead of `foo` itself, as this is fairly common for packages which depend on a dedicated package for their command-line interface.
 - **Use index URL instead of package URL for keyring credential lookups ([#12651](https://github.com/astral-sh/uv/pull/12651))**
-  
+
   When determining credentials for querying a package URL, uv previously sent the full URL to the `keyring` command. However, some keyring plugins expect to receive the *index URL* (which is usually a parent of the package URL). Now, uv requests credentials for the index URL instead. This behavior matches `pip`.
 - **Remove `--version` from subcommands ([#13108](https://github.com/astral-sh/uv/pull/13108))**
-  
+
   Previously, uv allowed the `--version` flag on arbitrary subcommands, e.g., `uv run --version`. However, the `--version` flag is useful for other operations since uv is a package manager. Consequently, we've removed the `--version` flag from subcommands — it is only available as `uv --version`.
 - **Omit Python 3.7 downloads from managed versions ([#13022](https://github.com/astral-sh/uv/pull/13022))**
-  
+
   Python 3.7 is EOL and not formally supported by uv; however, Python 3.7 was previously available for download on a subset of platforms.
 - **Reject non-PEP 751 TOML files in install, compile, and export commands ([#13120](https://github.com/astral-sh/uv/pull/13120), [#13119](https://github.com/astral-sh/uv/pull/13119))**
-  
+
   Previously, uv treated arbitrary `.toml` files passed to commands (e.g., `uv pip install -r foo.toml` or `uv pip compile -o foo.toml`) as `requirements.txt`-formatted files. Now, uv will error instead. If using PEP 751 lockfiles, use the standardized format for custom names instead, e.g., `pylock.foo.toml`.
 - **Ignore arbitrary Python requests in version files ([#12909](https://github.com/astral-sh/uv/pull/12909))**
-  
+
   uv allows arbitrary strings to be used for Python version requests, in which they are treated as an executable name to search for in the `PATH`. However, using this form of request in `.python-version` files is non-standard and conflicts with `pyenv-virtualenv` which writes environment names to `.python-version` files. In this release, uv will now ignore requests that are arbitrary strings when found in `.python-version` files.
 - **Error on unknown dependency object specifiers ([12811](https://github.com/astral-sh/uv/pull/12811))**
-  
+
   The `[dependency-groups]` entries can include "object specifiers", e.g. `set-phasers-to = ...` in:
-  
+
   ```toml
   [dependency-groups]
   foo = ["pyparsing"]
   bar = [{set-phasers-to = "stun"}]
   ```
-  
+
   However, the only current spec-compliant object specifier is `include-group`. Previously, uv would ignore unknown object specifiers. Now, uv will error.
 - **Make `--frozen` and `--no-sources` conflicting options ([#12671](https://github.com/astral-sh/uv/pull/12671))**
-  
+
   Using `--no-sources` always requires a new resolution and `--frozen` will always fail when used with it. Now, this conflict is encoded in the CLI options for clarity.
 - **Treat empty `UV_PYTHON_INSTALL_DIR` and `UV_TOOL_DIR` as unset ([#12907](https://github.com/astral-sh/uv/pull/12907), [#12905](https://github.com/astral-sh/uv/pull/12905))**
-  
+
   Previously, these variables were treated as set to the current working directory when set to an empty string. Now, uv will ignore these variables when empty. This matches uv's behavior for other environment variables which configure directories.
 
 ### Enhancements

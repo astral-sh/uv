@@ -4,9 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::vec;
 
-use anstream::eprint;
 use anyhow::Result;
-use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
@@ -14,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, PreviewMode, SourceStrategy,
+    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::Requirement;
@@ -29,6 +27,7 @@ use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
@@ -41,6 +40,21 @@ use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
 use super::project::default_dependency_groups;
+
+#[derive(Error, Debug)]
+enum VenvError {
+    #[error("Failed to create virtual environment")]
+    Creation(#[source] uv_virtualenv::Error),
+
+    #[error("Failed to install seed packages into virtual environment")]
+    Seed(#[source] AnyErrorBuild),
+
+    #[error("Failed to extract interpreter tags for installing seed packages")]
+    Tags(#[source] uv_platform_tags::TagsError),
+
+    #[error("Failed to resolve `--find-links` entry")]
+    FlatIndex(#[source] uv_client::FlatIndexError),
+}
 
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
@@ -60,7 +74,7 @@ pub(crate) async fn venv(
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     seed: bool,
-    allow_existing: bool,
+    on_existing: OnExisting,
     exclude_newer: Option<ExcludeNewer>,
     concurrency: Concurrency,
     no_config: bool,
@@ -70,89 +84,6 @@ pub(crate) async fn venv(
     relocatable: bool,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
-    match venv_impl(
-        project_dir,
-        path,
-        python_request,
-        install_mirrors,
-        link_mode,
-        index_locations,
-        index_strategy,
-        dependency_metadata,
-        keyring_provider,
-        network_settings,
-        prompt,
-        system_site_packages,
-        seed,
-        python_preference,
-        python_downloads,
-        allow_existing,
-        exclude_newer,
-        concurrency,
-        no_config,
-        no_project,
-        cache,
-        printer,
-        relocatable,
-        preview,
-    )
-    .await
-    {
-        Ok(status) => Ok(status),
-        Err(err) => {
-            eprint!("{err:?}");
-            Ok(ExitStatus::Failure)
-        }
-    }
-}
-
-#[derive(Error, Debug, Diagnostic)]
-enum VenvError {
-    #[error("Failed to create virtualenv")]
-    #[diagnostic(code(uv::venv::creation))]
-    Creation(#[source] uv_virtualenv::Error),
-
-    #[error("Failed to install seed packages")]
-    #[diagnostic(code(uv::venv::seed))]
-    Seed(#[source] AnyErrorBuild),
-
-    #[error("Failed to extract interpreter tags")]
-    #[diagnostic(code(uv::venv::tags))]
-    Tags(#[source] uv_platform_tags::TagsError),
-
-    #[error("Failed to resolve `--find-links` entry")]
-    #[diagnostic(code(uv::venv::flat_index))]
-    FlatIndex(#[source] uv_client::FlatIndexError),
-}
-
-/// Create a virtual environment.
-#[allow(clippy::fn_params_excessive_bools)]
-async fn venv_impl(
-    project_dir: &Path,
-    path: Option<PathBuf>,
-    python_request: Option<PythonRequest>,
-    install_mirrors: PythonInstallMirrors,
-    link_mode: LinkMode,
-    index_locations: &IndexLocations,
-    index_strategy: IndexStrategy,
-    dependency_metadata: DependencyMetadata,
-    keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
-    prompt: uv_virtualenv::Prompt,
-    system_site_packages: bool,
-    seed: bool,
-    python_preference: PythonPreference,
-    python_downloads: PythonDownloads,
-    allow_existing: bool,
-    exclude_newer: Option<ExcludeNewer>,
-    concurrency: Concurrency,
-    no_config: bool,
-    no_project: bool,
-    cache: &Cache,
-    printer: Printer,
-    relocatable: bool,
-    preview: PreviewMode,
-) -> miette::Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
         None
@@ -206,7 +137,7 @@ async fn venv_impl(
     // If the default dependency-groups demand a higher requires-python
     // we should bias an empty venv to that to avoid churn.
     let default_groups = match &project {
-        Some(project) => default_dependency_groups(project.pyproject_toml()).into_diagnostic()?,
+        Some(project) => default_dependency_groups(project.pyproject_toml())?,
         None => DefaultGroups::default(),
     };
     let groups = DependencyGroups::default().with_defaults(default_groups);
@@ -221,8 +152,7 @@ async fn venv_impl(
         project_dir,
         no_config,
     )
-    .await
-    .into_diagnostic()?;
+    .await?;
 
     // Locate the Python interpreter to use in the environment
     let interpreter = {
@@ -239,9 +169,8 @@ async fn venv_impl(
             install_mirrors.python_downloads_json_url.as_deref(),
             preview,
         )
-        .await
-        .into_diagnostic()?;
-        report_interpreter(&python, false, printer).into_diagnostic()?;
+        .await?;
+        report_interpreter(&python, false, printer)?;
         python.into_interpreter()
     };
 
@@ -268,8 +197,7 @@ async fn venv_impl(
         "Creating virtual environment {}at: {}",
         if seed { "with seed packages " } else { "" },
         path.user_display().cyan()
-    )
-    .into_diagnostic()?;
+    )?;
 
     let upgradeable = preview.is_enabled()
         && python_request
@@ -282,7 +210,7 @@ async fn venv_impl(
         interpreter,
         prompt,
         system_site_packages,
-        allow_existing,
+        on_existing,
         relocatable,
         seed,
         upgradeable,
@@ -307,8 +235,7 @@ async fn venv_impl(
         }
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::try_from(client_builder)
-            .into_diagnostic()?
+        let client = RegistryClientBuilder::try_from(client_builder)?
             .cache(cache.clone())
             .index_locations(index_locations)
             .index_strategy(index_strategy)
@@ -342,6 +269,7 @@ async fn venv_impl(
         let build_constraints = Constraints::default();
         let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
+        let config_settings_package = PackageConfigSettings::default();
         let sources = SourceStrategy::Disabled;
 
         // Do not allow builds
@@ -359,6 +287,7 @@ async fn venv_impl(
             state.clone(),
             index_strategy,
             &config_settings,
+            &config_settings_package,
             BuildIsolation::Isolated,
             link_mode,
             &build_options,
@@ -400,9 +329,7 @@ async fn venv_impl(
             .map_err(|err| VenvError::Seed(err.into()))?;
 
         let changelog = Changelog::from_installed(installed);
-        DefaultInstallLogger
-            .on_complete(&changelog, printer)
-            .into_diagnostic()?;
+        DefaultInstallLogger.on_complete(&changelog, printer)?;
     }
 
     // Determine the appropriate activation command.
@@ -431,7 +358,7 @@ async fn venv_impl(
         Some(Shell::Cmd) => Some(shlex_windows(venv.scripts().join("activate"), Shell::Cmd)),
     };
     if let Some(act) = activation {
-        writeln!(printer.stderr(), "Activate with: {}", act.green()).into_diagnostic()?;
+        writeln!(printer.stderr(), "Activate with: {}", act.green())?;
     }
 
     Ok(ExitStatus::Success)

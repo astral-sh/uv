@@ -162,6 +162,9 @@ impl EnvVars {
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
 
+    /// Timeout (in seconds) for bytecode compilation.
+    pub const UV_COMPILE_BYTECODE_TIMEOUT: &'static str = "UV_COMPILE_BYTECODE_TIMEOUT";
+
     /// Equivalent to the `--no-editable` command-line argument. If set, uv
     /// installs any editable dependencies, including the project and any workspace members, as
     /// non-editable
@@ -266,6 +269,12 @@ impl EnvVars {
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 
+    /// Whether to install the Python executable into the `UV_PYTHON_BIN_DIR` directory.
+    pub const UV_PYTHON_INSTALL_BIN: &'static str = "UV_PYTHON_INSTALL_BIN";
+
+    /// Whether to install the Python executable into the Windows registry.
+    pub const UV_PYTHON_INSTALL_REGISTRY: &'static str = "UV_PYTHON_INSTALL_REGISTRY";
+
     /// Managed Python installations information is hardcoded in the `uv` binary.
     ///
     /// This variable can be set to a URL pointing to JSON to use as a list for Python installations.
@@ -295,6 +304,10 @@ impl EnvVars {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
+
+    /// Equivalent to the `--clear` command-line argument. If set, uv will remove any
+    /// existing files or directories at the target path.
+    pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
 
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
     /// created by `uv venv`.
@@ -362,6 +375,14 @@ impl EnvVars {
     /// Used to force showing the derivation tree during resolver error reporting.
     #[attr_hidden]
     pub const UV_INTERNAL__SHOW_DERIVATION_TREE: &'static str = "UV_INTERNAL__SHOW_DERIVATION_TREE";
+
+    /// Used to set a temporary directory for some tests.
+    #[attr_hidden]
+    pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
+
+    /// Used to force treating an interpreter as "managed" during tests.
+    #[attr_hidden]
+    pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
 
     /// Path to system-level configuration directory on Unix systems.
     pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";

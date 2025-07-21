@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
@@ -36,10 +35,10 @@ use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
-use uv_requirements::RequirementsSource;
+use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
-use uv_settings::{Combine, FilesystemOptions, Options};
+use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -304,6 +303,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(FilesystemOptions::from)
         .combine(filesystem);
 
+    // Load environment variables not handled by Clap
+    let environment = EnvironmentOptions::new()?;
+
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(&cli.top_level.global_args, filesystem.as_ref());
 
@@ -469,20 +471,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-
-            let mut groups = BTreeMap::new();
-            for group in args.settings.groups {
-                // If there's no path provided, expect a pyproject.toml in the project-dir
-                // (Which is typically the current working directory, matching pip's behaviour)
-                let pyproject_path = group
-                    .path
-                    .clone()
-                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
-                groups
-                    .entry(pyproject_path)
-                    .or_insert_with(Vec::new)
-                    .push(group.name.clone());
-            }
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             commands::pip_compile(
                 &requirements,
@@ -521,6 +513,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.keyring_provider,
                 &globals.network_settings,
                 args.settings.config_setting,
+                args.settings.config_settings_package,
                 args.settings.no_build_isolation,
                 args.settings.no_build_isolation_package,
                 args.settings.build_options,
@@ -591,6 +584,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.allow_empty_requirements,
                 globals.installer_metadata,
                 &args.settings.config_setting,
+                &args.settings.config_settings_package,
                 args.settings.no_build_isolation,
                 args.settings.no_build_isolation_package,
                 args.settings.build_options,
@@ -652,20 +646,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Result<Vec<_>, _>>()?;
-
-            let mut groups = BTreeMap::new();
-            for group in args.settings.groups {
-                // If there's no path provided, expect a pyproject.toml in the project-dir
-                // (Which is typically the current working directory, matching pip's behaviour)
-                let pyproject_path = group
-                    .path
-                    .clone()
-                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
-                groups
-                    .entry(pyproject_path)
-                    .or_insert_with(Vec::new)
-                    .push(group.name.clone());
-            }
+            let groups = GroupsSpecification {
+                root: project_dir.to_path_buf(),
+                groups: args.settings.groups,
+            };
 
             // Special-case: any source trees specified on the command-line are automatically
             // reinstalled. This matches user expectations: `uv pip install .` should always
@@ -725,7 +709,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.overrides_from_workspace,
                 args.build_constraints_from_workspace,
                 &args.settings.extras,
-                groups,
+                &groups,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
@@ -742,6 +726,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.hash_checking,
                 globals.installer_metadata,
                 &args.settings.config_setting,
+                &args.settings.config_settings_package,
                 args.settings.no_build_isolation,
                 args.settings.no_build_isolation_package,
                 args.settings.build_options,
@@ -1029,6 +1014,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let python_request: Option<PythonRequest> =
                 args.settings.python.as_deref().map(PythonRequest::parse);
 
+            let on_existing = uv_virtualenv::OnExisting::from_args(args.allow_existing, args.clear);
+
             commands::venv(
                 &project_dir,
                 args.path,
@@ -1045,7 +1032,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 args.seed,
-                args.allow_existing,
+                on_existing,
                 args.settings.exclude_newer,
                 globals.concurrency,
                 cli.top_level.no_config,
@@ -1059,7 +1046,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Project(project) => {
             Box::pin(run_project(
-                cli.top_level.global_args.project.is_some(),
                 project,
                 &project_dir,
                 run_command,
@@ -1391,7 +1377,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PythonCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::PythonInstallSettings::resolve(args, filesystem);
+            let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
             // TODO(john): If we later want to support `--upgrade`, we need to replace this.
             let upgrade = false;
@@ -1660,7 +1646,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
 /// Run a [`ProjectCommand`].
 async fn run_project(
-    project_was_explicit: bool,
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
@@ -2052,19 +2037,11 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
-            // If they specified any of these flags, they probably don't mean `uv self version`
-            let strict = project_was_explicit
-                || globals.preview.is_enabled()
-                || args.dry_run
-                || !args.bump.is_empty()
-                || args.value.is_some()
-                || args.package.is_some();
             Box::pin(commands::project_version(
                 args.value,
                 args.bump,
                 args.short,
                 args.output_format,
-                strict,
                 project_dir,
                 args.package,
                 args.dry_run,
