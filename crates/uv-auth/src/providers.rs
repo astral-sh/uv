@@ -5,7 +5,7 @@ use url::Url;
 use uv_static::EnvVars;
 
 use crate::Credentials;
-use crate::realm::Realm;
+use crate::realm::{Realm, RealmRef};
 
 /// The [`Realm`] for the Hugging Face platform.
 static HUGGING_FACE_REALM: LazyLock<Realm> = LazyLock::new(|| {
@@ -37,7 +37,7 @@ pub(crate) struct HuggingFaceProvider;
 impl HuggingFaceProvider {
     /// Returns the credentials for the Hugging Face platform, if available.
     pub(crate) fn credentials_for(url: &Url) -> Option<Credentials> {
-        if Realm::from(url) == *HUGGING_FACE_REALM {
+        if RealmRef::from(url) == *HUGGING_FACE_REALM {
             if let Some(token) = HUGGING_FACE_TOKEN.as_ref() {
                 return Some(Credentials::Bearer {
                     token: token.clone(),
