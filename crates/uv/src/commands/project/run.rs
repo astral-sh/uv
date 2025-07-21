@@ -1074,7 +1074,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // N.B. The order here matters — earlier interpreters take precedence over the
             // later ones.
             for interpreter in [requirements_env.interpreter(), &base_interpreter] {
-                // Copy each entrypoint from the base environments to the ephemeral environment.
+                // Copy each entrypoint from the base environments to the ephemeral environment,
+                // updating the Python executable target to ensure they run in the ephemeral
+                // environment.
                 for entry in fs_err::read_dir(interpreter.scripts())? {
                     let entry = entry?;
 
@@ -1739,6 +1741,10 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
         .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
 }
 
+/// Create a copy of the entrypoint at `source` at `target`, if it has a Python shebang, replacing
+/// the previous Python executable with a new one.
+///
+/// Note on Windows, the entrypoints do not use shebangs and require a rewrite of the trampoline.
 #[cfg(unix)]
 fn copy_entrypoint(
     source: &Path,
@@ -1749,17 +1755,20 @@ fn copy_entrypoint(
     use std::os::unix::fs::PermissionsExt;
 
     let contents = fs_err::read_to_string(source)?;
-    let expected = r#"#!/bin/sh
+
+    let Some(contents) = contents
+        // Check for a relative path or relocatable shebang
+        .strip_prefix(
+            r#"#!/bin/sh
 '''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
 ' '''
-"#;
-
-    // Only rewrite entrypoints that use the expected shebang.
-    let Some(contents) = contents
-        .strip_prefix(expected)
+"#,
+        )
+        // Or an absolute path shebang
         .or_else(|| contents.strip_prefix(&format!("#!{}", previous_executable.display())))
     else {
-        debug!(
+        // If it's not a Python shebang, we'll skip it
+        trace!(
             "Skipping copy of entrypoint at {}: does not start with expected shebang",
             source.user_display()
         );
@@ -1782,6 +1791,8 @@ fn copy_entrypoint(
     Ok(())
 }
 
+/// Create a copy of the entrypoint at `source` at `target`, if it's a Python script launcher,
+/// replacing the target Python executable with a new one.
 #[cfg(windows)]
 fn copy_entrypoint(
     source: &Path,
