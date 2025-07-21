@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use uv_normalize::{ExtraName, GroupName};
 
 use crate::marker::tree::MarkerValueList;
+use crate::marker::{VariantFeature, VariantNamespace, VariantValue};
 use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
@@ -170,11 +171,26 @@ pub enum CanonicalMarkerListPair {
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
     /// A valid `variant_namespaces`.
-    VariantNamespaces(String),
+    VariantNamespaces {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+    },
     /// A valid `variant_features`.
-    VariantFeatures(String, String),
+    VariantFeatures {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+        feature: VariantFeature,
+    },
     /// A valid `variant_properties`.
-    VariantProperties(String, String, String),
+    VariantProperties {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+        feature: VariantFeature,
+        value: VariantValue,
+    },
     /// For leniency, preserve invalid values.
     Arbitrary { key: MarkerValueList, value: String },
 }
@@ -185,9 +201,9 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(_) => MarkerValueList::Extras,
             Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
-            Self::VariantNamespaces(_) => MarkerValueList::VariantNamespaces,
-            Self::VariantFeatures(_, _) => MarkerValueList::VariantFeatures,
-            Self::VariantProperties(_, _, _) => MarkerValueList::VariantProperties,
+            Self::VariantNamespaces { .. } => MarkerValueList::VariantNamespaces,
+            Self::VariantFeatures { .. } => MarkerValueList::VariantFeatures,
+            Self::VariantProperties { .. } => MarkerValueList::VariantProperties,
             Self::Arbitrary { key, .. } => *key,
         }
     }
@@ -197,12 +213,38 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
-            Self::VariantNamespaces(namespace) => namespace.clone(),
-            Self::VariantFeatures(namespace, property) => {
-                format!("{namespace} :: {property}")
+            Self::VariantNamespaces {
+                base: prefix,
+                namespace,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace}")
+                } else {
+                    namespace.to_string()
+                }
             }
-            Self::VariantProperties(namespace, property, value) => {
-                format!("{namespace} :: {property} :: {value}")
+            Self::VariantFeatures {
+                base: prefix,
+                namespace,
+                feature,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace} :: {feature}")
+                } else {
+                    format!("{namespace} :: {feature}")
+                }
+            }
+            Self::VariantProperties {
+                base: prefix,
+                namespace,
+                feature,
+                value,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace} :: {feature} :: {value}")
+                } else {
+                    format!("{namespace} :: {feature} :: {value}")
+                }
             }
             Self::Arbitrary { value, .. } => value.clone(),
         }

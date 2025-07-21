@@ -11,15 +11,16 @@ use uv_client::{FlatIndexEntry, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    HashComparison, IncompatibleSource, IncompatibleWheel, IndexUrl, PrioritizedDist,
-    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SourceDistCompatibility,
-    WheelCompatibility,
+    HashComparison, IncompatibleSource, IncompatibleWheel, IndexEntryFilename, IndexUrl,
+    PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, RegistryVariantsJson, RequiresPython,
+    SourceDistCompatibility, WheelCompatibility,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
 use uv_types::HashStrategy;
+use uv_variants::VariantPriority;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
@@ -467,7 +468,7 @@ impl VersionMapLazy {
                 let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
                 match filename {
-                    DistFilename::WheelFilename(filename) => {
+                    IndexEntryFilename::DistFilename(DistFilename::WheelFilename(filename)) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
                             &filename.name,
@@ -484,7 +485,9 @@ impl VersionMapLazy {
                         };
                         priority_dist.insert_built(dist, hashes, compatibility);
                     }
-                    DistFilename::SourceDistFilename(filename) => {
+                    IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(
+                        filename,
+                    )) => {
                         let compatibility = self.source_dist_compatibility(
                             &filename.name,
                             &filename.version,
@@ -502,6 +505,14 @@ impl VersionMapLazy {
                             wheels: vec![],
                         };
                         priority_dist.insert_source(dist, hashes, compatibility);
+                    }
+                    IndexEntryFilename::VariantJson(filename) => {
+                        let variant_json = RegistryVariantsJson {
+                            filename,
+                            file: Box::new(file),
+                            index: self.index.clone(),
+                        };
+                        priority_dist.insert_variant_json(variant_json);
                     }
                 }
             }
@@ -589,8 +600,8 @@ impl VersionMapLazy {
             }
         }
 
-        // Determine a compatibility for the wheel based on tags.
-        let priority = if let Some(tags) = &self.tags {
+        // Determine a priority for the wheel based on tags.
+        let tag_priority = if let Some(tags) = &self.tags {
             match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
@@ -606,6 +617,13 @@ impl VersionMapLazy {
                 ));
             }
             None
+        };
+
+        // TODO(konsti): Currently we ignore variants here on only determine them later
+        let variant_priority = if filename.variant().is_none() {
+            VariantPriority::NonVariant
+        } else {
+            VariantPriority::Unknown
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
@@ -626,7 +644,12 @@ impl VersionMapLazy {
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::Compatible {
+            hash,
+            tag_priority,
+            variant_priority,
+            build_tag,
+        }
     }
 }
 

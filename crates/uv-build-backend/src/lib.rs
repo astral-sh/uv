@@ -597,7 +597,7 @@ mod tests {
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"871d1f859140721b67cbeaca074e7a2740c88c38028d0509eba87d1285f1da9e"
+            @"590388c63ef4379eef57bedafffc6522dd2e3b84e689fe55ba3b1e7f2de8cc13"
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @r"

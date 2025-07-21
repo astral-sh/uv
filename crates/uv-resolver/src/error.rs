@@ -16,7 +16,9 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 use uv_pep440::{LocalVersionSlice, LowerBound, Version, VersionSpecifier};
-use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion, MarkerVariantsUniversal,
+};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ParsedUrl;
 use uv_redacted::DisplaySafeUrl;
@@ -44,6 +46,9 @@ pub enum ResolveError {
         Version,
         DerivationChain,
     ),
+
+    #[error(transparent)]
+    VariantFrontend(uv_distribution::Error),
 
     #[error(transparent)]
     Client(#[from] uv_client::Error),
@@ -409,7 +414,7 @@ impl NoSolutionError {
                 ":".bold(),
                 current_python_version,
             )?;
-        } else if !markers.evaluate(&self.current_environment, &[]) {
+        } else if !markers.evaluate(&self.current_environment, MarkerVariantsUniversal, &[]) {
             write!(
                 f,
                 "\n\n{}{} The resolution failed for an environment that is not the current one, \

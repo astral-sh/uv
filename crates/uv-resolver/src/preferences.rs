@@ -7,7 +7,7 @@ use tracing::trace;
 use uv_distribution_types::{IndexUrl, InstalledDist, InstalledDistKind};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
-use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{MarkerTree, MarkerVariantsUniversal, VerbatimUrl, VersionOrUrl};
 use uv_pypi_types::{HashDigest, HashDigests, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
@@ -241,7 +241,10 @@ impl Preferences {
         for preference in preferences {
             // Filter non-matching preferences when resolving for an environment.
             if let Some(markers) = env.marker_environment() {
-                if !preference.marker.evaluate(markers, &[]) {
+                if !preference
+                    .marker
+                    .evaluate(markers, MarkerVariantsUniversal, &[])
+                {
                     trace!("Excluding {preference} from preferences due to unmatched markers");
                     continue;
                 }

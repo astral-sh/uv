@@ -18,7 +18,7 @@ use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name,
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::{Requirement, VersionOrUrl};
+use uv_pep508::{MarkerVariantsUniversal, Requirement, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
@@ -253,7 +253,10 @@ impl<'env> DisplayDependencyGraph<'env> {
                 if prune.contains(&requirement.name) {
                     continue;
                 }
-                if !requirement.marker.evaluate(markers, &[]) {
+                if !requirement
+                    .marker
+                    .evaluate(markers, MarkerVariantsUniversal, &[])
+                {
                     continue;
                 }
 

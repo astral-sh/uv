@@ -7,7 +7,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use uv_normalize::PackageName;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, MarkerVariantsUniversal};
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolverEnvironment, ResolverOutput};
@@ -91,7 +91,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             let mut sources = SourceAnnotations::default();
 
             for requirement in self.resolution.requirements.iter().filter(|requirement| {
-                requirement.evaluate_markers(self.env.marker_environment(), &[])
+                requirement.evaluate_markers(
+                    self.env.marker_environment(),
+                    MarkerVariantsUniversal,
+                    &[],
+                )
             }) {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
@@ -106,7 +110,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .constraints
                 .requirements()
                 .filter(|requirement| {
-                    requirement.evaluate_markers(self.env.marker_environment(), &[])
+                    requirement.evaluate_markers(
+                        self.env.marker_environment(),
+                        MarkerVariantsUniversal,
+                        &[],
+                    )
                 })
             {
                 if let Some(origin) = &requirement.origin {
@@ -122,7 +130,11 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 .overrides
                 .requirements()
                 .filter(|requirement| {
-                    requirement.evaluate_markers(self.env.marker_environment(), &[])
+                    requirement.evaluate_markers(
+                        self.env.marker_environment(),
+                        MarkerVariantsUniversal,
+                        &[],
+                    )
                 })
             {
                 if let Some(origin) = &requirement.origin {
