@@ -1320,6 +1320,99 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
 }
 
 #[test]
+fn run_with_overlay_interpreter() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [project.scripts]
+        main = "foo:main"
+        "#
+    })?;
+
+    let foo = context.temp_dir.child("src").child("foo");
+    foo.create_dir_all()?;
+    let init_py = foo.child("__init__.py");
+    init_py.write_str(indoc! { r"
+        def main():
+            import sys
+            print(sys.executable)
+       "
+    })?;
+
+    // The project's entrypoint should be rewritten to use the overlay interpreter.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // When layering the project on top (via `--with`), the overlay interpreter also should be used.
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Switch to a relocatable virtual environment.
+    context.venv().arg("--relocatable").assert().success();
+
+    // The project's entrypoint should be rewritten to use the overlay interpreter.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    ");
+
+    // When layering the project on top (via `--with`), the overlay interpreter also should be used.
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_with_build_constraints() -> Result<()> {
     let context = TestContext::new("3.9");
 

@@ -1085,6 +1085,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     copy_entrypoint(
                         &entry.path(),
                         &ephemeral_env.scripts().join(entry.file_name()),
+                        interpreter.sys_executable(),
                         ephemeral_env.sys_executable(),
                     )?;
                 }
@@ -1739,7 +1740,12 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
 }
 
 #[cfg(unix)]
-fn copy_entrypoint(source: &Path, target: &Path, python_executable: &Path) -> anyhow::Result<()> {
+fn copy_entrypoint(
+    source: &Path,
+    target: &Path,
+    previous_executable: &Path,
+    python_executable: &Path,
+) -> anyhow::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     let contents = fs_err::read_to_string(source)?;
@@ -1749,7 +1755,14 @@ fn copy_entrypoint(source: &Path, target: &Path, python_executable: &Path) -> an
 "#;
 
     // Only rewrite entrypoints that use the expected shebang.
-    let Some(contents) = contents.strip_prefix(expected) else {
+    let Some(contents) = contents
+        .strip_prefix(expected)
+        .or_else(|| contents.strip_prefix(&format!("#!{}", previous_executable.display())))
+    else {
+        debug!(
+            "Skipping copy of entrypoint at {}: does not start with expected shebang",
+            source.user_display()
+        );
         return Ok(());
     };
 
@@ -1770,7 +1783,12 @@ fn copy_entrypoint(source: &Path, target: &Path, python_executable: &Path) -> an
 }
 
 #[cfg(windows)]
-fn copy_entrypoint(source: &Path, target: &Path, python_executable: &Path) -> anyhow::Result<()> {
+fn copy_entrypoint(
+    source: &Path,
+    target: &Path,
+    _previous_executable: &Path,
+    python_executable: &Path,
+) -> anyhow::Result<()> {
     use uv_trampoline_builder::Launcher;
 
     let Some(launcher) = Launcher::try_from_path(source)? else {
