@@ -3568,11 +3568,11 @@ fn add_update_git_reference_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r#"
+            script_content, @r##"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #     "uv-public-pypackage",
+        #  "uv-public-pypackage",
         # ]
         #
         # [tool.uv.sources]
@@ -3581,7 +3581,7 @@ fn add_update_git_reference_script() -> Result<()> {
 
         import time
         time.sleep(5)
-        "#
+        "##
         );
     });
 
@@ -3601,11 +3601,11 @@ fn add_update_git_reference_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r#"
+            script_content, @r##"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #     "uv-public-pypackage",
+        #  "uv-public-pypackage",
         # ]
         #
         # [tool.uv.sources]
@@ -3614,7 +3614,7 @@ fn add_update_git_reference_script() -> Result<()> {
 
         import time
         time.sleep(5)
-        "#
+        "##
         );
     });
 
