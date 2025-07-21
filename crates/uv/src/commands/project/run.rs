@@ -1092,14 +1092,16 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )?;
                 }
 
-                // Link common data directories from the base environment to the ephemeral
-                // environment. This is critical for Jupyter Lab, which cannot operate without the
-                // files it writes to `<prefix>/share`.
+                // Link data directories from the base environment to the ephemeral environment.
                 //
-                // We only perform a shallow merge here, so `<prefix>/share/<name>` will only be
-                // written once and contents beyond the first level, e.g.,
-                // `<prefix>/share/<name>/foo` will not be merged across parent interpreters.
-                for dir in &["etc", "share"] {
+                // This is critical for Jupyter Lab, which cannot operate without the files it
+                // writes to `<prefix>/share/jupyter`.
+                //
+                // See https://github.com/jupyterlab/jupyterlab/issues/17716
+                //
+                // We only perform a shallow merge here, so if a directory occurs more than once,
+                // any children of that directory will not be merged across base interpreters.
+                for dir in &["etc/jupyter", "share/jupyter"] {
                     let entries = match fs_err::read_dir(interpreter.sys_prefix().join(dir)) {
                         Ok(entries) => entries,
                         // Skip missing directories
