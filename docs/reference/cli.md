@@ -3639,6 +3639,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <dl class="cli-reference"><dt id="uv-pip-sync--all-extras"><a href="#uv-pip-sync--all-extras"><code>--all-extras</code></a></dt><dd><p>Include all optional dependencies.</p>
 <p>Only applies to <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
+</dd><dt id="uv-pip-sync--all-groups"><a href="#uv-pip-sync--all-groups"><code>--all-groups</code></a></dt><dd><p>Include dependencies from all dependency groups.</p>
+<p>Only applies to <code>pylock.toml</code> sources and the <code>pyproject.toml</code> in the working directory.</p>
 </dd><dt id="uv-pip-sync--allow-empty-requirements"><a href="#uv-pip-sync--allow-empty-requirements"><code>--allow-empty-requirements</code></a></dt><dd><p>Allow sync of empty requirements, which will clear the environment of all packages</p>
 </dd><dt id="uv-pip-sync--allow-insecure-host"><a href="#uv-pip-sync--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
@@ -3883,7 +3885,7 @@ Install packages into an environment
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDITABLE>|--group <GROUP>>
+uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDITABLE>|--group <GROUP>|--all-groups>
 ```
 
 <h3 class="cli-reference">Arguments</h3>
@@ -3896,6 +3898,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <dl class="cli-reference"><dt id="uv-pip-install--all-extras"><a href="#uv-pip-install--all-extras"><code>--all-extras</code></a></dt><dd><p>Include all optional dependencies.</p>
 <p>Only applies to <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
+</dd><dt id="uv-pip-install--all-groups"><a href="#uv-pip-install--all-groups"><code>--all-groups</code></a></dt><dd><p>Include dependencies from all dependency groups.</p>
+<p>Only applies to <code>pylock.toml</code> sources and the <code>pyproject.toml</code> in the working directory.</p>
 </dd><dt id="uv-pip-install--allow-insecure-host"><a href="#uv-pip-install--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>

@@ -1542,6 +1542,15 @@ pub struct PipSyncArgs {
     #[arg(long, group = "sources")]
     pub group: Vec<PipGroupName>,
 
+    /// Include dependencies from all dependency groups.
+    ///
+    /// Only applies to `pylock.toml` sources and the `pyproject.toml` in the working directory.
+    #[arg(long, group = "sources", overrides_with = "no_all_groups")]
+    pub all_groups: bool,
+
+    #[arg(long, overrides_with("all_groups"), hide = true)]
+    pub no_all_groups: bool,
+
     #[command(flatten)]
     pub installer: InstallerArgs,
 
@@ -1843,6 +1852,15 @@ pub struct PipInstallArgs {
     /// May be provided multiple times.
     #[arg(long, group = "sources")]
     pub group: Vec<PipGroupName>,
+
+    /// Include dependencies from all dependency groups.
+    ///
+    /// Only applies to `pylock.toml` sources and the `pyproject.toml` in the working directory.
+    #[arg(long, group = "sources", overrides_with = "no_all_groups")]
+    pub all_groups: bool,
+
+    #[arg(long, overrides_with("all_groups"), hide = true)]
+    pub no_all_groups: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
