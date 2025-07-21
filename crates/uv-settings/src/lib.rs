@@ -302,6 +302,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 fork_strategy,
                 dependency_metadata,
                 config_settings,
+                config_settings_package,
                 no_build_isolation,
                 no_build_isolation_package,
                 exclude_newer,
@@ -421,6 +422,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if config_settings.is_some() {
         masked_fields.push("config-settings");
+    }
+    if config_settings_package.is_some() {
+        masked_fields.push("config-settings-package");
     }
     if no_build_isolation.is_some() {
         masked_fields.push("no-build-isolation");

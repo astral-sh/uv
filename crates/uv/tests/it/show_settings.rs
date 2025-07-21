@@ -3870,6 +3870,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -3931,6 +3932,9 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: true,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
