@@ -275,7 +275,7 @@ pub(crate) fn create(
             create_link_to_executable(target.as_path(), executable_target.clone())
                 .map_err(Error::Python)?;
             let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
-            create_link_to_executable(targetw.as_path(), executable_target)
+            create_link_to_executable(targetw.as_path(), executable_target.clone())
                 .map_err(Error::Python)?;
             if interpreter.gil_disabled() {
                 let targett = scripts.join(WindowsExecutable::PythonMajorMinort.exe(interpreter));
