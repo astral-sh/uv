@@ -234,6 +234,8 @@ pub struct PylockTomlPackage {
 #[allow(clippy::empty_structs_with_brackets)]
 struct PylockTomlDependency {
     pub name: PackageName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<Version>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -874,7 +876,18 @@ impl<'lock> PylockToml {
                 .iter()
                 .map(|dep| PylockTomlDependency {
                     name: dep.package_id.name.clone(),
+                    version: dep.package_id.version.clone(),
                 })
+                .chain(
+                    package
+                        .optional_dependencies
+                        .values()
+                        .flatten()
+                        .map(|dep| PylockTomlDependency {
+                            name: dep.package_id.name.clone(),
+                            version: dep.package_id.version.clone(),
+                        })
+                )
                 .collect();
 
             let package = PylockTomlPackage {
