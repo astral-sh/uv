@@ -308,7 +308,7 @@ impl ResolverOutput {
                     }
                 }
                 MarkerParam::String(value_string) => {
-                    let from_env = marker_env.get_string(value_string);
+                    let from_env = marker_env.get_string(value_string).unwrap_or("");
                     MarkerExpression::String {
                         key: value_string.into(),
                         operator: MarkerOperator::Equal,

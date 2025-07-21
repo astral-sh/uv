@@ -8,12 +8,13 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
     Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    RequestedDist, RequiresPython,
+    RegistryVariantsJson, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
+use uv_variants::resolved_variants::ResolvedVariants;
 
 use crate::ExcludeNewer;
 use crate::flat_index::{FlatDistributions, FlatIndex};
@@ -22,6 +23,7 @@ use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
+pub type VariantProviderResult = Result<ResolvedVariants, uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
@@ -59,6 +61,13 @@ pub trait ResolverProvider {
         &'io self,
         dist: &'io InstalledDist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
+
+    /// Fetch the variants for a distribution given the marker environment.
+    fn fetch_and_query_variants<'io>(
+        &'io self,
+        variants_json: &'io RegistryVariantsJson,
+        marker_env: &'io uv_pep508::MarkerEnvironment,
+    ) -> impl Future<Output = VariantProviderResult> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -311,6 +320,17 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                 Arc::new(err),
             )),
         }
+    }
+
+    /// Fetch the variants for a distribution given the marker environment.
+    async fn fetch_and_query_variants<'io>(
+        &'io self,
+        variants_json: &'io RegistryVariantsJson,
+        marker_env: &'io uv_pep508::MarkerEnvironment,
+    ) -> VariantProviderResult {
+        self.fetcher
+            .fetch_and_query_variants(variants_json, marker_env)
+            .await
     }
 
     /// Set the [`Reporter`] to use for this installer.

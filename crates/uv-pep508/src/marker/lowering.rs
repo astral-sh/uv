@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
-
 use uv_normalize::{ExtraName, GroupName};
 
 use crate::marker::tree::MarkerValueList;
+use crate::marker::{VariantFeature, VariantNamespace, VariantValue};
 use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
@@ -59,6 +59,8 @@ pub enum CanonicalMarkerValueString {
     PlatformVersion,
     /// `implementation_name`
     ImplementationName,
+    /// `variant_label`
+    VariantLabel,
 }
 
 impl CanonicalMarkerValueString {
@@ -91,6 +93,7 @@ impl From<MarkerValueString> for CanonicalMarkerValueString {
             MarkerValueString::PlatformVersionDeprecated => Self::PlatformVersion,
             MarkerValueString::SysPlatform => Self::SysPlatform,
             MarkerValueString::SysPlatformDeprecated => Self::SysPlatform,
+            MarkerValueString::VariantLabel => Self::VariantLabel,
         }
     }
 }
@@ -108,6 +111,7 @@ impl From<CanonicalMarkerValueString> for MarkerValueString {
             CanonicalMarkerValueString::PlatformSystem => Self::PlatformSystem,
             CanonicalMarkerValueString::PlatformVersion => Self::PlatformVersion,
             CanonicalMarkerValueString::SysPlatform => Self::SysPlatform,
+            CanonicalMarkerValueString::VariantLabel => Self::VariantLabel,
         }
     }
 }
@@ -124,6 +128,7 @@ impl Display for CanonicalMarkerValueString {
             Self::PlatformSystem => f.write_str("platform_system"),
             Self::PlatformVersion => f.write_str("platform_version"),
             Self::SysPlatform => f.write_str("sys_platform"),
+            Self::VariantLabel => f.write_str("variant_label"),
         }
     }
 }
@@ -162,13 +167,34 @@ impl Display for CanonicalMarkerValueExtra {
 
 /// A key-value pair for `<value> in <key>` or `<value> not in <key>`, where the key is a list.
 ///
-/// Used for PEP 751 markers.
+/// Used for PEP 751 and variant markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerListPair {
     /// A valid [`ExtraName`].
     Extras(ExtraName),
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
+    /// A valid `variant_namespaces`.
+    VariantNamespaces {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+    },
+    /// A valid `variant_features`.
+    VariantFeatures {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+        feature: VariantFeature,
+    },
+    /// A valid `variant_properties`.
+    VariantProperties {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: VariantNamespace,
+        feature: VariantFeature,
+        value: VariantValue,
+    },
     /// For leniency, preserve invalid values.
     Arbitrary { key: MarkerValueList, value: String },
 }
@@ -179,6 +205,9 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(_) => MarkerValueList::Extras,
             Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
+            Self::VariantNamespaces { .. } => MarkerValueList::VariantNamespaces,
+            Self::VariantFeatures { .. } => MarkerValueList::VariantFeatures,
+            Self::VariantProperties { .. } => MarkerValueList::VariantProperties,
             Self::Arbitrary { key, .. } => *key,
         }
     }
@@ -188,6 +217,39 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
+            Self::VariantNamespaces {
+                base: prefix,
+                namespace,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace}")
+                } else {
+                    namespace.to_string()
+                }
+            }
+            Self::VariantFeatures {
+                base: prefix,
+                namespace,
+                feature,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace} :: {feature}")
+                } else {
+                    format!("{namespace} :: {feature}")
+                }
+            }
+            Self::VariantProperties {
+                base: prefix,
+                namespace,
+                feature,
+                value,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace} :: {feature} :: {value}")
+                } else {
+                    format!("{namespace} :: {feature} :: {value}")
+                }
+            }
             Self::Arbitrary { value, .. } => value.clone(),
         }
     }

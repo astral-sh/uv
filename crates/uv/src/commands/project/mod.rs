@@ -331,6 +331,9 @@ pub(crate) enum ProjectError {
     DefaultGroups(#[from] uv_workspace::DefaultGroupsError),
 
     #[error(transparent)]
+    Distribution(#[from] uv_distribution::Error),
+
+    #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]

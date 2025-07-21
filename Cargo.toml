@@ -89,6 +89,8 @@ uv-torch = { version = "0.0.82", path = "crates/uv-torch" }
 uv-trampoline-builder = { version = "0.0.82", path = "crates/uv-trampoline-builder" }
 uv-types = { version = "0.0.82", path = "crates/uv-types" }
 uv-unix = { version = "0.0.82", path = "crates/uv-unix" }
+uv-variant-frontend = { path = "crates/uv-variant-frontend" }
+uv-variants = { path = "crates/uv-variants" }
 uv-version = { version = "0.12.15", path = "crates/uv-version" }
 uv-virtualenv = { version = "0.0.82", path = "crates/uv-virtualenv" }
 uv-warnings = { version = "0.0.82", path = "crates/uv-warnings" }
@@ -277,7 +279,7 @@ security-framework = { version = "3", default-features = false }
 self-replace = { version = "1.5.0", default-features = false }
 serde = { version = "1.0.210", default-features = false, features = ["derive", "rc", "std"] }
 serde-untagged = { version = "0.1.6", default-features = false }
-serde_json = { version = "1.0.128", default-features = false, features = ["std"] }
+serde_json = { version = "1.0.128", default-features = false, features = ["std", "preserve_order"] }
 sha2 = { version = "0.11.0", default-features = false }
 smallvec = { version = "1.13.2", default-features = false }
 spdx = { version = "0.13.0", default-features = false }

@@ -4594,6 +4594,7 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -5886,6 +5887,7 @@ dependencies = [
  "uv-trampoline-builder",
  "uv-types",
  "uv-unix",
+ "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",
@@ -6294,6 +6296,7 @@ dependencies = [
  "uv-small-str",
  "uv-static",
  "uv-torch",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "webpki-root-certs",
@@ -6444,6 +6447,8 @@ dependencies = [
  "uv-requirements",
  "uv-resolver",
  "uv-types",
+ "uv-variant-frontend",
+ "uv-variants",
  "uv-version",
  "uv-workspace",
 ]
@@ -6460,6 +6465,7 @@ dependencies = [
  "http-content-range",
  "indoc",
  "insta",
+ "itertools 0.14.0",
  "owo-colors",
  "rayon",
  "reqwest",
@@ -6490,6 +6496,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-metadata",
  "uv-normalize",
+ "uv-once-map",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
@@ -6498,6 +6505,7 @@ dependencies = [
  "uv-python",
  "uv-redacted",
  "uv-types",
+ "uv-variants",
  "uv-workspace",
  "walkdir",
 ]
@@ -6558,6 +6566,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-small-str",
+ "uv-variants",
  "uv-warnings",
 ]
 
@@ -6821,6 +6830,7 @@ dependencies = [
  "either",
  "fs-err",
  "futures",
+ "hashbrown 0.17.1",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -6862,6 +6872,7 @@ dependencies = [
  "uv-resolver-types",
  "uv-small-str",
  "uv-types",
+ "uv-variants",
  "uv-version",
  "uv-warnings",
  "uv-workspace",
@@ -7095,6 +7106,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.17.1",
  "indexmap",
+ "indoc",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -7311,6 +7323,7 @@ dependencies = [
  "uv-static",
  "uv-torch",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
 ]
 
@@ -7583,9 +7596,11 @@ dependencies = [
  "uv-normalize",
  "uv-once-map",
  "uv-pep440",
+ "uv-pep508",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
+ "uv-variants",
  "uv-workspace",
 ]
 
@@ -7595,6 +7610,52 @@ version = "0.0.82"
 dependencies = [
  "nix 0.31.3",
  "thiserror",
+]
+
+[[package]]
+name = "uv-variant-frontend"
+version = "0.0.3"
+dependencies = [
+ "anstream",
+ "anyhow",
+ "fs-err",
+ "indoc",
+ "owo-colors",
+ "rustc-hash",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uv-configuration",
+ "uv-distribution-types",
+ "uv-fs",
+ "uv-preview",
+ "uv-python",
+ "uv-static",
+ "uv-types",
+ "uv-variants",
+ "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-variants"
+version = "0.0.3"
+dependencies = [
+ "indexmap",
+ "insta",
+ "itertools 0.14.0",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-normalize",
+ "uv-once-map",
+ "uv-pep440",
+ "uv-pep508",
+ "uv-pypi-types",
 ]
 
 [[package]]

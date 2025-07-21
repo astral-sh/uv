@@ -39,6 +39,7 @@ uv-redacted = { workspace = true }
 uv-resolver-types = { workspace = true }
 uv-small-str = { workspace = true }
 uv-types = { workspace = true }
+uv-variants = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
@@ -47,6 +48,7 @@ cyclonedx-bom = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+hashbrown = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
 memchr = { workspace = true }
