@@ -1,5 +1,4 @@
 use std::fmt::{Display, Formatter};
-
 use uv_normalize::{ExtraName, GroupName};
 
 use crate::marker::tree::MarkerValueList;
@@ -163,13 +162,19 @@ impl Display for CanonicalMarkerValueExtra {
 
 /// A key-value pair for `<value> in <key>` or `<value> not in <key>`, where the key is a list.
 ///
-/// Used for PEP 751 markers.
+/// Used for PEP 751 and variant markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerListPair {
     /// A valid [`ExtraName`].
     Extras(ExtraName),
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
+    /// A valid `variant_namespaces`.
+    VariantNamespaces(String),
+    /// A valid `variant_features`.
+    VariantFeatures(String, String),
+    /// A valid `variant_properties`.
+    VariantProperties(String, String, String),
     /// For leniency, preserve invalid values.
     Arbitrary { key: MarkerValueList, value: String },
 }
@@ -180,6 +185,9 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(_) => MarkerValueList::Extras,
             Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
+            Self::VariantNamespaces(_) => MarkerValueList::VariantNamespaces,
+            Self::VariantFeatures(_, _) => MarkerValueList::VariantFeatures,
+            Self::VariantProperties(_, _, _) => MarkerValueList::VariantProperties,
             Self::Arbitrary { key, .. } => *key,
         }
     }
@@ -189,6 +197,13 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
+            Self::VariantNamespaces(namespace) => namespace.clone(),
+            Self::VariantFeatures(namespace, property) => {
+                format!("{namespace} :: {property}")
+            }
+            Self::VariantProperties(namespace, property, value) => {
+                format!("{namespace} :: {property} :: {value}")
+            }
             Self::Arbitrary { value, .. } => value.clone(),
         }
     }
