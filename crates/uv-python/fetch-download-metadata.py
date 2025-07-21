@@ -611,6 +611,9 @@ class GraalPyFinder(Finder):
                 platform = self._normalize_os(m.group(1))
                 arch = self._normalize_arch(m.group(2))
                 libc = "gnu" if platform == "linux" else "none"
+                sha256 = None
+                if digest := asset["digest"]:
+                    sha256 = digest.removeprefix("sha256:")
                 download = PythonDownload(
                     release=0,
                     version=python_version,
@@ -623,6 +626,7 @@ class GraalPyFinder(Finder):
                     implementation=self.implementation,
                     filename=asset["name"],
                     url=url,
+                    sha256=sha256,
                 )
                 # Only keep the latest GraalPy version of each arch/platform
                 if (python_version, arch, platform) not in results:
@@ -637,6 +641,7 @@ class GraalPyFinder(Finder):
         return self.PLATFORM_MAPPING.get(os, os)
 
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
+        downloads = list(filter(lambda d: not d.sha256, downloads))
         for idx, batch in enumerate(batched(downloads, n)):
             logging.info("Fetching GraalPy checksums: %d/%d", idx * n, len(downloads))
             checksum_requests = []
