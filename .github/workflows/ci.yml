@@ -1613,7 +1613,7 @@ jobs:
 
       - name: "Authenticate with GCP"
         id: "auth"
-        uses: "google-github-actions/auth@0920706a19e9d22c3d0da43d1db5939c6ad837a8"
+        uses: "google-github-actions/auth@140bb5113ffb6b65a7e9b937a81fa96cf5064462"
         with:
           credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
 
