@@ -444,6 +444,17 @@ pub(crate) async fn pip_install(
             format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
         })?;
 
+        // Verify that the Python version is compatible with the lock file.
+        if let Some(requires_python) = lock.requires_python.as_ref() {
+            if !requires_python.contains(interpreter.python_version()) {
+                return Err(anyhow::anyhow!(
+                    "The requested interpreter resolved to Python {}, which is incompatible with the `pylock.toml`'s Python requirement: `{}`",
+                    interpreter.python_version(),
+                    requires_python,
+                ));
+            }
+        }
+
         // Convert the extras and groups specifications into a concrete form.
         let extras = extras.with_defaults(DefaultExtras::default());
         let extras = extras

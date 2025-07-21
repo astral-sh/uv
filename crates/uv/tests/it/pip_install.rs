@@ -11591,6 +11591,51 @@ requires_python = "==3.13.*"
     Ok(())
 }
 
+#[test]
+fn pep_751_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.13"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the `pylock.toml`'s Python requirement: `>=3.13`
+    "
+    );
+
+    Ok(())
+}
+
 /// Test that uv doesn't hang if an index returns a distribution for the wrong package.
 #[tokio::test]
 async fn bogus_redirect() -> Result<()> {
