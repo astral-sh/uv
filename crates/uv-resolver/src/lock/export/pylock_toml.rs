@@ -892,11 +892,14 @@ impl<'lock> PylockToml {
                         .optional_dependencies
                         .values()
                         .flatten()
-                        .filter(|dep| included_packages.contains(&(&dep.package_id.name, &dep.package_id.version)))
+                        .filter(|dep| {
+                            included_packages
+                                .contains(&(&dep.package_id.name, &dep.package_id.version))
+                        })
                         .map(|dep| PylockTomlDependency {
                             name: dep.package_id.name.clone(),
                             version: dep.package_id.version.clone(),
-                        })
+                        }),
                 )
                 .collect();
 
