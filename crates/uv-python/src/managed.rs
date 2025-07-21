@@ -847,7 +847,7 @@ fn executable_path_from_base(
 /// Create a link to a managed Python executable.
 ///
 /// If the file already exists at the link path, an error will be returned.
-pub fn create_link_to_executable(link: &Path, executable: PathBuf) -> Result<(), Error> {
+pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
     fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
         to: link_parent.to_path_buf(),
@@ -856,20 +856,20 @@ pub fn create_link_to_executable(link: &Path, executable: PathBuf) -> Result<(),
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
-        match symlink_or_copy_file(&executable, link) {
+        match symlink_or_copy_file(executable, link) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                Err(Error::MissingExecutable(executable.clone()))
+                Err(Error::MissingExecutable(executable.to_path_buf()))
             }
             Err(err) => Err(Error::LinkExecutable {
-                from: executable,
+                from: executable.to_path_buf(),
                 to: link.to_path_buf(),
                 err,
             }),
         }
     } else if cfg!(windows) {
         // TODO(zanieb): Install GUI launchers as well
-        let launcher = windows_python_launcher(&executable, false)?;
+        let launcher = windows_python_launcher(executable, false)?;
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
@@ -878,7 +878,7 @@ pub fn create_link_to_executable(link: &Path, executable: PathBuf) -> Result<(),
             std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))
                 .map_err(|err| Error::LinkExecutable {
-                    from: executable,
+                    from: executable.to_path_buf(),
                     to: link.to_path_buf(),
                     err,
                 })

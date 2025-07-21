@@ -768,7 +768,7 @@ fn create_bin_links(
             installation.executable(false)
         };
 
-        match create_link_to_executable(&target, executable.clone()) {
+        match create_link_to_executable(&target, &executable) {
             Ok(()) => {
                 debug!(
                     "Installed executable at `{}` for {}",
@@ -925,7 +925,7 @@ fn create_bin_links(
                         .remove(&target);
                 }
 
-                if let Err(err) = create_link_to_executable(&target, executable) {
+                if let Err(err) = create_link_to_executable(&target, &executable) {
                     errors.push((
                         InstallErrorKind::Bin,
                         installation.key().clone(),
@@ -953,7 +953,7 @@ fn create_bin_links(
                 errors.push((
                     InstallErrorKind::Bin,
                     installation.key().clone(),
-                    anyhow::Error::new(err),
+                    Error::new(err),
                 ));
             }
         }
