@@ -186,7 +186,7 @@ pub struct PylockToml {
     lock_version: Version,
     created_by: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    requires_python: Option<RequiresPython>,
+    pub requires_python: Option<RequiresPython>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub extras: Vec<ExtraName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
