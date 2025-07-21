@@ -3568,7 +3568,7 @@ fn add_update_git_reference_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r##"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -3581,7 +3581,7 @@ fn add_update_git_reference_script() -> Result<()> {
 
         import time
         time.sleep(5)
-        "###
+        "##
         );
     });
 
@@ -3601,7 +3601,7 @@ fn add_update_git_reference_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r##"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -3614,7 +3614,7 @@ fn add_update_git_reference_script() -> Result<()> {
 
         import time
         time.sleep(5)
-        "###
+        "##
         );
     });
 
@@ -10896,7 +10896,7 @@ fn add_preserves_empty_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10906,7 +10906,7 @@ fn add_preserves_empty_comment() -> Result<()> {
             # Second line.
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -13189,7 +13189,7 @@ fn add_path_with_existing_workspace() -> Result<()> {
     [tool.uv.workspace]
     members = [
         "project",
-     "dep",
+        "dep",
     ]
     "#
     );

@@ -19,9 +19,9 @@ pub struct PyProjectToml {
 
 impl PyProjectToml {
     pub fn from_toml(toml: &str) -> Result<Self, MetadataError> {
-        let pyproject_toml: toml_edit::ImDocument<_> = toml_edit::ImDocument::from_str(toml)
+        let pyproject_toml = toml_edit::Document::from_str(toml)
             .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
-        let pyproject_toml: Self = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+        let pyproject_toml = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
             .map_err(MetadataError::InvalidPyprojectTomlSchema)?;
         Ok(pyproject_toml)
     }

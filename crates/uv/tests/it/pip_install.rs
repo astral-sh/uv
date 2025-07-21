@@ -118,7 +118,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -129,16 +129,15 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
         |
       1 | 123 - 456
         |     ^
-      expected `.`, `=`
+      key with no value, expected `=`
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
       |     ^
-    expected `.`, `=`
-
-    "###
+    key with no value, expected `=`
+    "
     );
 
     Ok(())

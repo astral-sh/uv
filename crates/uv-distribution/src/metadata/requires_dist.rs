@@ -618,14 +618,13 @@ mod test {
             tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 16
+        assert_snapshot!(format_err(input).await, @r#"
+        error: TOML parse error at line 8, column 28
           |
         8 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
-          |                ^
-        invalid string
-        expected `"`, `'`
-        "###);
+          |                            ^
+        missing comma between key-value pairs, expected `,`
+        "#);
     }
 
     #[tokio::test]
