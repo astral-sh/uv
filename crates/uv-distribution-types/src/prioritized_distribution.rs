@@ -9,10 +9,12 @@ use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
+use uv_variants::VariantPriority;
+use uv_variants::resolved_variants::ResolvedVariants;
 
 use crate::{
-    File, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    ResolvedDistRef,
+    File, IndexUrl, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RegistryVariantsJson, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -26,9 +28,13 @@ struct PrioritizedDistInner {
     source: Option<(RegistrySourceDist, SourceDistCompatibility)>,
     /// The highest-priority wheel index. When present, it is
     /// guaranteed to be a valid index into `wheels`.
+    ///
+    /// This wheel may still be incompatible.
     best_wheel_index: Option<usize>,
     /// The set of all wheels associated with this distribution.
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
+    /// The `variants.json` file associated with the package version.
+    variants_json: Option<RegistryVariantsJson>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
     /// The set of supported platforms for the distribution, described in terms of their markers.
@@ -41,6 +47,7 @@ impl Default for PrioritizedDistInner {
             source: None,
             best_wheel_index: None,
             wheels: Vec::new(),
+            variants_json: None,
             hashes: Vec::new(),
             markers: MarkerTree::FALSE,
         }
@@ -91,6 +98,16 @@ impl CompatibleDist<'_> {
         }
     }
 
+    /// Return the index URL for the distribution, if any.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. } => Some(&sdist.index),
+            CompatibleDist::CompatibleWheel { wheel, .. } => Some(&wheel.index),
+            CompatibleDist::IncompatibleWheel { sdist, .. } => Some(&sdist.index),
+        }
+    }
+
     // For installable distributions, return the prioritized distribution it was derived from.
     pub fn prioritized(&self) -> Option<&PrioritizedDist> {
         match self {
@@ -125,6 +142,7 @@ impl IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => format!("has {self}"),
+                IncompatibleWheel::Variant => format!("has {self}"),
                 IncompatibleWheel::Tag(_) => format!("has {self}"),
                 IncompatibleWheel::Yanked(_) => format!("was {self}"),
                 IncompatibleWheel::ExcludeNewer(ts) => match ts {
@@ -153,6 +171,7 @@ impl IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => format!("have {self}"),
+                IncompatibleWheel::Variant => format!("have {self}"),
                 IncompatibleWheel::Tag(_) => format!("have {self}"),
                 IncompatibleWheel::Yanked(_) => format!("were {self}"),
                 IncompatibleWheel::ExcludeNewer(ts) => match ts {
@@ -201,6 +220,7 @@ impl IncompatibleDist {
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
                 IncompatibleWheel::Tag(IncompatibleTag::Invalid) => None,
+                IncompatibleWheel::Variant => None,
                 IncompatibleWheel::NoBinary => None,
                 IncompatibleWheel::Yanked(..) => None,
                 IncompatibleWheel::ExcludeNewer(..) => None,
@@ -218,6 +238,9 @@ impl Display for IncompatibleDist {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
                 IncompatibleWheel::NoBinary => f.write_str("no source distribution"),
+                IncompatibleWheel::Variant => {
+                    f.write_str("no wheels with a variant supported on the current platform")
+                }
                 IncompatibleWheel::Tag(tag) => match tag {
                     IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
@@ -292,13 +315,20 @@ pub enum PythonRequirementKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
-    Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
+    Compatible {
+        hash: HashComparison,
+        variant_priority: VariantPriority,
+        tag_priority: Option<TagPriority>,
+        build_tag: Option<BuildTag>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleWheel {
     /// The wheel was published after the exclude newer time.
     ExcludeNewer(Option<i64>),
+    /// The wheel variant does not match the target platform.
+    Variant,
     /// The wheel tags do not match those of the target Python platform.
     Tag(IncompatibleTag),
     /// The required Python version is not a superset of the target Python version range.
@@ -346,6 +376,7 @@ impl PrioritizedDist {
             markers: implied_markers(&dist.filename),
             best_wheel_index: Some(0),
             wheels: vec![(dist, compatibility)],
+            variants_json: None,
             source: None,
             hashes,
         }))
@@ -362,7 +393,20 @@ impl PrioritizedDist {
             best_wheel_index: None,
             wheels: vec![],
             source: Some((dist, compatibility)),
+            variants_json: None,
             hashes,
+        }))
+    }
+
+    /// Create a new [`PrioritizedDist`] from the `variants.json`.
+    pub fn from_variant_json(variant_json: RegistryVariantsJson) -> Self {
+        Self(Box::new(PrioritizedDistInner {
+            markers: MarkerTree::TRUE,
+            best_wheel_index: Some(0),
+            wheels: vec![],
+            source: None,
+            variants_json: Some(variant_json),
+            hashes: vec![],
         }))
     }
 
@@ -419,17 +463,51 @@ impl PrioritizedDist {
         }
     }
 
+    pub fn insert_variant_json(&mut self, variant_json: RegistryVariantsJson) {
+        debug_assert!(
+            self.0.variants_json.is_none(),
+            "The variants.json filename is unique"
+        );
+        self.0.variants_json = Some(variant_json);
+    }
+
+    /// Return the variants JSON for the distribution, if any.
+    pub fn variants_json(&self) -> Option<&RegistryVariantsJson> {
+        self.0.variants_json.as_ref()
+    }
+
+    /// Return the index URL for the distribution, if any.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        self.0
+            .source
+            .as_ref()
+            .map(|(sdist, _)| &sdist.index)
+            .or_else(|| self.0.wheels.first().map(|(wheel, _)| &wheel.index))
+    }
+
     /// Return the highest-priority distribution for the package version, if any.
-    pub fn get(&self) -> Option<CompatibleDist<'_>> {
+    pub fn get(&self, allow_all_variants: bool) -> Option<CompatibleDist<'_>> {
         let best_wheel = self.0.best_wheel_index.map(|i| &self.0.wheels[i]);
         match (&best_wheel, &self.0.source) {
             // If both are compatible, break ties based on the hash outcome. For example, prefer a
             // source distribution with a matching hash over a wheel with a mismatched hash. When
             // the outcomes are equivalent (e.g., both have a matching hash), prefer the wheel.
             (
-                Some((wheel, WheelCompatibility::Compatible(wheel_hash, tag_priority, ..))),
+                Some((
+                    wheel,
+                    WheelCompatibility::Compatible {
+                        hash: wheel_hash,
+                        tag_priority,
+                        variant_priority,
+                        ..
+                    },
+                )),
                 Some((sdist, SourceDistCompatibility::Compatible(sdist_hash))),
-            ) => {
+            ) if matches!(
+                variant_priority,
+                VariantPriority::BestVariant | VariantPriority::NonVariant
+            ) || allow_all_variants =>
+            {
                 if sdist_hash > wheel_hash {
                     Some(CompatibleDist::SourceDist {
                         sdist,
@@ -444,7 +522,22 @@ impl PrioritizedDist {
                 }
             }
             // Prefer the highest-priority, platform-compatible wheel.
-            (Some((wheel, WheelCompatibility::Compatible(_, tag_priority, ..))), _) => {
+            (
+                Some((
+                    wheel,
+                    WheelCompatibility::Compatible {
+                        hash: _,
+                        tag_priority,
+                        variant_priority,
+                        ..
+                    },
+                )),
+                _,
+            ) if matches!(
+                variant_priority,
+                VariantPriority::BestVariant | VariantPriority::NonVariant
+            ) || allow_all_variants =>
+            {
                 Some(CompatibleDist::CompatibleWheel {
                     wheel,
                     priority: *tag_priority,
@@ -477,6 +570,56 @@ impl PrioritizedDist {
         }
     }
 
+    /// Prioritize a matching variant wheel over a matching non-variant wheel.
+    ///
+    /// Returns `None` or there is no matching variant.
+    pub fn prioritize_best_variant_wheel(
+        &self,
+        resolved_variants: &ResolvedVariants,
+    ) -> Option<Self> {
+        let mut highest_priority_variant_wheel: Option<(usize, Vec<usize>)> = None;
+        for (wheel_index, (wheel, compatibility)) in self.wheels().enumerate() {
+            if !compatibility.is_compatible() {
+                continue;
+            }
+
+            let Some(variant) = wheel.filename.variant() else {
+                // The non-variant wheel is already supported
+                continue;
+            };
+
+            let Some(scores) = resolved_variants.score_variant(variant) else {
+                continue;
+            };
+
+            if let Some((_, old_scores)) = &highest_priority_variant_wheel {
+                if &scores > old_scores {
+                    highest_priority_variant_wheel = Some((wheel_index, scores));
+                }
+            } else {
+                highest_priority_variant_wheel = Some((wheel_index, scores));
+            }
+        }
+
+        if let Some((wheel_index, _)) = highest_priority_variant_wheel {
+            use owo_colors::OwoColorize;
+
+            let inner = PrioritizedDistInner {
+                best_wheel_index: Some(wheel_index),
+                ..(*self.0).clone()
+            };
+            let compatible_wheel = &inner.wheels[wheel_index];
+            debug!(
+                "{} {}",
+                "Using variant wheel".red(),
+                compatible_wheel.0.filename
+            );
+            Some(Self(Box::new(inner)))
+        } else {
+            None
+        }
+    }
+
     /// Return the incompatibility for the best source distribution, if any.
     pub fn incompatible_source(&self) -> Option<&IncompatibleSource> {
         self.0
@@ -489,14 +632,22 @@ impl PrioritizedDist {
     }
 
     /// Return the incompatibility for the best wheel, if any.
-    pub fn incompatible_wheel(&self) -> Option<&IncompatibleWheel> {
+    pub fn incompatible_wheel(&self, allow_variants: bool) -> Option<&IncompatibleWheel> {
         self.0
             .best_wheel_index
             .map(|i| &self.0.wheels[i])
             .and_then(|(_, compatibility)| match compatibility {
-                WheelCompatibility::Compatible(_, _, _) => None,
+                WheelCompatibility::Compatible {
+                    variant_priority: VariantPriority::Unknown,
+                    ..
+                } if !allow_variants => Some(&IncompatibleWheel::Variant),
+                WheelCompatibility::Compatible { .. } => None,
                 WheelCompatibility::Incompatible(incompatibility) => Some(incompatibility),
             })
+    }
+
+    pub fn wheels(&self) -> impl Iterator<Item = &(RegistryBuiltWheel, WheelCompatibility)> {
+        self.0.wheels.iter()
     }
 
     /// Return the hashes for each distribution.
@@ -665,7 +816,7 @@ impl<'a> CompatibleDist<'a> {
 impl WheelCompatibility {
     /// Return `true` if the distribution is compatible.
     pub fn is_compatible(&self) -> bool {
-        matches!(self, Self::Compatible(_, _, _))
+        matches!(self, Self::Compatible { .. })
     }
 
     /// Return `true` if the distribution is excluded.
@@ -679,14 +830,30 @@ impl WheelCompatibility {
     /// Compatible wheel ordering is determined by tag priority.
     pub fn is_more_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Compatible(_, _, _), Self::Incompatible(_)) => true,
+            (Self::Compatible { .. }, Self::Incompatible(..)) => true,
             (
-                Self::Compatible(hash, tag_priority, build_tag),
-                Self::Compatible(other_hash, other_tag_priority, other_build_tag),
+                Self::Compatible {
+                    hash,
+                    variant_priority,
+                    tag_priority,
+                    build_tag,
+                },
+                Self::Compatible {
+                    hash: other_hash,
+                    variant_priority: other_variant_priority,
+                    tag_priority: other_tag_priority,
+                    build_tag: other_build_tag,
+                },
             ) => {
-                (hash, tag_priority, build_tag) > (other_hash, other_tag_priority, other_build_tag)
+                (hash, variant_priority, tag_priority, build_tag)
+                    > (
+                        other_hash,
+                        other_variant_priority,
+                        other_tag_priority,
+                        other_build_tag,
+                    )
             }
-            (Self::Incompatible(_), Self::Compatible(_, _, _)) => false,
+            (Self::Incompatible(..), Self::Compatible { .. }) => false,
             (Self::Incompatible(incompatibility), Self::Incompatible(other_incompatibility)) => {
                 incompatibility.is_more_compatible(other_incompatibility)
             }
@@ -768,8 +935,17 @@ impl IncompatibleWheel {
                 Self::MissingPlatform(_)
                 | Self::NoBinary
                 | Self::RequiresPython(_, _)
+                | Self::Variant
                 | Self::Tag(_)
                 | Self::Yanked(_) => true,
+            },
+            Self::Variant => match other {
+                Self::ExcludeNewer(_)
+                | Self::Tag(_)
+                | Self::RequiresPython(_, _)
+                | Self::Yanked(_) => false,
+                Self::Variant => false,
+                Self::MissingPlatform(_) | Self::NoBinary => true,
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
@@ -777,25 +953,27 @@ impl IncompatibleWheel {
                 Self::MissingPlatform(_)
                 | Self::NoBinary
                 | Self::RequiresPython(_, _)
+                | Self::Variant
                 | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
-                Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) => true,
+                Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) | Self::Variant => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
-                Self::MissingPlatform(_) | Self::NoBinary => true,
+                Self::MissingPlatform(_) | Self::NoBinary | Self::Variant => true,
             },
             Self::NoBinary => match other {
                 Self::ExcludeNewer(_)
                 | Self::Tag(_)
                 | Self::RequiresPython(_, _)
-                | Self::Yanked(_) => false,
+                | Self::Yanked(_)
+                | Self::Variant => false,
                 Self::NoBinary => false,
                 Self::MissingPlatform(_) => true,
             },

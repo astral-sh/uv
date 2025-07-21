@@ -15,7 +15,7 @@ use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
-use uv_distribution_filename::DistFilename;
+use uv_distribution_filename::{DistFilename, VariantLabel};
 use uv_distribution_types::{
     Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
 };
@@ -27,6 +27,7 @@ use uv_preview::Preview;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
+use uv_variants::variants_json::DistInfoVariantsJson;
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
@@ -165,6 +166,13 @@ pub(crate) async fn pip_list(
                 .map(|dist| Entry {
                     name: dist.name().clone(),
                     version: dist.version().clone(),
+                    variant: dist
+                        .read_variant_json()
+                        .ok()
+                        .flatten()
+                        .as_ref()
+                        .and_then(DistInfoVariantsJson::label)
+                        .cloned(),
                     latest_version: latest
                         .get(dist.name())
                         .and_then(|filename| filename.as_ref())
@@ -202,6 +210,28 @@ pub(crate) async fn pip_list(
                         .collect_vec(),
                 },
             ];
+
+            // Variant column is only displayed if at least one package has a variant.
+            let variants = results
+                .iter()
+                .map(|dist| {
+                    dist.read_variant_json()
+                        .ok()
+                        .flatten()
+                        .as_ref()
+                        .and_then(DistInfoVariantsJson::label)
+                        .map(ToString::to_string)
+                })
+                .collect_vec();
+            if variants.iter().any(Option::is_some) {
+                columns.push(Column {
+                    header: String::from("Variant"),
+                    rows: variants
+                        .into_iter()
+                        .map(std::option::Option::unwrap_or_default)
+                        .collect_vec(),
+                });
+            }
 
             // The latest version and type are only displayed if outdated.
             if outdated {
@@ -333,6 +363,8 @@ impl From<&DistFilename> for FileType {
 struct Entry {
     name: PackageName,
     version: Version,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    variant: Option<VariantLabel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     latest_version: Option<Version>,
     #[serde(skip_serializing_if = "Option::is_none")]
