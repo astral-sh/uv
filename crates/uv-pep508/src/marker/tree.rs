@@ -126,6 +126,24 @@ impl Display for MarkerValueString {
     }
 }
 
+/// Those markers with exclusively `in` and `not in` operators (PEP 751)
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum MarkerValueContains {
+    /// `extras`. This one is special because it's a list, and user-provided
+    Extras,
+    /// `dependency_groups`. This one is special because it's a list, and user-provided
+    DependencyGroups,
+}
+
+impl Display for MarkerValueContains {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Extras => f.write_str("extras"),
+            Self::DependencyGroups => f.write_str("dependency_groups"),
+        }
+    }
+}
+
 /// One of the predefined environment values
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
@@ -137,10 +155,8 @@ pub enum MarkerValue {
     MarkerEnvString(MarkerValueString),
     /// `extra`. This one is special because it's a list, and user-provided
     Extra,
-    /// `extras`. This one is special because it's a list, and user-provided
-    Extras,
-    /// `dependency_groups`. This one is special because it's a list, and user-provided
-    DependencyGroups,
+    /// Those markers with exclusively `in` and `not in` operators (PEP 751)
+    MarkerEnvContains(MarkerValueContains),
     /// Not a constant, but a user given quoted string with a value inside such as '3.8' or "windows"
     QuotedString(ArcStr),
 }
@@ -181,8 +197,8 @@ impl FromStr for MarkerValue {
             "sys_platform" => Self::MarkerEnvString(MarkerValueString::SysPlatform),
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
             "extra" => Self::Extra,
-            "extras" => Self::Extras,
-            "dependency_groups" => Self::DependencyGroups,
+            "extras" => Self::MarkerEnvContains(MarkerValueContains::Extras),
+            "dependency_groups" => Self::MarkerEnvContains(MarkerValueContains::DependencyGroups),
             _ => return Err(format!("Invalid key: {s}")),
         };
         Ok(value)
@@ -195,8 +211,7 @@ impl Display for MarkerValue {
             Self::MarkerEnvVersion(marker_value_version) => marker_value_version.fmt(f),
             Self::MarkerEnvString(marker_value_string) => marker_value_string.fmt(f),
             Self::Extra => f.write_str("extra"),
-            Self::Extras => f.write_str("extras"),
-            Self::DependencyGroups => f.write_str("dependency_groups"),
+            Self::MarkerEnvContains(marker_value_contains) => marker_value_contains.fmt(f),
             Self::QuotedString(value) => write!(f, "'{value}'"),
         }
     }
