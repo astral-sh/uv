@@ -277,6 +277,14 @@ pub(crate) fn create(
             let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
             create_link_to_executable(targetw.as_path(), executable_target)
                 .map_err(Error::Python)?;
+            if interpreter.gil_disabled() {
+                let targett = scripts.join(WindowsExecutable::PythonMajorMinort.exe(interpreter));
+                create_link_to_executable(targett.as_path(), executable_target.clone())
+                    .map_err(Error::Python)?;
+                let targetwt = scripts.join(WindowsExecutable::PythonwMajorMinort.exe(interpreter));
+                create_link_to_executable(targetwt.as_path(), executable_target)
+                    .map_err(Error::Python)?;
+            }
         } else {
             // Always copy `python.exe`.
             copy_launcher_windows(
