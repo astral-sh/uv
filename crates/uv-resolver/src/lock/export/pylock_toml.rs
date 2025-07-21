@@ -232,7 +232,9 @@ pub struct PylockTomlPackage {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[allow(clippy::empty_structs_with_brackets)]
-struct PylockTomlDependency {}
+struct PylockTomlDependency {
+    pub name: PackageName,
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -866,12 +868,21 @@ impl<'lock> PylockToml {
                 .filter(|_| directory.is_none())
                 .cloned();
 
+            // Extract dependencies from the package
+            let dependencies = package
+                .dependencies
+                .iter()
+                .map(|dep| PylockTomlDependency {
+                    name: dep.package_id.name.clone(),
+                })
+                .collect();
+
             let package = PylockTomlPackage {
                 name,
                 version,
                 marker: node.marker,
                 requires_python: None,
-                dependencies: vec![],
+                dependencies,
                 index,
                 vcs,
                 directory,
