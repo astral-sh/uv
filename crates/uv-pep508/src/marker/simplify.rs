@@ -162,6 +162,22 @@ fn collect_dnf(
                 path.pop();
             }
         }
+        MarkerTreeKind::List(marker) => {
+            for (is_high, tree) in marker.children() {
+                let expr = MarkerExpression::List {
+                    pair: marker.pair().clone(),
+                    operator: if is_high {
+                        ContainerOperator::In
+                    } else {
+                        ContainerOperator::NotIn
+                    },
+                };
+
+                path.push(expr);
+                collect_dnf(tree, dnf, path);
+                path.pop();
+            }
+        }
         MarkerTreeKind::Extra(marker) => {
             for (value, tree) in marker.children() {
                 let operator = if value {
@@ -171,42 +187,6 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::Extra {
-                    name: marker.name().clone().into(),
-                    operator,
-                };
-
-                path.push(expr);
-                collect_dnf(tree, dnf, path);
-                path.pop();
-            }
-        }
-        MarkerTreeKind::Extras(marker) => {
-            for (value, tree) in marker.children() {
-                let operator = if value {
-                    ContainerOperator::In
-                } else {
-                    ContainerOperator::NotIn
-                };
-
-                let expr = MarkerExpression::Extras {
-                    name: marker.name().clone().into(),
-                    operator,
-                };
-
-                path.push(expr);
-                collect_dnf(tree, dnf, path);
-                path.pop();
-            }
-        }
-        MarkerTreeKind::DependencyGroups(marker) => {
-            for (value, tree) in marker.children() {
-                let operator = if value {
-                    ContainerOperator::In
-                } else {
-                    ContainerOperator::NotIn
-                };
-
-                let expr = MarkerExpression::DependencyGroups {
                     name: marker.name().clone().into(),
                     operator,
                 };
@@ -433,18 +413,18 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
         MarkerExpression::VersionIn {
             key,
             versions,
-            negated,
+            operator,
         } => {
             let MarkerExpression::VersionIn {
                 key: key2,
                 versions: versions2,
-                negated: negated2,
+                operator: operator2,
             } = right
             else {
                 return false;
             };
 
-            key == key2 && versions == versions2 && negated != negated2
+            key == key2 && versions == versions2 && operator != operator2
         }
         MarkerExpression::String {
             key,
@@ -477,27 +457,16 @@ fn is_negation(left: &MarkerExpression, right: &MarkerExpression) -> bool {
 
             name == name2 && operator.negate() == *operator2
         }
-        MarkerExpression::Extras { name, operator } => {
-            let MarkerExpression::Extras {
-                name: name2,
+        MarkerExpression::List { pair, operator } => {
+            let MarkerExpression::List {
+                pair: pair2,
                 operator: operator2,
             } = right
             else {
                 return false;
             };
 
-            name == name2 && *operator == operator2.negate()
-        }
-        MarkerExpression::DependencyGroups { name, operator } => {
-            let MarkerExpression::DependencyGroups {
-                name: name2,
-                operator: operator2,
-            } = right
-            else {
-                return false;
-            };
-
-            name == name2 && *operator == operator2.negate()
+            pair == pair2 && operator != operator2
         }
     }
 }
