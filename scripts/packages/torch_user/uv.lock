@@ -1,0 +1,1433 @@
+version = 1
+revision = 3
+requires-python = "==3.13.*"
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "(platform_machine != 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform != 'linux' or (variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)",
+]
+
+[[package]]
+name = "dpcpp-cpp-rt"
+version = "2025.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "intel-opencl-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-openmp", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-sycl-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/79/04d766ab2585b2e5586dfc5e39fd1a29eb61d415b1538ec5c2d02e7a4995/dpcpp_cpp_rt-2025.2.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:e601799b8698342116d165d52b9a86bddd1acca6b3522e656417e5128229f66e", size = 28795, upload-time = "2025-08-13T18:31:52.648Z" },
+]
+
+[[package]]
+name = "filelock"
+version = "3.20.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/46/0028a82567109b5ef6e4d2a1f04a583fb513e6cf9527fcdd09afd817deeb/filelock-3.20.0.tar.gz", hash = "sha256:711e943b4ec6be42e1d4e6690b48dc175c822967466bb31c0c293f34334c13f4", size = 18922, upload-time = "2025-10-08T18:03:50.056Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/91/7216b27286936c16f5b4d0c530087e4a54eead683e6b0b73dd0c64844af6/filelock-3.20.0-py3-none-any.whl", hash = "sha256:339b4732ffda5cd79b13f4e2711a31b0365ce445d95d243bb996273d072546a2", size = 16054, upload-time = "2025-10-08T18:03:48.35Z" },
+]
+
+[[package]]
+name = "fsspec"
+version = "2025.10.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/7f/2747c0d332b9acfa75dc84447a066fdf812b5a6b8d30472b74d309bfe8cb/fsspec-2025.10.0.tar.gz", hash = "sha256:b6789427626f068f9a83ca4e8a3cc050850b6c0f71f99ddb4f542b8266a26a59", size = 309285, upload-time = "2025-10-30T14:58:44.036Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/02/a6b21098b1d5d6249b7c5ab69dde30108a71e4e819d4a9778f1de1d5b70d/fsspec-2025.10.0-py3-none-any.whl", hash = "sha256:7c7712353ae7d875407f97715f0e1ffcc21e33d5b24556cb1e090ae9409ec61d", size = 200966, upload-time = "2025-10-30T14:58:42.53Z" },
+]
+
+[[package]]
+name = "impi-rt"
+version = "2021.16.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/44/6867aebd60d8b8bcf8f7e3b1fa781debd4fc3df16bfb1525e732570ea214/impi_rt-2021.16.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:0f70499bc42eab6923c0ae8fa6dd409c047d93626d686ac21d04e295b120bb95", size = 84635349, upload-time = "2025-08-13T18:32:10.885Z" },
+]
+
+[[package]]
+name = "intel-cmplr-lib-rt"
+version = "2025.2.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/a9/a3d904890e2c5ea906db65c90b912553a94da44d4e81f26641b0d124cedb/intel_cmplr_lib_rt-2025.2.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:13e53cf4ee3d910db5ed46cf994c99dd391b50d6efb553cf3dd029b866d79a86", size = 47494270, upload-time = "2025-08-13T18:32:03.056Z" },
+]
+
+[[package]]
+name = "intel-cmplr-lib-ur"
+version = "2025.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "umf", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/18/28198666e0ee1709a471c3e376001146e629214d67553bc9fa3e7bbc9b8e/intel_cmplr_lib_ur-2025.2.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:ecc6eba009ead8ea819d931107ba11e2b502f5d8ebbd287e4901074a764f9792", size = 29313080, upload-time = "2025-08-13T18:31:36.833Z" },
+]
+
+[[package]]
+name = "intel-cmplr-lic-rt"
+version = "2025.2.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/87/c2229d6dbda1a9b949f009c9a0b1f14141b2725bb526964e6e263328935a/intel_cmplr_lic_rt-2025.2.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:aeaad4648cc0baaefffb0a0f8c1c2d1de01e5396711c3e69e36fab90030889d8", size = 18909, upload-time = "2025-08-13T18:31:54.25Z" },
+]
+
+[[package]]
+name = "intel-opencl-rt"
+version = "2025.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "intel-cmplr-lic-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "tbb", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/2d/bb5fdf03f267afa3b9d0e1a6d92ebb487e35aee3462d19b38669b4f8b455/intel_opencl_rt-2025.2.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:5f8c5f9c2840ebc0360524f46fb13f28a1c45a98483f78f0c488b3ec4c411d28", size = 193043449, upload-time = "2025-08-13T18:31:45.158Z" },
+]
+
+[[package]]
+name = "intel-openmp"
+version = "2025.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "intel-cmplr-lib-ur", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/0a/160013c2e8920e7f4d5bfb0b46dbe9fdd37ff50adcc11a1bad674f22bd78/intel_openmp-2025.2.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:4656e8e864998db776dbb6d045067f75c227f78c72943e07e15b0d1d65ff45c2", size = 73411361, upload-time = "2025-08-13T18:31:57.96Z" },
+]
+
+[[package]]
+name = "intel-pti"
+version = "0.13.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/78/de/170216cc7776b239ddc4825911a109b10c8396a57bab46c177d8ef404e50/intel_pti-0.13.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:926982bd57a1f73ba9e604b12394fbcf8443076c75990cb70b10a47b8e97effe", size = 1122645, upload-time = "2025-08-13T18:30:54.3Z" },
+]
+
+[[package]]
+name = "intel-sycl-rt"
+version = "2025.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "intel-cmplr-lib-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-cmplr-lib-ur", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-cmplr-lic-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/00/5621dd3aa9e078ebed8b5b73fe86986e4554398466f218b3125f7f76c7a9/intel_sycl_rt-2025.2.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:d44dd7e76cf7b624de9106f3d9c3d541f6f20d83e861f724b055867fd351b064", size = 113799221, upload-time = "2025-08-13T18:31:30.774Z" },
+]
+
+[[package]]
+name = "jinja2"
+version = "3.1.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markupsafe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899, upload-time = "2025-03-05T20:05:00.369Z" },
+]
+
+[[package]]
+name = "markupsafe"
+version = "3.0.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/99/7690b6d4034fffd95959cbe0c02de8deb3098cc577c67bb6a24fe5d7caa7/markupsafe-3.0.3.tar.gz", hash = "sha256:722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698", size = 80313, upload-time = "2025-09-27T18:37:40.426Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/2f/907b9c7bbba283e68f20259574b13d005c121a0fa4c175f9bed27c4597ff/markupsafe-3.0.3-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:e1cf1972137e83c5d4c136c43ced9ac51d0e124706ee1c8aa8532c1287fa8795", size = 11622, upload-time = "2025-09-27T18:36:41.777Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/d9/5f7756922cdd676869eca1c4e3c0cd0df60ed30199ffd775e319089cb3ed/markupsafe-3.0.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:116bb52f642a37c115f517494ea5feb03889e04df47eeff5b130b1808ce7c219", size = 12029, upload-time = "2025-09-27T18:36:43.257Z" },
+    { url = "https://files.pythonhosted.org/packages/00/07/575a68c754943058c78f30db02ee03a64b3c638586fba6a6dd56830b30a3/markupsafe-3.0.3-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:133a43e73a802c5562be9bbcd03d090aa5a1fe899db609c29e8c8d815c5f6de6", size = 24374, upload-time = "2025-09-27T18:36:44.508Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/21/9b05698b46f218fc0e118e1f8168395c65c8a2c750ae2bab54fc4bd4e0e8/markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ccfcd093f13f0f0b7fdd0f198b90053bf7b2f02a3927a30e63f3ccc9df56b676", size = 22980, upload-time = "2025-09-27T18:36:45.385Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/71/544260864f893f18b6827315b988c146b559391e6e7e8f7252839b1b846a/markupsafe-3.0.3-cp313-cp313-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:509fa21c6deb7a7a273d629cf5ec029bc209d1a51178615ddf718f5918992ab9", size = 21990, upload-time = "2025-09-27T18:36:46.916Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/28/b50fc2f74d1ad761af2f5dcce7492648b983d00a65b8c0e0cb457c82ebbe/markupsafe-3.0.3-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:a4afe79fb3de0b7097d81da19090f4df4f8d3a2b3adaa8764138aac2e44f3af1", size = 23784, upload-time = "2025-09-27T18:36:47.884Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/76/104b2aa106a208da8b17a2fb72e033a5a9d7073c68f7e508b94916ed47a9/markupsafe-3.0.3-cp313-cp313-musllinux_1_2_riscv64.whl", hash = "sha256:795e7751525cae078558e679d646ae45574b47ed6e7771863fcc079a6171a0fc", size = 21588, upload-time = "2025-09-27T18:36:48.82Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/99/16a5eb2d140087ebd97180d95249b00a03aa87e29cc224056274f2e45fd6/markupsafe-3.0.3-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:8485f406a96febb5140bfeca44a73e3ce5116b2501ac54fe953e488fb1d03b12", size = 23041, upload-time = "2025-09-27T18:36:49.797Z" },
+    { url = "https://files.pythonhosted.org/packages/19/bc/e7140ed90c5d61d77cea142eed9f9c303f4c4806f60a1044c13e3f1471d0/markupsafe-3.0.3-cp313-cp313-win32.whl", hash = "sha256:bdd37121970bfd8be76c5fb069c7751683bdf373db1ed6c010162b2a130248ed", size = 14543, upload-time = "2025-09-27T18:36:51.584Z" },
+    { url = "https://files.pythonhosted.org/packages/05/73/c4abe620b841b6b791f2edc248f556900667a5a1cf023a6646967ae98335/markupsafe-3.0.3-cp313-cp313-win_amd64.whl", hash = "sha256:9a1abfdc021a164803f4d485104931fb8f8c1efd55bc6b748d2f5774e78b62c5", size = 15113, upload-time = "2025-09-27T18:36:52.537Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/3a/fa34a0f7cfef23cf9500d68cb7c32dd64ffd58a12b09225fb03dd37d5b80/markupsafe-3.0.3-cp313-cp313-win_arm64.whl", hash = "sha256:7e68f88e5b8799aa49c85cd116c932a1ac15caaa3f5db09087854d218359e485", size = 13911, upload-time = "2025-09-27T18:36:53.513Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/d7/e05cd7efe43a88a17a37b3ae96e79a19e846f3f456fe79c57ca61356ef01/markupsafe-3.0.3-cp313-cp313t-macosx_10_13_x86_64.whl", hash = "sha256:218551f6df4868a8d527e3062d0fb968682fe92054e89978594c28e642c43a73", size = 11658, upload-time = "2025-09-27T18:36:54.819Z" },
+    { url = "https://files.pythonhosted.org/packages/99/9e/e412117548182ce2148bdeacdda3bb494260c0b0184360fe0d56389b523b/markupsafe-3.0.3-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:3524b778fe5cfb3452a09d31e7b5adefeea8c5be1d43c4f810ba09f2ceb29d37", size = 12066, upload-time = "2025-09-27T18:36:55.714Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/e6/fa0ffcda717ef64a5108eaa7b4f5ed28d56122c9a6d70ab8b72f9f715c80/markupsafe-3.0.3-cp313-cp313t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4e885a3d1efa2eadc93c894a21770e4bc67899e3543680313b09f139e149ab19", size = 25639, upload-time = "2025-09-27T18:36:56.908Z" },
+    { url = "https://files.pythonhosted.org/packages/96/ec/2102e881fe9d25fc16cb4b25d5f5cde50970967ffa5dddafdb771237062d/markupsafe-3.0.3-cp313-cp313t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8709b08f4a89aa7586de0aadc8da56180242ee0ada3999749b183aa23df95025", size = 23569, upload-time = "2025-09-27T18:36:57.913Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/30/6f2fce1f1f205fc9323255b216ca8a235b15860c34b6798f810f05828e32/markupsafe-3.0.3-cp313-cp313t-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:b8512a91625c9b3da6f127803b166b629725e68af71f8184ae7e7d54686a56d6", size = 23284, upload-time = "2025-09-27T18:36:58.833Z" },
+    { url = "https://files.pythonhosted.org/packages/58/47/4a0ccea4ab9f5dcb6f79c0236d954acb382202721e704223a8aafa38b5c8/markupsafe-3.0.3-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:9b79b7a16f7fedff2495d684f2b59b0457c3b493778c9eed31111be64d58279f", size = 24801, upload-time = "2025-09-27T18:36:59.739Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/70/3780e9b72180b6fecb83a4814d84c3bf4b4ae4bf0b19c27196104149734c/markupsafe-3.0.3-cp313-cp313t-musllinux_1_2_riscv64.whl", hash = "sha256:12c63dfb4a98206f045aa9563db46507995f7ef6d83b2f68eda65c307c6829eb", size = 22769, upload-time = "2025-09-27T18:37:00.719Z" },
+    { url = "https://files.pythonhosted.org/packages/98/c5/c03c7f4125180fc215220c035beac6b9cb684bc7a067c84fc69414d315f5/markupsafe-3.0.3-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:8f71bc33915be5186016f675cd83a1e08523649b0e33efdb898db577ef5bb009", size = 23642, upload-time = "2025-09-27T18:37:01.673Z" },
+    { url = "https://files.pythonhosted.org/packages/80/d6/2d1b89f6ca4bff1036499b1e29a1d02d282259f3681540e16563f27ebc23/markupsafe-3.0.3-cp313-cp313t-win32.whl", hash = "sha256:69c0b73548bc525c8cb9a251cddf1931d1db4d2258e9599c28c07ef3580ef354", size = 14612, upload-time = "2025-09-27T18:37:02.639Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/98/e48a4bfba0a0ffcf9925fe2d69240bfaa19c6f7507b8cd09c70684a53c1e/markupsafe-3.0.3-cp313-cp313t-win_amd64.whl", hash = "sha256:1b4b79e8ebf6b55351f0d91fe80f893b4743f104bff22e90697db1590e47a218", size = 15200, upload-time = "2025-09-27T18:37:03.582Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/72/e3cc540f351f316e9ed0f092757459afbc595824ca724cbc5a5d4263713f/markupsafe-3.0.3-cp313-cp313t-win_arm64.whl", hash = "sha256:ad2cf8aa28b8c020ab2fc8287b0f823d0a7d8630784c31e9ee5edea20f406287", size = 13973, upload-time = "2025-09-27T18:37:04.929Z" },
+]
+
+[[package]]
+name = "mkl"
+version = "2025.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "intel-openmp", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "tbb", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/46/7b/f5b1b84eb0a2a6e145fc31b4e6b1c59690dcb088734197da8f299caf7c67/mkl-2025.2.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:974b4e222cc94e8d3b67213a361c8ac25d432cc4fccc5f2f00aa15c4e67cc203", size = 190225238, upload-time = "2025-06-24T13:16:12.866Z" },
+]
+
+[[package]]
+name = "mpmath"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/47/dd32fa426cc72114383ac549964eecb20ecfd886d1e5ccf5340b55b02f57/mpmath-1.3.0.tar.gz", hash = "sha256:7a28eb2a9774d00c7bc92411c19a89209d5da7c4c9a9e227be8330a23a25b91f", size = 508106, upload-time = "2023-03-07T16:47:11.061Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c", size = 536198, upload-time = "2023-03-07T16:47:09.197Z" },
+]
+
+[[package]]
+name = "networkx"
+version = "3.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/fc/7b6fd4d22c8c4dc5704430140d8b3f520531d4fe7328b8f8d03f5a7950e8/networkx-3.6.tar.gz", hash = "sha256:285276002ad1f7f7da0f7b42f004bcba70d381e936559166363707fdad3d72ad", size = 2511464, upload-time = "2025-11-24T03:03:47.158Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/c7/d64168da60332c17d24c0d2f08bdf3987e8d1ae9d84b5bbd0eec2eb26a55/networkx-3.6-py3-none-any.whl", hash = "sha256:cdb395b105806062473d3be36458d8f1459a4e4b98e236a66c3a48996e07684f", size = 2063713, upload-time = "2025-11-24T03:03:45.21Z" },
+]
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.6.4.1"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:df7183bf5966e9bc93d3ada2411765361addb5de75771958c9b55e2e97cd6d98" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.6.4.1-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:04fcd192f191c4472937b1cb6030a4a3df8fddc06558026f78bb6eb5b50db274" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cublas/nvidia_cublas-12.6.4.1-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.8.4.1"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.8.4.1-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:9cf6ddbd74f6c0b482b04fbc1cb090637ee35b5a9824484f614243f103c1b6ad" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.8.4.1-py3-none-manylinux_2_27_x86_64-cu12.whl", hash = "sha256:c5b108a0a39f8f0d62b331fdfa4da3f7b98a109451039c31e55538f2d6d522c1" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cublas/nvidia_cublas-12.8.4.1-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.9.1.4"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "(platform_machine != 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.9.1.4-py3-none-manylinux_2_27_x86_64-cu12.whl", hash = "sha256:32d0377efae9e0895132426d9398140016eab1dbb1df4e8f509d0e579b8a4872" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cublas/nvidia_cublas-12.9.1.4-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cublas"
+version = "13.0.0.19"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-13.0.0.19-py3-none-manylinux_2_27_aarch64-cu13.whl", hash = "sha256:b19c8b063cdfa3e3219eb27fe9fc88fa628bf8a56c3ec79da5b653f89dabb52f" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-13.0.0.19-py3-none-manylinux_2_27_x86_64-cu13.whl", hash = "sha256:e5e11ff4150e7b4a9e9d6dab9458edfe844d57aa340a1a15f875d1d36081a747" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cublas/nvidia_cublas-13.0.0.19-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.6.80"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.6.80-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:6fb7f7812e314c17ed2409e533a0fb257c3fe08aedaa789b14011630bd9179f8" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.6.80-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:ece63e9d3f63411fe9773d90ce80f66ca55390fda97af226e82f47173b70ddbc" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.6.80-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:2491292c35867239765f7f565f93e4eba45e096736a2d2e208fce168708de374" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.6.80-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:62b63f089ff3098ff649b6eb8e69f72726b30706dfaee861f5aba1932a5a012c" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-cupti/nvidia_cuda_cupti-12.6.80-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.8.90"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.8.90-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:875d557ef69a2c9f53b6f3dfc3e0536904656122e966031356a3f2fe2570538d" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:411f9aabbce0550bc0bdabbe34fe484e30b122e5d547065adb6de14db2b9b3c0" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-cupti/nvidia_cuda_cupti-12.8.90-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.9.79"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.9.79-py3-none-manylinux_2_25_x86_64-cu12.whl", hash = "sha256:ee830bc282e18aad3864f0ab483f24797444136405199880f763fcf1e21ded28" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-cupti/nvidia_cuda_cupti-12.9.79-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "13.0.48"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-13.0.48-py3-none-manylinux_2_25_aarch64-cu13.whl", hash = "sha256:3ca7a5818ca11eb1e28e34809d02575233718507c2e16dd10f385aa036d702f1" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-13.0.48-py3-none-manylinux_2_25_x86_64-cu13.whl", hash = "sha256:e455936be421b5739ec20109f8ed400d49619b64d512704f0f4e2f887c7aa472" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-cupti/nvidia_cuda_cupti-13.0.48-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.6.77"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.6.77-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:64fcee4bd3c7a1356dcef29f19e715bd5ceaad4c7008395389fffaebd9b9ac49" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:ddc3abc7a8f5d8d713cf1a84805c9e430ae1912088cb46972c02a019a9d7af73" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.6.77-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.8.93"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl", hash = "sha256:34fb6e7d8f672436ad6f37fb566e1288c2ba293afb03b77cb0f3671b0ea8398f" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.8.93-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:41511a84156f4bef2a69d3d6ddf472b1925a01d4142676b9f58f3c7683b41913" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.8.93-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.9.86"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl", hash = "sha256:3f78b7e790267d82929b6aaba0d66ad5b1fe6d14a5651de6311921d6221143c8" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.9.86-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "13.0.48"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-13.0.48-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu13.whl", hash = "sha256:a12189cf426291f49f043de75fcacf62b34a5e0334ac4b98062b5eb852755785" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-13.0.48-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu13.whl", hash = "sha256:9b3c97de94e92e76685701c84c9687f870d89a538aa8c43a1c5ad3b8d416a312" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-13.0.48-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.6.77"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.6.77-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:12ab83d25cbadfc66f25ebe1339c2b7abbab76aa2338dc9a3ccdbb1a2a09570e" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.6.77-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:7f44e9b1a562e10db961ecf306c9d6de38b8f14d9441e8edf4707a404a571ae6" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:4d067b25abfd1318d7dee6926c705da07ee7e4d74f2f2e263b7969f069d82a2e" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.6.77-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:729ffd53c9f56c49e8ba7c66cadca658c4ae7bce490082ef30d6e450c5da2c49" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-runtime/nvidia_cuda_runtime-12.6.77-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.8.90"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.8.90-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:8ddda5b491991e8e19aa0dfb34fd26d804dcfa2648dbd6dab14c0dcab52688c7" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:e9ff83ca5bf5c6c5392c7de9626b13ce098a71a3845f0402e9524c4da3986f2b" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-runtime/nvidia_cuda_runtime-12.8.90-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.9.79"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:1e40d01b85ebdf7ef70de3ea85e469584a07d8ff14c0171e799e32c74ecb4616" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-runtime/nvidia_cuda_runtime-12.9.79-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "13.0.48"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-13.0.48-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu13.whl", hash = "sha256:e1e1f077b9398f1ebe287059f0bcafbee48dfe7700c60d2e60d8324174383c0b" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-13.0.48-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu13.whl", hash = "sha256:0101829c15b9d2ab9a63037cbc7bcf51dd75b9322013ec6df5476680ef27687e" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cuda-runtime/nvidia_cuda_runtime-13.0.48-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-cudnn"
+version = "9.10.2.21"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "(platform_machine != 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)" },
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)" },
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine != 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)" },
+    { name = "nvidia-cublas", version = "13.0.0.19", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cudnn/nvidia_cudnn-9.10.2.21-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:e2e67d4a1b1689e8d51285d43f752e6746739e9a725aa0fd3c6d32c1b01c67c5" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cudnn/nvidia_cudnn-9.10.2.21-py3-none-manylinux_2_27_x86_64-cu12.whl", hash = "sha256:e6c42a677b5bc4e9f47c8958e9dbc3951758a5b8d2cbb041bdb9a1aa91533f35" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cudnn/nvidia_cudnn-9.10.2.21-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cudnn"
+version = "9.13.0.50"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "13.0.0.19", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cudnn/nvidia_cudnn-9.13.0.50-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:04e8717648988aa125248fbf8ba7ec0f93194953998d300d5b928dc8718e81af" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cudnn/nvidia_cudnn-9.13.0.50-py3-none-manylinux_2_27_aarch64-cu13.whl", hash = "sha256:ac31f6c1fe6e8b14250d8e8253926ecd60f2055c433478d8ab29e688b8d99842" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cudnn/nvidia_cudnn-9.13.0.50-py3-none-manylinux_2_27_x86_64-cu12.whl", hash = "sha256:b60c0de61ffba41586a09745a24a4cfcdc81c2c269d8e799f6430af415e176d2" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cudnn/nvidia_cudnn-9.13.0.50-py3-none-manylinux_2_27_x86_64-cu13.whl", hash = "sha256:9f338245511dd81d650ab1dbe2842ac19114db6811f78dde1371db6a9911c1aa" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cudnn/nvidia_cudnn-9.13.0.50-variants.json", hash = "sha256:8ebd613dfbd3f403556ecd2edfbb9851cdc92030307ff2bfb0efaa043763783a" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.3.0.4"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.6')" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.0.4-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:d898d1c310ff66a06763bb1cbc89e0f90615f0e1cf2750f3cea4fc04bec49f4a" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.0.4-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:74f8153ff68c2fae853b171a38a0aeb8a114e1a5f471196727846cc5df161208" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.0.4-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:bb277140b70219e4fc64f57e411986cc93ed43fb48e375b6e0de7412fc2ebe9e" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cufft/nvidia_cufft-11.3.0.4-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.3.3.83"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.8')" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.3.83-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:743259f924fd95ee62f779c15411f18d5dd5d86cc468dae3b261143b32e0e9ac" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:a7d515cdd02d61c790fdbb0fbf9214899ca58f4b1936166dffdec78ad7d2a637" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cufft/nvidia_cufft-11.3.3.83-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.4.1.4"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:9deb59189a1f8d01fe56969b2a68cd76fe67964b8ea7630f815b6f71a9f4529c" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cufft/nvidia_cufft-11.4.1.4-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "12.0.0.15"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "13.0.39", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-12.0.0.15-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu13.whl", hash = "sha256:deb86f65cb0878daa0efa1ac5cd1331382add1b1ff455ade9b4619b2a8020634" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-12.0.0.15-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu13.whl", hash = "sha256:77ec6f42887fe69740c00b196dd318b0af2ad8c7b48cddd11353d5b0d041f951" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cufft/nvidia_cufft-12.0.0.15-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.11.1.6"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.11.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:b3235a5626019b0e456843c17ab0c26a3e0e6092f2cda54f240136f4ed000ee3" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.11.1.6-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:eb3410223de6ec0e815ff8abbbaf26bc3424414eef33aa0d5b5a4984d8867ea7" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cufile/nvidia_cufile-1.11.1.6-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.13.1.3"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.13.1.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:e594828886b8afc91af86eba37e7a224701e86df4e602cf11dd30d381ef0459a" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.13.1.3-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:bf54ba47ed25f66130faddd1cb985cdd404ac5ee3a686b4973440e9f63d20bb6" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cufile/nvidia_cufile-1.13.1.3-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.14.1.1"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.14.1.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:d4a3bb6e6fb5d82324ed92cb72b6c60ea2e7d09c46f36159909dc7710aba5ab1" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cufile/nvidia_cufile-1.14.1.1-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.15.0.42"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.15.0.42-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu13.whl", hash = "sha256:51c4a853b5ac1ee4afac05de6dd92053e4618889191cd0f01ed1016da2d391d1" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.15.0.42-py3-none-manylinux_2_27_aarch64-cu13.whl", hash = "sha256:a54967d8a45294480ab8975f1445df02cc581bcce37fe9a710feaebc12f1a386" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cufile/nvidia_cufile-1.15.0.42-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.7.77"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.7.77-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:bb2899d1be2a02022cf4ff98ab709a7a68abd27a5836eb44a09376721f9f9a92" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.7.77-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:5876bcc891f5728520bee6cfc93608410f143d4b833d5453ae5428691be1f9f2" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.7.77-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:c1aad157be2658ed2634f3ec02ebf2c8b227b2de39aedec3a643b9d576223334" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.7.77-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:aa78f7ca090f570464dd5ba924ed9ad4de57468818229c738fcef83905790b99" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-curand/nvidia_curand-10.3.7.77-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.9.90"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.9.90-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:b5ae1f2b0d76781e3dc30ab5ac60d6f3e213a9dfba47eb2c9bf897e175d15297" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.9.90-py3-none-manylinux_2_27_x86_64-cu12.whl", hash = "sha256:443b04de9ee86ff6806b5ef62f9c68cac665699d2253b3fa66ac16b632cc8da9" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-curand/nvidia_curand-10.3.9.90-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.10.19"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.10.19-py3-none-manylinux_2_27_x86_64-cu12.whl", hash = "sha256:05a1ef1ab9d10f47c609c7d21e425d9ccb3e440dec79625ef0730733b07463d1" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-curand/nvidia_curand-10.3.10.19-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.4.0.35"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_aarch64-cu13.whl", hash = "sha256:d5a97443fbac16a9fea4b5c70a2a30031bf0813375ad2e91b100aa97b02fd781" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_x86_64-cu13.whl", hash = "sha256:dca5f865cd21461c4aad57472a04367abd3235b41157e8cc3f530e514b298272" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-curand/nvidia_curand-10.4.0.35-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.1.2"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.6')" },
+    { name = "nvidia-cusparse", version = "12.5.4.2", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.6')" },
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.6')" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.1.2-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:967ee47af4f1ddc3c13ddcbf3806a3c2f6ce959cb33bf2420b5297dfb34a5703" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.1.2-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:b69d1d65bc640ba5ae51454999faf0951caac0c7448cebe065370e75f0509f23" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.1.2-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:8ddfbc89aa6fc248d45123e7d42d654bbd245471bcbb8111b8ca3a86fb981bff" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.1.2-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:8c0f7adce9d977f2ec393ad5615f7836b3a3e5f44c84961e4a648f5f00557c93" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusolver/nvidia_cusolver-11.7.1.2-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.3.90"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.8')" },
+    { name = "nvidia-cusparse", version = "12.5.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.8')" },
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.8')" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.3.90-py3-none-manylinux_2_27_aarch64-cu12.whl", hash = "sha256:2d063553162c3dffec9162b5884703cf3ce355a30151e890ba527ad1593a6331" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.3.90-py3-none-manylinux_2_27_x86_64-cu12.whl", hash = "sha256:7b2f860335e643d3bceaddedaf9b46ada6e5ee65303b103acb39479272ada168" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusolver/nvidia_cusolver-11.7.3.90-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.5.82"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.10.65", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.5.82-py3-none-manylinux_2_27_x86_64-cu12.whl", hash = "sha256:88952abbdefe79cbe917fa2c05820c2bcad2744606eafc54e711dd5f0865783f" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusolver/nvidia_cusolver-11.7.5.82-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "12.0.3.29"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "13.0.0.19", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.6.2.49", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "13.0.39", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-12.0.3.29-py3-none-manylinux_2_27_aarch64-cu13.whl", hash = "sha256:5a3d67c5e14234b2f9e21ab492465acd41e489383f58321131f0b2edba30501e" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-12.0.3.29-py3-none-manylinux_2_27_x86_64-cu13.whl", hash = "sha256:840d1743ffb61657aca190dcd48d3293f06e74a74377754ff59d9ef8e48db9de" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusolver/nvidia_cusolver-12.0.3.29-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.4.2"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.6')" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.4.2-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:8fef7dd012811dfc4ef80cf3cbc6ada707314537107f392d2e42bef6c08f20d6" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.4.2-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:60c08c59e3d44c226129bfc6e84acde42470c24c8a1412452b0540a1908224bd" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.4.2-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:489c96e5342eaa182c496628685e0918decc77234228273060ebcdde80892192" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.4.2-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:eb9b87d8674ef21a2a988baee541e6b633873f65f6263f5e2c6ba8585304da02" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusparse/nvidia_cusparse-12.5.4.2-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.8.93"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda12.8')" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.8.93-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:e9d056d480043fa14ad9757a100a83627f5d72d45967c50ebc49311222d313b4" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:b3bbbdd89ebfeb3fb44a1ce64793b8f8e13669b355036e411a1d2f200b4934a7" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusparse/nvidia_cusparse-12.5.8.93-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.10.65"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.10.65-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:8c39ea9a7cd5e486e17b6e532c9e1d50d28c0d28b97165961fa2a2984d5d6b6a" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusparse/nvidia_cusparse-12.5.10.65-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.6.2.49"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "13.0.39", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.6.2.49-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu13.whl", hash = "sha256:875d87cab1a1967278e70b6672d882b9141d3b3f19f55e7a487b0285b74126ce" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.6.2.49-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu13.whl", hash = "sha256:c31c41b346c112e5ccc607a5f2c97d88ff01e15f0f72838afdedf7e9881d29ca" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusparse/nvidia_cusparse-12.6.2.49-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-cusparselt"
+version = "0.7.1"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "(platform_machine != 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparselt/nvidia_cusparselt-0.7.1-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:576f525a9f7f30b6094fce8210a91888083b9174914eee0bbe785d2cead333d7" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparselt/nvidia_cusparselt-0.7.1-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:66253f3ffbe5e61624cc23459c3eddef4607c70df449afab9523db3c903ff680" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusparselt/nvidia_cusparselt-0.7.1-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-cusparselt"
+version = "0.8.0"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparselt/nvidia_cusparselt-0.8.0-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:559051ecb23bca76f241091a4fbabcce4c4bcc474a2158fb0b4cad2acf8f354a" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparselt/nvidia_cusparselt-0.8.0-py3-none-manylinux2014_aarch64-cu13.whl", hash = "sha256:66516ed350a7d457ba5d20739bada23d6ae8c1210cbeed8049f18c4a8cb26874" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparselt/nvidia_cusparselt-0.8.0-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:67d38f817f5fd795f1ffc64f532d08ccdb36b87dd9a5a1e81fc4e72398e6188f" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparselt/nvidia_cusparselt-0.8.0-py3-none-manylinux2014_x86_64-cu13.whl", hash = "sha256:db4d61a08af02eee44fe45c40ecd151ddd4861a9efcbf652d70196e72f8df48e" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-cusparselt/nvidia_cusparselt-0.8.0-variants.json", hash = "sha256:8ebd613dfbd3f403556ecd2edfbb9851cdc92030307ff2bfb0efaa043763783a" }
+
+[[package]]
+name = "nvidia-nccl"
+version = "2.27.3"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "(platform_machine != 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:6a9c0d86d20ca0c928a4b1f64733ae21dfabbe514a0060bd5c8ffe303090f2d6" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nccl/nvidia_nccl-2.27.3-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-nccl"
+version = "2.27.5"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.5-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:0c85291aba4bee19090d3ec579670636fe3dbfb2c1f47768fb3e1b1ed93fd340" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:0456b674b214f231df447c01943c64b36d52580633f31c2c4cdd49448bbdc813" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nccl/nvidia_nccl-2.27.5-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-nccl"
+version = "2.27.7"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.7-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:a3f74b320c70a5e3292b2ab263a95f4ab406a5560fcc00b038ea152c5efe71be" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.7-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu13.whl", hash = "sha256:0e762e9b7d4f06d3f5e291953e153f1ccf39c0a2824b77cbc40a11a0492cc3f1" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.7-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:cb418c194e22d7202d9e1047c5789faabeafedd7e60023e4d68046ca12110947" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.7-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu13.whl", hash = "sha256:f3b940ee80fa150fcfa67d3bc51ba21a8ef72c064c523c583390f7b30a9eaca4" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nccl/nvidia_nccl-2.27.7-variants.json", hash = "sha256:8ebd613dfbd3f403556ecd2edfbb9851cdc92030307ff2bfb0efaa043763783a" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.6.85"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.6.85-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl", hash = "sha256:a0796d484e5d6c5aa5424008e1cf52873d321ee8203de2d506c054f19372e4db" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.6.85-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:5bbc08463331124f70f0765ce560431ec214fe6da207b6ce3635f60d0660adde" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvjitlink/nvidia_nvjitlink-12.6.85-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.8.93"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl", hash = "sha256:ffead13b94832e40d202f368c38d4205ed68d365c032ff8386123b287c1c3c13" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.8.93-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:653cdf7ac818be9e65326a1ab9f51d76ce701dabd4d272f3aa9c8a3fb824094e" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvjitlink/nvidia_nvjitlink-12.8.93-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.9.86"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl", hash = "sha256:b42fb65fe63056478985eeab24f47cbb3864771b0c02d74d12f5aad014bbea65" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvjitlink/nvidia_nvjitlink-12.9.86-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "13.0.39"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-13.0.39-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu13.whl", hash = "sha256:3c9e2efec0355b9fc5b5fa6711a53babc0e586bf554369df074ee1660d78ec46" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-13.0.39-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu13.whl", hash = "sha256:d80b97aa6fb33a05e768594845125c4156aeb54dd57e205096977f274f9846bb" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvjitlink/nvidia_nvjitlink-13.0.39-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "nvidia-nvshmem"
+version = "3.3.20"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvshmem/nvidia_nvshmem-3.3.20-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:10f58daec4b13d975ab50aa90d4c3d582079ead5b2a007f4b279ec835dd751aa" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvshmem/nvidia_nvshmem-3.3.20-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:bf13e3407a17f9abd7e69be53a3111271e1222cf0dc3920f7f4e3f3fd310f289" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvshmem/nvidia_nvshmem-3.3.20-variants.json", hash = "sha256:6dfc48eda07dd47ef0d6f85d1ca97e929334b3eee0e8085ebcf64bbe81c0c87e" }
+
+[[package]]
+name = "nvidia-nvshmem"
+version = "3.3.24"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvshmem/nvidia_nvshmem-3.3.24-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:8b56d04129a46a17a253011aaec302db472c5de4b83dfcd5c9983447fa34c320" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvshmem/nvidia_nvshmem-3.3.24-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu13.whl", hash = "sha256:b80ae57784905972b0cda2cd9df2293287ba92df21c1ffee8e9fd86fa9d33cfa" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvshmem/nvidia_nvshmem-3.3.24-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:d8b65ea474b1d71ed2b7a3b23b6d4ad2b8af113042218da160ffa62d091ffa8f" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvshmem/nvidia_nvshmem-3.3.24-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu13.whl", hash = "sha256:516383b8ddf9e4342556fa70351a7f53bd8b1fef7f8c14e51aba0b02b2a5329c" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvshmem/nvidia_nvshmem-3.3.24-variants.json", hash = "sha256:8ebd613dfbd3f403556ecd2edfbb9851cdc92030307ff2bfb0efaa043763783a" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.6.77"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.6.77-py3-none-manylinux2014_aarch64-cu12.whl", hash = "sha256:d83abfaa2f2ec35ef0c04ad4e912114261db64dcf4d80451523ef55f39ff8a1b" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.6.77-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:f703eb0458b14194a0a514731906b2b6438d6046d268443da94f48a305270b63" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl", hash = "sha256:5a9de2a7716900912dc205fcd7eb995615fb8b272aef04e2723056660b073d3f" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.6.77-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:5735d04b75d19753f935d49969065b94af77b786a89733b0eebeb8b899a4b8d5" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvtx/nvidia_nvtx-12.6.77-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.8.90"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.8.90-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu12.whl", hash = "sha256:20d21f5914fb63fce467f75d14953be9c294b9786872167bc273f0280cfd19ed" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl", hash = "sha256:d71ca95f3f0670d986b1ed4661e3c80b9c840eaab672f74e9706e839160e0a70" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvtx/nvidia_nvtx-12.8.90-variants.json", hash = "sha256:e886a6907c222711bef14696698cb5974bf85f7b0c66df6b4628b74c47a8789f" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.9.79"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.9.79-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64-cu12.whl", hash = "sha256:bd281dfd05fd2b39c31392f5881028c2fe5dd802d353a9a751e77b139dc0bdd8" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvtx/nvidia_nvtx-12.9.79-variants.json", hash = "sha256:98d8a5e601c78a5edfb92ab575002ebb00bef4cfc8802b64cc3d3825f6669e42" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "13.0.39"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-13.0.39-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64-cu13.whl", hash = "sha256:37ac800419c7523c83d4b955d8971ad84d27c861dda722f87730ea5ddd6ec6e7" },
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-13.0.39-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64-cu13.whl", hash = "sha256:5167a9b97bafa8a24da1dd048c76b5793cc2715debdbb6d4b2a0ffcd33e1cae5" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/nvidia-nvtx/nvidia_nvtx-13.0.39-variants.json", hash = "sha256:ea0fbd6a71a2fe9982eccb9617ee101f3c811f6447e4dd0f4c3e99acf888dc05" }
+
+[[package]]
+name = "oneccl"
+version = "2021.16.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "impi-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-sycl-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/95/38/e31cc932bd62ede7813dad2062caef6b745550e699766cdf6ba3a8e2ff8e/oneccl-2021.16.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:371c2ebd6590216a1cbbeaf0ba70b26e9a275a708993aba43c9ee82a1947a3c6", size = 104428094, upload-time = "2025-08-13T17:22:16.448Z" },
+]
+
+[[package]]
+name = "oneccl-devel"
+version = "2021.16.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "oneccl", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f6/05/fd082b1da0fdd8082b99d721fd69a4a954f61639fbe7d024ca93b16e4dc1/oneccl_devel-2021.16.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:9154ab9c10e9864464c7163857f87c3de05b80030b4dc4ad9bdbd8084cb85ac2", size = 35075212, upload-time = "2025-08-13T17:22:21.894Z" },
+]
+
+[[package]]
+name = "onemkl-sycl-blas"
+version = "2025.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dpcpp-cpp-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-opencl-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "mkl", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/c2/b37cf1963b73a3c971efc36d53b97efccaa30f52f1f523a5452d582dbe08/onemkl_sycl_blas-2025.2.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:28ad1e49c821f34b57ba217dc64ab6f95d5f8f262b582296d8551d298408fd72", size = 23585330, upload-time = "2025-06-24T13:16:37.562Z" },
+]
+
+[[package]]
+name = "onemkl-sycl-dft"
+version = "2025.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dpcpp-cpp-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-opencl-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "mkl", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/5b/5d26447da4cf01abab3020c82924b1661684adb0286a99c692cd1c08461d/onemkl_sycl_dft-2025.2.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:1f05b0b8315d7b59867ad512e7e06297b24778d0dcb9deac5201c1982bc8af57", size = 6859958, upload-time = "2025-06-24T13:15:48.466Z" },
+]
+
+[[package]]
+name = "onemkl-sycl-lapack"
+version = "2025.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dpcpp-cpp-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-opencl-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "mkl", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "onemkl-sycl-blas", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/2e/6e87e5a96bb16fe757d82de185b2706b2e4d3eb372f5eaa266508fb3c1ed/onemkl_sycl_lapack-2025.2.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:2b2395fd1c267db2719b8fff59486b478568f61567b596b6f8c1f7008c4aba4d", size = 10818002, upload-time = "2025-06-24T13:16:04.779Z" },
+]
+
+[[package]]
+name = "onemkl-sycl-rng"
+version = "2025.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dpcpp-cpp-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-opencl-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "mkl", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bb/c8/81bab1b7838a9229ed078b9628c8e05ce8073045b64c642971bc5ce0cce8/onemkl_sycl_rng-2025.2.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:2fb7f8978a26e089cc29d862776cd4acdb66bbc5614cc59fa992d55e073ac093", size = 25350619, upload-time = "2025-06-24T13:16:01.236Z" },
+]
+
+[[package]]
+name = "onemkl-sycl-sparse"
+version = "2025.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dpcpp-cpp-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "intel-opencl-rt", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "mkl", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "onemkl-sycl-blas", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/68/af04fa6a7d8fa5c9c3af4055abab86ed04af24b2cf316dd00f2f16694557/onemkl_sycl_sparse-2025.2.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:b122f08aa80d0bc4330b5e218fcf810123c0efbf029b4460912e638b3cd75c5a", size = 22410699, upload-time = "2025-06-24T13:15:43.166Z" },
+]
+
+[[package]]
+name = "pytorch-triton-rocm"
+version = "3.5.0"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/variant/pytorch_triton_rocm-3.5.0-cp313-cp313-linux_x86_64.whl", hash = "sha256:bd2fab6dfb077dfc11fb581c5d33a0ee2d43ea13415530d095d1d5326d85d8b2" },
+    { url = "https://download.pytorch.org/whl/variant/pytorch_triton_rocm-3.5.0-cp313-cp313t-linux_x86_64.whl", hash = "sha256:0922f3ed8cd09f7d7f3a62138808efc9cdf9c9ee2913e00786e948b10f091fb0" },
+]
+
+[[package]]
+name = "pytorch-triton-xpu"
+version = "3.5.0"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+dependencies = [
+    { name = "setuptools", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/variant/pytorch_triton_xpu-3.5.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0d24c1716088f2764d0d24c64227732195b6a42706c3c5fc89eeb4904bfa0818" },
+    { url = "https://download.pytorch.org/whl/variant/pytorch_triton_xpu-3.5.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:74f00689800e2fe4e75b5db26ace8084eaa44e6df9a30e2ad65ddb89abf5a152" },
+]
+
+[[package]]
+name = "setuptools"
+version = "80.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/5d/3bf57dcd21979b887f014ea83c24ae194cfcd12b9e0fda66b957c69d1fca/setuptools-80.9.0.tar.gz", hash = "sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c", size = 1319958, upload-time = "2025-05-27T00:56:51.443Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl", hash = "sha256:062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922", size = 1201486, upload-time = "2025-05-27T00:56:49.664Z" },
+]
+
+[[package]]
+name = "sympy"
+version = "1.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mpmath" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
+]
+
+[[package]]
+name = "tbb"
+version = "2022.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tcmlib", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/5c/019acaccf0038b8e05b0a54189439d0987891017a84ca43675589f7e460c/tbb-2022.2.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:522189f3e370a6b9c92b8a7fbdecf3633f7c53f0ea4eb8d6891a7f5f00c78099", size = 6393815, upload-time = "2025-06-24T13:15:13.482Z" },
+]
+
+[[package]]
+name = "tcmlib"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/28/9d/97d81fa340b9f1a0e33d6260daeb8bd7bbc2ef5b686be193491de5c9880a/tcmlib-1.4.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:b2a2b68c100cc2a6163d394353b3013ab2479e70300b9bc1cb7f7822bcc38a40", size = 2731275, upload-time = "2025-06-24T13:15:40.134Z" },
+]
+
+[[package]]
+name = "torch"
+version = "2.8.0"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "(platform_machine != 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)",
+]
+dependencies = [
+    { name = "filelock", marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "fsspec", marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "jinja2", marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "networkx", marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.6.80", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.8.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.9.79", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.6.77", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.9.86", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.6.77", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.8.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.9.79", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cudnn", version = "9.10.2.21", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cufft", version = "11.3.0.4", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cufft", version = "11.3.3.83", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cufft", version = "11.4.1.4", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cufile", version = "1.11.1.6", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cufile", version = "1.13.1.3", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cufile", version = "1.14.1.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.7.77", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.9.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.10.19", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.1.2", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.3.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.5.82", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.4.2", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.10.65", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusparselt", version = "0.7.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nccl", version = "2.27.3", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.6.77", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.8.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.9.79", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "setuptools", marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "sympy", marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "triton", version = "3.4.0", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'nvidia' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "typing-extensions", marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_aarch64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_aarch64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu126.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu128.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_aarch64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_aarch64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_x86_64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_x86_64-cu126.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_x86_64-cu128.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_x86_64-cu129.whl" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/torch/torch-2.8.0-variants.json", hash = "sha256:f73788697773b8d02c30e21358921bee2ca214ce5a04e3cf947f8399ed7a2a73" }
+
+[[package]]
+name = "torch"
+version = "2.9.0"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform != 'linux' or (variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)",
+]
+dependencies = [
+    { name = "dpcpp-cpp-rt", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "filelock", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "fsspec", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "impi-rt", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (platform_machine == 'x86_64' and sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "intel-cmplr-lib-rt", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "intel-cmplr-lib-ur", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "intel-cmplr-lic-rt", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "intel-opencl-rt", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "intel-openmp", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "intel-pti", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "intel-sycl-rt", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "jinja2", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "mkl", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "networkx", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-cublas", version = "13.0.0.19", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.6.80", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-cuda-cupti", version = "12.8.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-cuda-cupti", version = "13.0.48", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.6.77", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-cuda-nvrtc", version = "12.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-cuda-nvrtc", version = "13.0.48", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.6.77", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-cuda-runtime", version = "12.8.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-cuda-runtime", version = "13.0.48", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cudnn", version = "9.10.2.21", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label != 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cudnn", version = "9.13.0.50", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cufft", version = "11.3.0.4", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-cufft", version = "11.3.3.83", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-cufft", version = "12.0.0.15", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cufile", version = "1.11.1.6", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-cufile", version = "1.13.1.3", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-cufile", version = "1.15.0.42", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.7.77", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-curand", version = "10.3.9.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-curand", version = "10.4.0.35", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.1.2", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-cusolver", version = "11.7.3.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-cusolver", version = "12.0.3.29", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.4.2", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-cusparse", version = "12.5.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-cusparse", version = "12.6.2.49", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-cusparselt", version = "0.7.1", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label != 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-cusparselt", version = "0.8.0", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-nccl", version = "2.27.5", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label != 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nccl", version = "2.27.7", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-nvjitlink", version = "13.0.39", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-nvshmem", version = "3.3.20", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label != 'cuda13.0' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "nvidia-nvshmem", version = "3.3.24", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.6.77", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.6'" },
+    { name = "nvidia-nvtx", version = "12.8.90", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda12.8'" },
+    { name = "nvidia-nvtx", version = "13.0.39", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "oneccl", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (platform_machine == 'x86_64' and sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "oneccl-devel", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (platform_machine == 'x86_64' and sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "onemkl-sycl-blas", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "onemkl-sycl-dft", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "onemkl-sycl-lapack", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "onemkl-sycl-rng", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "onemkl-sycl-sparse", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "pytorch-triton-rocm", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label != 'cuda13.0' and 'amd' in variant_namespaces) or (platform_machine == 'x86_64' and sys_platform == 'linux' and 'amd' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "pytorch-triton-xpu", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "setuptools", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "sympy", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "tbb", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "tcmlib", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "triton", version = "3.5.0", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'nvidia' in variant_namespaces) or (sys_platform == 'linux' and 'nvidia' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+    { name = "typing-extensions", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+    { name = "umf", marker = "(sys_platform == 'linux' and variant_label != 'cuda13.0' and 'intel' in variant_namespaces) or (sys_platform == 'linux' and 'intel' in variant_namespaces and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-linux_x86_64-xpu.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-macosx_11_0_arm64-null.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_aarch64-cuda12.6.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_aarch64-cuda12.8.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_aarch64-cuda13.0.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_aarch64-null.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_x86_64-cuda12.6.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_x86_64-cuda12.8.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_x86_64-cuda13.0.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_x86_64-null.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_x86_64-rocm6.3.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-manylinux_2_28_x86_64-rocm6.4.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-win_amd64-cuda12.6.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-win_amd64-cuda12.8.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-win_amd64-cuda13.0.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-win_amd64-null.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313-win_amd64-xpu.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-linux_x86_64-xpu.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-macosx_11_0_arm64-null.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_aarch64-cuda12.6.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_aarch64-cuda12.8.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_aarch64-cuda13.0.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_aarch64-null.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_x86_64-cuda12.6.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_x86_64-cuda12.8.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_x86_64-cuda13.0.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_x86_64-null.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_x86_64-rocm6.3.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-manylinux_2_28_x86_64-rocm6.4.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-win_amd64-cuda12.6.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-win_amd64-cuda12.8.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-win_amd64-cuda13.0.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-win_amd64-null.whl" },
+    { url = "https://download.pytorch.org/whl/variant/torch-2.9.0-cp313-cp313t-win_amd64-xpu.whl" },
+]
+variants-json = { url = "https://wheelnext.github.io/variants-index/v0.0.2/torch/torch-2.9.0-variants.json", hash = "sha256:84ebd7f16e01cc71a8f56999f792caf6202c3dd977e37ea325dd87f9303d1a3e" }
+
+[[package]]
+name = "torch-user"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "torch", version = "2.8.0", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+    { name = "torch", version = "2.9.0", source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }, marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "torch" }]
+
+[[package]]
+name = "triton"
+version = "3.4.0"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "(platform_machine != 'x86_64' and sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties) or (sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties)",
+]
+dependencies = [
+    { name = "setuptools", marker = "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/variant/triton-3.4.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/variant/triton-3.4.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/variant/triton-3.4.0-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/variant/triton-3.4.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+]
+
+[[package]]
+name = "triton"
+version = "3.5.0"
+source = { registry = "https://wheelnext.github.io/variants-index/v0.0.2" }
+resolution-markers = [
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.6' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label == 'cuda12.8' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties",
+    "sys_platform == 'linux' and variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties",
+    "sys_platform != 'linux' or (variant_label != 'cuda12.6' and variant_label != 'cuda12.8' and variant_label != 'cuda13.0' and 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties)",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/variant/triton-3.5.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/variant/triton-3.5.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/variant/triton-3.5.0-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/variant/triton-3.5.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+]
+
+[[package]]
+name = "typing-extensions"
+version = "4.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/94/1a15dd82efb362ac84269196e94cf00f187f7ed21c242792a923cdb1c61f/typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466", size = 109391, upload-time = "2025-08-25T13:49:26.313Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548", size = 44614, upload-time = "2025-08-25T13:49:24.86Z" },
+]
+
+[[package]]
+name = "umf"
+version = "0.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tcmlib", marker = "sys_platform != 'linux' or variant_label != 'cuda13.0' or 'torch==2.9.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b4/3a/63b40f833c7b27ba767e467fdf52cf972cdd149aab72d3d9761ec200fc9f/umf-0.11.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:9f2a6be0de4202fdcdddf9045c54ae6eb4c4afaec38e1871a603db3f72d36bab", size = 329971, upload-time = "2025-06-24T13:19:35.567Z" },
+]

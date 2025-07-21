@@ -9,6 +9,7 @@ pub use egg::{EggInfoFilename, EggInfoFilenameError};
 pub use expanded_tags::{ExpandedTagError, ExpandedTags};
 pub use extension::{DistExtension, ExtensionError, SourceDistExtension};
 pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
+pub use variant_label::{InvalidVariantLabel, VariantLabel};
 pub use wheel::{WheelFilename, WheelFilenameError};
 
 mod build_tag;
@@ -17,6 +18,7 @@ mod expanded_tags;
 mod extension;
 mod source_dist;
 mod splitter;
+mod variant_label;
 mod wheel;
 mod wheel_tag;
 
@@ -100,10 +102,20 @@ impl Display for DistFilename {
 
 #[cfg(test)]
 mod tests {
-    use crate::WheelFilename;
+    use super::*;
+    use crate::wheel_tag::WheelTag;
+    use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 
     #[test]
     fn wheel_filename_size() {
+        // This value is performance critical
         assert_eq!(size_of::<WheelFilename>(), 48);
+        // Components of the above size
+        assert_eq!(size_of::<PackageName>(), 8);
+        assert_eq!(size_of::<Version>(), 16);
+        assert_eq!(size_of::<WheelTag>(), 24);
+        assert_eq!(size_of::<LanguageTag>(), 3);
+        assert_eq!(size_of::<AbiTag>(), 5);
+        assert_eq!(size_of::<PlatformTag>(), 16);
     }
 }

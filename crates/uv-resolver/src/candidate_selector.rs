@@ -1,9 +1,8 @@
-use std::fmt::{Display, Formatter};
-
 use either::Either;
 use itertools::Itertools;
 use pubgrub::Range;
 use smallvec::SmallVec;
+use std::fmt::{Display, Formatter};
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
@@ -653,9 +652,9 @@ impl CandidateDist<'_> {
     }
 }
 
-impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
-    fn from(value: &'a PrioritizedDist) -> Self {
-        if let Some(dist) = value.get() {
+impl<'a> CandidateDist<'a> {
+    fn from_prioritized_dist(value: &'a PrioritizedDist, allow_all_variants: bool) -> Self {
+        if let Some(dist) = value.get(allow_all_variants) {
             CandidateDist::Compatible(dist)
         } else {
             // TODO(zanieb)
@@ -664,7 +663,7 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
             // why neither distribution kind can be used.
             let dist = if let Some(incompatibility) = value.incompatible_source() {
                 IncompatibleDist::Source(incompatibility.clone())
-            } else if let Some(incompatibility) = value.incompatible_wheel() {
+            } else if let Some(incompatibility) = value.incompatible_wheel(allow_all_variants) {
                 IncompatibleDist::Wheel(incompatibility.clone())
             } else {
                 IncompatibleDist::Unavailable
@@ -721,8 +720,39 @@ impl<'a> Candidate<'a> {
         Self {
             name,
             version,
-            dist: CandidateDist::from(dist),
+            dist: CandidateDist::from_prioritized_dist(dist, false),
             choice_kind,
+        }
+    }
+
+    /// By default, variant wheels are considered incompatible. During universal resolutions,
+    /// variant wheels should be allowed, similar to any other wheel that is only tag-incompatible
+    /// to the current platform.
+    pub(crate) fn allow_variant_wheels(self) -> Self {
+        // Optimization: Only if the current candidate is incompatible for being a variant, it can
+        // change if we allow variants.
+        let CandidateDist::Incompatible {
+            incompatible_dist: IncompatibleDist::Wheel(IncompatibleWheel::Variant),
+            prioritized_dist,
+        } = self.dist
+        else {
+            return self;
+        };
+
+        Self {
+            dist: CandidateDist::from_prioritized_dist(prioritized_dist, true),
+            ..self
+        }
+    }
+
+    // TODO(konsti): Stop breaking isolation?
+    pub(crate) fn prioritize_best_variant_wheel(
+        self,
+        prioritized_dist: &'a PrioritizedDist,
+    ) -> Self {
+        Self {
+            dist: CandidateDist::from_prioritized_dist(prioritized_dist, true),
+            ..self
         }
     }
 

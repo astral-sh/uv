@@ -392,6 +392,18 @@ alias, for backwards compatibility.
 Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
 example, spinners and progress bars.
 
+### `UV_NO_PROVIDER_ISOLATION`
+<small class="added-in">added in `0.9.2`</small>
+
+A comma separated list of variant provider backends that use the current environment instead
+of an isolated environment.
+
+The requirements need to be installed in the current environment, no provider `requires`
+will be installed. This option is intended for development and as an escape hatch where
+isolation fails.
+
+Example: `UV_NO_PROVIDER_ISOLATION=gpu.provider:api,cpu,blas.backend`
+
 ### `UV_NO_SOURCES`
 <small class="added-in">added in `0.9.8`</small>
 

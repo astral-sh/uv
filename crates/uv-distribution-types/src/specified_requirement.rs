@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use uv_git_types::{GitLfs, GitReference};
 use uv_normalize::ExtraName;
-use uv_pep508::{MarkerEnvironment, MarkerTree, UnnamedRequirement};
+use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerVariantsEnvironment, UnnamedRequirement};
 use uv_pypi_types::{Hashes, ParsedUrl};
 
 use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
@@ -60,10 +60,17 @@ impl UnresolvedRequirement {
     /// that reference the environment as true. In other words, it does
     /// environment independent expression evaluation. (Which in turn devolves
     /// to "only evaluate marker expressions that reference an extra name.")
-    pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
+    pub fn evaluate_markers(
+        &self,
+        env: Option<&MarkerEnvironment>,
+        variants: &impl MarkerVariantsEnvironment,
+        extras: &[ExtraName],
+    ) -> bool {
         match self {
-            Self::Named(requirement) => requirement.evaluate_markers(env, extras),
-            Self::Unnamed(requirement) => requirement.evaluate_optional_environment(env, extras),
+            Self::Named(requirement) => requirement.evaluate_markers(env, variants, extras),
+            Self::Unnamed(requirement) => {
+                requirement.evaluate_optional_environment(env, variants, extras)
+            }
         }
     }
 
