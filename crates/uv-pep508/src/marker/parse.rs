@@ -181,6 +181,9 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     let r_value = parse_marker_value(cursor, reporter)?;
     let len = cursor.pos() - start;
 
+    // TODO(konsti): Catch incorrect variant markers in all places, now that we have the
+    // opportunity to check from the beginning.
+
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
     let expr = match l_value {
@@ -307,7 +310,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                             Ok(name) => CanonicalMarkerListPair::Extras(name),
                             Err(err) => {
                                 reporter.report(
-                                    MarkerWarningKind::ExtrasInvalidComparison,
+                                    MarkerWarningKind::ListInvalidComparison,
                                     format!("Expected extra name (found `{l_string}`): {err}"),
                                 );
                                 CanonicalMarkerListPair::Arbitrary {
@@ -322,13 +325,60 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                 Ok(name) => CanonicalMarkerListPair::DependencyGroup(name),
                                 Err(err) => {
                                     reporter.report(
-                                    MarkerWarningKind::ExtrasInvalidComparison,
+                                    MarkerWarningKind::ListInvalidComparison,
                                     format!("Expected dependency group name (found `{l_string}`): {err}"),
                                 );
                                     CanonicalMarkerListPair::Arbitrary {
                                         key,
                                         value: l_string.to_string(),
                                     }
+                                }
+                            }
+                        }
+                        MarkerValueList::VariantNamespaces => {
+                            // TODO(konsti): Validate
+                            CanonicalMarkerListPair::VariantNamespaces(l_string.trim().to_string())
+                        }
+                        MarkerValueList::VariantFeatures => {
+                            if let Some((namespace, feature)) = l_string.split_once("::") {
+                                // TODO(konsti): Validate
+                                CanonicalMarkerListPair::VariantFeatures(
+                                    namespace.trim().to_string(),
+                                    feature.trim().to_string(),
+                                )
+                            } else {
+                                reporter.report(
+                                    MarkerWarningKind::ListInvalidComparison,
+                                    format!("Expected variant feature with two components seperated by `::`, found `{l_string}`"),
+                                );
+                                CanonicalMarkerListPair::Arbitrary {
+                                    key,
+                                    value: l_string.to_string(),
+                                }
+                            }
+                        }
+                        MarkerValueList::VariantProperties => {
+                            let mut components = l_string.split("::");
+                            if let (Some(namespace), Some(feature), Some(property), None) = (
+                                components.next(),
+                                components.next(),
+                                components.next(),
+                                components.next(),
+                            ) {
+                                // TODO(konsti): Validate
+                                CanonicalMarkerListPair::VariantProperties(
+                                    namespace.trim().to_string(),
+                                    feature.trim().to_string(),
+                                    property.trim().to_string(),
+                                )
+                            } else {
+                                reporter.report(
+                                    MarkerWarningKind::ListInvalidComparison,
+                                    format!("Expected variant property with three components seperated by `::`, found `{l_string}`"),
+                                );
+                                CanonicalMarkerListPair::Arbitrary {
+                                    key,
+                                    value: l_string.to_string(),
                                 }
                             }
                         }
