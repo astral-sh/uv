@@ -59,10 +59,10 @@ use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range}
 
 use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
-    CanonicalMarkerValueDependencyGroup, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
+    CanonicalMarkerListPair, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
     CanonicalMarkerValueVersion,
 };
-use crate::marker::tree::{ContainerOperator, MarkerValueDependencyGroup};
+use crate::marker::tree::ContainerOperator;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
@@ -188,19 +188,19 @@ impl InternerGuard<'_> {
             MarkerExpression::VersionIn {
                 key,
                 versions,
-                negated,
+                operator,
             } => match key {
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
-                    Edges::from_versions(&versions, negated),
+                    Edges::from_versions(&versions, operator),
                 ),
                 MarkerValueVersion::PythonFullVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-                    Edges::from_versions(&versions, negated),
+                    Edges::from_versions(&versions, operator),
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
-                    match Edges::from_python_versions(versions, negated) {
+                    match Edges::from_python_versions(versions, operator) {
                         Ok(edges) => (
                             Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
                             edges,
@@ -315,6 +315,10 @@ impl InternerGuard<'_> {
                 };
                 (Variable::String(key), Edges::from_string(operator, value))
             }
+            MarkerExpression::List { pair, operator } => (
+                Variable::List(pair),
+                Edges::from_bool(operator == ContainerOperator::In),
+            ),
             // A variable representing the existence or absence of a particular extra.
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Extra(extra),
@@ -333,48 +337,6 @@ impl InternerGuard<'_> {
             // Invalid `extra` names are always `false`.
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Arbitrary(_),
-                ..
-            } => return NodeId::FALSE,
-            // A variable representing the existence or absence of a particular extra, in the
-            // context of a PEP 751 lockfile.
-            MarkerExpression::Extras {
-                name: MarkerValueExtra::Extra(extra),
-                operator: ContainerOperator::In,
-            } => (
-                Variable::Extras(CanonicalMarkerValueExtra::Extra(extra)),
-                Edges::from_bool(true),
-            ),
-            MarkerExpression::Extras {
-                name: MarkerValueExtra::Extra(extra),
-                operator: ContainerOperator::NotIn,
-            } => (
-                Variable::Extras(CanonicalMarkerValueExtra::Extra(extra)),
-                Edges::from_bool(false),
-            ),
-            // Invalid `extras` names are always `false`.
-            MarkerExpression::Extras {
-                name: MarkerValueExtra::Arbitrary(_),
-                ..
-            } => return NodeId::FALSE,
-            // A variable representing the existence or absence of a particular extra, in the
-            // context of a PEP 751 lockfile.
-            MarkerExpression::DependencyGroups {
-                name: MarkerValueDependencyGroup::Group(group),
-                operator: ContainerOperator::In,
-            } => (
-                Variable::DependencyGroups(CanonicalMarkerValueDependencyGroup::Group(group)),
-                Edges::from_bool(true),
-            ),
-            MarkerExpression::DependencyGroups {
-                name: MarkerValueDependencyGroup::Group(group),
-                operator: ContainerOperator::NotIn,
-            } => (
-                Variable::DependencyGroups(CanonicalMarkerValueDependencyGroup::Group(group)),
-                Edges::from_bool(false),
-            ),
-            // Invalid `dependency_group` names are always `false`.
-            MarkerExpression::DependencyGroups {
-                name: MarkerValueDependencyGroup::Arbitrary(_),
                 ..
             } => return NodeId::FALSE,
         };
@@ -1090,18 +1052,12 @@ pub(crate) enum Variable {
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     Extra(CanonicalMarkerValueExtra),
-    /// A variable representing the existence or absence of a given extra, in the context of a
-    /// PEP 751 lockfile marker.
+    /// A variable representing whether a `<value> in <key>` or `<value> not in <key>`
+    /// expression, where the key is a list.
     ///
-    /// We keep extras at the leaves of the tree, so when simplifying extras we can
+    /// We keep extras and groups at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
-    Extras(CanonicalMarkerValueExtra),
-    /// A variable representing the existence or absence of a given dependency group, in the context of a
-    /// PEP 751 lockfile marker.
-    ///
-    /// We keep groups at the leaves of the tree, so when simplifying groups we can
-    /// trivially remove the leaves without having to reconstruct the entire tree.
-    DependencyGroups(CanonicalMarkerValueDependencyGroup),
+    List(CanonicalMarkerListPair),
 }
 
 impl Variable {
@@ -1279,7 +1235,10 @@ impl Edges {
     /// Returns an [`Edges`] where values in the given range are `true`.
     ///
     /// Only for use when the `key` is a `PythonVersion`. Normalizes to `PythonFullVersion`.
-    fn from_python_versions(versions: Vec<Version>, negated: bool) -> Result<Edges, NodeId> {
+    fn from_python_versions(
+        versions: Vec<Version>,
+        operator: ContainerOperator,
+    ) -> Result<Edges, NodeId> {
         let mut range: Ranges<Version> = versions
             .into_iter()
             .map(|version| {
@@ -1290,7 +1249,7 @@ impl Edges {
             .flatten_ok()
             .collect::<Result<Ranges<_>, NodeId>>()?;
 
-        if negated {
+        if operator == ContainerOperator::NotIn {
             range = range.complement();
         }
 
@@ -1300,7 +1259,7 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &[Version], negated: bool) -> Edges {
+    fn from_versions(versions: &[Version], operator: ContainerOperator) -> Edges {
         let mut range: Ranges<Version> = versions
             .iter()
             .map(|version| {
@@ -1311,7 +1270,7 @@ impl Edges {
             })
             .collect();
 
-        if negated {
+        if operator == ContainerOperator::NotIn {
             range = range.complement();
         }
 

@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use uv_normalize::{ExtraName, GroupName};
 
-use crate::marker::tree::MarkerValueDependencyGroup;
+use crate::marker::tree::MarkerValueList;
 use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
@@ -161,34 +161,35 @@ impl Display for CanonicalMarkerValueExtra {
     }
 }
 
-/// The [`GroupName`] value used in `dependency_group` markers.
+/// A key-value pair for `<value> in <key>` or `<value> not in <key>`, where the key is a list.
+///
+/// Used for PEP 751 markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum CanonicalMarkerValueDependencyGroup {
+pub enum CanonicalMarkerListPair {
+    /// A valid [`ExtraName`].
+    Extras(ExtraName),
     /// A valid [`GroupName`].
-    Group(GroupName),
+    DependencyGroup(GroupName),
+    /// For leniency, preserve invalid values.
+    Arbitrary { key: MarkerValueList, value: String },
 }
 
-impl CanonicalMarkerValueDependencyGroup {
-    /// Returns the [`GroupName`] value.
-    pub fn group(&self) -> &GroupName {
+impl CanonicalMarkerListPair {
+    /// The key (RHS) of the marker expression.
+    pub(crate) fn key(&self) -> MarkerValueList {
         match self {
-            Self::Group(group) => group,
+            Self::Extras(_) => MarkerValueList::Extras,
+            Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
+            Self::Arbitrary { key, .. } => *key,
         }
     }
-}
 
-impl From<CanonicalMarkerValueDependencyGroup> for MarkerValueDependencyGroup {
-    fn from(value: CanonicalMarkerValueDependencyGroup) -> Self {
-        match value {
-            CanonicalMarkerValueDependencyGroup::Group(group) => Self::Group(group),
-        }
-    }
-}
-
-impl Display for CanonicalMarkerValueDependencyGroup {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    /// The value (LHS) of the marker expression.
+    pub(crate) fn value(&self) -> String {
         match self {
-            Self::Group(group) => group.fmt(f),
+            Self::Extras(extra) => extra.to_string(),
+            Self::DependencyGroup(group) => group.to_string(),
+            Self::Arbitrary { value, .. } => value.clone(),
         }
     }
 }
