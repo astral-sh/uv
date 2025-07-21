@@ -262,10 +262,10 @@ pub(crate) fn create(
     if cfg!(windows) {
         if using_minor_version_link {
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
-            create_link_to_executable(target.as_path(), executable_target.clone())
+            create_link_to_executable(target.as_path(), &executable_target)
                 .map_err(Error::Python)?;
             let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
-            create_link_to_executable(targetw.as_path(), executable_target)
+            create_link_to_executable(targetw.as_path(), &executable_target)
                 .map_err(Error::Python)?;
         } else {
             // Always copy `python.exe`.
