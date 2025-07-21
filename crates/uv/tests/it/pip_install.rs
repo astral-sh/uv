@@ -825,7 +825,7 @@ fn install_pyproject_toml_poetry() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[tool.poetry]
-name = "poetry-editable"
+name = "poetry-example"
 version = "0.1.0"
 description = ""
 authors = ["Astral Software Inc. <hey@astral.sh>"]
@@ -1298,7 +1298,7 @@ fn install_extras() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1311,7 +1311,7 @@ fn install_extras() -> Result<()> {
     // Request extras for a source tree
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1374,6 +1374,68 @@ fn install_editable() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+    "
+    );
+
+    // Install it again.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+    "
+    );
+
+    // Add another, non-editable dependency.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/flit_editable"))
+        .arg("black"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 7 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     ~ flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    "
+    );
+}
+
+#[test]
+fn install_editable_poetry() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
@@ -1403,30 +1465,6 @@ fn install_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-    "###
-    );
-
-    // Add another, non-editable dependency.
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable"))
-        .arg("black"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 10 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 7 packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
      ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
@@ -7696,7 +7734,7 @@ fn tool_uv_sources() -> Result<()> {
         dependencies = [
           "tqdm>4,<=5",
           "packaging @ git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e",
-          "poetry_editable",
+          "flit_editable",
           "urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl",
           # Windows consistency
           "colorama>0.4,<5",
@@ -7713,20 +7751,20 @@ fn tool_uv_sources() -> Result<()> {
         [tool.uv.sources]
         tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
         charset-normalizer = { git = "https://github.com/jawah/charset_normalizer", rev = "ffdf7f5f08beb0ceb92dc0637e97382ba27cecfa" }
-        poetry_editable = { path = "../poetry_editable", editable = true }
+        flit_editable = { path = "../flit_editable", editable = true }
     "#})?;
 
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
-    fs_err::create_dir_all(context.temp_dir.join("poetry_editable/poetry_editable"))?;
+    fs_err::create_dir_all(context.temp_dir.join("flit_editable/flit_editable"))?;
     fs_err::copy(
-        project_root.join("scripts/packages/poetry_editable/pyproject.toml"),
-        context.temp_dir.join("poetry_editable/pyproject.toml"),
+        project_root.join("scripts/packages/flit_editable/pyproject.toml"),
+        context.temp_dir.join("flit_editable/pyproject.toml"),
     )?;
     fs_err::copy(
-        project_root.join("scripts/packages/poetry_editable/poetry_editable/__init__.py"),
+        project_root.join("scripts/packages/flit_editable/flit_editable/__init__.py"),
         context
             .temp_dir
-            .join("poetry_editable/poetry_editable/__init__.py"),
+            .join("flit_editable/flit_editable/__init__.py"),
     )?;
 
     // Install the editable packages.
@@ -7734,25 +7772,22 @@ fn tool_uv_sources() -> Result<()> {
         .arg("-r")
         .arg(require_path)
         .arg("--extra")
-        .arg("utils"), @r###"
+        .arg("utils"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Prepared 9 packages in [TIME]
-    Installed 9 packages in [TIME]
-     + anyio==4.3.0
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
      + charset-normalizer==3.4.1 (from git+https://github.com/jawah/charset_normalizer@ffdf7f5f08beb0ceb92dc0637e97382ba27cecfa)
      + colorama==0.4.6
-     + idna==3.6
+     + flit-editable==0.1.0 (from file://[TEMP_DIR]/flit_editable)
      + packaging==24.1.dev0 (from git+https://github.com/pypa/packaging@32deafe8668a2130a3366b98154914d188f3718e)
-     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
-     + sniffio==1.3.1
      + tqdm==4.66.0 (from https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl)
      + urllib3==2.2.1 (from https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl)
-    "###
+    "
     );
 
     // Re-install the editable packages.
@@ -7760,15 +7795,15 @@ fn tool_uv_sources() -> Result<()> {
         .arg("-r")
         .arg(require_path)
         .arg("--extra")
-        .arg("utils"), @r###"
+        .arg("utils"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Audited 9 packages in [TIME]
-    "###
+    Resolved 6 packages in [TIME]
+    Audited 6 packages in [TIME]
+    "
     );
     Ok(())
 }
@@ -9932,20 +9967,17 @@ fn other_sources_group() -> Result<()> {
     // and install an editable
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-e").arg(context.workspace_root.join("scripts/packages/poetry_editable"))
+        .arg("-e").arg(context.workspace_root.join("scripts/packages/flit_editable"))
         .arg("--group").arg("foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
-     + sniffio==1.3.1
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
      + sortedcontainers==2.4.0
     ");
 

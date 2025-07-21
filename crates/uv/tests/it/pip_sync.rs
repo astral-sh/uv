@@ -2244,22 +2244,22 @@ fn refresh_package() -> Result<()> {
 #[test]
 fn sync_editable() -> Result<()> {
     let context = TestContext::new("3.12");
-    let poetry_editable = context.temp_dir.child("poetry_editable");
+    let flit_editable = context.temp_dir.child("flit_editable");
 
     // Copy into the temporary directory so we can mutate it.
     copy_dir_all(
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable"),
-        &poetry_editable,
+            .join("scripts/packages/flit_editable"),
+        &flit_editable,
     )?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
         anyio==3.7.0
-        -e file://{poetry_editable}
+        -e file://{flit_editable}
         ",
-        poetry_editable = poetry_editable.display()
+        flit_editable = flit_editable.display()
     })?;
 
     // Install the editable package.
@@ -2274,7 +2274,7 @@ fn sync_editable() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + anyio==3.7.0
-     + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     + flit-editable==0.1.0 (from file://[TEMP_DIR]/flit_editable)
     "###
     );
 
@@ -2295,7 +2295,7 @@ fn sync_editable() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg(requirements_txt.path())
         .arg("--reinstall-package")
-        .arg("poetry-editable"), @r###"
+        .arg("flit-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2305,16 +2305,16 @@ fn sync_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
+     ~ flit-editable==0.1.0 (from file://[TEMP_DIR]/flit_editable)
     "###
     );
 
-    let python_source_file = poetry_editable.path().join("poetry_editable/__init__.py");
-    let check_installed = indoc::indoc! {r#"
-        from poetry_editable import a
+    let python_source_file = flit_editable.path().join("flit_editable/__init__.py");
+    let check_installed = indoc::indoc! {r"
+        from flit_editable import main
 
-        assert a() == "a", a()
-   "#};
+        assert main() == None
+   "};
     context.assert_command(check_installed).success();
 
     // Edit the sources and make sure the changes are respected without syncing again.
@@ -2324,7 +2324,7 @@ fn sync_editable() -> Result<()> {
     fs_err::write(&python_source_file, python_version_1)?;
 
     let check_installed = indoc::indoc! {r"
-        from poetry_editable import version
+        from flit_editable import version
 
         assert version == 1, version
    "};
@@ -2336,7 +2336,7 @@ fn sync_editable() -> Result<()> {
     fs_err::write(&python_source_file, python_version_2)?;
 
     let check_installed = indoc::indoc! {r"
-        from poetry_editable import version
+        from flit_editable import version
 
         assert version == 2, version
    "};
@@ -2357,7 +2357,7 @@ fn sync_editable() -> Result<()> {
     );
 
     // Modify the `pyproject.toml` file.
-    let pyproject_toml = poetry_editable.path().join("pyproject.toml");
+    let pyproject_toml = flit_editable.path().join("pyproject.toml");
     let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
     fs_err::write(
         &pyproject_toml,
@@ -2376,13 +2376,13 @@ fn sync_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
-     + poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
+     - flit-editable==0.1.0 (from file://[TEMP_DIR]/flit_editable)
+     + flit-editable==0.1.1 (from file://[TEMP_DIR]/flit_editable)
     "###
     );
 
     // Modify the `pyproject.toml` file.
-    let pyproject_toml = poetry_editable.path().join("pyproject.toml");
+    let pyproject_toml = flit_editable.path().join("pyproject.toml");
     let pyproject_toml_contents = fs_err::read_to_string(&pyproject_toml)?;
     fs_err::write(
         &pyproject_toml,
@@ -2401,7 +2401,7 @@ fn sync_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ poetry-editable==0.1.1 (from file://[TEMP_DIR]/poetry_editable)
+     ~ flit-editable==0.1.1 (from file://[TEMP_DIR]/flit_editable)
     "###
     );
 
