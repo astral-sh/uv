@@ -18,6 +18,8 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_variants::VariantProviderOutput;
+use uv_variants::variants_json::VariantPropertyType;
 use uv_workspace::WorkspaceCache;
 
 use crate::BuildArena;
@@ -61,6 +63,7 @@ use crate::BuildArena;
 /// them.
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
+    type VariantsBuilder: VariantsTrait;
 
     /// Return a reference to the interpreter.
     fn interpreter(&self) -> &Interpreter;
@@ -151,6 +154,13 @@ pub trait BuildContext {
         build_kind: BuildKind,
         version_id: Option<&'a str>,
     ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;
+
+    fn setup_variants<'a>(
+        &'a self,
+        backend_name: String,
+        provider: &'a uv_variants::variants_json::Provider,
+        build_output: BuildOutput,
+    ) -> impl Future<Output = Result<Self::VariantsBuilder, anyhow::Error>> + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
@@ -177,6 +187,13 @@ pub trait SourceBuildTrait {
         &'a self,
         wheel_dir: &'a Path,
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
+}
+
+pub trait VariantsTrait {
+    fn query(
+        &self,
+        known_properties: &[VariantPropertyType],
+    ) -> impl Future<Output = anyhow::Result<VariantProviderOutput>>;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]

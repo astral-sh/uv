@@ -365,7 +365,7 @@ impl<'lock> PylockToml {
             if !node.is_base() {
                 continue;
             }
-            let ResolvedDist::Installable { dist, version } = &node.dist else {
+            let ResolvedDist::Installable { dist, version, .. } = &node.dist else {
                 continue;
             };
             if omit.contains(dist.name()) {
@@ -980,7 +980,10 @@ impl<'lock> PylockToml {
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
-            if !package.marker.evaluate_pep751(markers, extras, groups) {
+            if !package
+                .marker
+                .evaluate_pep751(markers, None, extras, groups)
+            {
                 continue;
             }
 
@@ -1059,6 +1062,7 @@ impl<'lock> PylockToml {
                 }));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(built_dist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {
@@ -1076,6 +1080,7 @@ impl<'lock> PylockToml {
                 )?));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {
@@ -1090,6 +1095,7 @@ impl<'lock> PylockToml {
                 ));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {
@@ -1104,6 +1110,7 @@ impl<'lock> PylockToml {
                 ));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {
@@ -1120,6 +1127,7 @@ impl<'lock> PylockToml {
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(dist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {

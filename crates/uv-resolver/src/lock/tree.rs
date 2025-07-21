@@ -126,9 +126,9 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker.evaluate_no_extras(markers, None)
+                }) {
                     continue;
                 }
 
@@ -190,7 +190,7 @@ impl<'env> TreeDisplay<'env> {
                     if marker.is_false() {
                         continue;
                     }
-                    if markers.is_some_and(|markers| !marker.evaluate(markers, &[])) {
+                    if markers.is_some_and(|markers| !marker.evaluate(markers, None, &[])) {
                         continue;
                     }
                     // Add the package to the graph.
@@ -227,7 +227,7 @@ impl<'env> TreeDisplay<'env> {
                         if marker.is_false() {
                             continue;
                         }
-                        if markers.is_some_and(|markers| !marker.evaluate(markers, &[])) {
+                        if markers.is_some_and(|markers| !marker.evaluate(markers, None, &[])) {
                             continue;
                         }
                         // Add the package to the graph.
@@ -269,9 +269,9 @@ impl<'env> TreeDisplay<'env> {
                     continue;
                 }
 
-                if markers
-                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
-                {
+                if markers.is_some_and(|markers| {
+                    !dep.complexified_marker.evaluate_no_extras(markers, None)
+                }) {
                     continue;
                 }
 

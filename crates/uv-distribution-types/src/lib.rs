@@ -59,6 +59,7 @@ pub use crate::cached::*;
 pub use crate::dependency_metadata::*;
 pub use crate::diagnostic::*;
 pub use crate::dist_error::*;
+pub use crate::dist_or_variant_filename::*;
 pub use crate::error::*;
 pub use crate::file::*;
 pub use crate::hash::*;
@@ -79,6 +80,7 @@ pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
 pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
+pub use crate::variant_json::*;
 
 mod annotation;
 mod any;
@@ -87,6 +89,7 @@ mod cached;
 mod dependency_metadata;
 mod diagnostic;
 mod dist_error;
+mod dist_or_variant_filename;
 mod error;
 mod file;
 mod hash;
@@ -107,6 +110,7 @@ mod resolved;
 mod specified_requirement;
 mod status_code_strategy;
 mod traits;
+mod variant_json;
 
 #[derive(Debug, Clone)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
@@ -623,6 +627,14 @@ impl BuiltDist {
             Self::Registry(wheels) => &wheels.best_wheel().filename.version,
             Self::DirectUrl(wheel) => &wheel.filename.version,
             Self::Path(wheel) => &wheel.filename.version,
+        }
+    }
+
+    pub fn wheel_filename(&self) -> &WheelFilename {
+        match self {
+            Self::Registry(wheels) => &wheels.best_wheel().filename,
+            Self::DirectUrl(wheel) => &wheel.filename,
+            Self::Path(wheel) => &wheel.filename,
         }
     }
 }
@@ -1459,6 +1471,14 @@ impl Identifier for BuildableSource<'_> {
             BuildableSource::Url(source) => source.resource_id(),
         }
     }
+}
+
+/// A built distribution (wheel) that exists in a registry, like `PyPI`.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct RegistryVariantsJson {
+    pub filename: VariantsJson,
+    pub file: Box<File>,
+    pub index: IndexUrl,
 }
 
 #[cfg(test)]

@@ -449,6 +449,8 @@ impl ResolverOutput {
             (
                 ResolvedDist::Installable {
                     dist: Arc::new(dist),
+                    // Only registry distributions have a variants JSON file.
+                    variants_json: None,
                     version: Some(version.clone()),
                 },
                 hashes,
@@ -645,7 +647,7 @@ impl ResolverOutput {
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
         use uv_pep508::{
             CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerExpression,
-            MarkerOperator, MarkerTree,
+            MarkerOperator, MarkerTree, MarkerValueList,
         };
 
         /// A subset of the possible marker values.
@@ -657,6 +659,7 @@ impl ResolverOutput {
         enum MarkerParam {
             Version(CanonicalMarkerValueVersion),
             String(CanonicalMarkerValueString),
+            List(MarkerValueList),
         }
 
         /// Add all marker parameters from the given tree to the given set.
@@ -688,17 +691,19 @@ impl ResolverOutput {
                         add_marker_params_from_tree(tree, set);
                     }
                 }
+                MarkerTreeKind::List(marker) => {
+                    // TODO(konsti): Do we care about this set here?
+                    set.insert(MarkerParam::List(marker.key()));
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(tree, set);
+                    }
+                }
                 // We specifically don't care about these for the
                 // purposes of generating a marker string for a lock
                 // file. Quoted strings are marker values given by the
                 // user. We don't track those here, since we're only
                 // interested in which markers are used.
                 MarkerTreeKind::Extra(marker) => {
-                    for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(tree, set);
-                    }
-                }
-                MarkerTreeKind::List(marker) => {
                     for (_, tree) in marker.children() {
                         add_marker_params_from_tree(tree, set);
                     }
@@ -761,6 +766,21 @@ impl ResolverOutput {
                         key: value_string.into(),
                         operator: MarkerOperator::Equal,
                         value: from_env.into(),
+                    }
+                }
+                MarkerParam::List(value_variant) => {
+                    match value_variant {
+                        MarkerValueList::VariantNamespaces
+                        | MarkerValueList::VariantFeatures
+                        | MarkerValueList::VariantProperties => {
+                            // We ignore variants for the resolution marker tree since they are package
+                            // specific.
+                            continue;
+                        }
+                        MarkerValueList::Extras | MarkerValueList::DependencyGroups => {
+                            // TODO(konsti): Do we need to track them?
+                            continue;
+                        }
                     }
                 }
             };

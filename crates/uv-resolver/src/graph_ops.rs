@@ -270,7 +270,9 @@ pub(crate) fn simplify_conflict_markers(
                     Some((inf.item.package(), inf.item.group()?))
                 })
                 .collect::<Vec<_>>();
-            graph[edge_index].conflict().evaluate(&extras, &groups)
+            graph[edge_index]
+                .conflict()
+                .evaluate(None, &extras, &groups)
         });
         if !all_paths_satisfied {
             continue;

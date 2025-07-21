@@ -1,6 +1,7 @@
 ---
 source: crates/uv-distribution-filename/src/wheel.rs
 expression: "WheelFilename::from_str(\"foo-1.2.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl\")"
+snapshot_kind: text
 ---
 Ok(
     WheelFilename {
@@ -41,5 +42,6 @@ Ok(
                 repr: "cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64",
             },
         },
+        variant: None,
     },
 )
