@@ -241,7 +241,7 @@ impl Preferences {
         for preference in preferences {
             // Filter non-matching preferences when resolving for an environment.
             if let Some(markers) = env.marker_environment() {
-                if !preference.marker.evaluate(markers, &[]) {
+                if !preference.marker.evaluate(markers, None, &[]) {
                     trace!("Excluding {preference} from preferences due to unmatched markers");
                     continue;
                 }
@@ -250,7 +250,7 @@ impl Preferences {
                     if !preference
                         .fork_markers
                         .iter()
-                        .any(|marker| marker.evaluate_no_extras(markers))
+                        .any(|marker| marker.evaluate_no_extras(markers, None))
                     {
                         trace!(
                             "Excluding {preference} from preferences due to unmatched fork markers"

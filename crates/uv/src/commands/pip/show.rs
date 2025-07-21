@@ -101,7 +101,7 @@ pub(crate) fn pip_show(
             requires_map.insert(
                 dist.name(),
                 Box::into_iter(metadata.requires_dist)
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, None, &[]))
                     .map(|req| req.name)
                     .sorted_unstable()
                     .dedup()
@@ -117,7 +117,7 @@ pub(crate) fn pip_show(
             }
             if let Ok(metadata) = installed.metadata() {
                 let requires = Box::into_iter(metadata.requires_dist)
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, None, &[]))
                     .map(|req| req.name)
                     .collect_vec();
                 if !requires.is_empty() {

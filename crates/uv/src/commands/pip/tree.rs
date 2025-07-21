@@ -254,7 +254,7 @@ impl<'env> DisplayDependencyGraph<'env> {
                 if prune.contains(&requirement.name) {
                     continue;
                 }
-                if !requirement.marker.evaluate(markers, &[]) {
+                if !requirement.marker.evaluate(markers, None, &[]) {
                     continue;
                 }
 

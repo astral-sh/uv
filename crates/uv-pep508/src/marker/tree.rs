@@ -1222,6 +1222,11 @@ impl MarkerTree {
         }
     }
 
+    /// Whether the marker requires variant information to be accurately evaluated
+    pub fn has_variant_expression(&self) -> bool {
+        self.kind().has_variant_expression()
+    }
+
     /// Find a top level `extra == "..."` expression.
     ///
     /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
@@ -1671,6 +1676,23 @@ pub enum MarkerTreeKind<'a> {
     List(ListMarkerTree<'a>),
     /// An extra expression (e.g., `extra == 'dev'`).
     Extra(ExtraMarkerTree<'a>),
+}
+
+impl MarkerTreeKind<'_> {
+    /// TODO(konsti)
+    pub fn has_variant_expression(&self) -> bool {
+        match self {
+            MarkerTreeKind::True | MarkerTreeKind::False => false,
+            Self::List(ListMarkerTree {
+                pair:
+                    CanonicalMarkerListPair::VariantNamespaces(_)
+                    | CanonicalMarkerListPair::VariantFeatures(_, _)
+                    | CanonicalMarkerListPair::VariantProperties(_, _, _),
+                ..
+            }) => true,
+            _ => true,
+        }
+    }
 }
 
 /// A version marker node, such as `python_version < '3.7'`.

@@ -40,6 +40,8 @@ use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
     HashStrategy, InFlight,
 };
+use uv_variant_frontend::VariantBuild;
+use uv_variants::variants_json::Provider;
 use uv_workspace::WorkspaceCache;
 
 #[derive(Debug, Error)]
@@ -174,6 +176,7 @@ impl<'a> BuildDispatch<'a> {
 #[allow(refining_impl_trait)]
 impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
+    type VariantsBuilder = VariantBuild;
 
     async fn interpreter(&self) -> &Interpreter {
         self.interpreter
@@ -532,6 +535,26 @@ impl BuildContext for BuildDispatch<'_> {
         .await??;
 
         Ok(Some(filename))
+    }
+
+    async fn setup_variants<'data>(
+        &'data self,
+        backend_name: String,
+        backend: &'data Provider,
+        build_output: BuildOutput,
+    ) -> anyhow::Result<VariantBuild> {
+        let builder = VariantBuild::setup(
+            backend_name,
+            backend,
+            self.interpreter,
+            self,
+            self.build_extra_env_vars.clone(),
+            build_output,
+            self.concurrency.builds,
+        )
+        .boxed_local()
+        .await?;
+        Ok(builder)
     }
 }
 

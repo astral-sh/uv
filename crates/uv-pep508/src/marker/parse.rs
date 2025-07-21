@@ -349,7 +349,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                             } else {
                                 reporter.report(
                                     MarkerWarningKind::ListInvalidComparison,
-                                    format!("Expected variant feature with two components seperated by `::`, found `{l_string}`"),
+                                    format!("Expected variant feature with two components separated by `::`, found `{l_string}`"),
                                 );
                                 CanonicalMarkerListPair::Arbitrary {
                                     key,
@@ -374,7 +374,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                             } else {
                                 reporter.report(
                                     MarkerWarningKind::ListInvalidComparison,
-                                    format!("Expected variant property with three components seperated by `::`, found `{l_string}`"),
+                                    format!("Expected variant property with three components separated by `::`, found `{l_string}`"),
                                 );
                                 CanonicalMarkerListPair::Arbitrary {
                                     key,
