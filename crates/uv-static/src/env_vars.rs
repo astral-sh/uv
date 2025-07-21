@@ -765,4 +765,11 @@ impl EnvVars {
 
     /// Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
     pub const UV_NO_GITHUB_FAST_PATH: &'static str = "UV_NO_GITHUB_FAST_PATH";
+
+    /// Authentication token for Hugging Face requests. When set, uv will use this token
+    /// when making requests to `https://huggingface.co/` and any subdomains.
+    pub const HF_TOKEN: &'static str = "HF_TOKEN";
+
+    /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
+    pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
 }
