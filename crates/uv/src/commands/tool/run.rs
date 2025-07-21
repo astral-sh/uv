@@ -1080,5 +1080,9 @@ async fn get_or_create_environment(
         },
     };
 
+    // Clear any existing overlay.
+    environment.clear_overlay()?;
+    environment.clear_system_site_packages()?;
+
     Ok((from, environment.into()))
 }
