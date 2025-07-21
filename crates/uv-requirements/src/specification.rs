@@ -502,7 +502,21 @@ impl RequirementsSpecification {
                     names.push(group.name.clone());
                 }
 
-                if !names.is_empty() {
+                if groups.all_groups {
+                    spec.groups.insert(
+                        pylock_toml.clone(),
+                        DependencyGroups::from_args(
+                            false,
+                            false,
+                            false,
+                            Vec::new(),
+                            Vec::new(),
+                            false,
+                            Vec::new(),
+                            true,
+                        ),
+                    );
+                } else if !names.is_empty() {
                     spec.pylock_groups = DependencyGroups::from_args(
                         None,
                         Vec::new(),
@@ -531,11 +545,29 @@ impl RequirementsSpecification {
             }
 
             let mut group_specs = BTreeMap::new();
-            for (path, groups) in groups_by_path {
+            for (path, group_names) in groups_by_path {
                 let group_spec =
-                    DependencyGroups::from_args(None, Vec::new(), Vec::new(), false, groups, false);
+                    DependencyGroups::from_args(None, Vec::new(), Vec::new(), false, group_names, false);
                 group_specs.insert(path, group_spec);
             }
+
+            // If `--all-groups` was specified, we assume it refers to the root project.
+            if groups.all_groups {
+                group_specs.insert(
+                    groups.root.join("pyproject.toml"),
+                    DependencyGroups::from_args(
+                        false,
+                        false,
+                        false,
+                        Vec::new(),
+                        Vec::new(),
+                        false,
+                        Vec::new(),
+                        true,
+                    ),
+                );
+            }
+
             spec.groups = group_specs;
         }
 
@@ -734,6 +766,8 @@ pub struct GroupsSpecification {
     pub root: PathBuf,
     /// The enabled groups.
     pub groups: Vec<PipGroupName>,
+    /// Whether to include all groups.
+    pub all_groups: bool,
 }
 
 /// Read the contents of a requirements input.
