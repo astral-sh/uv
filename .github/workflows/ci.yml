@@ -319,6 +319,127 @@ jobs:
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
+  keyring-tests-linux:
+    timeout-minutes: 10
+    needs: determine_changes
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on: depot-ubuntu-22.04-16
+    name: "cargo test | uv-keyring ubuntu"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+
+      - name: "Install secret service"
+        run: |
+          sudo apt update -y
+          sudo apt install -y gnome-keyring
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@7b20dfd705618832f20d29066e34aa2f2f6194c2 # v2.52.8
+        with:
+          tool: cargo-nextest
+
+      - name: "Start gnome-keyring"
+        # run gnome-keyring with 'foobar' as password for the login keyring
+        # this will create a new login keyring and unlock it
+        # the login password doesn't matter, but the keyring must be unlocked for the tests to work
+        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+
+      - name: "Cargo test"
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
+        # run tests single-threaded to avoid dbus race conditions
+        run: |
+          cargo nextest run \
+            --features keyring-tests \
+            --package uv-keyring \
+            --test-threads=1 \
+            --status-level skip --failure-output immediate-final --no-fail-fast --final-status-level slow
+
+  keyring-tests-windows:
+    timeout-minutes: 15
+    needs: determine_changes
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on: depot-windows-2022-16
+    name: "cargo test | uv-keyring windows"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@c99cc51b309eee71a866715cfa08c922f11cf898 # v2.56.19
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
+          # Avoid permission errors during concurrent tests
+          # See https://github.com/astral-sh/uv/issues/6940
+          UV_LINK_MODE: copy
+        shell: bash
+        run: |
+          cargo nextest run \
+            --features keyring-tests \
+            --package uv-keyring \
+            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+
+  keyring-test-macos:
+    timeout-minutes: 15
+    needs: determine_changes
+    # Only run macOS tests on main without opt-in
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') || github.ref == 'refs/heads/main' }}
+    runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
+    name: "cargo test | uv-keyring macos"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@c99cc51b309eee71a866715cfa08c922f11cf898 # v2.56.19
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        env:
+          # Retry more than default to reduce flakes in CI
+          UV_HTTP_RETRIES: 5
+        run: |
+          cargo nextest run \
+            --features keyring-tests \
+            --package uv-keyring \
+            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+
   # Separate jobs for the nightly crate
   windows-trampoline-check:
     timeout-minutes: 15
