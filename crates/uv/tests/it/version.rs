@@ -1545,7 +1545,6 @@ fn git_version_info_expected() -> bool {
     git_dir.exists()
 }
 
-
 // Should error if this pyproject.toml isn't usable for whatever reason
 // and --project was passed explicitly.
 #[test]
