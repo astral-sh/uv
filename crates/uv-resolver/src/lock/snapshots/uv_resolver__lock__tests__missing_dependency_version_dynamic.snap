@@ -1,6 +1,7 @@
 ---
 source: crates/uv-resolver/src/lock/mod.rs
 expression: result
+snapshot_kind: text
 ---
 Ok(
     Lock {
@@ -52,6 +53,7 @@ Ok(
                 },
                 sdist: None,
                 wheels: [],
+                variants_json: None,
                 fork_markers: [],
                 dependencies: [],
                 optional_dependencies: {},
@@ -100,6 +102,7 @@ Ok(
                     },
                 ),
                 wheels: [],
+                variants_json: None,
                 fork_markers: [],
                 dependencies: [],
                 optional_dependencies: {},
@@ -148,6 +151,7 @@ Ok(
                     },
                 ),
                 wheels: [],
+                variants_json: None,
                 fork_markers: [],
                 dependencies: [
                     Dependency {

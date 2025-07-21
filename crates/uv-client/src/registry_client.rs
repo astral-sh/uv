@@ -21,8 +21,9 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, IndexCapabilities, IndexEntryFilename, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    VariantsJson,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -1073,19 +1074,28 @@ impl FlatIndexCache {
 pub struct VersionFiles {
     pub wheels: Vec<VersionWheel>,
     pub source_dists: Vec<VersionSourceDist>,
+    pub variant_jsons: Vec<VersionVariantJson>,
 }
 
 impl VersionFiles {
-    fn push(&mut self, filename: DistFilename, file: File) {
+    fn push(&mut self, filename: IndexEntryFilename, file: File) {
         match filename {
-            DistFilename::WheelFilename(name) => self.wheels.push(VersionWheel { name, file }),
-            DistFilename::SourceDistFilename(name) => {
+            IndexEntryFilename::DistFilename(DistFilename::WheelFilename(name)) => {
+                self.wheels.push(VersionWheel { name, file });
+            }
+            IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(name)) => {
                 self.source_dists.push(VersionSourceDist { name, file });
+            }
+            IndexEntryFilename::VariantJson(variants_json) => {
+                self.variant_jsons.push(VersionVariantJson {
+                    name: variants_json,
+                    file,
+                });
             }
         }
     }
 
-    pub fn all(self) -> impl Iterator<Item = (DistFilename, File)> {
+    pub fn dists(self) -> impl Iterator<Item = (DistFilename, File)> {
         self.source_dists
             .into_iter()
             .map(|VersionSourceDist { name, file }| (DistFilename::SourceDistFilename(name), file))
@@ -1093,6 +1103,30 @@ impl VersionFiles {
                 self.wheels
                     .into_iter()
                     .map(|VersionWheel { name, file }| (DistFilename::WheelFilename(name), file)),
+            )
+    }
+
+    pub fn all(self) -> impl Iterator<Item = (IndexEntryFilename, File)> {
+        self.source_dists
+            .into_iter()
+            .map(|VersionSourceDist { name, file }| {
+                (
+                    IndexEntryFilename::DistFilename(DistFilename::SourceDistFilename(name)),
+                    file,
+                )
+            })
+            .chain(self.wheels.into_iter().map(|VersionWheel { name, file }| {
+                (
+                    IndexEntryFilename::DistFilename(DistFilename::WheelFilename(name)),
+                    file,
+                )
+            }))
+            .chain(
+                self.variant_jsons
+                    .into_iter()
+                    .map(|VersionVariantJson { name, file }| {
+                        (IndexEntryFilename::VariantJson(name), file)
+                    }),
             )
     }
 }
@@ -1108,6 +1142,13 @@ pub struct VersionWheel {
 #[rkyv(derive(Debug))]
 pub struct VersionSourceDist {
     pub name: SourceDistFilename,
+    pub file: File,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+pub struct VersionVariantJson {
+    pub name: VariantsJson,
     pub file: File,
 }
 
@@ -1135,14 +1176,11 @@ impl SimpleMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
+            let Some(filename) =
+                IndexEntryFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
-            };
-            let version = match filename {
-                DistFilename::SourceDistFilename(ref inner) => &inner.version,
-                DistFilename::WheelFilename(ref inner) => &inner.version,
             };
             let file = match File::try_from(file, &base) {
                 Ok(file) => file,
@@ -1152,7 +1190,7 @@ impl SimpleMetadata {
                     continue;
                 }
             };
-            match map.entry(version.clone()) {
+            match map.entry(filename.version().clone()) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     entry.get_mut().push(filename, file);
                 }

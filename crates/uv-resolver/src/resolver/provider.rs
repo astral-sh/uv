@@ -4,13 +4,14 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
-    RequiresPython,
+    Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RegistryVariantsJson,
+    RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
+use uv_variants::resolved_variants::ResolvedVariants;
 
 use crate::ExcludeNewer;
 use crate::flat_index::FlatIndex;
@@ -99,6 +100,11 @@ pub trait ResolverProvider {
         &'io self,
         dist: &'io InstalledDist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
+
+    fn fetch_and_query_variants<'io>(
+        &'io self,
+        variants_json: &'io RegistryVariantsJson,
+    ) -> impl Future<Output = anyhow::Result<ResolvedVariants>> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -301,6 +307,13 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                 Arc::new(err),
             )),
         }
+    }
+
+    async fn fetch_and_query_variants<'io>(
+        &'io self,
+        variants_json: &'io RegistryVariantsJson,
+    ) -> anyhow::Result<ResolvedVariants> {
+        Ok(self.fetcher.fetch_and_query_variants(variants_json).await?)
     }
 
     /// Set the [`Reporter`] to use for this installer.

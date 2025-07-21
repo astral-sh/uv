@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::io;
 use std::path::Path;
@@ -5,12 +6,17 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures::{FutureExt, TryStreamExt};
+use anyhow::anyhow;
+use futures::{FutureExt, StreamExt, TryStreamExt};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use reqwest::Response;
+use rustc_hash::FxHashMap;
 use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{Instrument, info_span, instrument, warn};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -18,16 +24,22 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_configuration::BuildOutput;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, IndexUrl, InstalledDist, Name, SourceDist,
+    BuildableSource, BuiltDist, Dist, DistributionId, HashPolicy, Hashed, Identifier, IndexUrl,
+    InstalledDist, Name, Node, RegistryBuiltDist, RegistryVariantsJson, Resolution, ResolvedDist,
+    SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::DisplaySafeUrl;
-use uv_types::{BuildContext, BuildStack};
+use uv_types::{BuildContext, BuildStack, VariantsTrait};
+use uv_variants::resolved_variants::ResolvedVariants;
+use uv_variants::score_variant;
+use uv_variants::variants_json::{VariantPropertyType, VariantsJsonContent};
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -532,6 +544,147 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         self.builder
             .source_tree_requires_dist(source_tree.as_ref())
             .await
+    }
+
+    #[instrument(skip_all, fields(variants_json = %variants_json.filename))]
+    pub async fn fetch_and_query_variants(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<ResolvedVariants, Error> {
+        let variants_json = self.fetch_variants_json(variants_json).await?;
+        let resolved_variants = self.query_variant_providers(variants_json).await?;
+        Ok(resolved_variants)
+    }
+
+    /// Fetch the variants.json contents from a URL (cached) or from a path.
+    async fn fetch_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<VariantsJsonContent, Error> {
+        let url = variants_json.file.url.to_url()?;
+
+        // If the URL is a file URL, load the variants directly from the file system.
+        let variants_json = if url.scheme() == "file" {
+            let path = url
+                .to_file_path()
+                .map_err(|()| Error::NonFileUrl(url.clone()))?;
+            let bytes = fs_err::tokio::read(&path).await.expect("TODO(konsti)");
+            info_span!("parse_variants_json")
+                .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+                .expect("TODO(konsti)")
+        } else {
+            let req = self
+                .client
+                .unmanaged
+                .uncached_client(&url)
+                .get(Url::from(url.clone()))
+                .build()?;
+
+            let cache_entry = self.build_context.cache().entry(
+                // TODO(konsti): Get our own bucket?
+                CacheBucket::Wheels,
+                WheelCache::Index(&variants_json.index)
+                    .wheel_dir(variants_json.filename.name.as_ref()),
+                format!("variants-{}.msgpack", variants_json.filename.cache_key()),
+            );
+
+            let cache_control = match self.client.unmanaged.connectivity() {
+                Connectivity::Online => {
+                    if let Some(header) = self
+                        .build_context
+                        .locations()
+                        .artifact_cache_control_for(&variants_json.index)
+                    {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.build_context
+                                .cache()
+                                .freshness(&cache_entry, Some(&variants_json.filename.name), None)
+                                .map_err(Error::CacheRead)?,
+                        )
+                    }
+                }
+                Connectivity::Offline => CacheControl::AllowStale,
+            };
+
+            let response_callback = async |response: Response| {
+                let bytes = response.bytes().await.expect("TODO(konsti)");
+
+                info_span!("parse_variants_json")
+                    .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+            };
+
+            self.client
+                .managed(|client| {
+                    client.cached_client().get_serde_with_retry(
+                        req,
+                        &cache_entry,
+                        cache_control,
+                        response_callback,
+                    )
+                })
+                .await
+                .map_err(|err| match err {
+                    CachedClientError::Callback { err, .. } => panic!("TODO(konsti): {err:?}"),
+                    CachedClientError::Client { err, .. } => Error::Client(err),
+                })?
+        };
+        Ok(variants_json)
+    }
+
+    async fn query_variant_providers(
+        &self,
+        variants_json: VariantsJsonContent,
+    ) -> Result<ResolvedVariants, Error> {
+        // Collect all known properties for dynamic providers.
+        // TODO(konsti): We shouldn't need to do this conversion.
+        let mut known_properties = BTreeSet::default();
+        for variant in variants_json.variants.values() {
+            for (namespace, features) in variant {
+                for (feature, value) in features {
+                    for value in value {
+                        known_properties.insert(VariantPropertyType {
+                            namespace: namespace.clone(),
+                            feature: feature.clone(),
+                            // TODO(konsti): Be consistent on value vs. property
+                            value: value.clone(),
+                        });
+                    }
+                }
+            }
+        }
+        let known_properties: Vec<VariantPropertyType> = known_properties.into_iter().collect();
+
+        // Compute the set of available variants.
+        // Run all providers.
+        let mut resolved_priorities = FxHashMap::default();
+        for (name, provider) in &variants_json.providers {
+            debug!("Querying provider {name}");
+            let config = {
+                async {
+                    // TODO(konsti): That's not spec compliant
+                    let backend_name = provider.plugin_api.clone().unwrap_or(name.clone());
+                    let builder = self
+                        .build_context
+                        .setup_variants(backend_name, provider, BuildOutput::Debug)
+                        .await?;
+                    Ok::<_, Error>(builder.query(&known_properties).await?)
+                }
+                .instrument(info_span!("query_variant_provider"))
+                .await?
+            };
+            trace!(
+                "Found namespace {} with configs {:?}",
+                config.namespace, config
+            );
+            resolved_priorities.insert(config.namespace.clone(), config);
+        }
+
+        Ok(ResolvedVariants {
+            variants_json,
+            target_variants: resolved_priorities,
+        })
     }
 
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
@@ -1203,4 +1356,155 @@ impl LocalArchivePointer {
     pub fn to_cache_info(&self) -> CacheInfo {
         CacheInfo::from_timestamp(self.timestamp)
     }
+}
+
+/// TODO(konsti): Find a better home for those functions
+pub async fn resolve_variants<Context: BuildContext>(
+    resolution: Resolution,
+    distribution_database: DistributionDatabase<'_, Context>,
+) -> anyhow::Result<Resolution> {
+    // Fetch variants.json and then query providers, running in parallel for all dists
+    // TODO(konsti): Reuse in memory index from resolve phase and merge equivalent requests.
+    let dist_resolved_variants: FxHashMap<DistributionId, ResolvedVariants> =
+        futures::stream::iter(
+            resolution
+                .graph()
+                .node_weights()
+                .filter_map(|node| extract_variants(node)),
+        )
+        .map(async |(variants_json, dist)| {
+            // Fetch variants_json and run providers
+            let resolved_variants = distribution_database
+                .fetch_and_query_variants(variants_json)
+                .await?;
+            Ok::<_, anyhow::Error>((dist.distribution_id(), resolved_variants))
+        })
+        // TODO(konsti): Buffer size
+        .buffered(8)
+        .try_collect()
+        .await?;
+
+    // Determine modification to the resolutions to select variant wheels, or error if there
+    // is no matching variant wheel and no matching non-variant wheel.
+    let mut new_best_wheel_index: FxHashMap<DistributionId, usize> = FxHashMap::default();
+    for node in resolution.graph().node_weights() {
+        let Some((_, dist)) = extract_variants(node) else {
+            continue;
+        };
+        let resolved_variants = &dist_resolved_variants[&dist.distribution_id()];
+        dist.distribution_id();
+
+        // Select best wheel
+        let mut highest_priority_variant_wheel: Option<(usize, Vec<usize>)> = None;
+        for (wheel_index, wheel) in dist.wheels.iter().enumerate() {
+            let Some(variant) = wheel.filename.variant() else {
+                // The non-variant wheel is already supported
+                continue;
+            };
+
+            let Some(variants_properties) = resolved_variants.variants_json.variants.get(variant)
+            else {
+                // TODO(konsti): For production, this should be a warning.
+                panic!("Variant {variant} not found in variants.json");
+            };
+
+            let Some(scores) = score_variant(
+                &resolved_variants.variants_json.default_priorities,
+                &resolved_variants.target_variants,
+                variants_properties,
+            ) else {
+                // The wheel is not compatible.
+                continue;
+            };
+
+            if let Some((_, old_scores)) = &highest_priority_variant_wheel {
+                if &scores > old_scores {
+                    highest_priority_variant_wheel = Some((wheel_index, scores));
+                }
+            } else {
+                highest_priority_variant_wheel = Some((wheel_index, scores));
+            }
+        }
+
+        // Determine if we need to modify the resolution
+        if let Some((wheel_index, _scores)) = highest_priority_variant_wheel {
+            debug!(
+                "{} for {}: {}",
+                "Use variant wheel".red(),
+                dist.name(),
+                dist.wheels[wheel_index].filename,
+            );
+            new_best_wheel_index.insert(dist.distribution_id(), wheel_index);
+        } else if dist.best_wheel().filename.variant().is_some() {
+            return Err(anyhow!(
+                "Package {} has no matching wheel for the current platform. Mismatching wheel variants: {}",
+                dist.name(),
+                dist.wheels
+                    .iter()
+                    .filter_map(|wheel| wheel.filename.variant())
+                    .join(", ")
+            ));
+        } else {
+            trace!(
+                "No matching variant wheel, but matching non-variant wheel for {}",
+                dist.name()
+            );
+        }
+    }
+    let resolution = resolution.map(|dist| {
+        let ResolvedDist::Installable {
+            dist,
+            version,
+            variants_json,
+        } = dist
+        else {
+            return None;
+        };
+        let Dist::Built(BuiltDist::Registry(dist)) = &**dist else {
+            return None;
+        };
+        // Check whether there is a matching variant wheel we want to use instead of the default.
+        let best_wheel_index = new_best_wheel_index.get(&dist.distribution_id())?;
+        Some(ResolvedDist::Installable {
+            dist: Arc::new(Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+                wheels: dist.wheels.clone(),
+                best_wheel_index: *best_wheel_index,
+                sdist: dist.sdist.clone(),
+            }))),
+            variants_json: variants_json.clone(),
+            version: version.clone(),
+        })
+    });
+
+    Ok(resolution)
+}
+
+fn extract_variants(node: &Node) -> Option<(&RegistryVariantsJson, &RegistryBuiltDist)> {
+    let Node::Dist { dist, .. } = node else {
+        // The root node has no variants
+        return None;
+    };
+    let ResolvedDist::Installable {
+        dist,
+        variants_json,
+        ..
+    } = dist
+    else {
+        // TODO(konsti): Installed dists? Or is that not a thing here?
+        return None;
+    };
+    let Some(variants_json) = variants_json else {
+        return None;
+    };
+    let Dist::Built(BuiltDist::Registry(dist)) = &**dist else {
+        return None;
+    };
+    if !dist
+        .wheels
+        .iter()
+        .any(|wheel| wheel.filename.variant().is_some())
+    {
+        return None;
+    }
+    Some((variants_json, dist))
 }
