@@ -7560,7 +7560,7 @@ fn sync_derivation_chain() -> Result<()> {
         [[tool.uv.dependency-metadata]]
         name = "wsgiref"
         version = "0.1.2"
-        dependencies = []
+        requires-dist = []
         "#,
     )?;
 
@@ -7623,7 +7623,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
         [[tool.uv.dependency-metadata]]
         name = "wsgiref"
         version = "0.1.2"
-        dependencies = []
+        requires-dist = []
         "#,
     )?;
 
@@ -7688,7 +7688,7 @@ fn sync_derivation_chain_group() -> Result<()> {
         [[tool.uv.dependency-metadata]]
         name = "wsgiref"
         version = "0.1.2"
-        dependencies = []
+        requires-dist = []
         "#,
     )?;
 
