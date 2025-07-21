@@ -5,7 +5,7 @@ use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
 use crate::marker::MarkerValueExtra;
-use crate::marker::tree::{ContainerOperator, MarkerValueDependencyGroup};
+use crate::marker::tree::{ContainerOperator, MarkerValueContains, MarkerValueDependencyGroup};
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
     MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -209,10 +209,9 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
         MarkerValue::MarkerEnvString(key) => {
             let value = match r_value {
                 MarkerValue::Extra
-                | MarkerValue::Extras
-                | MarkerValue::DependencyGroups
                 | MarkerValue::MarkerEnvVersion(_)
-                | MarkerValue::MarkerEnvString(_) => {
+                | MarkerValue::MarkerEnvString(_)
+                | MarkerValue::MarkerEnvContains(_) => {
                     reporter.report(
                         MarkerWarningKind::MarkerMarkerComparison,
                         "Comparing two markers with each other doesn't make any sense,
@@ -245,9 +244,8 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
             let value = match r_value {
                 MarkerValue::MarkerEnvVersion(_)
                 | MarkerValue::MarkerEnvString(_)
-                | MarkerValue::Extra
-                | MarkerValue::Extras
-                | MarkerValue::DependencyGroups => {
+                | MarkerValue::MarkerEnvContains(_)
+                | MarkerValue::Extra => {
                     reporter.report(
                         MarkerWarningKind::ExtraInvalidComparison,
                         "Comparing extra with something other than a quoted string is wrong,
@@ -279,9 +277,11 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 // `'...' == extra`
                 MarkerValue::Extra => parse_extra_expr(operator, &l_string, reporter),
                 // `'...' in extras`
-                MarkerValue::Extras => parse_extras_expr(operator, &l_string, reporter),
+                MarkerValue::MarkerEnvContains(MarkerValueContains::Extras) => {
+                    parse_extras_expr(operator, &l_string, reporter)
+                }
                 // `'...' in dependency_groups`
-                MarkerValue::DependencyGroups => {
+                MarkerValue::MarkerEnvContains(MarkerValueContains::DependencyGroups) => {
                     parse_dependency_groups_expr(operator, &l_string, reporter)
                 }
                 // `'...' == '...'`, doesn't make much sense
@@ -300,22 +300,12 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 }
             }
         }
-        MarkerValue::Extras => {
+        MarkerValue::MarkerEnvContains(key) => {
             reporter.report(
                 MarkerWarningKind::Pep440Error,
                 format!(
-                    "The `extras` marker must be used as '...' in extras' or '... not in extras',
-                    found `{l_value} {operator} {r_value}`, will be ignored"
-                ),
-            );
-            return Ok(None);
-        }
-        MarkerValue::DependencyGroups => {
-            reporter.report(
-                MarkerWarningKind::Pep440Error,
-                format!(
-                    "The `dependency_groups` marker must be used as '...' in dependency_groups' or '... not in dependency_groups',
-                    found `{l_value} {operator} {r_value}`, will be ignored"
+                    "The `{key}` marker must be used as '...' in {key}' or '... not in {key}',
+                    found `{key} {operator} {r_value}`, will be ignored"
                 ),
             );
             return Ok(None);
