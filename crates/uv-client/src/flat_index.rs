@@ -7,8 +7,7 @@ use url::Url;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
-use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_distribution_types::{File, FileLocation, IndexEntryFilename, IndexUrl, UrlString};
 use uv_pypi_types::HashDigests;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
@@ -40,7 +39,7 @@ pub enum FindLinksDirectoryError {
 /// An entry in a `--find-links` index.
 #[derive(Debug, Clone)]
 pub struct FlatIndexEntry {
-    pub filename: DistFilename,
+    pub filename: IndexEntryFilename,
     pub file: File,
     pub index: IndexUrl,
 }
@@ -238,7 +237,9 @@ impl<'a> FlatIndexClient<'a> {
                     })
                     .filter_map(|file| {
                         Some(FlatIndexEntry {
-                            filename: DistFilename::try_from_normalized_filename(&file.filename)?,
+                            filename: IndexEntryFilename::try_from_normalized_filename(
+                                &file.filename,
+                            )?,
                             file,
                             index: flat_index.clone(),
                         })
@@ -308,9 +309,10 @@ impl<'a> FlatIndexClient<'a> {
                 zstd: None,
             };
 
-            let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
+            // Try to parse as a distribution filename first
+            let Some(filename) = IndexEntryFilename::try_from_normalized_filename(filename) else {
                 debug!(
-                    "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
+                    "Ignoring `--find-links` entry (expected a wheel, source distribution, or variants.json filename): {}",
                     entry.path().display()
                 );
                 continue;

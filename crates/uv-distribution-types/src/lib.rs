@@ -67,6 +67,7 @@ pub use crate::file::*;
 pub use crate::hash::*;
 pub use crate::id::*;
 pub use crate::index::*;
+pub use crate::index_entry::*;
 pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
@@ -82,6 +83,7 @@ pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
 pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
+pub use crate::variant_json::*;
 
 mod annotation;
 mod any;
@@ -98,6 +100,7 @@ mod file;
 mod hash;
 mod id;
 mod index;
+mod index_entry;
 mod index_name;
 mod index_url;
 mod installed;
@@ -113,6 +116,7 @@ mod resolved;
 mod specified_requirement;
 mod status_code_strategy;
 mod traits;
+mod variant_json;
 
 #[derive(Debug, Clone)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
@@ -629,6 +633,14 @@ impl BuiltDist {
             Self::Registry(wheels) => &wheels.best_wheel().filename.version,
             Self::DirectUrl(wheel) => &wheel.filename.version,
             Self::Path(wheel) => &wheel.filename.version,
+        }
+    }
+
+    pub fn wheel_filename(&self) -> &WheelFilename {
+        match self {
+            Self::Registry(wheels) => &wheels.best_wheel().filename,
+            Self::DirectUrl(wheel) => &wheel.filename,
+            Self::Path(wheel) => &wheel.filename,
         }
     }
 }
@@ -1464,6 +1476,34 @@ impl Identifier for BuildableSource<'_> {
             Self::Dist(source) => source.resource_id(),
             Self::Url(source) => source.resource_id(),
         }
+    }
+}
+
+/// A built distribution (wheel) that exists in a registry, like `PyPI`.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct RegistryVariantsJson {
+    pub filename: VariantsJson,
+    pub file: Box<File>,
+    pub index: IndexUrl,
+}
+
+impl RegistryVariantsJson {
+    /// Return the [`GlobalVersionId`] for this registry variants JSON.
+    pub fn version_id(&self) -> GlobalVersionId {
+        GlobalVersionId::new(
+            VersionId::NameVersion(self.filename.name.clone(), self.filename.version.clone()),
+            self.index.clone(),
+        )
+    }
+}
+
+impl Identifier for RegistryVariantsJson {
+    fn distribution_id(&self) -> DistributionId {
+        self.file.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.file.resource_id()
     }
 }
 

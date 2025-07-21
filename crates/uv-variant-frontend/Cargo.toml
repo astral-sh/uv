@@ -1,0 +1,36 @@
+[package]
+name = "uv-variant-frontend"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-configuration = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-fs = { workspace = true }
+uv-preview = { workspace = true }
+uv-python = { workspace = true }
+uv-static = { workspace = true }
+uv-types = { workspace = true }
+uv-virtualenv = { workspace = true }
+uv-variants = { workspace = true }
+
+anstream = { workspace = true }
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+indoc = { workspace = true }
+owo-colors = { workspace = true }
+rustc-hash = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

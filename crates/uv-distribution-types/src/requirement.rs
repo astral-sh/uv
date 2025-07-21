@@ -11,7 +11,8 @@ use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
+    MarkerEnvironment, MarkerTree, MarkerVariantsEnvironment, RequirementOrigin, VerbatimUrl,
+    VersionOrUrl, marker,
 };
 use uv_redacted::DisplaySafeUrl;
 
@@ -69,8 +70,14 @@ impl Requirement {
     /// When `env` is `None`, this specifically evaluates all marker
     /// expressions based on the environment to `true`. That is, this provides
     /// environment independent marker evaluation.
-    pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
-        self.marker.evaluate_optional_environment(env, extras)
+    pub fn evaluate_markers(
+        &self,
+        env: Option<&MarkerEnvironment>,
+        variants: impl MarkerVariantsEnvironment,
+        extras: &[ExtraName],
+    ) -> bool {
+        self.marker
+            .evaluate_optional_environment(env, variants, extras)
     }
 
     /// Returns `true` if the requirement is editable.

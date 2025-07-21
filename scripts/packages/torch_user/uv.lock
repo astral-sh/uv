@@ -1,0 +1,662 @@
+version = 1
+revision = 3
+requires-python = "==3.13.*"
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+    "platform_machine != 'x86_64' or sys_platform != 'linux' or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties)",
+]
+
+[[package]]
+name = "filelock"
+version = "3.18.0"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/filelock-3.18.0-py3-none-any.whl" },
+]
+
+[[package]]
+name = "fsspec"
+version = "2025.5.1"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/fsspec-2025.5.1-py3-none-any.whl" },
+]
+
+[[package]]
+name = "jinja2"
+version = "3.1.6"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+dependencies = [
+    { name = "markupsafe" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/jinja2-3.1.6-py3-none-any.whl" },
+]
+
+[[package]]
+name = "markupsafe"
+version = "3.0.2"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313-macosx_10_13_universal2.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313-macosx_11_0_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313-win_amd64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313t-macosx_10_13_universal2.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313t-macosx_11_0_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/MarkupSafe-3.0.2-cp313-cp313t-win_amd64.whl" },
+]
+
+[[package]]
+name = "mpmath"
+version = "1.3.0"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/mpmath-1.3.0-py3-none-any.whl" },
+]
+
+[[package]]
+name = "networkx"
+version = "3.5"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/networkx-3.5-py3-none-any.whl" },
+]
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.6.4.1"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cublas-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cublas-12.6.4.1-variants.json" }
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.8.4.1"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cublas-12.8.4.1-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cublas-12.8.4.1-variants.json" }
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.9.1.4"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+    "platform_machine != 'x86_64' or sys_platform != 'linux' or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties)",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cublas-12.9.1.4-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cublas-12.9.1.4-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.6.80"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_cupti-12.6.80-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_cupti-12.6.80-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.8.90"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_cupti-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_cupti-12.8.90-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.9.79"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_cupti-12.9.79-py3-none-manylinux_2_25_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_cupti-12.9.79-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.6.77"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_nvrtc-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_nvrtc-12.6.77-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.8.93"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_nvrtc-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_nvrtc-12.8.93-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.9.86"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_nvrtc-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_nvrtc-12.9.86-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.6.77"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_runtime-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_runtime-12.6.77-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.8.90"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_runtime-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_runtime-12.8.90-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.9.79"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_runtime-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cuda_runtime-12.9.79-variants.json" }
+
+[[package]]
+name = "nvidia-cudnn"
+version = "9.10.2.21"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+dependencies = [
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine != 'x86_64' or sys_platform != 'linux' or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties)" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cudnn-9.10.2.21-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cudnn-9.10.2.21-variants.json" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.3.0.4"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufft-11.3.0.4-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufft-11.3.0.4-variants.json" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.3.3.83"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufft-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufft-11.3.3.83-variants.json" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.4.1.4"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufft-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufft-11.4.1.4-variants.json" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.11.1.6"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufile-1.11.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufile-1.11.1.6-variants.json" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.13.1.3"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufile-1.13.1.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufile-1.13.1.3-variants.json" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.14.1.1"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufile-1.14.1.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cufile-1.14.1.1-variants.json" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.7.77"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_curand-10.3.7.77-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_curand-10.3.7.77-variants.json" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.9.90"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_curand-10.3.9.90-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_curand-10.3.9.90-variants.json" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.10.19"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_curand-10.3.10.19-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_curand-10.3.10.19-variants.json" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.1.2"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.4.2", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusolver-11.7.1.2-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusolver-11.7.1.2-variants.json" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.3.90"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.8.93", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusolver-11.7.3.90-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusolver-11.7.3.90-variants.json" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.5.82"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.10.65", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusolver-11.7.5.82-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusolver-11.7.5.82-variants.json" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.4.2"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusparse-12.5.4.2-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusparse-12.5.4.2-variants.json" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.8.93"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusparse-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusparse-12.5.8.93-variants.json" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.10.65"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusparse-12.5.10.65-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusparse-12.5.10.65-variants.json" }
+
+[[package]]
+name = "nvidia-cusparselt"
+version = "0.7.1"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusparselt-0.7.1-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_cusparselt-0.7.1-variants.json" }
+
+[[package]]
+name = "nvidia-nccl"
+version = "2.27.3"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_nccl-2.27.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_nccl-2.27.3-variants.json" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.6.85"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvjitlink-12.6.85-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvjitlink-12.6.85-variants.json" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.8.93"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvjitlink-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvjitlink-12.8.93-variants.json" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.9.86"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvjitlink-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvjitlink-12.9.86-variants.json" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.6.77"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvtx-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvtx-12.6.77-variants.json" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.8.90"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvtx-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvtx-12.8.90-variants.json" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.9.79"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvtx-12.9.79-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/nvidia_nvtx-12.9.79-variants.json" }
+
+[[package]]
+name = "setuptools"
+version = "80.9.0"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/setuptools-80.9.0-py3-none-any.whl" },
+]
+
+[[package]]
+name = "sympy"
+version = "1.14.0"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+dependencies = [
+    { name = "mpmath" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/sympy-1.14.0-py3-none-any.whl" },
+]
+
+[[package]]
+name = "torch"
+version = "2.8.0"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+dependencies = [
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.6.80", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.8.90", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.9.79", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.6.77", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.8.93", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.9.86", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.6.77", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.8.90", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.9.79", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cudnn", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia' in variant_namespaces" },
+    { name = "nvidia-cufft", version = "11.3.0.4", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cufft", version = "11.3.3.83", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cufft", version = "11.4.1.4", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cufile", version = "1.11.1.6", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cufile", version = "1.13.1.3", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cufile", version = "1.14.1.1", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.7.77", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.9.90", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.10.19", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.1.2", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.3.90", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.5.82", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.4.2", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.8.93", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.10.65", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cusparselt", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia' in variant_namespaces" },
+    { name = "nvidia-nccl", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia' in variant_namespaces" },
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.6.77", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.8.90", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.9.79", source = { registry = "https://download.pytorch.org/whl/variant" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.0' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'torch==2.8.0 | nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "setuptools" },
+    { name = "sympy" },
+    { name = "triton", marker = "sys_platform == 'linux' and 'nvidia' in variant_namespaces" },
+    { name = "typing-extensions" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-macosx_14_0_arm64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_aarch64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_aarch64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu126.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu128.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-win_amd64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-win_amd64-cu126.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-win_amd64-cu128.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313-win_amd64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-macosx_14_0_arm64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_aarch64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_aarch64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_x86_64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_x86_64-cu126.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_x86_64-cu128.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-manylinux_2_28_x86_64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-win_amd64-00000000.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-win_amd64-cu126.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-win_amd64-cu128.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-cp313t-win_amd64-cu129.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-cp313-none-macosx_11_0_arm64-00000000.whl" },
+]
+variants-json = { url = "https://download.pytorch.org/whl/test/variant/torch-2.8.0-variants.json" }
+
+[[package]]
+name = "torch-user"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "torch" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "torch" }]
+
+[[package]]
+name = "triton"
+version = "3.4.0"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+dependencies = [
+    { name = "setuptools" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/triton-3.4.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/triton-3.4.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/triton-3.4.0-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/test/variant/triton-3.4.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+]
+
+[[package]]
+name = "typing-extensions"
+version = "4.14.1"
+source = { registry = "https://download.pytorch.org/whl/variant" }
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/variant/typing_extensions-4.14.1-py3-none-any.whl" },
+]

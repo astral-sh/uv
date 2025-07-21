@@ -4,9 +4,9 @@ use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
-use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::CanonicalMarkerListPair;
 use crate::marker::tree::{ContainerOperator, MarkerValueList};
+use crate::marker::{MarkerValueExtra, VariantFeature, VariantNamespace, VariantValue};
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
     MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -336,49 +336,114 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                             }
                         }
                         MarkerValueList::VariantNamespaces => {
-                            // TODO(konsti): Validate
-                            CanonicalMarkerListPair::VariantNamespaces(l_string.trim().to_string())
+                            let (base, value) =
+                                if let Some((base, value)) = l_string.split_once(" | ") {
+                                    (Some(base.trim().to_string()), value)
+                                } else {
+                                    (None, l_string.as_str())
+                                };
+
+                            CanonicalMarkerListPair::VariantNamespaces {
+                                base,
+                                namespace: VariantNamespace::from_str(value).map_err(|err| {
+                                    Pep508Error {
+                                        message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                        start,
+                                        len,
+                                        input: cursor.to_string(),
+                                    }
+                                })?,
+                            }
                         }
                         MarkerValueList::VariantFeatures => {
-                            if let Some((namespace, feature)) = l_string.split_once("::") {
-                                // TODO(konsti): Validate
-                                CanonicalMarkerListPair::VariantFeatures(
-                                    namespace.trim().to_string(),
-                                    feature.trim().to_string(),
-                                )
+                            let (base, value) =
+                                if let Some((base, value)) = l_string.split_once(" | ") {
+                                    (Some(base.trim().to_string()), value)
+                                } else {
+                                    (None, l_string.as_str())
+                                };
+
+                            if let Some((namespace, feature)) = value.split_once("::") {
+                                CanonicalMarkerListPair::VariantFeatures {
+                                    base,
+                                    namespace: VariantNamespace::from_str(namespace).map_err(
+                                        |err| Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        },
+                                    )?,
+                                    feature: VariantFeature::from_str(feature).map_err(|err| {
+                                        Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        }
+                                    })?,
+                                }
                             } else {
                                 reporter.report(
                                     MarkerWarningKind::ListInvalidComparison,
-                                    format!("Expected variant feature with two components seperated by `::`, found `{l_string}`"),
+                                    format!("Expected variant feature with two components separated by `::`, found `{value}`"),
                                 );
                                 CanonicalMarkerListPair::Arbitrary {
                                     key,
-                                    value: l_string.to_string(),
+                                    value: value.to_string(),
                                 }
                             }
                         }
                         MarkerValueList::VariantProperties => {
-                            let mut components = l_string.split("::");
+                            let (base, value) =
+                                if let Some((base, value)) = l_string.trim().split_once(" | ") {
+                                    (Some(base.trim().to_string()), value)
+                                } else {
+                                    (None, l_string.as_str())
+                                };
+
+                            let mut components = value.split("::");
                             if let (Some(namespace), Some(feature), Some(property), None) = (
                                 components.next(),
                                 components.next(),
                                 components.next(),
                                 components.next(),
                             ) {
-                                // TODO(konsti): Validate
-                                CanonicalMarkerListPair::VariantProperties(
-                                    namespace.trim().to_string(),
-                                    feature.trim().to_string(),
-                                    property.trim().to_string(),
-                                )
+                                CanonicalMarkerListPair::VariantProperties {
+                                    base,
+                                    namespace: VariantNamespace::from_str(namespace).map_err(
+                                        |err| Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        },
+                                    )?,
+                                    feature: VariantFeature::from_str(feature).map_err(|err| {
+                                        Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        }
+                                    })?,
+                                    value: VariantValue::from_str(property).map_err(|err| {
+                                        Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        }
+                                    })?,
+                                }
                             } else {
                                 reporter.report(
                                     MarkerWarningKind::ListInvalidComparison,
-                                    format!("Expected variant property with three components seperated by `::`, found `{l_string}`"),
+                                    format!("Expected variant property with three components separated by `::`, found `{value}`"),
                                 );
                                 CanonicalMarkerListPair::Arbitrary {
                                     key,
-                                    value: l_string.to_string(),
+                                    value: value.to_string(),
                                 }
                             }
                         }
