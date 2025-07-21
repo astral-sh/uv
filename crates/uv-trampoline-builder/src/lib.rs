@@ -140,7 +140,7 @@ impl Launcher {
         }))
     }
 
-    pub fn to_file(self, path: &Path) -> Result<(), Error> {
+    pub fn write_to_file(self, file: &mut File) -> Result<(), Error> {
         let python_path = self.python_path.simplified_display().to_string();
 
         if python_path.len() > MAX_PATH_LENGTH as usize {
@@ -161,7 +161,7 @@ impl Launcher {
         );
         launcher.extend_from_slice(self.kind.magic_number());
 
-        fs_err::write(path, launcher)?;
+        file.write_all(&launcher)?;
         Ok(())
     }
 

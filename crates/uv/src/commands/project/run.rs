@@ -1082,16 +1082,22 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     if !entry.file_type()?.is_file() {
                         continue;
                     }
-                    let target = ephemeral_env.scripts().join(entry.file_name());
-                    if target.try_exists()? {
-                        continue;
-                    }
-                    copy_entrypoint(
+                    match copy_entrypoint(
                         &entry.path(),
-                        &target,
+                        &ephemeral_env.scripts().join(entry.file_name()),
                         interpreter.sys_executable(),
                         ephemeral_env.sys_executable(),
-                    )?;
+                    ) {
+                        Ok(()) => {}
+                        // If the entrypoint already exists, skip it.
+                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                            trace!(
+                                "Skipping copy of entrypoint `{}`: already exists",
+                                &entry.path().display()
+                            );
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
                 }
 
                 // Link data directories from the base environment to the ephemeral environment.
@@ -1723,6 +1729,8 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
 /// Create a copy of the entrypoint at `source` at `target`, if it has a Python shebang, replacing
 /// the previous Python executable with a new one.
 ///
+/// This is a no-op if the target already exists.
+///
 /// Note on Windows, the entrypoints do not use shebangs and require a rewrite of the trampoline.
 #[cfg(unix)]
 fn copy_entrypoint(
@@ -1730,7 +1738,8 @@ fn copy_entrypoint(
     target: &Path,
     previous_executable: &Path,
     python_executable: &Path,
-) -> anyhow::Result<()> {
+) -> Result<(), std::io::Error> {
+    use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
 
     let contents = fs_err::read_to_string(source)?;
@@ -1748,14 +1757,18 @@ fn copy_entrypoint(
     else {
         // If it's not a Python shebang, we'll skip it
         trace!(
-            "Skipping copy of entrypoint at {}: does not start with expected shebang",
+            "Skipping copy of entrypoint `{}`: does not start with expected shebang",
             source.user_display()
         );
         return Ok(());
     };
 
     let contents = format!("#!{}\n{}", python_executable.display(), contents);
-    fs_err::write(target, &contents)?;
+    let mut file = fs_err::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(target)?;
+    file.write_all(contents.as_bytes())?;
 
     let mut perms = fs_err::metadata(target)?.permissions();
     perms.set_mode(0o755);
@@ -1782,7 +1795,11 @@ fn copy_entrypoint(
     };
 
     let launcher = launcher.with_python_path(python_executable.to_path_buf());
-    launcher.to_file(target)?;
+    let mut file = fs_err::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(target)?;
+    launcher.write_to_file(target)?;
 
     trace!("Updated entrypoint at {}", target.user_display());
 
