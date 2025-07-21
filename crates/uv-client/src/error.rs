@@ -9,6 +9,7 @@ use owo_colors::OwoColorize;
 use reqwest::Response;
 use serde::Deserialize;
 use tracing::warn;
+use uv_distribution_types::VariantsJsonFilename;
 
 use crate::base_client::CertificateSource;
 use crate::middleware::OfflineError;
@@ -435,6 +436,10 @@ pub enum ErrorKind {
     #[error("Package `{0}` was not found in the local index")]
     LocalPackageNotFound(PackageName),
 
+    /// The `variants.json` file was not found in the local (file-based) index.
+    #[error("Variants JSON file `{0}` was not found in the local index")]
+    VariantsJsonNotFile(VariantsJsonFilename),
+
     /// The root was not found in the local (file-based) index.
     #[error("Local index not found at: `{}`", _0.display())]
     LocalIndexNotFound(PathBuf),
@@ -515,6 +520,9 @@ pub enum ErrorKind {
         "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`"
     )]
     Offline(String),
+
+    #[error("Invalid variants.json format: {0}")]
+    VariantsJsonFormat(DisplaySafeUrl, #[source] serde_json::Error),
 }
 
 impl ErrorKind {

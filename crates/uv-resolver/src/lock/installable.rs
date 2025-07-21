@@ -5,6 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use either::Either;
+use hashbrown::HashMap;
 use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -13,10 +14,17 @@ use uv_configuration::{
     BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification,
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
-use uv_distribution_types::{Edge, FirstParty, Node, Resolution, ResolvedDist};
+use uv_distribution::{DistributionDatabase, PackageVariantCache};
+use uv_distribution_types::{Edge, FirstParty, Name, Node, Resolution, ResolvedDist};
 use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
+use uv_pep508::{
+    MarkerVariantsEnvironment, MarkerVariantsUniversal, VariantFeature, VariantNamespace,
+    VariantValue,
+};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
+use uv_types::BuildContext;
+use uv_variants::variant_with_label::VariantWithLabel;
 
 use crate::lock::{
     Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageIndex,
@@ -164,6 +172,64 @@ pub trait Installable<'lock> {
         )
     }
 
+    /// Variant properties to use when following a locked package's dependencies.
+    fn variant_environment(&self, _package: &Package) -> impl MarkerVariantsEnvironment {
+        MarkerVariantsUniversal
+    }
+
+    /// Resolve variant metadata before following the selected wheels' dependencies.
+    #[expect(async_fn_in_trait)]
+    async fn to_resolution_with_variants<Context: BuildContext>(
+        &self,
+        marker_env: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        build_options: &BuildOptions,
+        install_options: &InstallOptions,
+        distribution_database: DistributionDatabase<'_, Context>,
+        variants_cache: &PackageVariantCache,
+    ) -> Result<Resolution, LockError> {
+        let provisional = self.to_resolution(
+            marker_env,
+            tags,
+            extras,
+            groups,
+            build_options,
+            install_options,
+        )?;
+        let mut variants = QueriedVariants::default();
+        for package in self.lock().packages() {
+            if provisional
+                .distributions()
+                .any(|dist| dist.name() == package.name())
+            {
+                let properties = determine_properties(
+                    package,
+                    self.install_path(),
+                    marker_env,
+                    &distribution_database,
+                    variants_cache,
+                    tags,
+                )
+                .await?;
+                variants.0.insert(variant_base(package), properties);
+            }
+        }
+        VariantInstallable {
+            target: self,
+            variants,
+        }
+        .to_resolution(
+            marker_env,
+            tags,
+            extras,
+            groups,
+            build_options,
+            install_options,
+        )
+    }
+
     /// Create an installable [`Node`] from a [`Package`].
     fn installable_node(
         &self,
@@ -185,8 +251,10 @@ pub trait Installable<'lock> {
             },
         )?;
         let version = package.version().cloned();
+        let variants_json = package.to_registry_variants_json(self.install_path())?;
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
+            variants_json: variants_json.map(Arc::new),
             version,
         };
         Ok(Node::Dist {
@@ -213,6 +281,8 @@ pub trait Installable<'lock> {
         let version = package.version().cloned();
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
+            // No need to determine variants for something we don't install.
+            variants_json: None,
             version,
         };
         let hashes = package.hashes();
@@ -398,6 +468,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
                 if !dep.complexified_marker.evaluate(
                     marker_env,
+                    &self.variant_environment(dist),
                     activated_projects.iter().copied(),
                     activated_extras
                         .iter()
@@ -485,7 +556,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
             // Add any requirements that are exclusive to the workspace root (e.g., dependencies in
             // PEP 723 scripts).
             for dependency in self.lock().requirements() {
-                if !dependency.marker.evaluate(marker_env, &[]) {
+                if !dependency
+                    .marker
+                    .evaluate(marker_env, &MarkerVariantsUniversal, &[])
+                {
                     continue;
                 }
 
@@ -548,7 +622,10 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 })
                 .flatten()
             {
-                if !dependency.marker.evaluate(marker_env, &[]) {
+                if !dependency
+                    .marker
+                    .evaluate(marker_env, &MarkerVariantsUniversal, &[])
+                {
                     continue;
                 }
 
@@ -677,6 +754,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         newly_activated_extras(dep, &activated_extras);
                     if !dep_reachability.evaluate(
                         marker_env,
+                        &self.variant_environment(package),
                         activated_projects.iter().copied(),
                         activated_extras
                             .iter()
@@ -755,10 +833,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
                 }
-                if !dep
-                    .complexified_marker
-                    .evaluate_activated(marker_env, &activated)
-                {
+                if !dep.complexified_marker.evaluate_activated(
+                    marker_env,
+                    &self.variant_environment(package),
+                    &activated,
+                ) {
                     continue;
                 }
 
@@ -1764,5 +1843,201 @@ source = { registry = "https://example.com/simple" }
             .expect("valid resolution");
 
         assert!(target.package_to_node_calls.get() > 0);
+    }
+}
+
+fn variant_base(package: &Package) -> String {
+    format!(
+        "{}=={}",
+        package.name(),
+        package
+            .version()
+            .map(ToString::to_string)
+            .unwrap_or_default()
+    )
+}
+
+struct VariantInstallable<'a, T: ?Sized> {
+    target: &'a T,
+    variants: QueriedVariants,
+}
+
+impl<'lock, T: Installable<'lock> + ?Sized> Installable<'lock> for VariantInstallable<'_, T> {
+    fn install_path(&self) -> &'lock Path {
+        self.target.install_path()
+    }
+    fn lock(&self) -> &'lock Lock {
+        self.target.lock()
+    }
+    fn roots(&self) -> impl Iterator<Item = &PackageName> {
+        self.target.roots()
+    }
+    fn group_root(&self, groups: &DependencyGroupsWithDefaults) -> Option<&PackageName> {
+        self.target.group_root(groups)
+    }
+    fn includes_group(
+        &self,
+        package: Option<&PackageName>,
+        group: &GroupName,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> bool {
+        self.target.includes_group(package, group, groups)
+    }
+    fn project_name(&self) -> Option<&PackageName> {
+        self.target.project_name()
+    }
+    fn variant_environment(&self, package: &Package) -> impl MarkerVariantsEnvironment {
+        CurrentQueriedVariants {
+            current: self
+                .variants
+                .0
+                .get(&variant_base(package))
+                .unwrap_or(&EMPTY_VARIANT),
+            global: &self.variants,
+        }
+    }
+}
+
+static EMPTY_VARIANT: std::sync::LazyLock<VariantWithLabel> =
+    std::sync::LazyLock::new(VariantWithLabel::default);
+
+/// Map for the package identifier to the package's variants for marker evaluation.
+#[derive(Default, Debug)]
+struct QueriedVariants(HashMap<String, VariantWithLabel>);
+
+/// Variants for markers evaluation both for the current package (without base) and globally (with
+/// base).
+#[derive(Copy, Clone, Debug)]
+struct CurrentQueriedVariants<'a> {
+    current: &'a VariantWithLabel,
+    global: &'a QueriedVariants,
+}
+
+impl MarkerVariantsEnvironment for CurrentQueriedVariants<'_> {
+    fn contains_namespace(&self, namespace: &VariantNamespace) -> bool {
+        self.current.contains_namespace(namespace)
+    }
+
+    fn contains_feature(&self, namespace: &VariantNamespace, feature: &VariantFeature) -> bool {
+        self.current.contains_feature(namespace, feature)
+    }
+
+    fn contains_property(
+        &self,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
+    ) -> bool {
+        self.current.contains_property(namespace, feature, value)
+    }
+
+    fn contains_base_namespace(&self, prefix: &str, namespace: &VariantNamespace) -> bool {
+        let Some(variant) = self.global.0.get(prefix) else {
+            return false;
+        };
+
+        variant.contains_namespace(namespace)
+    }
+
+    fn contains_base_feature(
+        &self,
+        prefix: &str,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+    ) -> bool {
+        let Some(variant) = self.global.0.get(prefix) else {
+            return false;
+        };
+
+        variant.contains_feature(namespace, feature)
+    }
+
+    fn contains_base_property(
+        &self,
+        prefix: &str,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
+    ) -> bool {
+        let Some(variant) = self.global.0.get(prefix) else {
+            return false;
+        };
+
+        variant.contains_property(namespace, feature, value)
+    }
+
+    fn label(&self) -> Option<&str> {
+        self.current.label()
+    }
+}
+
+async fn determine_properties<Context: BuildContext>(
+    package: &Package,
+    workspace_root: &Path,
+    marker_env: &ResolverMarkerEnvironment,
+    distribution_database: &DistributionDatabase<'_, Context>,
+    variants_cache: &PackageVariantCache,
+    tags: &Tags,
+) -> Result<VariantWithLabel, LockError> {
+    let Some(variants_json) = package.to_registry_variants_json(workspace_root)? else {
+        // When selecting a non-variant wheel, all variant markers evaluate to false.
+        return Ok(VariantWithLabel::default());
+    };
+    let resolved_variants = if variants_cache.register(variants_json.version_id()) {
+        let resolved_variants = distribution_database
+            .fetch_and_query_variants(&variants_json, marker_env)
+            .await
+            .map_err(|err| LockErrorKind::VariantError {
+                package_id: package.id.clone(),
+                err,
+            })?;
+
+        let resolved_variants = Arc::new(resolved_variants);
+        variants_cache.done(variants_json.version_id(), resolved_variants.clone());
+        resolved_variants
+    } else {
+        variants_cache
+            .wait(&variants_json.version_id())
+            .await
+            .expect("missing value for registered task")
+    };
+
+    // Select best wheel
+    let mut highest_priority_variant_wheel: Option<(_, Vec<usize>)> = None;
+    for wheel in &package.wheels {
+        if !wheel.filename.compatibility(tags).is_compatible() {
+            continue;
+        }
+        let Some(variant) = wheel.filename.variant() else {
+            // The non-variant wheel is already supported
+            continue;
+        };
+
+        let Some(scores) = resolved_variants.score_variant(variant) else {
+            continue;
+        };
+
+        if let Some((_, old_scores)) = &highest_priority_variant_wheel {
+            if &scores > old_scores {
+                highest_priority_variant_wheel = Some((variant, scores));
+            }
+        } else {
+            highest_priority_variant_wheel = Some((variant, scores));
+        }
+    }
+
+    if let Some((best_variant, _)) = highest_priority_variant_wheel {
+        // TODO(konsti): We shouldn't need to clone
+
+        // TODO(konsti): The variant exists because we used it for scoring, but we should
+        // be able to write this without unwrap.
+        let known_properties = resolved_variants.variants_json.variants[best_variant].clone();
+        Ok(VariantWithLabel {
+            variant: known_properties,
+            label: Some(best_variant.clone()),
+        })
+    } else {
+        // When selecting the non-variant wheel, all variant markers evaluate to false.
+        Ok(VariantWithLabel::default())
     }
 }

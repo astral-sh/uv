@@ -1,6 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
 
@@ -13,8 +14,9 @@ use uv_fs::Simplified;
 use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::{Requirement, VariantNamespace};
 use uv_platform_tags::Platform;
-use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_pypi_types::{HashAlgorithm, HashDigest, VerbatimParsedUrl};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
@@ -119,6 +121,32 @@ pub enum Error {
         filename: WheelFilename,
         python_platform: Platform,
         python_version: PythonVersion,
+    },
+    #[error(
+        "Package {name} has no matching wheel for the current platform, but has the following variants: {variants}"
+    )]
+    WheelVariantMismatch { name: PackageName, variants: String },
+    #[error("Provider plugin is declared to use namespace {declared} but uses namespace {actual}")]
+    WheelVariantNamespaceMismatch {
+        declared: VariantNamespace,
+        actual: VariantNamespace,
+    },
+    #[error("Failed to read variant lock")]
+    VariantLockRead(#[source] std::io::Error),
+    #[error("Variant lock has an unsupported format: {}", _0.user_display())]
+    VariantLockParse(PathBuf, #[source] toml::de::Error),
+    #[error("Variant lock has an unsupported version {}, only version 0.1 is supported: {}", _1, _0.user_display())]
+    VariantLockVersion(PathBuf, Version),
+    #[error(
+        "Variant lock is missing a matching provider and `UV_VARIANT_LOCK_INCOMPLETE` is not set\n  variant lock: {}\n  requires: `{}`\n  plugin-api: {}",
+        variant_lock.user_display(),
+        requires.iter().join("`, `"),
+        plugin_api
+    )]
+    VariantLockMissing {
+        variant_lock: PathBuf,
+        requires: Vec<Requirement<VerbatimParsedUrl>>,
+        plugin_api: String,
     },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),

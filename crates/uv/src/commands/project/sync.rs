@@ -19,14 +19,14 @@ use uv_configuration::{
     InstallOptions, TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, resolve_variants};
 use uv_distribution_types::{
     Dist, Index, IndexUrl, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pep508::{MarkerTree, MarkerVariantsUniversal, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl};
 use uv_python::{
@@ -764,7 +764,7 @@ pub(crate) async fn do_sync<'a>(
     if !environments.is_empty() {
         if !environments
             .iter()
-            .any(|env| env.evaluate(&marker_env, &[]))
+            .any(|env| env.evaluate(&marker_env, &MarkerVariantsUniversal, &[]))
         {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 // For error reporting, we use the "simplified"
@@ -786,15 +786,166 @@ pub(crate) async fn do_sync<'a>(
     // Determine the tags to use for the resolution.
     let tags = resolution_tags(None, python_platform, venv.interpreter())?;
 
-    // Read the lockfile.
-    let resolution = target.to_resolution(
-        &marker_env,
-        &tags,
-        extras,
-        groups,
+    // Populate credentials from the target.
+    store_credentials_from_target(target, &client_builder)?;
+
+    {
+        // Read the lockfile.
+        let resolution = target.to_resolution(
+            &marker_env,
+            &tags,
+            extras,
+            groups,
+            build_options,
+            &install_options,
+        )?;
+
+        if !resolution.distributions().any(|dist| {
+            matches!(
+                dist,
+                ResolvedDist::Installable {
+                    variants_json: Some(_),
+                    ..
+                }
+            )
+        }) {
+            // Always skip virtual projects, which shouldn't be built or installed.
+            let resolution = apply_no_virtual_project(resolution);
+
+            // If necessary, convert editable to non-editable distributions.
+            let resolution = apply_editable_mode(resolution, editable.clone());
+
+            // Constrain any build requirements marked as `match-runtime = true`.
+            let extra_build_requires = extra_build_requires.clone().match_runtime(&resolution)?;
+
+            // Extract the hashes from the lockfile.
+            let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+
+            let bytecode_compilation =
+                compile_bytecode.then_some(operations::BytecodeCompilation::All);
+            let site_packages = SitePackages::from_environment(venv)?;
+            let installation_plan = operations::InstallationPlan::build(
+                &resolution,
+                site_packages,
+                InstallationStrategy::Strict,
+                reinstall,
+                build_options,
+                &hasher,
+                index_locations,
+                config_setting,
+                config_settings_package,
+                &extra_build_requires,
+                extra_build_variables,
+                cache,
+                venv,
+                &tags,
+            )?;
+
+            // Avoid constructing an HTTP client and build dispatch when planning shows that there is no
+            // installation work to perform.
+            if installation_plan.is_noop(modifications, bytecode_compilation, dry_run) {
+                maybe_check_malware(
+                    &target,
+                    &resolution,
+                    &malware_check_client_builder,
+                    concurrency,
+                    cache,
+                    preview,
+                    &malware_context,
+                )
+                .await?;
+
+                return Ok(installation_plan.finish_noop(
+                    &resolution,
+                    modifications,
+                    bytecode_compilation,
+                    logger.as_ref(),
+                    dry_run,
+                    printer,
+                )?);
+            }
+        }
+    }
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
+        .index_strategy(index_strategy)
+        .markers(venv.interpreter().markers())
+        .platform(venv.interpreter().platform())
+        .build()?;
+
+    // Determine whether to enable build isolation.
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(venv),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            BuildIsolation::SharedPackage(venv, packages)
+        }
+    };
+
+    // Read the build constraints from the lockfile.
+    let build_constraints = target.build_constraints();
+
+    // TODO(konsti): Don't do this twice, find a better way to resolve the current build_dispatch
+    // -> resolution -> hasher -> flat_index -> resolution loop.
+    // Verify build dependencies against the full lockfile, including unselected extras and groups.
+    let build_hasher = target.lock().hash_strategy(target.install_path())?;
+    let flat_index = {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await?;
+        FlatIndex::from_entries(entries)
+    };
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &build_constraints,
+        venv.interpreter(),
+        index_locations,
+        &flat_index,
+        dependency_metadata,
+        state.clone().into_inner(),
+        index_strategy,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        link_mode,
         build_options,
-        &install_options,
-    )?;
+        &build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
+        preview,
+    );
+
+    // TODO(konsti): Pass this into operations::install
+    let distribution_database = DistributionDatabase::new(
+        &client,
+        &build_dispatch,
+        concurrency.downloads_semaphore.clone(),
+    );
+
+    // Read the lockfile.
+    let resolution = target
+        .to_resolution_with_variants(
+            &marker_env,
+            &tags,
+            extras,
+            groups,
+            build_options,
+            &install_options,
+            distribution_database,
+            state.index().variant_priorities(),
+        )
+        .await?;
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);
@@ -805,11 +956,64 @@ pub(crate) async fn do_sync<'a>(
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
+    // TODO(charlie): These are all default values. We should consider whether we want to make them
+    // optional on the downstream APIs.
+    // Verify build dependencies against the full lockfile, including unselected extras and groups.
+    let build_hasher = target.lock().hash_strategy(target.install_path())?;
+
     // Extract the hashes from the lockfile.
     let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
-    // Populate credentials from the target.
-    store_credentials_from_target(target, &client_builder)?;
+    // Resolve the flat indexes from `--find-links`.
+    let flat_index = {
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+        let entries = client
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
+            .await?;
+        FlatIndex::from_entries(entries)
+    };
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        cache,
+        &build_constraints,
+        venv.interpreter(),
+        index_locations,
+        &flat_index,
+        dependency_metadata,
+        state.clone().into_inner(),
+        index_strategy,
+        config_setting,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        link_mode,
+        build_options,
+        &build_hasher,
+        exclude_newer.clone(),
+        sources.clone(),
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
+        preview,
+    );
+
+    // TODO(konsti): Pass this into operations::install
+    let distribution_database = DistributionDatabase::new(
+        &client,
+        &build_dispatch,
+        concurrency.downloads_semaphore.clone(),
+    );
+    let resolution = resolve_variants(
+        resolution,
+        &marker_env,
+        distribution_database,
+        state.index().variant_priorities(),
+        &tags,
+    )
+    .await?;
 
     let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
     let site_packages = SitePackages::from_environment(venv)?;
@@ -853,65 +1057,6 @@ pub(crate) async fn do_sync<'a>(
             printer,
         )?);
     }
-
-    // Initialize the registry client.
-    let client = RegistryClientBuilder::new(client_builder, cache.clone())
-        .index_locations(index_locations.clone())
-        .index_strategy(index_strategy)
-        .markers(venv.interpreter().markers())
-        .platform(venv.interpreter().platform())
-        .build()?;
-
-    // Determine whether to enable build isolation.
-    let build_isolation = match build_isolation {
-        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
-        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(venv),
-        uv_configuration::BuildIsolation::SharedPackage(packages) => {
-            BuildIsolation::SharedPackage(venv, packages)
-        }
-    };
-
-    // Read the build constraints from the lockfile.
-    let build_constraints = target.build_constraints();
-
-    // Verify build dependencies against the full lockfile, including unselected extras and groups.
-    let build_hasher = target.lock().hash_strategy(target.install_path())?;
-
-    // Resolve the flat indexes from `--find-links`.
-    let flat_index = {
-        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
-        let entries = client
-            .fetch_all(index_locations.flat_indexes().map(Index::url))
-            .await?;
-        FlatIndex::from_entries(entries)
-    };
-
-    // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        &build_constraints,
-        venv.interpreter(),
-        index_locations,
-        &flat_index,
-        dependency_metadata,
-        state.clone().into_inner(),
-        index_strategy,
-        config_setting,
-        config_settings_package,
-        build_isolation,
-        &extra_build_requires,
-        extra_build_variables,
-        link_mode,
-        build_options,
-        &build_hasher,
-        exclude_newer.clone(),
-        sources.clone(),
-        SourceTreeEditablePolicy::Project,
-        workspace_cache.clone(),
-        concurrency.clone(),
-        preview,
-    );
 
     // Run a malware check against OSV before installing.
     maybe_check_malware(

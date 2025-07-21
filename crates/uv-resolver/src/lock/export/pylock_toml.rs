@@ -37,7 +37,7 @@ use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
+use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerVariantsUniversal, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{
     HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind,
@@ -548,7 +548,7 @@ impl<'lock> PylockToml {
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(resolution.graph.node_count());
         for (node_index, node) in resolution.base_dists() {
-            let ResolvedDist::Installable { dist, version } = &node.dist else {
+            let ResolvedDist::Installable { dist, version, .. } = &node.dist else {
                 continue;
             };
             if omit.contains(dist.name()) {
@@ -1302,7 +1302,10 @@ impl<'lock> PylockToml {
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
-            if !package.marker.evaluate_pep751(markers, extras, groups) {
+            if !package
+                .marker
+                .evaluate_pep751(markers, &MarkerVariantsUniversal, extras, groups)
+            {
                 continue;
             }
             if !active_packages.insert(package.name.clone()) {
@@ -1397,6 +1400,7 @@ impl<'lock> PylockToml {
                 }));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(built_dist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {
@@ -1414,6 +1418,7 @@ impl<'lock> PylockToml {
                 )?));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {
@@ -1428,6 +1433,7 @@ impl<'lock> PylockToml {
                 ));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {
@@ -1442,6 +1448,7 @@ impl<'lock> PylockToml {
                 ));
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(sdist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {
@@ -1458,6 +1465,7 @@ impl<'lock> PylockToml {
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
                 let dist = ResolvedDist::Installable {
                     dist: Arc::new(dist),
+                    variants_json: None,
                     version: package.version,
                 };
                 Node::Dist {

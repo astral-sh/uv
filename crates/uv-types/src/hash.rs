@@ -12,6 +12,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
+use uv_pep508::MarkerVariantsUniversal;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 use uv_redacted::DisplaySafeUrl;
 
@@ -188,9 +189,11 @@ impl HashStrategy {
 
         // First, index the constraints by name.
         for (requirement, digests) in constraints {
-            if !requirement
-                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
-            {
+            if !requirement.evaluate_markers(
+                marker_env.map(ResolverMarkerEnvironment::markers),
+                &MarkerVariantsUniversal,
+                &[],
+            ) {
                 continue;
             }
 
@@ -229,9 +232,11 @@ impl HashStrategy {
         // For each requirement, map from hash identity to allowed hashes.
         let mut requirement_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
         for (requirement, digests) in requirements {
-            if !requirement
-                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
-            {
+            if !requirement.evaluate_markers(
+                marker_env.map(ResolverMarkerEnvironment::markers),
+                &MarkerVariantsUniversal,
+                &[],
+            ) {
                 continue;
             }
 
