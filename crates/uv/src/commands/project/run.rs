@@ -22,7 +22,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
-use uv_fs::{PythonExt, Simplified, create_symlink, symlink_or_copy_file};
+use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{
@@ -1079,14 +1079,16 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // environment.
                 for entry in fs_err::read_dir(interpreter.scripts())? {
                     let entry = entry?;
-
                     if !entry.file_type()?.is_file() {
                         continue;
                     }
-
+                    let target = ephemeral_env.scripts().join(entry.file_name());
+                    if target.try_exists()? {
+                        continue;
+                    }
                     copy_entrypoint(
                         &entry.path(),
-                        &ephemeral_env.scripts().join(entry.file_name()),
+                        &target,
                         interpreter.sys_executable(),
                         ephemeral_env.sys_executable(),
                     )?;
@@ -1098,44 +1100,23 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // writes to `<prefix>/share/jupyter`.
                 //
                 // See https://github.com/jupyterlab/jupyterlab/issues/17716
-                //
-                // We only perform a shallow merge here, so if a directory occurs more than once,
-                // any children of that directory will not be merged across base interpreters.
                 for dir in &["etc/jupyter", "share/jupyter"] {
-                    let entries = match fs_err::read_dir(interpreter.sys_prefix().join(dir)) {
-                        Ok(entries) => entries,
-                        // Skip missing directories
-                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                    let source = interpreter.sys_prefix().join(dir);
+                    if !matches!(source.try_exists(), Ok(true)) {
+                        continue;
+                    }
+                    if !source.is_dir() {
+                        continue;
+                    }
+                    let target = ephemeral_env.sys_prefix().join(dir);
+                    match create_symlink(&source, &target) {
+                        Ok(()) => trace!(
+                            "Created link for {} -> {}",
+                            target.user_display(),
+                            source.user_display()
+                        ),
+                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
                         Err(err) => return Err(err.into()),
-                    };
-                    fs_err::create_dir_all(ephemeral_env.sys_prefix().join(dir))?;
-                    for entry in entries {
-                        let entry = entry?;
-                        let target = ephemeral_env.sys_prefix().join(dir).join(entry.file_name());
-
-                        if entry.file_type()?.is_file() {
-                            match symlink_or_copy_file(entry.path(), &target) {
-                                Ok(()) => trace!(
-                                    "Created link for {} -> {}",
-                                    target.user_display(),
-                                    entry.path().user_display()
-                                ),
-                                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
-                                Err(err) => return Err(err.into()),
-                            }
-                        } else if entry.file_type()?.is_dir() {
-                            match create_symlink(entry.path(), &target) {
-                                Ok(()) => trace!(
-                                    "Created link for {} -> {}",
-                                    target.user_display(),
-                                    entry.path().user_display()
-                                ),
-                                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
-                                Err(err) => return Err(err.into()),
-                            }
-                        } else {
-                            trace!("Skipping link of entry: {}", entry.path().user_display());
-                        }
                     }
                 }
             }
@@ -1163,10 +1144,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     // Cast to `PythonEnvironment`.
     let ephemeral_env = ephemeral_env.map(PythonEnvironment::from);
-
-    if let Some(e) = ephemeral_env.as_ref() {
-        debug!("Using ephemeral environment at: {}", e.scripts().display());
-    }
 
     // Determine the Python interpreter to use for the command, if necessary.
     let interpreter = ephemeral_env
@@ -1780,15 +1757,11 @@ fn copy_entrypoint(
     let contents = format!("#!{}\n{}", python_executable.display(), contents);
     fs_err::write(target, &contents)?;
 
-    match fs_err::write(target, &contents) {
-        Ok(()) => trace!("Updated entrypoint at {}", target.user_display()),
-        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
-        Err(err) => return Err(err.into()),
-    }
-
     let mut perms = fs_err::metadata(target)?.permissions();
     perms.set_mode(0o755);
     fs_err::set_permissions(target, perms)?;
+
+    trace!("Updated entrypoint at {}", target.user_display());
 
     Ok(())
 }
@@ -1809,13 +1782,9 @@ fn copy_entrypoint(
     };
 
     let launcher = launcher.with_python_path(python_executable.to_path_buf());
+    launcher.to_file(target)?;
 
-    match launcher.to_file(target) {
-        Ok(()) => trace!("Updated entrypoint at {}", target.user_display()),
-        Err(uv_trampoline_builder::Error::Io(err))
-            if err.kind() == std::io::ErrorKind::AlreadyExists => {}
-        Err(err) => return Err(err.into()),
-    }
+    trace!("Updated entrypoint at {}", target.user_display());
 
     Ok(())
 }
