@@ -644,10 +644,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.git,
                             &self.workspace_members,
                             self.selector.resolution_strategy(),
-                        )?;
+                        ).map_err(|err| {
+                            if let Some(name) = state.pubgrub.package_store[next_id].name() {
+                                let chain = DerivationChainBuilder::from_state(next_id, &version, &state.pubgrub)
+                                    .unwrap_or_default();
+                                ResolveError::Dependencies(Box::new(err), name.clone(), version.clone(), chain)
+                            } else {
+                                err
+                            }
+                        })?;
 
                         // Emit a request to fetch the metadata for each registry package.
-                        self.visit_dependencies(&dependencies, &state, &request_sink)?;
+                        self.visit_dependencies(&dependencies, &state, &request_sink).map_err(|err| {
+                            if let Some(name) = state.pubgrub.package_store[next_id].name() {
+                                let chain = DerivationChainBuilder::from_state(next_id, &version, &state.pubgrub)
+                                    .unwrap_or_default();
+                                ResolveError::Dependencies(Box::new(err), name.clone(), version.clone(), chain)
+                            } else {
+                                err
+                            }
+                        })?;
 
                         // Add the dependencies to the state.
                         state.add_package_version_dependencies(next_id, &version, dependencies);
@@ -879,10 +895,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.git,
                     &self.workspace_members,
                     self.selector.resolution_strategy(),
-                )?;
+                ).map_err(|err| {
+                    if let Some(name) = forked_state.pubgrub.package_store[package].name() {
+                        let chain = DerivationChainBuilder::from_state(package, &version, &forked_state.pubgrub)
+                            .unwrap_or_default();
+                        ResolveError::Dependencies(Box::new(err), name.clone(), version.clone(), chain)
+                    } else {
+                        err
+                    }
+                })?;
 
                 // Emit a request to fetch the metadata for each registry package.
-                self.visit_dependencies(&fork.dependencies, &forked_state, request_sink)?;
+                self.visit_dependencies(&fork.dependencies, &forked_state, request_sink).map_err(|err| {
+                    if let Some(name) = forked_state.pubgrub.package_store[package].name() {
+                        let chain = DerivationChainBuilder::from_state(package, &version, &forked_state.pubgrub)
+                            .unwrap_or_default();
+                        ResolveError::Dependencies(Box::new(err), name.clone(), version.clone(), chain)
+                    } else {
+                        err
+                    }
+                })?;
 
                 // Add the dependencies to the state.
                 forked_state.add_package_version_dependencies(package, version, fork.dependencies);
@@ -2787,16 +2819,7 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, url.as_ref(), git).map_err(|err| {
-                    let name = self.pubgrub.package_store[for_package].name().unwrap().clone();
-                    let version = Some(for_version.clone());
-                    let chain = DerivationChainBuilder::from_state(for_package, for_version, &self.pubgrub)
-                        .unwrap_or_default();
-                    println!("name: {name:?}");
-                    println!("version: {version:?}");
-                    println!("chain: {chain:?}");
-                    ResolveError::Derived(Box::new(err), name, version, chain)
-                })? {
+                for url in urls.get_url(&self.env, name, url.as_ref(), git)? {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
                 }

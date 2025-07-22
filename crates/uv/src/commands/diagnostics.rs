@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -84,7 +83,7 @@ impl OperationDiagnostic {
                 }
                 None
             }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Derived(
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
                                                 error,
                                                 name,
                                                 version,
@@ -93,7 +92,7 @@ impl OperationDiagnostic {
                 derived_error(
                     error,
                     &name,
-                    version.as_ref(),
+                    &version,
                     &chain,
                     self.hint.clone(),
                 );
@@ -252,18 +251,18 @@ pub(crate) fn requested_dist_error(
 pub(crate) fn derived_error(
     error: Box<uv_resolver::ResolveError>,
     name: &PackageName,
-    version: Option<&Version>,
+    version: &Version,
     chain: &DerivationChain,
     help: Option<String>,
 ) {
-
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("{error}")]
+    #[error("Failed to resolve dependencies for `{}` ({})", name.cyan(), format!("v{version}").cyan())]
     #[diagnostic()]
     struct Diagnostic {
-        error: Box<uv_resolver::ResolveError>,
-        // #[source]
-        // source: Option<&'static dyn Error>,
+        name: PackageName,
+        version: Version,
+        #[source]
+        cause: Box<uv_resolver::ResolveError>,
         #[help]
         help: Option<String>,
     }
@@ -283,14 +282,15 @@ pub(crate) fn derived_error(
                 if chain.is_empty() {
                     None
                 } else {
-                    Some(format_chain(name, version, chain))
+                    Some(format_chain(name, Some(version), chain))
                 }
             })
     });
     // let source = error.source();
     let report = miette::Report::new(Diagnostic {
-        error,
-        // source,
+        name: name.clone(),
+        version: version.clone(),
+        cause: error,
         help,
     });
     anstream::eprint!("{report:?}");
