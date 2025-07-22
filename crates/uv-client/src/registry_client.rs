@@ -127,6 +127,14 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
+    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
+        self.base_client_builder = self
+            .base_client_builder
+            .built_in_root_certs(built_in_root_certs);
+        self
+    }
+
+    #[must_use]
     pub fn cache(mut self, cache: Cache) -> Self {
         self.cache = cache;
         self
