@@ -1329,7 +1329,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.8"
-        dependencies = []
+        dependencies = ["anyio"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -1358,15 +1358,29 @@ fn run_with_overlay_interpreter() -> Result<()> {
     [CACHE_DIR]/builds-v0/[TMP]/python
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+
+    // The package, its dependencies, and the overlay dependencies should be available.
+    context
+        .run()
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("python")
+        .arg("-c")
+        .arg("import foo; import anyio; import iniconfig")
+        .assert()
+        .success();
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
@@ -1376,10 +1390,13 @@ fn run_with_overlay_interpreter() -> Result<()> {
     [CACHE_DIR]/builds-v0/[TMP]/python
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
     ");
 
     // Switch to a relocatable virtual environment.
@@ -1393,10 +1410,21 @@ fn run_with_overlay_interpreter() -> Result<()> {
     [CACHE_DIR]/builds-v0/[TMP]/python
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
     ");
+
+    // The package, its dependencies, and the overlay dependencies should be available.
+    context
+        .run()
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("python")
+        .arg("-c")
+        .arg("import foo; import anyio; import iniconfig")
+        .assert()
+        .success();
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
@@ -1406,7 +1434,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     [CACHE_DIR]/builds-v0/[TMP]/python
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     Ok(())
