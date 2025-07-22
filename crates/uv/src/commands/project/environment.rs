@@ -78,6 +78,20 @@ impl EphemeralEnvironment {
         )?;
         Ok(())
     }
+
+    /// Returns the path to the environment's scripts directory.
+    pub(crate) fn scripts(&self) -> &Path {
+        self.0.scripts()
+    }
+
+    /// Returns the path to the environment's Python executable.
+    pub(crate) fn sys_executable(&self) -> &Path {
+        self.0.interpreter().sys_executable()
+    }
+
+    pub(crate) fn sys_prefix(&self) -> &Path {
+        self.0.interpreter().sys_prefix()
+    }
 }
 
 /// A [`PythonEnvironment`] stored in the cache.

@@ -1320,6 +1320,181 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
 }
 
 #[test]
+fn run_with_overlay_interpreter() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [project.scripts]
+        main = "foo:main"
+        "#
+    })?;
+
+    let foo = context.temp_dir.child("src").child("foo");
+    foo.create_dir_all()?;
+    let init_py = foo.child("__init__.py");
+    init_py.write_str(indoc! { r#"
+        import sys
+        import shutil
+        from pathlib import Path
+
+        def show_python():
+            print(sys.executable)
+
+        def copy_entrypoint():
+            base = Path(sys.executable)
+            shutil.copyfile(base.with_name("main").with_suffix(base.suffix), sys.argv[1])
+
+        def main():
+            show_python()
+            if len(sys.argv) > 1:
+                copy_entrypoint()
+       "#
+    })?;
+
+    // The project's entrypoint should be rewritten to use the overlay interpreter.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    #[cfg(unix)]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+            assert_snapshot!(
+                context.read("main"), @r##"
+            #![CACHE_DIR]/builds-v0/[TMP]/python
+            # -*- coding: utf-8 -*-
+            import sys
+            from foo import main
+            if __name__ == "__main__":
+                if sys.argv[0].endswith("-script.pyw"):
+                    sys.argv[0] = sys.argv[0][:-11]
+                elif sys.argv[0].endswith(".exe"):
+                    sys.argv[0] = sys.argv[0][:-4]
+                sys.exit(main())
+            "##
+            );
+        }
+    );
+
+    // The package, its dependencies, and the overlay dependencies should be available.
+    context
+        .run()
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("python")
+        .arg("-c")
+        .arg("import foo; import anyio; import iniconfig")
+        .assert()
+        .success();
+
+    // When layering the project on top (via `--with`), the overlay interpreter also should be used.
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Switch to a relocatable virtual environment.
+    context.venv().arg("--relocatable").assert().success();
+
+    // The project's entrypoint should be rewritten to use the overlay interpreter.
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 1 package in [TIME]
+    ");
+
+    // The package, its dependencies, and the overlay dependencies should be available.
+    context
+        .run()
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("python")
+        .arg("-c")
+        .arg("import foo; import anyio; import iniconfig")
+        .assert()
+        .success();
+
+    #[cfg(unix)]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+            assert_snapshot!(
+                context.read("main"), @r##"
+            #![CACHE_DIR]/builds-v0/[TMP]/python
+            # -*- coding: utf-8 -*-
+            import sys
+            from foo import main
+            if __name__ == "__main__":
+                if sys.argv[0].endswith("-script.pyw"):
+                    sys.argv[0] = sys.argv[0][:-11]
+                elif sys.argv[0].endswith(".exe"):
+                    sys.argv[0] = sys.argv[0][:-4]
+                sys.exit(main())
+            "##
+            );
+        }
+    );
+
+    // When layering the project on top (via `--with`), the overlay interpreter also should be used.
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_with_build_constraints() -> Result<()> {
     let context = TestContext::new("3.9");
 
