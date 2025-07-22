@@ -1613,6 +1613,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1640,6 +1641,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -1707,6 +1709,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
       ├─▶ The build backend returned an error
@@ -1741,6 +1744,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -1785,12 +1789,11 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
             print("Missing `anyio` module", file=sys.stderr)
             sys.exit(1)
         
-        if not anyio.__file__.startswith("{0}"):
-            print("Found anyio at", anyio.__file__, file=sys.stderr)
-            print("Expected {0}", file=sys.stderr)
+        # Check that we got the local version of anyio by checking for the marker
+        if not hasattr(anyio, 'LOCAL_ANYIO_MARKER'):
+            print("Found system anyio instead of local anyio", file=sys.stderr)
             sys.exit(1)
-    "#, anyio_local.display()
-    })?;
+    "#})?;
     child.child("src/child/__init__.py").touch()?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1811,27 +1814,30 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
         anyio_local = anyio_local.portable_display(),
     })?;
 
-    // Running `uv sync` should fail due to the unapplied source
+    // Running `uv sync` should succeed, as `anyio` is provided as a source
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
-
-          [stderr]
-          Found anyio at [CACHE_DIR]/builds-v0/[TMP]/__init__.py
-          Expected [WORKSPACE]/scripts/packages/anyio_local
-
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `child` was included because `project` (v0.1.0) depends on `child`
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    // We also don't apply sources from the child
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+
+    // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
     let child_pyproject_toml = child.child("pyproject.toml");
@@ -1850,6 +1856,40 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
         anyio = {{ path = "{}" }}
     "#, anyio_local.display()
     })?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(&formatdoc! {r#"
+        import sys
+
+        from hatchling.build import *
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+        
+        # Check that we got the local version of anyio by checking for the marker
+        if not hasattr(anyio, 'LOCAL_ANYIO_MARKER'):
+            print("Found system anyio instead of local anyio", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child"]
+
+            [tool.uv.sources]
+            child = { path = "child" }
+
+            [tool.uv.extra-build-dependencies]
+            child = ["anyio"]
+        "#,
+    })?;
 
     // Running `uv sync` should fail due to the unapplied source
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
@@ -1858,14 +1898,14 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Found anyio at [CACHE_DIR]/builds-v0/[TMP]/__init__.py
-          Expected [WORKSPACE]/scripts/packages/anyio_local
+          Found system anyio instead of local anyio
 
           hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `project` (v0.1.0) depends on `child`

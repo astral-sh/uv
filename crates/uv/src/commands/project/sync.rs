@@ -18,13 +18,14 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, IndexLocations, Requirement, Resolution, ResolvedDist,
+    SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
-use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Installable, Lock};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
@@ -32,7 +33,10 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache,
+    pyproject::ExtraBuildDependencies,
+};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
@@ -543,6 +547,61 @@ impl Deref for SyncEnvironment {
     }
 }
 
+/// Lower extra build dependencies using workspace sources.
+///
+/// This ensures that extra build dependencies respect source configurations
+/// from the project's `tool.uv.sources` table.
+#[allow(clippy::result_large_err)]
+fn lower_extra_build_dependencies(
+    extra_build_dependencies: &ExtraBuildDependencies,
+    workspace: &Workspace,
+    index_locations: &IndexLocations,
+) -> Result<ExtraBuildDependencies, ProjectError> {
+    use std::collections::BTreeMap;
+    use uv_configuration::SourceStrategy;
+
+    let mut lowered_dependencies = BTreeMap::new();
+
+    for (package_name, requirements) in extra_build_dependencies {
+        // Use BuildRequires to lower the requirements
+        let metadata = uv_distribution::BuildRequires::from_workspace(
+            uv_pypi_types::BuildRequires {
+                name: Some(package_name.clone()),
+                requires_dist: requirements.clone(),
+            },
+            workspace,
+            index_locations,
+            SourceStrategy::Enabled,
+        )?;
+
+        // Extract the lowered requirements and convert them
+        let lowered_requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> =
+            metadata.requires_dist.into_iter().map(Into::into).collect();
+        lowered_dependencies.insert(package_name.clone(), lowered_requirements);
+    }
+
+    Ok(ExtraBuildDependencies::from(lowered_dependencies))
+}
+
+/// Lower extra build dependencies using script sources.
+///
+/// This ensures that extra build dependencies respect source configurations
+/// from the script's metadata.
+fn lower_extra_build_dependencies_for_script(
+    extra_build_dependencies: &ExtraBuildDependencies,
+    _script: &Pep723Script,
+    _index_locations: &IndexLocations,
+) -> ExtraBuildDependencies {
+    // Scripts don't have extra build dependencies per se, but we still need to handle
+    // the case for consistency. Since scripts don't define extra build dependencies
+    // for other packages, we just return the dependencies as-is.
+    //
+    // If in the future scripts support defining extra build dependencies for packages
+    // they depend on, we would need to implement proper lowering here using the
+    // script's sources.
+    extra_build_dependencies.clone()
+}
+
 /// Sync a lockfile with an environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
@@ -590,6 +649,20 @@ pub(super) async fn do_sync(
             "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning."
         );
     }
+
+    // Lower extra build dependencies to apply source configurations
+    let extra_build_dependencies = match &target {
+        InstallTarget::Workspace { workspace, .. }
+        | InstallTarget::Project { workspace, .. }
+        | InstallTarget::NonProjectWorkspace { workspace, .. } => {
+            lower_extra_build_dependencies(extra_build_dependencies, workspace, index_locations)?
+        }
+        InstallTarget::Script { script, .. } => lower_extra_build_dependencies_for_script(
+            extra_build_dependencies,
+            script,
+            index_locations,
+        ),
+    };
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
@@ -719,7 +792,7 @@ pub(super) async fn do_sync(
         config_setting,
         config_settings_package,
         build_isolation,
-        extra_build_dependencies,
+        &extra_build_dependencies,
         link_mode,
         build_options,
         &build_hasher,
