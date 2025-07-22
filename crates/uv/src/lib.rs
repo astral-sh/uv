@@ -1058,6 +1058,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 script,
                 globals,
                 cli.top_level.no_config,
+                cli.top_level.global_args.project.is_some(),
                 filesystem,
                 cache,
                 printer,
@@ -1659,6 +1660,7 @@ async fn run_project(
     globals: GlobalSettings,
     // TODO(zanieb): Determine a better story for passing `no_config` in here
     no_config: bool,
+    explicit_project: bool,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
     printer: Printer,
@@ -2050,6 +2052,7 @@ async fn run_project(
                 args.output_format,
                 project_dir,
                 args.package,
+                explicit_project,
                 args.dry_run,
                 args.locked,
                 args.frozen,
