@@ -11398,7 +11398,7 @@ fn sync_config_settings_package() -> Result<()> {
 /// it, which breaks Docker volume mounts.
 #[test]
 #[cfg(unix)]
-fn sync_read_only_venv_directory() -> Result<()> {
+fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     let context = TestContext::new_with_versions(&["3.12"]);
@@ -11423,6 +11423,8 @@ fn sync_read_only_venv_directory() -> Result<()> {
     // Ensure the parent is read-only, to prevent deletion of the virtual environment
     fs_err::set_permissions(&project_dir, std::fs::Permissions::from_mode(0o555))?;
 
+    // Note we do _not_ fail to create the virtual environment — we fail later when writing to the
+    // project directory
     uv_snapshot!(context.filters(), context.sync().current_dir(&project_dir), @r"
     success: false
     exit_code: 2
@@ -11430,7 +11432,9 @@ fn sync_read_only_venv_directory() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: failed to remove directory `[TEMP_DIR]/project/.venv`: Permission denied (os error 13)
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    error: failed to write to file `[TEMP_DIR]/project/uv.lock`: Permission denied (os error 13)
     ");
 
     Ok(())
