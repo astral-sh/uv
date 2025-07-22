@@ -9,6 +9,7 @@ use anyhow::{Context, anyhow, bail};
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use thiserror::Error;
 use tokio::process::Command;
 use tracing::{debug, trace, warn};
 use url::Url;
@@ -1090,7 +1091,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     ) {
                         Ok(()) => {}
                         // If the entrypoint already exists, skip it.
-                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                        Err(CopyEntrypointError::Io(err))
+                            if err.kind() == std::io::ErrorKind::AlreadyExists =>
+                        {
                             trace!(
                                 "Skipping copy of entrypoint `{}`: already exists",
                                 &entry.path().display()
@@ -1726,6 +1729,15 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
         .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
 }
 
+#[derive(Error, Debug)]
+enum CopyEntrypointError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[cfg(windows)]
+    #[error(transparent)]
+    Trampoline(#[from] uv_trampoline_builder::Error),
+}
+
 /// Create a copy of the entrypoint at `source` at `target`, if it has a Python shebang, replacing
 /// the previous Python executable with a new one.
 ///
@@ -1738,7 +1750,7 @@ fn copy_entrypoint(
     target: &Path,
     previous_executable: &Path,
     python_executable: &Path,
-) -> Result<(), std::io::Error> {
+) -> Result<(), CopyEntrypointError> {
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
 
@@ -1787,7 +1799,7 @@ fn copy_entrypoint(
     target: &Path,
     _previous_executable: &Path,
     python_executable: &Path,
-) -> anyhow::Result<()> {
+) -> Result<(), CopyEntrypointError> {
     use uv_trampoline_builder::Launcher;
 
     let Some(launcher) = Launcher::try_from_path(source)? else {
@@ -1799,7 +1811,7 @@ fn copy_entrypoint(
         .create_new(true)
         .write(true)
         .open(target)?;
-    launcher.write_to_file(target)?;
+    launcher.write_to_file(&mut file)?;
 
     trace!("Updated entrypoint at {}", target.user_display());
 
