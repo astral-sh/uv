@@ -12186,7 +12186,7 @@ requires-python = ">3.8"
 fn prerelease_path_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an a package that requires a pre-release version of `flask`.
+    // Create a package that requires a pre-release version of `flask`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -12240,7 +12240,7 @@ requires-python = ">3.8"
 fn prerelease_editable_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an a package that requires a pre-release version of `flask`.r
+    // Create a package that requires a pre-release version of `flask`.r
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
