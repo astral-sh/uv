@@ -1754,12 +1754,34 @@ fn copy_entrypoint(
     previous_executable: &Path,
     python_executable: &Path,
 ) -> Result<(), CopyEntrypointError> {
-    use std::io::Write;
+    use std::io::{Seek, Write};
     use std::os::unix::fs::PermissionsExt;
 
     use fs_err::os::unix::fs::OpenOptionsExt;
 
-    let contents = fs_err::read_to_string(source)?;
+    let mut file = fs_err::File::open(source)?;
+    let mut buffer = [0u8; 2];
+    if file.read_exact(&mut buffer).is_err() {
+        // File is too small to have a shebang
+        trace!(
+            "Skipping copy of entrypoint `{}`: file is too small to contain a shebang",
+            source.user_display()
+        );
+        return Ok(());
+    }
+
+    // Check if it starts with `#!` to avoid reading binary files and such into memory
+    if &buffer != b"#!" {
+        trace!(
+            "Skipping copy of entrypoint `{}`: does not start with #!",
+            source.user_display()
+        );
+        return Ok(());
+    }
+
+    let mut contents = String::new();
+    file.seek(std::io::SeekFrom::Start(0))?;
+    file.read_to_string(&mut contents)?;
 
     let Some(contents) = contents
         // Check for a relative path or relocatable shebang
