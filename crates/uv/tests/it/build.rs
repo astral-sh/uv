@@ -1754,13 +1754,14 @@ fn build_with_symlink() -> Result<()> {
             build-backend = "hatchling.build"
     "#})?;
     fs_err::os::unix::fs::symlink(
-        context.temp_dir.child("pyproject.toml.real"),
+        "pyproject.toml.real",
         context.temp_dir.child("pyproject.toml"),
     )?;
     context
         .temp_dir
         .child("src/softlinked/__init__.py")
         .touch()?;
+    fs_err::remove_dir_all(&context.venv)?;
     uv_snapshot!(context.filters(), context.build(), @r###"
     success: true
     exit_code: 0
@@ -1799,6 +1800,7 @@ fn build_with_hardlink() -> Result<()> {
         .temp_dir
         .child("src/hardlinked/__init__.py")
         .touch()?;
+    fs_err::remove_dir_all(&context.venv)?;
     uv_snapshot!(context.filters(), context.build(), @r###"
     success: true
     exit_code: 0
