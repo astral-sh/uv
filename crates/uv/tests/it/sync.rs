@@ -4767,6 +4767,73 @@ fn sync_custom_environment_path() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn broken_venv_removal() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
+
+    context.init().arg("-p").arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.13").env_remove(EnvVars::VIRTUAL_ENV), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // Check that we're still recognizing the venv as such after a botched deletion.
+
+    // Create a directory that's unreadable, erroring on trying to delete its children.
+    // This relies on our implementation listing directory entries before deleting them — which is a
+    // bit of a hack but accomplishes the goal here.
+    let unreadable2 = context.temp_dir.child(".venv/z2.txt");
+    fs_err::create_dir(&unreadable2)?;
+    let perms = std::fs::Permissions::from_mode(000);
+    fs_err::set_permissions(&unreadable2, perms)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12").env_remove(EnvVars::VIRTUAL_ENV), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12").env_remove(EnvVars::VIRTUAL_ENV), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
+    ");
+    fs_err::remove_dir(unreadable2)?;
+
+    // Check that we're still failing if the venv doesn't look like one anymore.
+
+    context.venv().arg("--clear").assert().success();
+    fs_err::remove_file(context.temp_dir.join(".venv/pyvenv.cfg"))?;
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12").env_remove(EnvVars::VIRTUAL_ENV), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_active_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
