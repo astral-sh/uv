@@ -596,7 +596,11 @@ pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
         }
     }
 
-    fs::remove_file(location.join("pyvenv.cfg"))?;
+    match fs::remove_file(location.join("pyvenv.cfg")) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
     fs::remove_dir_all(location)?;
 
     Ok(())
