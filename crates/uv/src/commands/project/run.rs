@@ -1781,7 +1781,19 @@ fn copy_entrypoint(
 
     let mut contents = String::new();
     file.seek(std::io::SeekFrom::Start(0))?;
-    file.read_to_string(&mut contents)?;
+    match file.read_to_string(&mut contents) {
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::InvalidData => {
+            // If the file is not valid UTF-8, we skip it in case it was a binary file with `#!` at
+            // the start (which seems pretty niche, but being defensive here seems safe)
+            trace!(
+                "Skipping copy of entrypoint `{}`: is not valid UTF-8",
+                source.user_display()
+            );
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     let Some(contents) = contents
         // Check for a relative path or relocatable shebang
