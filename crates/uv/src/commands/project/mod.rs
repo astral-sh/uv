@@ -43,6 +43,7 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
@@ -1373,7 +1374,7 @@ impl ProjectEnvironment {
 
                 // Remove the existing virtual environment if it doesn't meet the requirements.
                 if replace {
-                    match fs_err::remove_dir_all(&root) {
+                    match remove_virtualenv(&root) {
                         Ok(()) => {
                             writeln!(
                                 printer.stderr(),
@@ -1381,8 +1382,9 @@ impl ProjectEnvironment {
                                 root.user_display().cyan()
                             )?;
                         }
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(e) => return Err(e.into()),
+                        Err(uv_virtualenv::Error::Io(err))
+                            if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(err.into()),
                     }
                 }
 
