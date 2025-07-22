@@ -1757,6 +1757,8 @@ fn copy_entrypoint(
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
 
+    use fs_err::os::unix::fs::OpenOptionsExt;
+
     let contents = fs_err::read_to_string(source)?;
 
     let Some(contents) = contents
@@ -1779,15 +1781,13 @@ fn copy_entrypoint(
     };
 
     let contents = format!("#!{}\n{}", python_executable.display(), contents);
+    let mode = fs_err::metadata(source)?.permissions().mode();
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
         .write(true)
+        .mode(mode)
         .open(target)?;
     file.write_all(contents.as_bytes())?;
-
-    let mut perms = fs_err::metadata(target)?.permissions();
-    perms.set_mode(0o755);
-    fs_err::set_permissions(target, perms)?;
 
     trace!("Updated entrypoint at {}", target.user_display());
 
