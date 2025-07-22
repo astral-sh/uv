@@ -3,6 +3,30 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.2
+
+### Enhancements
+
+- Add derivation chains for dependency errors ([#14824](https://github.com/astral-sh/uv/pull/14824))
+
+### Configuration
+
+- Add `UV_INIT_BUILD_BACKEND` ([#14821](https://github.com/astral-sh/uv/pull/14821))
+
+### Bug fixes
+
+- Avoid reading files in the environment bin that are not entrypoints ([#14830](https://github.com/astral-sh/uv/pull/14830))
+- Avoid removing empty directories when constructing virtual environments ([#14822](https://github.com/astral-sh/uv/pull/14822))
+- Preserve index URL priority order when writing to pyproject.toml ([#14831](https://github.com/astral-sh/uv/pull/14831))
+
+### Rust API
+
+- Expose `tls_built_in_root_certs` for client ([#14816](https://github.com/astral-sh/uv/pull/14816))
+
+### Documentation
+
+- Archive the 0.7.x changelog ([#14819](https://github.com/astral-sh/uv/pull/14819))
+
 ## 0.8.1
 
 ### Enhancements
