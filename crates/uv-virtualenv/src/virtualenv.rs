@@ -97,7 +97,8 @@ pub(crate) fn create(
                 }
                 OnExisting::Remove => {
                     debug!("Removing existing {name} due to `--clear`");
-                    remove_venv_directory(location)?;
+                    remove_virtualenv(location)?;
+                    fs::create_dir_all(location)?;
                 }
                 OnExisting::Fail
                     if location
@@ -110,7 +111,8 @@ pub(crate) fn create(
                     match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
-                            remove_venv_directory(location)?;
+                            remove_virtualenv(location)?;
+                            fs::create_dir_all(location)?;
                         }
                         Some(false) => {
                             let hint = format!(
@@ -566,9 +568,10 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
     }
 }
 
-fn remove_venv_directory(location: &Path) -> Result<(), Error> {
-    // On Windows, if the current executable is in the directory, guard against
-    // self-deletion.
+/// Perform a safe removal of a virtual environment.
+pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
+    // On Windows, if the current executable is in the directory, defer self-deletion since Windows
+    // won't let you unlink a running executable.
     #[cfg(windows)]
     if let Ok(itself) = std::env::current_exe() {
         let target = std::path::absolute(location)?;
@@ -578,8 +581,23 @@ fn remove_venv_directory(location: &Path) -> Result<(), Error> {
         }
     }
 
+    // We defer removal of the `pyvenv.cfg` until the end, so if we fail to remove the environment,
+    // uv can still identify it as a Python virtual environment that can be deleted.
+    for entry in fs::read_dir(location)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path == location.join("pyvenv.cfg") {
+            continue;
+        }
+        if path.is_dir() {
+            fs::remove_dir_all(&path)?;
+        } else {
+            fs::remove_file(&path)?;
+        }
+    }
+
+    fs::remove_file(location.join("pyvenv.cfg"))?;
     fs::remove_dir_all(location)?;
-    fs::create_dir_all(location)?;
 
     Ok(())
 }
