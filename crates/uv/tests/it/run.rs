@@ -1343,7 +1343,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     let foo = context.temp_dir.child("src").child("foo");
     foo.create_dir_all()?;
     let init_py = foo.child("__init__.py");
-    init_py.write_str(indoc! { r"
+    init_py.write_str(indoc! { r#"
         import sys
         import shutil
         from pathlib import Path
@@ -1352,13 +1352,14 @@ fn run_with_overlay_interpreter() -> Result<()> {
             print(sys.executable)
 
         def copy_entrypoint():
-            shutil.copyfile(Path(sys.executable).parent / 'main', sys.argv[1])
+            base = Path(sys.executable)
+            shutil.copyfile(base.with_name("main").with_suffix(base.suffix), sys.argv[1])
 
         def main():
             show_python()
             if len(sys.argv) > 1:
                 copy_entrypoint()
-       "
+       "#
     })?;
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
