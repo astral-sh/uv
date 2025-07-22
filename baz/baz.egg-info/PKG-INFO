@@ -1,7 +1,0 @@
-Metadata-Version: 2.4
-Name: baz
-Version: 0.1.0
-Summary: Add your description here
-Requires-Python: >=3.13.2
-Description-Content-Type: text/markdown
-Requires-Dist: foo

@@ -10,7 +10,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_resolver::{SentinelRange};
+use uv_resolver::SentinelRange;
 
 use crate::commands::pip;
 
@@ -83,21 +83,6 @@ impl OperationDiagnostic {
                 }
                 None
             }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
-                                                error,
-                                                name,
-                                                version,
-                                                chain,
-                                            )) => {
-                derived_error(
-                    error,
-                    &name,
-                    &version,
-                    &chain,
-                    self.hint.clone(),
-                );
-                None
-            }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
                 kind,
                 dist,
@@ -105,6 +90,15 @@ impl OperationDiagnostic {
                 err,
             )) => {
                 requested_dist_error(kind, dist, &chain, err, self.hint);
+                None
+            }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
+                error,
+                name,
+                version,
+                chain,
+            )) => {
+                dependencies_error(error, &name, &version, &chain, self.hint.clone());
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
@@ -247,8 +241,8 @@ pub(crate) fn requested_dist_error(
     anstream::eprint!("{report:?}");
 }
 
-/// Render a requested distribution failure (read, download or build) with a help message.
-pub(crate) fn derived_error(
+/// Render an error in fetching a package's dependencies.
+pub(crate) fn dependencies_error(
     error: Box<uv_resolver::ResolveError>,
     name: &PackageName,
     version: &Version,
@@ -286,7 +280,6 @@ pub(crate) fn derived_error(
                 }
             })
     });
-    // let source = error.source();
     let report = miette::Report::new(Diagnostic {
         name: name.clone(),
         version: version.clone(),

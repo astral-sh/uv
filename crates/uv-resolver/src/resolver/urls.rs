@@ -155,7 +155,6 @@ impl Urls {
         parsed_url: &'a ParsedUrl,
     ) -> Result<&'a VerbatimParsedUrl, ResolveError> {
         let Some(expected) = self.get_regular(package_name) else {
-            // STOPSHIP(charlie): Add derivation chain.
             return Err(ResolveError::DisallowedUrl {
                 name: package_name.clone(),
                 url: verbatim_url.to_string(),
