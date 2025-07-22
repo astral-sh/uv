@@ -28811,8 +28811,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -28822,8 +28821,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[tool.uv.index]]
         name = "pypi-proxy"
         url = "https://pypi-proxy.fly.dev/simple/"
-        "#,
-    )?;
+    "#})?;
 
     let no_trailing_slash_url = "https://pypi-proxy.fly.dev/simple";
 
@@ -28840,6 +28838,28 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
      + idna==3.6
      + sniffio==1.3.1
     ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+        ]
+
+        [[tool.uv.index]]
+        name = "pypi-proxy"
+        url = "https://pypi-proxy.fly.dev/simple"
+        "#
+        );
+    });
 
     let lock = context.read("uv.lock");
 
@@ -28902,13 +28922,12 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
