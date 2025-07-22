@@ -95,17 +95,16 @@ pub(crate) fn create(
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
+                _ if location
+                    .read_dir()
+                    .is_ok_and(|mut dir| dir.next().is_none()) =>
+                {
+                    debug!("Ignoring empty directory");
+                }
                 OnExisting::Remove => {
                     debug!("Removing existing {name} due to `--clear`");
                     remove_virtualenv(location)?;
                     fs::create_dir_all(location)?;
-                }
-                OnExisting::Fail
-                    if location
-                        .read_dir()
-                        .is_ok_and(|mut dir| dir.next().is_none()) =>
-                {
-                    debug!("Ignoring empty directory");
                 }
                 OnExisting::Fail => {
                     match confirm_clear(location, name)? {
