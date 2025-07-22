@@ -60,14 +60,14 @@ fn locked() -> Result<()> {
     )?;
 
     // Running with `--locked` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
-    ");
+    "###);
 
     // Lock the initial requirements.
     context.lock().assert().success();
@@ -86,7 +86,7 @@ fn locked() -> Result<()> {
     )?;
 
     // Running with `--locked` should error.
-    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -94,7 +94,7 @@ fn locked() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    ");
+    "###);
 
     let updated = context.read("uv.lock");
 
@@ -120,14 +120,14 @@ fn frozen() -> Result<()> {
     )?;
 
     // Running with `--frozen` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
-    ");
+    "###);
 
     context.lock().assert().success();
 
@@ -422,7 +422,7 @@ fn sync_json() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--locked")
-        .arg("--output-format").arg("json"), @r"
+        .arg("--output-format").arg("json"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -430,7 +430,7 @@ fn sync_json() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    ");
+    "###);
 
     // Test that JSON output is shown even with --quiet flag
     uv_snapshot!(context.filters(), context.sync()
@@ -932,7 +932,7 @@ fn check() -> Result<()> {
     )?;
 
     // Running `uv sync --check` should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -945,7 +945,7 @@ fn check() -> Result<()> {
     Would install 1 package
      + iniconfig==2.0.0
     The environment is outdated; run `uv sync` to update the environment
-    ");
+    "###);
 
     // Sync the environment.
     uv_snapshot!(context.filters(), context.sync(), @r"
@@ -1753,7 +1753,7 @@ fn sync_environment() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1761,7 +1761,7 @@ fn sync_environment() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The current Python platform is not compatible with the lockfile's supported environments: `python_full_version < '3.11'`
-    ");
+    "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -4767,73 +4767,6 @@ fn sync_custom_environment_path() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
-#[test]
-fn broken_venv_removal() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
-
-    context.init().arg("-p").arg("3.12").assert().success();
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.13").env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
-    Creating virtual environment at: .venv
-    Resolved 1 package in [TIME]
-    Audited in [TIME]
-    ");
-
-    // Check that we're still recognizing the venv as such after a botched deletion.
-
-    // Create a directory that's unreadable, erroring on trying to delete its children.
-    // This relies on our implementation listing directory entries before deleting them — which is a
-    // bit of a hack but accomplishes the goal here.
-    let unreadable2 = context.temp_dir.child(".venv/z2.txt");
-    fs_err::create_dir(&unreadable2)?;
-    let perms = std::fs::Permissions::from_mode(000);
-    fs_err::set_permissions(&unreadable2, perms)?;
-
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12").env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
-    ");
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12").env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
-    ");
-    fs_err::remove_dir(unreadable2)?;
-
-    // Check that we're still failing if the venv doesn't look like one anymore.
-
-    context.venv().arg("--clear").assert().success();
-    fs_err::remove_file(context.temp_dir.join(".venv/pyvenv.cfg"))?;
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12").env_remove(EnvVars::VIRTUAL_ENV), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Audited in [TIME]
-    ");
-
-    Ok(())
-}
-
 #[test]
 fn sync_active_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
@@ -4852,7 +4785,7 @@ fn sync_active_project_environment() -> Result<()> {
     )?;
 
     // Running `uv sync` with `VIRTUAL_ENV` should warn
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4865,7 +4798,7 @@ fn sync_active_project_environment() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    ");
+    "###);
 
     context
         .temp_dir
@@ -6852,16 +6785,21 @@ fn sync_invalid_environment() -> Result<()> {
         ");
     }
 
-    // But if the Python executable is missing entirely we should also fail
+    // If the Python executable is missing entirely, we'll delete and use it
     fs_err::remove_dir_all(&bin)?;
-    uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: false
-    exit_code: 2
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
-    "###);
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
 
     // But if it's not a virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
@@ -6894,6 +6832,17 @@ fn sync_invalid_environment() -> Result<()> {
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
     "###);
 
+    // Even if there's no Python executable
+    fs_err::remove_dir_all(&bin)?;
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
+    ");
+
     context
         .temp_dir
         .child(".venv")
@@ -6904,6 +6853,74 @@ fn sync_invalid_environment() -> Result<()> {
         .child(".venv")
         .child("file")
         .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_partial_environment_delete() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
+
+    context.init().arg("-p").arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // Create a directory that's unreadable, erroring on trying to delete its children.
+    // This relies on our implementation listing directory entries before deleting them — which is a
+    // bit of a hack but accomplishes the goal here.
+    let unreadable2 = context.temp_dir.child(".venv/z2.txt");
+    fs_err::create_dir(&unreadable2)?;
+    let perms = std::fs::Permissions::from_mode(0o000);
+    fs_err::set_permissions(&unreadable2, perms)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
+    ");
+
+    // Remove the unreadable directory
+    fs_err::remove_dir(unreadable2)?;
+
+    // We should be able to remove the venv now
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
 
     Ok(())
 }
