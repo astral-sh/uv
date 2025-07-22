@@ -1687,8 +1687,6 @@ fn version_get_fallback_missing_strict() -> Result<()> {
     Ok(())
 }
 
-
-
 /// Should error with hint if pyproject.toml is missing in normal mode
 #[test]
 fn version_get_missing_with_hint() -> Result<()> {

@@ -345,7 +345,11 @@ fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::
 /// Find the pyproject.toml we're modifying
 ///
 /// Note that `uv version` never needs to support PEP 723 scripts, as those are unversioned.
-async fn find_target(project_dir: &Path, package: Option<&PackageName>, explicit_project: bool) -> Result<VirtualProject> {
+async fn find_target(
+    project_dir: &Path,
+    package: Option<&PackageName>,
+    explicit_project: bool,
+) -> Result<VirtualProject> {
     // Find the project in the workspace.
     // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
