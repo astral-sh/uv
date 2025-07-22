@@ -302,7 +302,7 @@ uv init [OPTIONS] [PATH]
 <p>Disables creating extra files like <code>README.md</code>, the <code>src/</code> tree, <code>.python-version</code> files, etc.</p>
 </dd><dt id="uv-init--build-backend"><a href="#uv-init--build-backend"><code>--build-backend</code></a> <i>build-backend</i></dt><dd><p>Initialize a build-backend of choice for the project.</p>
 <p>Implicitly sets <code>--package</code>.</p>
-<p>Possible values:</p>
+<p>May also be set with the <code>UV_INIT_BUILD_BACKEND</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>hatch</code>:  Use <a href="https://pypi.org/project/hatchling">hatchling</a> as the project build backend</li>
 <li><code>flit</code>:  Use <a href="https://pypi.org/project/flit-core">flit-core</a> as the project build backend</li>
