@@ -940,13 +940,19 @@ impl ProjectInterpreter {
                         ));
                     }
                     InvalidEnvironmentKind::MissingExecutable(_) => {
+                        // If it's not an empty directory
                         if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
-                            return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                root,
-                                "it is not a valid Python environment (no Python executable was found)"
-                                    .to_string(),
-                            ));
+                            // ... and there's no `pyvenv.cfg`
+                            if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
+                                // ... then it's not a valid Python environment
+                                return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                    root,
+                                    "it is not a valid Python environment (no Python executable was found)"
+                                        .to_string(),
+                                ));
+                            }
                         }
+                        // Otherwise, we'll delete it
                     }
                     // If the environment is an empty directory, it's fine to use
                     InvalidEnvironmentKind::Empty => {}
