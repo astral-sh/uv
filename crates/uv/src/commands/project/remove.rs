@@ -357,6 +357,7 @@ pub(crate) async fn remove(
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Exact,
+        None,
         (&settings).into(),
         &network_settings,
         &state,

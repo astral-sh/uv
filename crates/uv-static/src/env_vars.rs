@@ -154,9 +154,16 @@ impl EnvVars {
     /// `--no-python-downloads` option. Whether uv should allow Python downloads.
     pub const UV_PYTHON_DOWNLOADS: &'static str = "UV_PYTHON_DOWNLOADS";
 
+    /// Overrides the environment-determined libc on linux systems when filling in the current platform
+    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
+    pub const UV_LIBC: &'static str = "UV_LIBC";
+
     /// Equivalent to the `--compile-bytecode` command-line argument. If set, uv
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
+
+    /// Timeout (in seconds) for bytecode compilation.
+    pub const UV_COMPILE_BYTECODE_TIMEOUT: &'static str = "UV_COMPILE_BYTECODE_TIMEOUT";
 
     /// Equivalent to the `--no-editable` command-line argument. If set, uv
     /// installs any editable dependencies, including the project and any workspace members, as
@@ -262,6 +269,12 @@ impl EnvVars {
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 
+    /// Whether to install the Python executable into the `UV_PYTHON_BIN_DIR` directory.
+    pub const UV_PYTHON_INSTALL_BIN: &'static str = "UV_PYTHON_INSTALL_BIN";
+
+    /// Whether to install the Python executable into the Windows registry.
+    pub const UV_PYTHON_INSTALL_REGISTRY: &'static str = "UV_PYTHON_INSTALL_REGISTRY";
+
     /// Managed Python installations information is hardcoded in the `uv` binary.
     ///
     /// This variable can be set to a URL pointing to JSON to use as a list for Python installations.
@@ -291,6 +304,10 @@ impl EnvVars {
     /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
+
+    /// Equivalent to the `--clear` command-line argument. If set, uv will remove any
+    /// existing files or directories at the target path.
+    pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
 
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
     /// created by `uv venv`.
@@ -359,6 +376,14 @@ impl EnvVars {
     #[attr_hidden]
     pub const UV_INTERNAL__SHOW_DERIVATION_TREE: &'static str = "UV_INTERNAL__SHOW_DERIVATION_TREE";
 
+    /// Used to set a temporary directory for some tests.
+    #[attr_hidden]
+    pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
+
+    /// Used to force treating an interpreter as "managed" during tests.
+    #[attr_hidden]
+    pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
+
     /// Path to system-level configuration directory on Unix systems.
     pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";
 
@@ -401,6 +426,9 @@ impl EnvVars {
 
     /// Timeout (in seconds) for HTTP requests. (default: 30 s)
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
+
+    /// The number of retries for HTTP requests. (default: 3)
+    pub const UV_HTTP_RETRIES: &'static str = "UV_HTTP_RETRIES";
 
     /// Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
     pub const UV_REQUEST_TIMEOUT: &'static str = "UV_REQUEST_TIMEOUT";
@@ -659,6 +687,9 @@ impl EnvVars {
     #[attr_hidden]
     pub const UV_TEST_VENDOR_LINKS_URL: &'static str = "UV_TEST_VENDOR_LINKS_URL";
 
+    /// Used to disable delay for HTTP retries in tests.
+    pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
+
     /// Used to set an index url for tests.
     #[attr_hidden]
     pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
@@ -734,4 +765,11 @@ impl EnvVars {
 
     /// Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
     pub const UV_NO_GITHUB_FAST_PATH: &'static str = "UV_NO_GITHUB_FAST_PATH";
+
+    /// Authentication token for Hugging Face requests. When set, uv will use this token
+    /// when making requests to `https://huggingface.co/` and any subdomains.
+    pub const HF_TOKEN: &'static str = "HF_TOKEN";
+
+    /// Disable Hugging Face authentication, even if `HF_TOKEN` is set.
+    pub const UV_NO_HF_TOKEN: &'static str = "UV_NO_HF_TOKEN";
 }

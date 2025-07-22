@@ -58,6 +58,49 @@ impl VerbatimUrl {
         })
     }
 
+    /// Convert a [`VerbatimUrl`] from a path or a URL.
+    ///
+    /// If no root directory is provided, relative paths are resolved against the current working
+    /// directory.
+    #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
+    pub fn from_url_or_path(
+        input: &str,
+        root_dir: Option<&Path>,
+    ) -> Result<Self, VerbatimUrlError> {
+        let url = match split_scheme(input) {
+            Some((scheme, ..)) => {
+                match Scheme::parse(scheme) {
+                    Some(_) => {
+                        // Ex) `https://pypi.org/simple`
+                        Self::parse_url(input)?
+                    }
+                    None => {
+                        // Ex) `C:\Users\user\index`
+                        if let Some(root_dir) = root_dir {
+                            Self::from_path(input, root_dir)?
+                        } else {
+                            let absolute_path = std::path::absolute(input).map_err(|err| {
+                                VerbatimUrlError::Absolute(input.to_string(), err)
+                            })?;
+                            Self::from_absolute_path(absolute_path)?
+                        }
+                    }
+                }
+            }
+            None => {
+                // Ex) `/Users/user/index`
+                if let Some(root_dir) = root_dir {
+                    Self::from_path(input, root_dir)?
+                } else {
+                    let absolute_path = std::path::absolute(input)
+                        .map_err(|err| VerbatimUrlError::Absolute(input.to_string(), err))?;
+                    Self::from_absolute_path(absolute_path)?
+                }
+            }
+        };
+        Ok(url.with_given(input))
+    }
+
     /// Parse a URL from an absolute or relative path.
     #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
     pub fn from_path(
@@ -361,6 +404,10 @@ pub enum VerbatimUrlError {
     /// Received a path that could not be normalized.
     #[error("path could not be normalized: {0}")]
     Normalization(PathBuf, #[source] std::io::Error),
+
+    /// Received a path that could not be converted to an absolute path.
+    #[error("path could not be converted to an absolute path: {0}")]
+    Absolute(String, #[source] std::io::Error),
 
     /// Received a path that could not be normalized.
     #[cfg(not(feature = "non-pep508-extensions"))]

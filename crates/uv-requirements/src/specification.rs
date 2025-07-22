@@ -43,7 +43,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, Simplified};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::PyProjectToml;
@@ -215,7 +215,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
-        groups: BTreeMap<PathBuf, Vec<GroupName>>,
+        groups: Option<&GroupsSpecification>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
@@ -250,10 +250,13 @@ impl RequirementsSpecification {
 
         // If we have a `pylock.toml`, don't allow additional requirements, constraints, or
         // overrides.
-        if requirements
-            .iter()
-            .any(|source| matches!(source, RequirementsSource::PylockToml(..)))
-        {
+        if let Some(pylock_toml) = requirements.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
             if requirements
                 .iter()
                 .any(|source| !matches!(source, RequirementsSource::PylockToml(..)))
@@ -272,24 +275,55 @@ impl RequirementsSpecification {
                     "Cannot specify constraints with a `pylock.toml` file"
                 ));
             }
-            if !groups.is_empty() {
-                return Err(anyhow::anyhow!(
-                    "Cannot specify groups with a `pylock.toml` file"
-                ));
+
+            // If we have a `pylock.toml`, disallow specifying paths for groups; instead, require
+            // that all groups refer to the `pylock.toml` file.
+            if let Some(groups) = groups {
+                let mut names = Vec::new();
+                for group in &groups.groups {
+                    if group.path.is_some() {
+                        return Err(anyhow::anyhow!(
+                            "Cannot specify paths for groups with a `pylock.toml` file; all groups must refer to the `pylock.toml` file"
+                        ));
+                    }
+                    names.push(group.name.clone());
+                }
+
+                if !names.is_empty() {
+                    spec.groups.insert(
+                        pylock_toml.clone(),
+                        DependencyGroups::from_args(
+                            false,
+                            false,
+                            false,
+                            Vec::new(),
+                            Vec::new(),
+                            false,
+                            names,
+                            false,
+                        ),
+                    );
+                }
             }
-        }
+        } else if let Some(groups) = groups {
+            // pip `--group` flags specify their own sources, which we need to process here.
+            // First, we collect all groups by their path.
+            let mut groups_by_path = BTreeMap::new();
+            for group in &groups.groups {
+                // If there's no path provided, expect a pyproject.toml in the project-dir
+                // (Which is typically the current working directory, matching pip's behaviour)
+                let pyproject_path = group
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| groups.root.join("pyproject.toml"));
+                groups_by_path
+                    .entry(pyproject_path)
+                    .or_insert_with(Vec::new)
+                    .push(group.name.clone());
+            }
 
-        // Resolve sources into specifications so we know their `source_tree`.
-        let mut requirement_sources = Vec::new();
-        for source in requirements {
-            let source = Self::from_source(source, client_builder).await?;
-            requirement_sources.push(source);
-        }
-
-        // pip `--group` flags specify their own sources, which we need to process here
-        if !groups.is_empty() {
             let mut group_specs = BTreeMap::new();
-            for (path, groups) in groups {
+            for (path, groups) in groups_by_path {
                 let group_spec = DependencyGroups::from_args(
                     false,
                     false,
@@ -303,6 +337,13 @@ impl RequirementsSpecification {
                 group_specs.insert(path, group_spec);
             }
             spec.groups = group_specs;
+        }
+
+        // Resolve sources into specifications so we know their `source_tree`.
+        let mut requirement_sources = Vec::new();
+        for source in requirements {
+            let source = Self::from_source(source, client_builder).await?;
+            requirement_sources.push(source);
         }
 
         // Read all requirements, and keep track of all requirements _and_ constraints.
@@ -426,7 +467,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], BTreeMap::default(), client_builder).await
+        Self::from_sources(requirements, &[], &[], None, client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].
@@ -484,4 +525,13 @@ impl RequirementsSpecification {
     pub fn is_empty(&self) -> bool {
         self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
     }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct GroupsSpecification {
+    /// The path to the project root, relative to which the default `pyproject.toml` file is
+    /// located.
+    pub root: PathBuf,
+    /// The enabled groups.
+    pub groups: Vec<PipGroupName>,
 }

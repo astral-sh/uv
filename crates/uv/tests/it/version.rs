@@ -1437,8 +1437,8 @@ fn version_set_dynamic() -> Result<()> {
     Ok(())
 }
 
-// Should fallback to `uv --version` if this pyproject.toml isn't usable for whatever reason
-// (In this case, because tool.uv.managed = false)
+/// Previously would fallback to `uv --version` if this pyproject.toml isn't usable for whatever reason
+/// (In this case, because tool.uv.managed = false)
 #[test]
 fn version_get_fallback_unmanaged() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1456,13 +1456,12 @@ fn version_get_fallback_unmanaged() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.version(), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+    error: The project is marked as unmanaged: `[TEMP_DIR]/`
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1507,13 +1506,12 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.version()
         .arg("--short"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+    error: The project is marked as unmanaged: `[TEMP_DIR]/`
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1545,97 +1543,6 @@ fn git_version_info_expected() -> bool {
         .expect("grandparent of manifest dir missing")
         .join(".git");
     git_dir.exists()
-}
-
-// version_get_fallback with `--json`
-#[test]
-fn version_get_fallback_unmanaged_json() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "myapp"
-        version = "0.1.2"
-
-        [tool.uv]
-        managed = false
-        "#,
-    )?;
-
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (
-                r#"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
-                r#"version": "[VERSION]""#,
-            ),
-            (
-                r#"short_commit_hash": ".*""#,
-                r#"short_commit_hash": "[HASH]""#,
-            ),
-            (r#"commit_hash": ".*""#, r#"commit_hash": "[LONGHASH]""#),
-            (r#"commit_date": ".*""#, r#"commit_date": "[DATE]""#),
-            (r#"last_tag": (".*"|null)"#, r#"last_tag": "[TAG]""#),
-            (
-                r#"commits_since_last_tag": .*"#,
-                r#"commits_since_last_tag": [COUNT]"#,
-            ),
-        ])
-        .collect::<Vec<_>>();
-    if git_version_info_expected() {
-        uv_snapshot!(filters, context.version()
-          .arg("--output-format").arg("json"), @r#"
-      success: true
-      exit_code: 0
-      ----- stdout -----
-      {
-        "package_name": "uv",
-        "version": "[VERSION]",
-        "commit_info": {
-          "short_commit_hash": "[LONGHASH]",
-          "commit_hash": "[LONGHASH]",
-          "commit_date": "[DATE]",
-          "last_tag": "[TAG]",
-          "commits_since_last_tag": [COUNT]
-        }
-      }
-
-      ----- stderr -----
-      warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
-      "#);
-    } else {
-        uv_snapshot!(filters, context.version()
-          .arg("--output-format").arg("json"), @r#"
-      success: true
-      exit_code: 0
-      ----- stdout -----
-      {
-        "package_name": "uv",
-        "version": "[VERSION]",
-        "commit_info": null
-      }
-
-      ----- stderr -----
-      warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
-      "#);
-    }
-
-    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
-    assert_snapshot!(
-        pyproject,
-    @r#"
-    [project]
-    name = "myapp"
-    version = "0.1.2"
-
-    [tool.uv]
-    managed = false
-    "#
-    );
-    Ok(())
 }
 
 // Should error if this pyproject.toml isn't usable for whatever reason
@@ -2086,7 +1993,7 @@ fn version_set_workspace() -> Result<()> {
         );
     });
 
-    // Set the other child's version, refereshing the lock and sync
+    // Set the other child's version, refreshing the lock and sync
     let mut version_cmd = context.version();
     version_cmd
         .arg("--package")
@@ -2558,6 +2465,7 @@ fn version_set_evil_constraints() -> Result<()> {
 /// Bump the version with conflicting extras, to ensure we're activating the correct subset of
 /// extras during the resolve.
 #[test]
+#[cfg(feature = "pypi")]
 fn version_extras() -> Result<()> {
     let context = TestContext::new("3.12");
 

@@ -16,7 +16,7 @@ use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
     DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    PreviewMode, SourceStrategy,
+    PackageConfigSettings, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
@@ -197,6 +197,7 @@ async fn build_impl(
         fork_strategy: _,
         dependency_metadata,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
         exclude_newer,
@@ -207,6 +208,7 @@ async fn build_impl(
     } = settings;
 
     let client_builder = BaseClientBuilder::default()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -262,7 +264,7 @@ async fn build_impl(
             .get(package)
             .ok_or_else(|| anyhow::anyhow!("Package `{package}` not found in workspace"))?;
 
-        if !package.pyproject_toml().is_package() {
+        if !package.pyproject_toml().is_package(true) {
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
@@ -299,7 +301,7 @@ async fn build_impl(
         let packages: Vec<_> = workspace
             .packages()
             .values()
-            .filter(|package| package.pyproject_toml().is_package())
+            .filter(|package| package.pyproject_toml().is_package(true))
             .map(|package| AnnotatedSource {
                 source: Source::Directory(Cow::Borrowed(package.root())),
                 package: Some(package.project().name.clone()),
@@ -356,6 +358,7 @@ async fn build_impl(
             dependency_metadata,
             *link_mode,
             config_setting,
+            config_settings_package,
             preview,
         );
         async {
@@ -433,6 +436,7 @@ async fn build_package(
     dependency_metadata: &DependencyMetadata,
     link_mode: LinkMode,
     config_setting: &ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
     preview: PreviewMode,
 ) -> Result<Vec<BuildMessage>, Error> {
     let output_dir = if let Some(output_dir) = output_dir {
@@ -567,6 +571,7 @@ async fn build_package(
         state.clone(),
         index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
         link_mode,
         build_options,

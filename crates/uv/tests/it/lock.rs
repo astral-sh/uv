@@ -2841,13 +2841,13 @@ fn lock_conflicting_project_basic() -> Result<()> {
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     warning: Ignoring existing lockfile due to fork markers not covering the supported environments: `python_version < '0'` vs `python_full_version >= '3.12'`
     Resolved 3 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     // Install from the lockfile.
@@ -7049,15 +7049,15 @@ fn lock_invalid_hash() -> Result<()> {
         "#)?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
@@ -7594,12 +7594,12 @@ fn lock_exclusion() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "project", virtual = "../" }]
+        requires-dist = [{ name = "project", directory = "../" }]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "../" }
+        source = { directory = "../" }
         "#
         );
     });
@@ -8182,7 +8182,7 @@ fn lock_dev_transitive() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "baz", editable = "baz" },
-            { name = "foo", virtual = "../foo" },
+            { name = "foo", directory = "../foo" },
             { name = "iniconfig", specifier = ">1" },
         ]
 
@@ -8204,7 +8204,7 @@ fn lock_dev_transitive() -> Result<()> {
         [[package]]
         name = "foo"
         version = "0.1.0"
-        source = { virtual = "../foo" }
+        source = { directory = "../foo" }
 
         [package.metadata]
 
@@ -11335,7 +11335,7 @@ fn lock_sources_source_tree() -> Result<()> {
 }
 
 /// Lock a project in which a given dependency is requested from two different members, once as
-/// editable, and once as non-editable.
+/// editable, and once as non-editable. This should trigger a conflicting URL error.
 #[test]
 fn lock_editable() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -11475,86 +11475,16 @@ fn lock_editable() -> Result<()> {
         library = { path = "../../library", editable = true }
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    "###);
-
-    let lock = context.read("uv.lock");
-
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 2
-        requires-python = ">=3.12"
-
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [manifest]
-        members = [
-            "leaf",
-            "workspace",
-        ]
-
-        [[package]]
-        name = "leaf"
-        version = "0.1.0"
-        source = { editable = "packages/leaf" }
-        dependencies = [
-            { name = "library" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "library", editable = "library" }]
-
-        [[package]]
-        name = "library"
-        version = "0.1.0"
-        source = { editable = "library" }
-
-        [[package]]
-        name = "workspace"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "library" },
-        ]
-
-        [package.metadata]
-        requires-dist = [{ name = "library", directory = "library" }]
-        "#
-        );
-    });
-
-    // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    "###);
-
-    // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + library==0.1.0 (from file://[TEMP_DIR]/library)
-    "###);
+    error: Requirements contain conflicting URLs for package `library` in all marker environments:
+    - file://[TEMP_DIR]/library
+    - file://[TEMP_DIR]/library (editable)
+    ");
 
     Ok(())
 }
@@ -12202,6 +12132,95 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
     Ok(())
 }
 
+/// Checks the output of `uv lock --check` when there isn't a lock
+#[test]
+fn check_no_lock() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["sortedcollections"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    ");
+    Ok(())
+}
+
+/// Checks the output of `uv lock --check` when the lock is outdated
+#[test]
+fn check_outdated_lock() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["sortedcollections"]
+        "#,
+    )?;
+
+    // Generate the lock
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Check the --check returns fine
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Edit dependencies so the lock is invalid
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--check"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+    Ok(())
+}
+
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.
@@ -12434,10 +12453,6 @@ fn lock_remove_member() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["leaf"]
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-
         [tool.uv.workspace]
         members = ["leaf"]
 
@@ -12500,7 +12515,7 @@ fn lock_remove_member() -> Result<()> {
         [[package]]
         name = "leaf"
         version = "0.1.0"
-        source = { virtual = "leaf" }
+        source = { editable = "leaf" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12511,13 +12526,13 @@ fn lock_remove_member() -> Result<()> {
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { editable = "." }
+        source = { virtual = "." }
         dependencies = [
             { name = "leaf" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "leaf", virtual = "leaf" }]
+        requires-dist = [{ name = "leaf", editable = "leaf" }]
 
         [[package]]
         name = "sniffio"
@@ -12532,16 +12547,124 @@ fn lock_remove_member() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    // Remove the member.
+    // Remove the member as a dependency (retain it as a workspace member)
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { workspace = true }
+        "#,
+    )?;
+
+    // Re-run with `--locked`. This should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    // Re-run without `--locked`.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "leaf",
+            "project",
+        ]
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { editable = "leaf" }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = ">3" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#
+        );
+    });
+
+    // Remove the member entirely
     pyproject_toml.write_str(
         r#"
         [project]
@@ -12553,15 +12676,15 @@ fn lock_remove_member() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-run without `--locked`.
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -12608,7 +12731,7 @@ fn lock_remove_member() -> Result<()> {
 /// This test would fail if we didn't write the list of workspace members to the lockfile, since
 /// we wouldn't be able to determine that a new member was added.
 #[test]
-fn lock_add_member() -> Result<()> {
+fn lock_add_member_with_build_system() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create a workspace, but don't add the member.
@@ -12698,15 +12821,15 @@ fn lock_add_member() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-run with `--offline`. This should also fail, during the resolve phase.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
@@ -12803,6 +12926,339 @@ fn lock_add_member() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn lock_add_member_without_build_system() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace, but don't add the member.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    // Create a workspace member.
+    let leaf = context.temp_dir.child("leaf");
+    leaf.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "leaf"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>3"]
+        "#,
+    )?;
+
+    // Add the member to the workspace, but not as a dependency of the root.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv.workspace]
+        members = ["leaf"]
+        "#,
+    )?;
+
+    // Re-run with `--locked`. This should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    // Re-run with `--offline`. This should also fail, during the resolve phase.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
+          And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    "###);
+
+    // Re-run without `--locked`.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Added anyio v4.3.0
+    Added idna v3.6
+    Added leaf v0.1.0
+    Added sniffio v1.3.1
+    "###);
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "leaf",
+            "project",
+        ]
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { virtual = "leaf" }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = ">3" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#
+        );
+    });
+
+    // Add the member to the workspace, as a dependency of the root.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["leaf"]
+
+        [tool.uv.workspace]
+        members = ["leaf"]
+
+        [tool.uv.sources]
+        leaf = { workspace = true }
+        "#,
+    )?;
+
+    // Re-run with `--locked`. This should fail.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    // Re-run without `--locked`.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // It should change from a virtual to an editable source
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "leaf",
+            "project",
+        ]
+
+        [[package]]
+        name = "anyio"
+        version = "4.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "leaf"
+        version = "0.1.0"
+        source = { editable = "leaf" }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = ">3" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "leaf" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "leaf", editable = "leaf" }]
 
         [[package]]
         name = "sniffio"
@@ -12935,15 +13391,15 @@ fn lock_redundant_add_member() -> Result<()> {
 
     // Re-run with `--locked`. This will fail, though in theory it could succeed, since the current
     // _resolution_ satisfies the requirements, even if the inputs are not identical
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-run without `--locked`.
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -13133,15 +13589,15 @@ fn lock_new_constraints() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-run without `--locked`.
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -13342,16 +13798,16 @@ fn lock_remove_member_non_project() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-run without `--locked`.
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -13474,15 +13930,15 @@ fn lock_rename_project() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-run without `--locked`.
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -14021,7 +14477,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.1.0"
-        source = { virtual = "dependency" }
+        source = { directory = "dependency" }
         dependencies = [
             { name = "iniconfig", marker = "python_full_version >= '3.10'" },
         ]
@@ -14047,7 +14503,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "dependency", marker = "python_full_version >= '3.10'", virtual = "dependency" }]
+        requires-dist = [{ name = "dependency", marker = "python_full_version >= '3.10'", directory = "dependency" }]
         "#
         );
     });
@@ -14474,15 +14930,15 @@ fn lock_constrained_environment() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -15737,15 +16193,15 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     )?;
 
     // Re-run with `--locked`; this should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-lock the project.
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -15819,15 +16275,15 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     )?;
 
     // Re-run with `--locked`; this should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     // Re-lock the project.
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -16265,7 +16721,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Adding root workspace member: `[TEMP_DIR]/`
     DEBUG No Python version file found in workspace: [TEMP_DIR]/
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
-    DEBUG Checking for Python environment at `.venv`
+    DEBUG Checking for Python environment at: `.venv`
     DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
     DEBUG Using request timeout of [TIME]
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
@@ -16801,7 +17257,7 @@ fn lock_unique_named_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "example"
-        url = "https://example.com"
+        url = "https://astral.sh"
         "#,
     )?;
 
@@ -17543,10 +17999,10 @@ fn lock_implicit_virtual_project() -> Result<()> {
     Ok(())
 }
 
-/// Lock a project that has a path dependency that is implicitly virtual (by way of omitting
-/// `build-system`).
+/// Lock a project that has a path dependency that is implicitly non-virtual (despite
+/// omitting `build-system`).
 #[test]
-fn lock_implicit_virtual_path() -> Result<()> {
+fn lock_implicit_package_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -17613,7 +18069,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         [[package]]
         name = "child"
         version = "0.1.0"
-        source = { virtual = "child" }
+        source = { directory = "child" }
         dependencies = [
             { name = "iniconfig" },
         ]
@@ -17651,7 +18107,7 @@ fn lock_implicit_virtual_path() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "anyio", specifier = ">3" },
-            { name = "child", virtual = "child" },
+            { name = "child", directory = "child" },
         ]
 
         [[package]]
@@ -17687,20 +18143,21 @@ fn lock_implicit_virtual_path() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
 
-    // Install from the lockfile. The virtual project should _not_ be installed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    // Install from the lockfile. The path dependency should be installed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
      + anyio==4.3.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      + idna==3.6
      + iniconfig==2.0.0
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -18529,6 +18986,42 @@ fn lock_dependency_metadata() -> Result<()> {
     Removed sniffio v1.3.1
     "###);
 
+    // Update the static metadata.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+        requires_dist = ["typing-extensions"]
+        "#,
+    )?;
+
+    // The operation should warn.
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 9
+         |
+      11 |         requires_dist = ["typing-extensions"]
+         |         ^^^^^^^^^^^^^
+      unknown field `requires_dist`, expected one of `name`, `version`, `requires-dist`, `requires-python`, `provides-extras`
+
+    Resolved 4 packages in [TIME]
+    Added idna v3.6
+    Removed iniconfig v2.0.0
+    Added sniffio v1.3.1
+    "#);
+
     Ok(())
 }
 
@@ -18800,7 +19293,7 @@ fn lock_duplicate_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18810,17 +19303,16 @@ fn lock_duplicate_sources() -> Result<()> {
       TOML parse error at line 9, column 9
         |
       9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
-        |         ^
-      duplicate key `python-multipart` in table `tool.uv.sources`
+        |         ^^^^^^^^^^^^^^^^
+      duplicate key
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 9
       |
     9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
-      |         ^
-    duplicate key `python-multipart` in table `tool.uv.sources`
-
-    "###);
+      |         ^^^^^^^^^^^^^^^^
+    duplicate key
+    "#);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -23712,15 +24204,15 @@ fn lock_dynamic_to_static() -> Result<()> {
     )?;
 
     // Rerunning with `--locked` should fail, since the project is no longer dynamic.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -23843,15 +24335,15 @@ fn lock_static_to_dynamic() -> Result<()> {
         .write_str("__version__ = '0.1.0'")?;
 
     // Rerunning with `--locked` should fail, since the project is no longer static.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -23945,15 +24437,15 @@ fn lock_bump_static_version() -> Result<()> {
     )?;
 
     // Rerunning with `--locked` should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -25761,15 +26253,15 @@ fn lock_script() -> Result<()> {
     })?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     Ok(())
 }
@@ -28090,15 +28582,15 @@ fn lock_empty_extra() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. We expect this to fail, since we've added an extra.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -28126,15 +28618,15 @@ fn lock_empty_extra() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. We expect this to fail, since we've added an extra.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    "###);
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
@@ -28800,12 +29292,12 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -28891,12 +29383,12 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -28982,12 +29474,12 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -29173,12 +29665,12 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     // Re-run with `--locked`
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @r"

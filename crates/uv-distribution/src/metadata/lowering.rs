@@ -306,19 +306,22 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member.pyproject_toml().is_package() {
+                            } else if member
+                                .pyproject_toml()
+                                .is_package(!workspace.is_required_member(&requirement.name))
+                            {
                                 RequirementSource::Directory {
                                     install_path: install_path.into_boxed_path(),
                                     url,
-                                    editable: true,
-                                    r#virtual: false,
+                                    editable: Some(true),
+                                    r#virtual: Some(false),
                                 }
                             } else {
                                 RequirementSource::Directory {
                                     install_path: install_path.into_boxed_path(),
                                     url,
-                                    editable: false,
-                                    r#virtual: true,
+                                    editable: Some(false),
+                                    r#virtual: Some(true),
                                 }
                             };
                             (source, marker)
@@ -724,26 +727,31 @@ fn path_source(
             Ok(RequirementSource::Directory {
                 install_path: install_path.into_boxed_path(),
                 url,
-                editable: true,
-                r#virtual: false,
+                editable,
+                r#virtual: Some(false),
             })
         } else {
             // Determine whether the project is a package or virtual.
+            // If the `package` option is unset, check if `tool.uv.package` is set
+            // on the path source (otherwise, default to `true`).
             let is_package = package.unwrap_or_else(|| {
                 let pyproject_path = install_path.join("pyproject.toml");
                 fs_err::read_to_string(&pyproject_path)
                     .ok()
                     .and_then(|contents| PyProjectToml::from_string(contents).ok())
-                    .map(|pyproject_toml| pyproject_toml.is_package())
+                    // We don't require a build system for path dependencies
+                    .map(|pyproject_toml| pyproject_toml.is_package(false))
                     .unwrap_or(true)
             });
+
+            // If the project is not a package, treat it as a virtual dependency.
+            let r#virtual = !is_package;
 
             Ok(RequirementSource::Directory {
                 install_path: install_path.into_boxed_path(),
                 url,
-                editable: false,
-                // If a project is not a package, treat it as a virtual dependency.
-                r#virtual: !is_package,
+                editable: Some(false),
+                r#virtual: Some(r#virtual),
             })
         }
     } else {

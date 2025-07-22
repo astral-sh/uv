@@ -98,14 +98,6 @@ pub(crate) async fn refine_interpreter(
         return Ok(None);
     }
 
-    // If the user passed a `--python` request, and the refined interpreter is incompatible, we
-    // can't use it.
-    if let Some(python_request) = python_request {
-        if !python_request.satisfied(interpreter, cache) {
-            return Ok(None);
-        }
-    }
-
     // We want an interpreter that's as close to the required version as possible. If we choose the
     // "latest" Python, we risk choosing a version that lacks wheels for the tool's requirements
     // (assuming those requirements don't publish source distributions).
@@ -135,15 +127,15 @@ pub(crate) async fn refine_interpreter(
         Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
     };
 
-    let python_request = PythonRequest::Version(VersionRequest::Range(
+    let requires_python_request = PythonRequest::Version(VersionRequest::Range(
         VersionSpecifiers::from_iter([lower_bound, upper_bound]),
         PythonVariant::default(),
     ));
 
-    debug!("Refining interpreter with: {python_request}");
+    debug!("Refining interpreter with: {requires_python_request}");
 
     let interpreter = PythonInstallation::find_or_download(
-        Some(&python_request),
+        Some(&requires_python_request),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -157,6 +149,14 @@ pub(crate) async fn refine_interpreter(
     )
     .await?
     .into_interpreter();
+
+    // If the user passed a `--python` request, and the refined interpreter is incompatible, we
+    // can't use it.
+    if let Some(python_request) = python_request {
+        if !python_request.satisfied(&interpreter, cache) {
+            return Ok(None);
+        }
+    }
 
     Ok(Some(interpreter))
 }

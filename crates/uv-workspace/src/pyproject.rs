@@ -17,7 +17,8 @@ use std::str::FromStr;
 use glob::Pattern;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
+use serde::de::{IntoDeserializer, SeqAccess};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use uv_build_backend::BuildBackendSettings;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
@@ -66,14 +67,14 @@ pub struct PyProjectToml {
 
     /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    build_system: Option<serde::de::IgnoredAny>,
+    pub build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
-        let pyproject: toml_edit::ImDocument<_> =
-            toml_edit::ImDocument::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
+        let pyproject =
+            toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
         let pyproject = PyProjectToml::deserialize(pyproject.into_deserializer())
             .map_err(PyprojectTomlError::TomlSchema)?;
         Ok(PyProjectToml { raw, ..pyproject })
@@ -81,19 +82,22 @@ impl PyProjectToml {
 
     /// Returns `true` if the project should be considered a Python package, as opposed to a
     /// non-package ("virtual") project.
-    pub fn is_package(&self) -> bool {
+    pub fn is_package(&self, require_build_system: bool) -> bool {
         // If `tool.uv.package` is set, defer to that explicit setting.
-        if let Some(is_package) = self
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.package)
-        {
+        if let Some(is_package) = self.tool_uv_package() {
             return is_package;
         }
 
         // Otherwise, a project is assumed to be a package if `build-system` is present.
-        self.build_system.is_some()
+        self.build_system.is_some() || !require_build_system
+    }
+
+    /// Returns the value of `tool.uv.package` if set.
+    fn tool_uv_package(&self) -> Option<bool> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.package)
     }
 
     /// Returns `true` if the project uses a dynamic version.

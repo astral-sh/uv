@@ -115,6 +115,11 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
+    pub fn retries_from_env(mut self) -> anyhow::Result<Self> {
+        self.base_client_builder = self.base_client_builder.retries_from_env()?;
+        Ok(self)
+    }
+
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.base_client_builder = self.base_client_builder.native_tls(native_tls);
@@ -506,11 +511,17 @@ impl RegistryClient {
             format!("{package_name}.rkyv"),
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => CacheControl::from(
-                self.cache
-                    .freshness(&cache_entry, Some(package_name), None)
-                    .map_err(ErrorKind::Io)?,
-            ),
+            Connectivity::Online => {
+                if let Some(header) = self.index_urls.simple_api_cache_control_for(index) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.cache
+                            .freshness(&cache_entry, Some(package_name), None)
+                            .map_err(ErrorKind::Io)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -566,7 +577,7 @@ impl RegistryClient {
         package_name: &PackageName,
         url: &DisplaySafeUrl,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl,
+        cache_control: CacheControl<'_>,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let simple_request = self
             .uncached_client(url)
@@ -778,11 +789,17 @@ impl RegistryClient {
                 format!("{}.msgpack", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
-                Connectivity::Online => CacheControl::from(
-                    self.cache
-                        .freshness(&cache_entry, Some(&filename.name), None)
-                        .map_err(ErrorKind::Io)?,
-                ),
+                Connectivity::Online => {
+                    if let Some(header) = self.index_urls.artifact_cache_control_for(index) {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                }
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
@@ -848,11 +865,25 @@ impl RegistryClient {
             format!("{}.msgpack", filename.cache_key()),
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => CacheControl::from(
-                self.cache
-                    .freshness(&cache_entry, Some(&filename.name), None)
-                    .map_err(ErrorKind::Io)?,
-            ),
+            Connectivity::Online => {
+                if let Some(index) = index {
+                    if let Some(header) = self.index_urls.artifact_cache_control_for(index) {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                } else {
+                    CacheControl::from(
+                        self.cache
+                            .freshness(&cache_entry, Some(&filename.name), None)
+                            .map_err(ErrorKind::Io)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 

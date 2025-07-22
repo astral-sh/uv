@@ -127,6 +127,10 @@ impl OperationDiagnostic {
                 native_tls_hint(err);
                 None
             }
+            pip::operations::Error::OutdatedEnvironment => {
+                anstream::eprintln!("{}", err);
+                None
+            }
             err => Some(err),
         }
     }

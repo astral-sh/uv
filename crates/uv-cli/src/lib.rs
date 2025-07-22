@@ -10,8 +10,9 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ConfigSettingEntry, ConfigSettingPackageEntry, ExportFormat, IndexStrategy,
+    KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend, TargetTriple, TrustedHost,
+    TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
@@ -43,6 +44,15 @@ pub enum PythonListFormat {
     #[default]
     Text,
     /// JSON (for computers).
+    Json,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum SyncFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
     Json,
 }
 
@@ -1192,6 +1202,14 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
+    /// Install the specified dependency group from a `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pyproject.toml` in the working directory is used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
@@ -1205,14 +1223,6 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
-
-    /// Install the specified dependency group from a `pyproject.toml`.
-    ///
-    /// If no path is provided, the `pyproject.toml` in the working directory is used.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, group = "sources")]
-    pub group: Vec<PipGroupName>,
 
     /// Write the compiled requirements to the given `requirements.txt` or `pylock.toml` file.
     ///
@@ -1508,6 +1518,30 @@ pub struct PipSyncArgs {
     #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraints: Vec<Maybe<PathBuf>>,
 
+    /// Include optional dependencies from the specified extra name; may be provided more than once.
+    ///
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    pub extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    ///
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
+    pub all_extras: bool,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub no_all_extras: bool,
+
+    /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
+    /// used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
+
     #[command(flatten)]
     pub installer: InstallerArgs,
 
@@ -1788,18 +1822,27 @@ pub struct PipInstallArgs {
 
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
     ///
-    /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
+    /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "extra", overrides_with = "no_all_extras")]
     pub all_extras: bool,
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
+
+    /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
+    /// used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -1814,14 +1857,6 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
-
-    /// Install the specified dependency group from a `pyproject.toml`.
-    ///
-    /// If no path is provided, the `pyproject.toml` in the working directory is used.
-    ///
-    /// May be provided multiple times.
-    #[arg(long, group = "sources")]
-    pub group: Vec<PipGroupName>,
 
     /// Require a matching hash for each requirement.
     ///
@@ -2606,16 +2641,23 @@ pub struct VenvArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_SEED)]
     pub seed: bool,
 
+    /// Remove any existing files or directories at the target path.
+    ///
+    /// By default, `uv venv` will exit with an error if the given path is non-empty. The
+    /// `--clear` option will instead clear a non-empty path before creating a new virtual
+    /// environment.
+    #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
+    pub clear: bool,
+
     /// Preserve any existing files or directories at the target path.
     ///
-    /// By default, `uv venv` will remove an existing virtual environment at the given path, and
-    /// exit with an error if the path is non-empty but _not_ a virtual environment. The
+    /// By default, `uv venv` will exit with an error if the given path is non-empty. The
     /// `--allow-existing` option will instead write to the given path, regardless of its contents,
     /// and without clearing it beforehand.
     ///
     /// WARNING: This option can lead to unexpected behavior if the existing virtual environment and
     /// the newly-created virtual environment are linked to different Python interpreters.
-    #[clap(long)]
+    #[clap(long, overrides_with = "clear")]
     pub allow_existing: bool,
 
     /// The path to the virtual environment to create.
@@ -3045,7 +3087,7 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of the project environment
     /// in a separate, ephemeral environment. These dependencies are allowed to conflict with those
     /// specified by the project.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode.
@@ -3206,6 +3248,10 @@ pub struct SyncArgs {
     /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
+
+    /// Select the output format.
+    #[arg(long, value_enum, default_value_t = SyncFormat::default())]
+    pub output_format: SyncFormat,
 
     /// Include all optional dependencies.
     ///
@@ -3438,6 +3484,23 @@ pub struct SyncArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// The platform for which requirements should be installed.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    ///
+    /// When targeting macOS (Darwin), the default minimum version is `12.0`. Use
+    /// `MACOSX_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `13.0`.
+    ///
+    /// WARNING: When specified, uv will select wheels that are compatible with the _target_
+    /// platform; as a result, the installed distributions may not be compatible with the _current_
+    /// platform. Conversely, any distributions that are built from source may be incompatible with
+    /// the _target_ platform, as they will be built for the _current_ platform. The
+    /// `--python-platform` option is intended for advanced use cases.
+    #[arg(long)]
+    pub python_platform: Option<TargetTriple>,
 
     /// Check if the Python environment is synchronized with the project.
     ///
@@ -3696,10 +3759,19 @@ pub struct AddArgs {
 
     /// Add the dependency as a workspace member.
     ///
-    /// When used with a path dependency, the package will be added to the workspace's `members`
-    /// list in the root `pyproject.toml` file.
-    #[arg(long)]
+    /// By default, uv will add path dependencies that are within the workspace directory
+    /// as workspace members. When used with a path dependency, the package will be added
+    /// to the workspace's `members` list in the root `pyproject.toml` file.
+    #[arg(long, overrides_with = "no_workspace")]
     pub workspace: bool,
+
+    /// Don't add the dependency as a workspace member.
+    ///
+    /// By default, when adding a dependency that's a local path and is within the workspace
+    /// directory, uv will add it as a workspace member; pass `--no-workspace` to add the package
+    /// as direct path dependency instead.
+    #[arg(long, overrides_with = "workspace")]
+    pub no_workspace: bool,
 }
 
 #[derive(Args)]
@@ -4256,7 +4328,7 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode
@@ -4371,7 +4443,7 @@ pub struct ToolInstallArgs {
     pub from: Option<String>,
 
     /// Include the following additional requirements.
-    #[arg(long)]
+    #[arg(short = 'w', long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Include all requirements listed in the given `requirements.txt` files.
@@ -4647,6 +4719,14 @@ pub struct ToolUpgradeArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_setting_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -4764,10 +4844,9 @@ pub enum PythonCommand {
     /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
     /// python dir`.
     ///
-    /// A `python` executable is not made globally available, managed Python versions are only used
-    /// in uv commands or in active virtual environments. There is experimental support for adding
-    /// Python executables to a directory on the path — use the `--preview` flag to enable this
-    /// behavior and `uv python dir --bin` to retrieve the target directory.
+    /// By default, Python executables are added to a directory on the path with a minor version
+    /// suffix, e.g., `python3.13`. To install `python3` and `python`, use the `--default` flag. Use
+    /// `uv python dir --bin` to see the target directory.
     ///
     /// Multiple Python versions may be requested.
     ///
@@ -4826,6 +4905,19 @@ pub enum PythonCommand {
 
     /// Uninstall Python versions.
     Uninstall(PythonUninstallArgs),
+
+    /// Ensure that the Python executable directory is on the `PATH`.
+    ///
+    /// If the Python executable directory is not present on the `PATH`, uv will attempt to add it to
+    /// the relevant shell configuration files.
+    ///
+    /// If the shell configuration files already include a blurb to add the executable directory to
+    /// the path, but the directory is not present on the `PATH`, uv will exit with an error.
+    ///
+    /// The Python executable directory is determined according to the XDG standard and can be
+    /// retrieved with `uv python dir --bin`.
+    #[command(alias = "ensurepath")]
+    UpdateShell,
 }
 
 #[derive(Args)]
@@ -4911,6 +5003,38 @@ pub struct PythonInstallArgs {
     #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
     pub install_dir: Option<PathBuf>,
 
+    /// Install a Python executable into the `bin` directory.
+    ///
+    /// This is the default behavior. If this flag is provided explicitly, uv will error if the
+    /// executable cannot be installed.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_BIN=1`.
+    ///
+    /// See `UV_PYTHON_BIN_DIR` to customize the target directory.
+    #[arg(long, overrides_with("no_bin"), hide = true)]
+    pub bin: bool,
+
+    /// Do not install a Python executable into the `bin` directory.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_BIN=0`.
+    #[arg(long, overrides_with("bin"), conflicts_with("default"))]
+    pub no_bin: bool,
+
+    /// Register the Python installation in the Windows registry.
+    ///
+    /// This is the default behavior on Windows. If this flag is provided explicitly, uv will error if the
+    /// registry entry cannot be created.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=1`.
+    #[arg(long, overrides_with("no_registry"), hide = true)]
+    pub registry: bool,
+
+    /// Do not register the Python installation in the Windows registry.
+    ///
+    /// This can also be set with `UV_PYTHON_INSTALL_REGISTRY=0`.
+    #[arg(long, overrides_with("registry"))]
+    pub no_registry: bool,
+
     /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
@@ -4973,7 +5097,7 @@ pub struct PythonInstallArgs {
     /// and `python`.
     ///
     /// If multiple Python versions are requested, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with("no_bin"))]
     pub default: bool,
 }
 
@@ -5394,6 +5518,14 @@ pub struct InstallerArgs {
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
+
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by PEP 518 are already installed.
@@ -5580,6 +5712,14 @@ pub struct ResolverArgs {
         help_heading = "Build options"
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
     /// Disable isolation when building source distributions.
     ///
@@ -5769,6 +5909,14 @@ pub struct ResolverInstallerArgs {
         help_heading = "Build options"
     )]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
+
+    /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
+    #[arg(
+        long,
+        alias = "config-settings-package",
+        help_heading = "Build options"
+    )]
+    pub config_settings_package: Option<Vec<ConfigSettingPackageEntry>>,
 
     /// Disable isolation when building source distributions.
     ///

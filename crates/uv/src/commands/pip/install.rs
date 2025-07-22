@@ -1,6 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
-use std::path::PathBuf;
 
 use anyhow::Context;
 use itertools::Itertools;
@@ -11,7 +10,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    HashCheckingMode, IndexStrategy, PackageConfigSettings, PreviewMode, Reinstall, SourceStrategy,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -22,14 +22,14 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::GroupName;
+use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,
 };
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
@@ -58,7 +58,7 @@ pub(crate) async fn pip_install(
     overrides_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
-    groups: BTreeMap<PathBuf, Vec<GroupName>>,
+    groups: &GroupsSpecification,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
@@ -75,6 +75,7 @@ pub(crate) async fn pip_install(
     hash_checking: Option<HashCheckingMode>,
     installer_metadata: bool,
     config_settings: &ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
@@ -99,6 +100,7 @@ pub(crate) async fn pip_install(
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
@@ -125,7 +127,7 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         extras,
-        groups,
+        Some(groups),
         &client_builder,
     )
     .await?;
@@ -421,6 +423,7 @@ pub(crate) async fn pip_install(
         state.clone(),
         index_strategy,
         config_settings,
+        config_settings_package,
         build_isolation,
         link_mode,
         &build_options,
@@ -437,11 +440,46 @@ pub(crate) async fn pip_install(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content)
-            .with_context(|| format!("Not a valid pylock.toml file: {}", pylock.user_display()))?;
+        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
+            format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
+        })?;
 
-        let resolution =
-            lock.to_resolution(install_path, marker_env.markers(), &tags, &build_options)?;
+        // Verify that the Python version is compatible with the lock file.
+        if let Some(requires_python) = lock.requires_python.as_ref() {
+            if !requires_python.contains(interpreter.python_version()) {
+                return Err(anyhow::anyhow!(
+                    "The requested interpreter resolved to Python {}, which is incompatible with the `pylock.toml`'s Python requirement: `{}`",
+                    interpreter.python_version(),
+                    requires_python,
+                ));
+            }
+        }
+
+        // Convert the extras and groups specifications into a concrete form.
+        let extras = extras.with_defaults(DefaultExtras::default());
+        let extras = extras
+            .extra_names(lock.extras.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let groups = groups
+            .get(&pylock)
+            .cloned()
+            .unwrap_or_default()
+            .with_defaults(DefaultGroups::List(lock.default_groups.clone()));
+        let groups = groups
+            .group_names(lock.dependency_groups.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let resolution = lock.to_resolution(
+            install_path,
+            marker_env.markers(),
+            &extras,
+            &groups,
+            &tags,
+            &build_options,
+        )?;
         let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         (resolution, hasher)
@@ -512,6 +550,7 @@ pub(crate) async fn pip_install(
         compile,
         &index_locations,
         config_settings,
+        config_settings_package,
         &hasher,
         &tags,
         &client,

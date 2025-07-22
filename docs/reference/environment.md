@@ -26,6 +26,10 @@ directory for caching instead of the default cache directory.
 Equivalent to the `--compile-bytecode` command-line argument. If set, uv
 will compile Python source files to bytecode after installation.
 
+### `UV_COMPILE_BYTECODE_TIMEOUT`
+
+Timeout (in seconds) for bytecode compilation.
+
 ### `UV_CONCURRENT_BUILDS`
 
 Sets the maximum number of source distributions that uv will build
@@ -102,6 +106,10 @@ Equivalent to the `--token` argument for self update. A GitHub token for authent
 
 Enables fetching files stored in Git LFS when installing a package from a Git repository.
 
+### `UV_HTTP_RETRIES`
+
+The number of retries for HTTP requests. (default: 3)
+
 ### `UV_HTTP_TIMEOUT`
 
 Timeout (in seconds) for HTTP requests. (default: 30 s)
@@ -162,6 +170,11 @@ Defaults to `~/.local/bin`.
 
 Equivalent to the `--keyring-provider` command-line argument. If set, uv
 will use this value as the keyring provider.
+
+### `UV_LIBC`
+
+Overrides the environment-determined libc on linux systems when filling in the current platform
+within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
 
 ### `UV_LINK_MODE`
 
@@ -238,6 +251,10 @@ Ignore `.env` files when executing `uv run` commands.
 ### `UV_NO_GITHUB_FAST_PATH`
 
 Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
+
+### `UV_NO_HF_TOKEN`
+
+Disable Hugging Face authentication, even if `HF_TOKEN` is set.
 
 ### `UV_NO_INSTALLER_METADATA`
 
@@ -363,6 +380,10 @@ This will allow for setting each property of the Python installation, mostly the
 
 Note that currently, only local paths are supported.
 
+### `UV_PYTHON_INSTALL_BIN`
+
+Whether to install the Python executable into the `UV_PYTHON_BIN_DIR` directory.
+
 ### `UV_PYTHON_INSTALL_DIR`
 
 Specifies the directory for storing managed Python installations.
@@ -376,6 +397,10 @@ This variable can be set to a mirror URL to use a different source for Python in
 The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
 `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
 Distributions can be read from a local directory by using the `file://` URL scheme.
+
+### `UV_PYTHON_INSTALL_REGISTRY`
+
+Whether to install the Python executable into the Windows registry.
 
 ### `UV_PYTHON_PREFERENCE`
 
@@ -416,6 +441,10 @@ WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (
 or containerized environments and should be used with caution, as modifying the system
 Python can lead to unexpected behavior.
 
+### `UV_TEST_NO_HTTP_RETRY_DELAY`
+
+Used to disable delay for HTTP retries in tests.
+
 ### `UV_TOOL_BIN_DIR`
 
 Specifies the "bin" directory for installing tool executables.
@@ -432,6 +461,11 @@ Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`,
 
 Used ephemeral environments like CI to install uv to a specific path while preventing
 the installer from modifying shell profiles or environment variables.
+
+### `UV_VENV_CLEAR`
+
+Equivalent to the `--clear` command-line argument. If set, uv will remove any
+existing files or directories at the target path.
 
 ### `UV_VENV_SEED`
 
@@ -497,6 +531,11 @@ See [force-color.org](https://force-color.org).
 ### `GITHUB_ACTIONS`
 
 Used for trusted publishing via `uv publish`.
+
+### `HF_TOKEN`
+
+Authentication token for Hugging Face requests. When set, uv will use this token
+when making requests to `https://huggingface.co/` and any subdomains.
 
 ### `HOME`
 

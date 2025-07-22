@@ -11,7 +11,7 @@
 //! let marker = r#"requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8""#;
 //! let dependency_specification = Requirement::<VerbatimUrl>::from_str(marker).unwrap();
 //! assert_eq!(dependency_specification.name.as_ref(), "requests");
-//! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()]);
+//! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()].into());
 //! ```
 
 #![warn(missing_docs)]
@@ -32,8 +32,8 @@ pub use marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
-    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
+    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]

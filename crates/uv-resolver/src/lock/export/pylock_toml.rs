@@ -186,13 +186,13 @@ pub struct PylockToml {
     lock_version: Version,
     created_by: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    requires_python: Option<RequiresPython>,
+    pub requires_python: Option<RequiresPython>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    extras: Vec<ExtraName>,
+    pub extras: Vec<ExtraName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    dependency_groups: Vec<GroupName>,
+    pub dependency_groups: Vec<GroupName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    default_groups: Vec<GroupName>,
+    pub default_groups: Vec<GroupName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -500,7 +500,7 @@ impl<'lock> PylockToml {
                         .unwrap_or_else(|_| dist.install_path.clone());
                     package.directory = Some(PylockTomlDirectory {
                         path: PortablePathBuf::from(path),
-                        editable: if dist.editable { Some(true) } else { None },
+                        editable: dist.editable,
                         subdirectory: None,
                     });
                 }
@@ -737,7 +737,7 @@ impl<'lock> PylockToml {
                     ),
                     editable: match editable {
                         EditableMode::NonEditable => None,
-                        EditableMode::Editable => Some(sdist.editable),
+                        EditableMode::Editable => sdist.editable,
                     },
                     subdirectory: None,
                 }),
@@ -966,9 +966,12 @@ impl<'lock> PylockToml {
         self,
         install_path: &Path,
         markers: &MarkerEnvironment,
+        extras: &[ExtraName],
+        groups: &[GroupName],
         tags: &Tags,
         build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
+        // Convert the extras and dependency groups specifications to a concrete environment.
         let mut graph =
             petgraph::graph::DiGraph::with_capacity(self.packages.len(), self.packages.len());
 
@@ -977,7 +980,7 @@ impl<'lock> PylockToml {
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
-            if !package.marker.evaluate(markers, &[]) {
+            if !package.marker.evaluate_pep751(markers, extras, groups) {
                 continue;
             }
 
@@ -1152,7 +1155,7 @@ impl<'lock> PylockToml {
             };
 
             let index = graph.add_node(dist);
-            graph.add_edge(root, index, Edge::Prod(package.marker));
+            graph.add_edge(root, index, Edge::Prod);
         }
 
         Ok(Resolution::new(graph))
@@ -1394,8 +1397,8 @@ impl PylockTomlDirectory {
         Ok(DirectorySourceDist {
             name: name.clone(),
             install_path: path.into_boxed_path(),
-            editable: self.editable.unwrap_or(false),
-            r#virtual: false,
+            editable: self.editable,
+            r#virtual: Some(false),
             url,
         })
     }

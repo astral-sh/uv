@@ -34,6 +34,9 @@ use crate::{
     VirtualEnvironment,
 };
 
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE};
+
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
 pub struct Interpreter {
@@ -268,15 +271,28 @@ impl Interpreter {
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
     pub fn is_managed(&self) -> bool {
+        if let Ok(test_managed) =
+            std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
+        {
+            // During testing, we collect interpreters into an artificial search path and need to
+            // be able to mock whether an interpreter is managed or not.
+            return test_managed.split_ascii_whitespace().any(|item| {
+                let version = <PythonVersion as std::str::FromStr>::from_str(item).expect(
+                    "`UV_INTERNAL__TEST_PYTHON_MANAGED` items should be valid Python versions",
+                );
+                if version.patch().is_some() {
+                    version.version() == self.python_version()
+                } else {
+                    (version.major(), version.minor()) == self.python_tuple()
+                }
+            });
+        }
+
         let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
             return false;
         };
 
-        installations
-            .find_all()
-            .into_iter()
-            .flatten()
-            .any(|install| install.path() == self.sys_base_prefix)
+        self.sys_base_prefix.starts_with(installations.root())
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -760,6 +776,13 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[cfg(windows)]
+    #[error("Failed to query Python interpreter at `{path}`")]
+    CorruptWindowsPackage {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
     #[error("{0}")]
     UnexpectedResponse(UnexpectedResponseError),
     #[error("{0}")]
@@ -872,10 +895,23 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(|err| Error::SpawnFailed {
-                path: interpreter.to_path_buf(),
-                err,
-            })?;
+            .map_err(
+                |err| match err.raw_os_error().and_then(|code| u32::try_from(code).ok()) {
+                    // These error codes are returned if the Python interpreter is a corrupt MSIX
+                    // package, which we want to differentiate from a typical spawn failure.
+                    #[cfg(windows)]
+                    Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) => {
+                        Error::CorruptWindowsPackage {
+                            path: interpreter.to_path_buf(),
+                            err,
+                        }
+                    }
+                    _ => Error::SpawnFailed {
+                        path: interpreter.to_path_buf(),
+                        err,
+                    },
+                },
+            )?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

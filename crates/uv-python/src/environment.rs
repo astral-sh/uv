@@ -158,8 +158,7 @@ impl PythonEnvironment {
         let installation = match find_python_installation(
             request,
             preference,
-            // Ignore managed installations when looking for environments
-            PythonPreference::OnlySystem,
+            PythonPreference::default(),
             cache,
             preview,
         )? {
@@ -174,7 +173,7 @@ impl PythonEnvironment {
     /// N.B. This function also works for system Python environments and users depend on this.
     pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         debug!(
-            "Checking for Python environment at `{}`",
+            "Checking for Python environment at: `{}`",
             root.as_ref().user_display()
         );
         match root.as_ref().try_exists() {

@@ -11,8 +11,8 @@ use uv_cli::{
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs,
-    VenvArgs, VersionArgs, VersionBump, VersionFormat,
+    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
+    ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
@@ -23,9 +23,9 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
-    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, PreviewMode,
+    ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl, Requirement};
 use uv_install_wheel::LinkMode;
@@ -38,8 +38,8 @@ use uv_resolver::{
     AnnotationStyle, DependencyMode, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
-    Combine, FilesystemOptions, Options, PipOptions, PublishOptions, PythonInstallMirrors,
-    ResolverInstallerOptions, ResolverOptions,
+    Combine, EnvironmentOptions, FilesystemOptions, Options, PipOptions, PublishOptions,
+    PythonInstallMirrors, ResolverInstallerOptions, ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -712,6 +712,7 @@ impl ToolUpgradeSettings {
             pre,
             fork_strategy,
             config_setting,
+            config_setting_package: config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
             build_isolation,
@@ -746,6 +747,7 @@ impl ToolUpgradeSettings {
             pre,
             fork_strategy,
             config_setting,
+            config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
             build_isolation,
@@ -933,6 +935,8 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
+    pub(crate) bin: Option<bool>,
+    pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
     pub(crate) python_downloads_json_url: Option<String>,
@@ -942,7 +946,11 @@ pub(crate) struct PythonInstallSettings {
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PythonInstallArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let options = filesystem.map(FilesystemOptions::into_options);
         let (python_mirror, pypy_mirror, python_downloads_json_url) = match options {
             Some(options) => (
@@ -961,6 +969,10 @@ impl PythonInstallSettings {
             install_dir,
             targets,
             reinstall,
+            bin,
+            no_bin,
+            registry,
+            no_registry,
             force,
             mirror: _,
             pypy_mirror: _,
@@ -973,6 +985,9 @@ impl PythonInstallSettings {
             targets,
             reinstall,
             force,
+            bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
+            registry: flag(registry, no_registry, "registry")
+                .or(environment.python_install_registry),
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
             python_downloads_json_url,
@@ -988,10 +1003,12 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) force: bool,
+    pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
+    pub(crate) bin: Option<bool>,
 }
 
 impl PythonUpgradeSettings {
@@ -1013,6 +1030,8 @@ impl PythonUpgradeSettings {
             args.python_downloads_json_url.or(python_downloads_json_url);
         let force = false;
         let default = false;
+        let bin = None;
+        let registry = None;
 
         let PythonUpgradeArgs {
             install_dir,
@@ -1026,10 +1045,12 @@ impl PythonUpgradeSettings {
             install_dir,
             targets,
             force,
+            registry,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
             python_downloads_json_url,
             default,
+            bin,
         }
     }
 }
@@ -1150,9 +1171,11 @@ pub(crate) struct SyncSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
+    pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) output_format: SyncFormat,
 }
 
 impl SyncSettings {
@@ -1190,8 +1213,10 @@ impl SyncSettings {
             package,
             script,
             python,
+            python_platform,
             check,
             no_check,
+            output_format,
         } = args;
         let install_mirrors = filesystem
             .clone()
@@ -1211,6 +1236,7 @@ impl SyncSettings {
         };
 
         Self {
+            output_format,
             locked,
             frozen,
             dry_run,
@@ -1249,6 +1275,7 @@ impl SyncSettings {
             all_packages,
             package,
             python: python.and_then(Maybe::into_option),
+            python_platform,
             refresh: Refresh::from(refresh),
             settings,
             install_mirrors,
@@ -1326,7 +1353,7 @@ pub(crate) struct AddSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
-    pub(crate) workspace: bool,
+    pub(crate) workspace: Option<bool>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
@@ -1365,6 +1392,7 @@ impl AddSettings {
             script,
             python,
             workspace,
+            no_workspace,
         } = args;
 
         let dependency_type = if let Some(extra) = optional {
@@ -1465,7 +1493,7 @@ impl AddSettings {
             package,
             script,
             python: python.and_then(Maybe::into_option),
-            workspace,
+            workspace: flag(workspace, no_workspace, "workspace"),
             editable: flag(editable, no_editable, "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
@@ -2030,6 +2058,10 @@ impl PipSyncSettings {
             src_file,
             constraints,
             build_constraints,
+            extra,
+            all_extras,
+            no_all_extras,
+            group,
             installer,
             refresh,
             require_hashes,
@@ -2094,6 +2126,9 @@ impl PipSyncSettings {
                     python_version,
                     python_platform,
                     strict: flag(strict, no_strict, "strict"),
+                    extra,
+                    all_extras: flag(all_extras, no_all_extras, "all-extras"),
+                    group: Some(group),
                     torch_backend,
                     ..PipOptions::from(installer)
                 },
@@ -2597,6 +2632,7 @@ impl BuildSettings {
 pub(crate) struct VenvSettings {
     pub(crate) seed: bool,
     pub(crate) allow_existing: bool,
+    pub(crate) clear: bool,
     pub(crate) path: Option<PathBuf>,
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
@@ -2615,6 +2651,7 @@ impl VenvSettings {
             no_system,
             seed,
             allow_existing,
+            clear,
             path,
             prompt,
             system_site_packages,
@@ -2632,6 +2669,7 @@ impl VenvSettings {
         Self {
             seed,
             allow_existing,
+            clear,
             path,
             prompt,
             system_site_packages,
@@ -2665,6 +2703,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
+    pub(crate) config_settings_package: &'a PackageConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
     pub(crate) exclude_newer: Option<ExcludeNewer>,
@@ -2683,6 +2722,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
 pub(crate) struct ResolverSettings {
     pub(crate) build_options: BuildOptions,
     pub(crate) config_setting: ConfigSettings,
+    pub(crate) config_settings_package: PackageConfigSettings,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) exclude_newer: Option<ExcludeNewer>,
     pub(crate) fork_strategy: ForkStrategy,
@@ -2741,6 +2781,7 @@ impl From<ResolverOptions> for ResolverSettings {
             index_strategy: value.index_strategy.unwrap_or_default(),
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
+            config_settings_package: value.config_settings_package.unwrap_or_default(),
             no_build_isolation: value.no_build_isolation.unwrap_or_default(),
             no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
@@ -2820,6 +2861,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
                 ),
                 config_setting: value.config_settings.unwrap_or_default(),
+                config_settings_package: value.config_settings_package.unwrap_or_default(),
                 dependency_metadata: DependencyMetadata::from_entries(
                     value.dependency_metadata.into_iter().flatten(),
                 ),
@@ -2889,6 +2931,7 @@ pub(crate) struct PipSettings {
     pub(crate) custom_compile_command: Option<String>,
     pub(crate) generate_hashes: bool,
     pub(crate) config_setting: ConfigSettings,
+    pub(crate) config_settings_package: PackageConfigSettings,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) universal: bool,
@@ -2958,6 +3001,7 @@ impl PipSettings {
             custom_compile_command,
             generate_hashes,
             config_settings,
+            config_settings_package,
             python_version,
             python_platform,
             universal,
@@ -2993,6 +3037,7 @@ impl PipSettings {
             fork_strategy: top_level_fork_strategy,
             dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
+            config_settings_package: top_level_config_settings_package,
             no_build_isolation: top_level_no_build_isolation,
             no_build_isolation_package: top_level_no_build_isolation_package,
             exclude_newer: top_level_exclude_newer,
@@ -3025,6 +3070,8 @@ impl PipSettings {
         let fork_strategy = fork_strategy.combine(top_level_fork_strategy);
         let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
         let config_settings = config_settings.combine(top_level_config_settings);
+        let config_settings_package =
+            config_settings_package.combine(top_level_config_settings_package);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
         let no_build_isolation_package =
             no_build_isolation_package.combine(top_level_no_build_isolation_package);
@@ -3127,6 +3174,10 @@ impl PipSettings {
                 .config_settings
                 .combine(config_settings)
                 .unwrap_or_default(),
+            config_settings_package: args
+                .config_settings_package
+                .combine(config_settings_package)
+                .unwrap_or_default(),
             torch_backend: args.torch_backend.combine(torch_backend),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
@@ -3220,6 +3271,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             keyring_provider: settings.resolver.keyring_provider,
             dependency_metadata: &settings.resolver.dependency_metadata,
             config_setting: &settings.resolver.config_setting,
+            config_settings_package: &settings.resolver.config_settings_package,
             no_build_isolation: settings.resolver.no_build_isolation,
             no_build_isolation_package: &settings.resolver.no_build_isolation_package,
             exclude_newer: settings.resolver.exclude_newer,

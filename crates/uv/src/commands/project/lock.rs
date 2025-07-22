@@ -99,6 +99,7 @@ pub(crate) async fn lock(
     let script = match script {
         Some(ScriptPath::Path(path)) => {
             let client_builder = BaseClientBuilder::new()
+                .retries_from_env()?
                 .connectivity(network_settings.connectivity)
                 .native_tls(network_settings.native_tls)
                 .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -233,6 +234,10 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
+        Err(err @ ProjectError::LockMismatch(..)) => {
+            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
+            Ok(ExitStatus::Failure)
+        }
         Err(ProjectError::Operation(err)) => {
             diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
@@ -345,8 +350,11 @@ impl<'env> LockOperation<'env> {
                 .await?;
 
                 // If the lockfile changed, return an error.
-                if matches!(result, LockResult::Changed(_, _)) {
-                    return Err(ProjectError::LockMismatch(Box::new(result.into_lock())));
+                if let LockResult::Changed(prev, cur) = result {
+                    return Err(ProjectError::LockMismatch(
+                        prev.map(Box::new),
+                        Box::new(cur),
+                    ));
                 }
 
                 Ok(result)
@@ -424,6 +432,7 @@ async fn do_lock(
         fork_strategy,
         dependency_metadata,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
         exclude_newer,
@@ -436,6 +445,7 @@ async fn do_lock(
     // Collect the requirements, etc.
     let members = target.members();
     let packages = target.packages();
+    let required_members = target.required_members();
     let requirements = target.requirements();
     let overrides = target.overrides();
     let constraints = target.constraints();
@@ -588,6 +598,7 @@ async fn do_lock(
 
     // Initialize the client.
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
@@ -664,6 +675,7 @@ async fn do_lock(
         state.fork().into_inner(),
         *index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
         *link_mode,
         build_options,
@@ -684,6 +696,7 @@ async fn do_lock(
             target.install_path(),
             packages,
             &members,
+            required_members,
             &requirements,
             &dependency_groups,
             &constraints,
@@ -897,6 +910,7 @@ impl ValidatedLock {
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
+        required_members: &BTreeSet<PackageName>,
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
@@ -1108,6 +1122,7 @@ impl ValidatedLock {
                 install_path,
                 packages,
                 members,
+                required_members,
                 requirements,
                 constraints,
                 overrides,

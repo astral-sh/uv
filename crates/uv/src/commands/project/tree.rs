@@ -200,6 +200,7 @@ pub(crate) async fn tree(
                 fork_strategy: _,
                 dependency_metadata: _,
                 config_setting: _,
+                config_settings_package: _,
                 no_build_isolation: _,
                 no_build_isolation_package: _,
                 exclude_newer: _,
@@ -215,6 +216,7 @@ pub(crate) async fn tree(
             let client = RegistryClientBuilder::new(
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
+            .retries_from_env()?
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())

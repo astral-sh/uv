@@ -139,6 +139,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -200,6 +201,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: true,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -320,6 +324,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -381,6 +386,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: true,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -502,6 +510,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -563,6 +572,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -716,6 +728,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -777,6 +790,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: true,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -929,6 +945,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -1059,6 +1078,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -1120,6 +1140,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: true,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -1267,6 +1290,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -1299,6 +1323,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -1360,6 +1385,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -1484,6 +1512,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -1516,6 +1545,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -1548,6 +1578,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -1609,6 +1640,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -1755,6 +1789,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 no_index: true,
@@ -1815,6 +1850,9 @@ fn resolve_find_links() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -1989,6 +2027,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -2124,6 +2165,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -2156,6 +2198,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -2217,6 +2260,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -2337,6 +2383,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -2369,6 +2416,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -2430,6 +2478,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -2603,6 +2654,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -2758,6 +2812,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -2911,6 +2968,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -3070,6 +3130,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -3193,6 +3256,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             fork_strategy: None,
             dependency_metadata: None,
             config_settings: None,
+            config_settings_package: None,
             no_build_isolation: None,
             no_build_isolation_package: None,
             exclude_newer: None,
@@ -3217,6 +3281,9 @@ fn resolve_tool() -> anyhow::Result<()> {
                     no_build: None,
                 },
                 config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
                     {},
                 ),
                 dependency_metadata: DependencyMetadata(
@@ -3411,6 +3478,9 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -3441,6 +3511,8 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
 }
 
 /// Read from both a `uv.toml` and `pyproject.toml` file in the current directory.
+///
+/// Some fields in `[tool.uv]` are masked by `uv.toml` being defined, and should be warned about.
 #[test]
 #[cfg_attr(
     windows,
@@ -3464,6 +3536,10 @@ fn resolve_both() -> anyhow::Result<()> {
         [project]
         name = "example"
         version = "0.0.0"
+
+        [tool.uv]
+        offline = true
+        dev-dependencies = ["pytest"]
 
         [tool.uv.pip]
         resolution = "highest"
@@ -3564,6 +3640,7 @@ fn resolve_both() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -3627,6 +3704,9 @@ fn resolve_both() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -3650,7 +3730,236 @@ fn resolve_both() -> anyhow::Result<()> {
     }
 
     ----- stderr -----
-    warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The `[tool.uv]` section will be ignored in favor of the `uv.toml` file.
+    warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
+    - offline
+    - pip
+    "#
+    );
+
+    Ok(())
+}
+
+/// Read from both a `uv.toml` and `pyproject.toml` file in the current directory.
+///
+/// But the fields `[tool.uv]` defines aren't allowed in `uv.toml` so there's no warning.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_both_special_fields() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a `uv.toml` file to the directory.
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        [pip]
+        resolution = "lowest-direct"
+        generate-hashes = true
+        index-url = "https://pypi.org/simple"
+    "#})?;
+
+    // Write a `pyproject.toml` file to the directory
+    let config = context.temp_dir.child("pyproject.toml");
+    config.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+
+        [dependency-groups]
+        mygroup = ["iniconfig"]
+
+        [tool.uv]
+        dev-dependencies = ["pytest"]
+
+        [tool.uv.dependency-groups]
+        mygroup = {requires-python = ">=3.12"}
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+        .arg("--show-settings")
+        .arg("requirements.in"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        format: None,
+        src_file: [
+            "requirements.in",
+        ],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: DisplaySafeUrl {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                        format: Simple,
+                        publish_url: None,
+                        authenticate: Auto,
+                        ignore_error_codes: None,
+                        cache_control: None,
+                    },
+                ],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+                python_downloads_json_url: None,
+            },
+            system: false,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
+            groups: [],
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            torch_backend: None,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: LowestDirect,
+            prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: true,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: None,
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: Some(
+                Verify,
+            ),
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
     "#
     );
 
@@ -3870,6 +4179,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -3933,6 +4243,9 @@ fn resolve_config_file() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -3987,7 +4300,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4010,7 +4323,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4022,9 +4335,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     9 | ""
       |   ^
-    expected `.`, `=`
-
-    "###
+    key with no value, expected `=`
+    "#
     );
 
     Ok(())
@@ -4180,6 +4492,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -4338,6 +4653,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -4517,6 +4835,9 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -4658,6 +4979,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -4690,6 +5012,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -4751,6 +5074,9 @@ fn index_priority() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -4873,6 +5199,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -4905,6 +5232,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -4966,6 +5294,9 @@ fn index_priority() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -5094,6 +5425,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -5126,6 +5458,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -5187,6 +5520,9 @@ fn index_priority() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -5310,6 +5646,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -5342,6 +5679,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -5403,6 +5741,9 @@ fn index_priority() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -5533,6 +5874,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -5565,6 +5907,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -5626,6 +5969,9 @@ fn index_priority() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -5749,6 +6095,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                     Index {
                         name: None,
@@ -5781,6 +6128,7 @@ fn index_priority() -> anyhow::Result<()> {
                         publish_url: None,
                         authenticate: Auto,
                         ignore_error_codes: None,
+                        cache_control: None,
                     },
                 ],
                 flat_index: [],
@@ -5842,6 +6190,9 @@ fn index_priority() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -6006,6 +6357,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -6154,6 +6508,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -6298,6 +6655,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -6448,6 +6808,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             config_setting: ConfigSettings(
                 {},
             ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
             python_version: None,
             python_platform: None,
             universal: false,
@@ -6592,6 +6955,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
@@ -6739,6 +7105,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             custom_compile_command: None,
             generate_hashes: false,
             config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
                 {},
             ),
             python_version: None,
