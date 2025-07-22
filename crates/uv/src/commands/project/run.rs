@@ -1118,6 +1118,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         continue;
                     }
                     let target = ephemeral_env.sys_prefix().join(dir);
+                    if let Some(parent) = target.parent() {
+                        fs_err::create_dir_all(parent)?;
+                    }
                     match create_symlink(&source, &target) {
                         Ok(()) => trace!(
                             "Created link for {} -> {}",
