@@ -1768,7 +1768,7 @@ fn copy_entrypoint(
 "#,
         )
         // Or an absolute path shebang
-        .or_else(|| contents.strip_prefix(&format!("#!{}", previous_executable.display())))
+        .or_else(|| contents.strip_prefix(&format!("#!{}\n", previous_executable.display())))
     else {
         // If it's not a Python shebang, we'll skip it
         trace!(
