@@ -11393,3 +11393,49 @@ fn sync_config_settings_package() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that when we sync to an empty virtual environment directory, we don't attempt to remove
+/// it, which breaks Docker volume mounts.
+#[test]
+#[cfg(unix)]
+fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let project_dir = context.temp_dir.child("project");
+    fs_err::create_dir(&project_dir)?;
+
+    let pyproject_toml = project_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    let venv_dir = project_dir.child(".venv");
+    fs_err::create_dir(&venv_dir)?;
+
+    // Ensure the parent is read-only, to prevent deletion of the virtual environment
+    fs_err::set_permissions(&project_dir, std::fs::Permissions::from_mode(0o555))?;
+
+    // Note we do _not_ fail to create the virtual environment — we fail later when writing to the
+    // project directory
+    uv_snapshot!(context.filters(), context.sync().current_dir(&project_dir), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    error: failed to write to file `[TEMP_DIR]/project/uv.lock`: Permission denied (os error 13)
+    ");
+
+    Ok(())
+}

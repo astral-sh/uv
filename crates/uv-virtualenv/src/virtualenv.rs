@@ -10,7 +10,7 @@ use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use uv_configuration::PreviewMode;
 use uv_fs::{CWD, Simplified, cachedir};
@@ -85,6 +85,18 @@ pub(crate) fn create(
                 format!("File exists at `{}`", location.user_display()),
             )));
         }
+        Ok(metadata)
+            if metadata.is_dir()
+                && location
+                    .read_dir()
+                    .is_ok_and(|mut dir| dir.next().is_none()) =>
+        {
+            // If it's an empty directory, we can proceed
+            trace!(
+                "Using empty directory at `{}` for virtual environment",
+                location.user_display()
+            );
+        }
         Ok(metadata) if metadata.is_dir() => {
             let name = if uv_fs::is_virtualenv_base(location) {
                 "virtual environment"
@@ -99,13 +111,6 @@ pub(crate) fn create(
                     debug!("Removing existing {name} due to `--clear`");
                     remove_virtualenv(location)?;
                     fs::create_dir_all(location)?;
-                }
-                OnExisting::Fail
-                    if location
-                        .read_dir()
-                        .is_ok_and(|mut dir| dir.next().is_none()) =>
-                {
-                    debug!("Ignoring empty directory");
                 }
                 OnExisting::Fail => {
                     match confirm_clear(location, name)? {
