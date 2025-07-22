@@ -43,7 +43,7 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -113,6 +113,12 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    if preview.is_disabled() && !extra_build_dependencies.is_empty() {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning."
+        );
+    }
+
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
     if output_file

@@ -443,6 +443,12 @@ async fn do_lock(
         sources,
     } = settings;
 
+    if preview.is_disabled() && !extra_build_dependencies.is_empty() {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning."
+        );
+    }
+
     // Collect the requirements, etc.
     let members = target.members();
     let packages = target.packages();

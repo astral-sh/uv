@@ -30,7 +30,7 @@ use uv_resolver::{FlatIndex, Installable, Lock};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -584,6 +584,12 @@ pub(super) async fn do_sync(
         build_options,
         sources,
     } = settings;
+
+    if preview.is_disabled() && !extra_build_dependencies.is_empty() {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning."
+        );
+    }
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?

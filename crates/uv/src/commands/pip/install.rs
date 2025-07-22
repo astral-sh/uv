@@ -37,7 +37,7 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -101,6 +101,12 @@ pub(crate) async fn pip_install(
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
+
+    if preview.is_disabled() && !extra_build_dependencies.is_empty() {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning."
+        );
+    }
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?

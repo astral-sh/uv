@@ -101,6 +101,12 @@ pub(crate) async fn add(
         warn_user_once!("The bounds option is in preview and may change in any future release.");
     }
 
+    if preview.is_disabled() && !settings.resolver.extra_build_dependencies.is_empty() {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning."
+        );
+    }
+
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {

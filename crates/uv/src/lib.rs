@@ -444,6 +444,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, filesystem);
             show_settings!(args);
+            if !args.settings.extra_build_dependencies.is_empty() && globals.preview.is_disabled() {
+                warn_user_once!(
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+                );
+            }
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
@@ -555,6 +560,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, filesystem);
             show_settings!(args);
+            if !args.settings.extra_build_dependencies.is_empty() && globals.preview.is_disabled() {
+                warn_user_once!(
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+                );
+            }
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
@@ -628,6 +638,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let mut args = PipInstallSettings::resolve(args, filesystem);
             show_settings!(args);
+            if !args.settings.extra_build_dependencies.is_empty() && globals.preview.is_disabled() {
+                warn_user_once!(
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+                );
+            }
 
             let mut requirements = Vec::with_capacity(
                 args.package.len() + args.editables.len() + args.requirements.len(),
