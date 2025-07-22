@@ -1993,7 +1993,7 @@ fn version_set_workspace() -> Result<()> {
         );
     });
 
-    // Set the other child's version, refereshing the lock and sync
+    // Set the other child's version, refreshing the lock and sync
     let mut version_cmd = context.version();
     version_cmd
         .arg("--package")
