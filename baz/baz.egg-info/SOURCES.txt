@@ -1,0 +1,8 @@
+README.md
+main.py
+pyproject.toml
+baz.egg-info/PKG-INFO
+baz.egg-info/SOURCES.txt
+baz.egg-info/dependency_links.txt
+baz.egg-info/requires.txt
+baz.egg-info/top_level.txt

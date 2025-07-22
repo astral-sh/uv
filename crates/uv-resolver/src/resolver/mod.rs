@@ -2787,7 +2787,16 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                for url in urls.get_url(&self.env, name, url.as_ref(), git)? {
+                for url in urls.get_url(&self.env, name, url.as_ref(), git).map_err(|err| {
+                    let name = self.pubgrub.package_store[for_package].name().unwrap().clone();
+                    let version = Some(for_version.clone());
+                    let chain = DerivationChainBuilder::from_state(for_package, for_version, &self.pubgrub)
+                        .unwrap_or_default();
+                    println!("name: {name:?}");
+                    println!("version: {version:?}");
+                    println!("chain: {chain:?}");
+                    ResolveError::Derived(Box::new(err), name, version, chain)
+                })? {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
                 }

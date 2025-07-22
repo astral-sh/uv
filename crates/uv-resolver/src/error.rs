@@ -33,10 +33,13 @@ use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
-use crate::{InMemoryIndex, Options};
+use crate::{InMemoryIndex, Options, Package};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
+    #[error("Failed to resolve dependencies for package `{1}=={2}`")]
+    Dependencies(#[source] Box<ResolveError>, PackageName, Version, DerivationChain),
+
     #[error(transparent)]
     Client(#[from] uv_client::Error),
 

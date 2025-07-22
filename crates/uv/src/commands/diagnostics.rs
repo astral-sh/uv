@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -10,7 +11,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_resolver::SentinelRange;
+use uv_resolver::{SentinelRange};
 
 use crate::commands::pip;
 
@@ -81,6 +82,21 @@ impl OperationDiagnostic {
                 } else {
                     no_solution(&err);
                 }
+                None
+            }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Derived(
+                                                error,
+                                                name,
+                                                version,
+                                                chain,
+                                            )) => {
+                derived_error(
+                    error,
+                    &name,
+                    version.as_ref(),
+                    &chain,
+                    self.hint.clone(),
+                );
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
@@ -227,6 +243,54 @@ pub(crate) fn requested_dist_error(
         kind,
         dist,
         cause,
+        help,
+    });
+    anstream::eprint!("{report:?}");
+}
+
+/// Render a requested distribution failure (read, download or build) with a help message.
+pub(crate) fn derived_error(
+    error: Box<uv_resolver::ResolveError>,
+    name: &PackageName,
+    version: Option<&Version>,
+    chain: &DerivationChain,
+    help: Option<String>,
+) {
+
+    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[error("{error}")]
+    #[diagnostic()]
+    struct Diagnostic {
+        error: Box<uv_resolver::ResolveError>,
+        // #[source]
+        // source: Option<&'static dyn Error>,
+        #[help]
+        help: Option<String>,
+    }
+
+    let help = help.or_else(|| {
+        SUGGESTIONS
+            .get(name)
+            .map(|suggestion| {
+                format!(
+                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                    name.cyan(),
+                    suggestion.cyan(),
+                    suggestion.cyan(),
+                )
+            })
+            .or_else(|| {
+                if chain.is_empty() {
+                    None
+                } else {
+                    Some(format_chain(name, version, chain))
+                }
+            })
+    });
+    // let source = error.source();
+    let report = miette::Report::new(Diagnostic {
+        error,
+        // source,
         help,
     });
     anstream::eprint!("{report:?}");

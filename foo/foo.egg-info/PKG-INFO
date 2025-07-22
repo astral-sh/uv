@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: foo
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.13.2
+Description-Content-Type: text/markdown
+Requires-Dist: flask@ https://files.pythonhosted.org/packages/3d/68/9d4508e893976286d2ead7f8f571314af6c2037af34853a30fd769c02e9d/flask-3.1.1-py3-none-any.whl
