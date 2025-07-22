@@ -432,6 +432,46 @@ fn sync_json() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
+    // Test that JSON output is shown even with --quiet flag
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--quiet")
+        .arg("--frozen")
+        .arg("--output-format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "target": "project",
+      "project": {
+        "path": "[TEMP_DIR]/",
+        "workspace": {
+          "path": "[TEMP_DIR]/"
+        }
+      },
+      "sync": {
+        "environment": {
+          "path": "[VENV]/",
+          "python": {
+            "path": "[VENV]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]",
+            "implementation": "cpython"
+          }
+        },
+        "action": "check"
+      },
+      "lock": {
+        "path": "[TEMP_DIR]/uv.lock",
+        "action": "use"
+      },
+      "dry_run": false
+    }
+
+    ----- stderr -----
+    "#);
+
     Ok(())
 }
 
