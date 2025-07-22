@@ -4036,7 +4036,12 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,

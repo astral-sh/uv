@@ -70,14 +70,10 @@ impl LatestClient<'_> {
 
                 for (filename, file) in files.all() {
                     // Skip distributions uploaded after the cutoff.
-                    if !self.exclude_newer.is_empty() {
+                    if let Some(exclude_newer) = self.exclude_newer.exclude_newer_package(package) {
                         match file.upload_time_utc_ms.as_ref() {
                             Some(&upload_time)
-                                if upload_time
-                                    >= self
-                                        .exclude_newer
-                                        .timestamp_millis(package)
-                                        .unwrap_or(0) =>
+                                if upload_time >= exclude_newer.timestamp_millis() =>
                             {
                                 continue;
                             }

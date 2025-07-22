@@ -2579,14 +2579,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
                             // Don't show versions removed by excluded-newer in hints.
-                            if let Some(exclude_newer) = exclude_newer {
+                            if let Some(exclude_newer) =
+                                exclude_newer.and_then(|en| en.exclude_newer_package(name))
+                            {
                                 let Some(prioritized_dist) = dists.prioritized_dist() else {
                                     continue;
                                 };
                                 if prioritized_dist.files().all(|file| {
                                     file.upload_time_utc_ms.is_none_or(|upload_time| {
-                                        upload_time
-                                            >= exclude_newer.timestamp_millis(name).unwrap_or(0)
+                                        upload_time >= exclude_newer.timestamp_millis()
                                     })
                                 }) {
                                     continue;

@@ -37,7 +37,6 @@ uv-workspace = { workspace = true, features = ["schemars", "clap"] }
 
 clap = { workspace = true }
 fs-err = { workspace = true }
-rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 textwrap = { workspace = true }

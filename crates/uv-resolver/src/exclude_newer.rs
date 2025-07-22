@@ -204,12 +204,6 @@ impl ExcludeNewer {
         self.package.get(package_name).copied().or(self.global)
     }
 
-    /// Returns the timestamp in milliseconds for a specific package.
-    pub fn timestamp_millis(&self, package_name: &PackageName) -> Option<i64> {
-        self.exclude_newer_package(package_name)
-            .map(|ts| ts.timestamp_millis())
-    }
-
     /// Returns true if this has any configuration (global or per-package).
     pub fn is_empty(&self) -> bool {
         self.global.is_none() && self.package.is_empty()
