@@ -112,13 +112,11 @@ async fn do_uninstall(
         }
         if !found {
             // Clear any remnants in the registry
-            if preview.is_enabled() {
-                #[cfg(windows)]
-                {
-                    uv_python::windows_registry::remove_orphan_registry_entries(
-                        &installed_installations,
-                    );
-                }
+            #[cfg(windows)]
+            {
+                uv_python::windows_registry::remove_orphan_registry_entries(
+                    &installed_installations,
+                );
             }
 
             if matches!(requests.as_slice(), [PythonRequest::Default]) {
