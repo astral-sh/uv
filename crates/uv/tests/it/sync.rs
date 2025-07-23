@@ -1651,7 +1651,7 @@ fn sync_relative_wheel() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -3206,7 +3206,7 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -3317,7 +3317,7 @@ fn sync_group_self() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4327,7 +4327,7 @@ fn convert_to_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4387,7 +4387,7 @@ fn convert_to_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4456,7 +4456,7 @@ fn convert_to_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4521,7 +4521,7 @@ fn convert_to_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -6434,7 +6434,7 @@ fn sync_dynamic_extra() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -7773,7 +7773,7 @@ fn sync_stale_egg_info() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -7880,7 +7880,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -7974,7 +7974,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8092,7 +8092,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8274,7 +8274,7 @@ fn sync_git_path_dependency() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8382,7 +8382,7 @@ fn sync_build_tag() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -9068,7 +9068,7 @@ fn sync_locked_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.11"
 
         [options]
@@ -9173,7 +9173,7 @@ fn sync_locked_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.11"
 
         [options]
@@ -9956,7 +9956,7 @@ fn locked_version_coherence() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -10060,7 +10060,7 @@ fn sync_build_constraints() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -10883,7 +10883,7 @@ fn conflicting_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -11049,7 +11049,7 @@ fn undeclared_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
