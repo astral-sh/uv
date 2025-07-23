@@ -546,17 +546,17 @@ impl SourceBuild {
                 let pyproject_toml: PyProjectToml =
                     PyProjectToml::deserialize(pyproject_toml.into_deserializer())
                         .map_err(Error::InvalidPyprojectTomlSchema)?;
-                let name = pyproject_toml
-                    .project
-                    .as_ref()
-                    .map(|project| &project.name)
-                    .or(package_name);
 
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     // If necessary, lower the requirements.
                     let requirements = match source_strategy {
                         SourceStrategy::Enabled => {
-                            if let Some(name) = name {
+                            if let Some(name) = pyproject_toml
+                                .project
+                                .as_ref()
+                                .map(|project| &project.name)
+                                .or(package_name)
+                            {
                                 let build_requires = uv_pypi_types::BuildRequires {
                                     name: Some(name.clone()),
                                     requires_dist: build_system.requires,
@@ -647,12 +647,12 @@ impl SourceBuild {
                         source_tree.to_path_buf(),
                     )));
                 }
+
                 // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
                 // case,  but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                let backend = default_backend.clone();
-                Ok((backend, None))
+                Ok((default_backend.clone(), None))
             }
             Err(err) => Err(Box::new(err.into())),
         }
