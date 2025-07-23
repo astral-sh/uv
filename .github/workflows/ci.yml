@@ -214,7 +214,18 @@ jobs:
         run: rustup show
 
       - uses: astral-sh/setup-uv@bd01e18f51369d5a26f1651c3cb451d3417e3bba # v6.3.1
+
+      - name: "Cache Python downloads"
+        uses: actions/cache@v4
+        with:
+          path: /tmp/uv/python
+          key: uv-${{ runner.os }}-${{ hashFiles('.python-versions') }}
+          restore-keys: |
+            uv-${{ runner.os }}-${{ hashFiles('.python-versions') }}
+            uv-${{ runner.os }}
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_CACHE_DIR: /tmp/uv/python
         run: uv python install
 
       - name: "Install cargo nextest"
@@ -226,6 +237,7 @@ jobs:
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
+          UV_PYTHON_CACHE_DIR: /tmp/uv/python
         run: |
           cargo nextest run \
             --features python-patch \
@@ -250,7 +262,18 @@ jobs:
         run: rustup show
 
       - uses: astral-sh/setup-uv@bd01e18f51369d5a26f1651c3cb451d3417e3bba # v6.3.1
+
+      - name: "Cache Python downloads"
+        uses: actions/cache@v4
+        with:
+          path: /tmp/uv/python
+          key: uv-${{ runner.os }}-${{ hashFiles('.python-versions') }}
+          restore-keys: |
+            uv-${{ runner.os }}-${{ hashFiles('.python-versions') }}
+            uv-${{ runner.os }}
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_CACHE_DIR: /tmp/uv/python
         run: uv python install
 
       - name: "Install cargo nextest"
@@ -262,6 +285,7 @@ jobs:
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
+          UV_PYTHON_CACHE_DIR: /tmp/uv/python
         run: |
           cargo nextest run \
             --no-default-features \
@@ -286,8 +310,19 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
+      - name: "Cache Python downloads"
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.UV_WORKSPACE }}/python
+          key: uv-${{ runner.os }}-${{ hashFiles('.python-versions') }}
+          restore-keys: |
+            uv-${{ runner.os }}-${{ hashFiles('.python-versions') }}
+            uv-${{ runner.os }}
+
       - uses: astral-sh/setup-uv@bd01e18f51369d5a26f1651c3cb451d3417e3bba # v6.3.1
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_CACHE_DIR: ${{ env.UV_WORKSPACE }}/python
         run: uv python install
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
@@ -311,6 +346,7 @@ jobs:
           # Avoid permission errors during concurrent tests
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
+          UV_PYTHON_CACHE_DIR: ${{ env.UV_WORKSPACE }}/python
         shell: bash
         run: |
           cargo nextest run \
