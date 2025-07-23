@@ -11,8 +11,8 @@ use clap::{Args, Parser, Subcommand};
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ConfigSettingPackageEntry, ExportFormat, IndexStrategy,
-    KeyringProviderType, PackageNameSpecifier, ProjectBuildBackend, TargetTriple, TrustedHost,
-    TrustedPublishing, VersionControlSystem,
+    KeyringProviderType, PackageNameSpecifier, PreviewFeatures, ProjectBuildBackend, TargetTriple,
+    TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
@@ -273,7 +273,7 @@ pub struct GlobalArgs {
     )]
     pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
-    /// Whether to enable experimental, preview features.
+    /// Whether to enable all experimental preview features.
     ///
     /// Preview features may change without warning.
     #[arg(global = true, long, hide = true, env = EnvVars::UV_PREVIEW, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
@@ -281,6 +281,25 @@ pub struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("preview"), hide = true)]
     pub no_preview: bool,
+
+    /// Enable experimental preview features.
+    ///
+    /// Preview features may change without warning.
+    ///
+    /// Use comma-separated values or pass multiple times to to enable multiple features.
+    ///
+    /// The following features are available: `python-install-default`, `python-upgrade`,
+    /// `json-output`, `pylock`, `add-bounds`.
+    #[arg(
+        global = true,
+        long = "preview-features",
+        env = EnvVars::UV_PREVIEW_FEATURES,
+        value_delimiter = ',',
+        hide = true,
+        alias = "preview-feature",
+        value_enum,
+    )]
+    pub preview_features: Vec<PreviewFeatures>,
 
     /// Avoid discovering a `pyproject.toml` or `uv.toml` file.
     ///

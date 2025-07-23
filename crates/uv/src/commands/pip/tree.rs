@@ -13,7 +13,7 @@ use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, PreviewMode};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, Preview};
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
@@ -52,7 +52,7 @@ pub(crate) async fn pip_tree(
     system: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(

@@ -8,7 +8,7 @@ use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::PreviewMode;
+use uv_configuration::Preview;
 use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
@@ -58,7 +58,7 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, Error> {
         let installation =
             find_python_installation(request, environments, preference, cache, preview)??;
@@ -72,7 +72,7 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, Error> {
         Ok(find_best_python_installation(
             request,
@@ -97,7 +97,7 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
@@ -220,7 +220,7 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
