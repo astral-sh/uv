@@ -3568,7 +3568,7 @@ fn add_update_git_reference_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r##"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -3581,7 +3581,7 @@ fn add_update_git_reference_script() -> Result<()> {
 
         import time
         time.sleep(5)
-        "###
+        "##
         );
     });
 
@@ -3601,7 +3601,7 @@ fn add_update_git_reference_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            script_content, @r###"
+            script_content, @r##"
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
@@ -3614,7 +3614,7 @@ fn add_update_git_reference_script() -> Result<()> {
 
         import time
         time.sleep(5)
-        "###
+        "##
         );
     });
 
@@ -10896,7 +10896,7 @@ fn add_preserves_empty_comment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10906,7 +10906,7 @@ fn add_preserves_empty_comment() -> Result<()> {
             # Second line.
             "anyio==3.7.0",
         ]
-        "###
+        "#
         );
     });
 
@@ -11307,6 +11307,115 @@ fn remove_all_with_comments() -> Result<()> {
     Ok(())
 }
 
+/// If multiple indexes are provided on the CLI, the first-provided index should take precedence
+/// during resolution, and should appear first in the `pyproject.toml` file.
+///
+/// See: <https://github.com/astral-sh/uv/issues/14817>
+#[test]
+fn multiple_index_cli() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("requests")
+        .arg("--index")
+        .arg("https://test.pypi.org/simple")
+        .arg("--index")
+        .arg("https://pypi.org/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==2.5.4.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests>=2.5.4.1",
+        ]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
+
+        [[tool.uv.index]]
+        url = "https://pypi.org/simple"
+        "#
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "requests" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "requests", specifier = ">=2.5.4.1" }]
+
+        [[package]]
+        name = "requests"
+        version = "2.5.4.1"
+        source = { registry = "https://test.pypi.org/simple" }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/6e/93/638dbb5f2c1f4120edaad4f3d45ffb1718e463733ad07d68f59e042901d6/requests-2.5.4.1.tar.gz", hash = "sha256:b19df51fa3e52a2bd7fc80a1ac11fb6b2f51a7c0bf31ba9ff6b5d11ea8605ae9", size = 448691, upload-time = "2015-03-13T21:30:03.228Z" }
+        wheels = [
+            { url = "https://test-files.pythonhosted.org/packages/6d/00/8ed1b6ea43b10bfe28d08e6af29fd6aa5d8dab5e45ead9394a6268a2d2ec/requests-2.5.4.1-py2.py3-none-any.whl", hash = "sha256:0a2c98e46121e7507afb0edc89d342641a1fb9e8d56f7d592d4975ee6b685f9a", size = 468942, upload-time = "2015-03-13T21:29:55.769Z" },
+        ]
+        "#
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// If an index is repeated by the CLI and an environment variable, the CLI value should take
 /// precedence.
 ///
@@ -11418,7 +11527,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
     Ok(())
 }
 
-/// If an index is repeated on the CLI, the last-provided index should take precedence.
+/// If an index is repeated on the CLI, the first-provided index should take precedence.
 /// Newlines in `UV_INDEX` should be treated as separators.
 ///
 /// The index that appears in the `pyproject.toml` should also be consistent with the index that
@@ -11524,7 +11633,7 @@ fn repeated_index_cli_environment_variable_newline() -> Result<()> {
     Ok(())
 }
 
-/// If an index is repeated on the CLI, the last-provided index should take precedence.
+/// If an index is repeated on the CLI, the first-provided index should take precedence.
 ///
 /// The index that appears in the `pyproject.toml` should also be consistent with the index that
 /// appears in the `uv.lock`.
@@ -11634,7 +11743,7 @@ fn repeated_index_cli() -> Result<()> {
     Ok(())
 }
 
-/// If an index is repeated on the CLI, the last-provided index should take precedence.
+/// If an index is repeated on the CLI, the first-provided index should take precedence.
 ///
 /// The index that appears in the `pyproject.toml` should also be consistent with the index that
 /// appears in the `uv.lock`.
@@ -13189,7 +13298,7 @@ fn add_path_with_existing_workspace() -> Result<()> {
     [tool.uv.workspace]
     members = [
         "project",
-     "dep",
+        "dep",
     ]
     "#
     );

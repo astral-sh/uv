@@ -392,6 +392,7 @@ impl PyProjectTomlMut {
 
     /// Add an [`Index`] to `tool.uv.index`.
     pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
+        let size = self.doc.len();
         let existing = self
             .doc
             .entry("tool")
@@ -472,8 +473,7 @@ impl PyProjectTomlMut {
         if table
             .get("url")
             .and_then(|item| item.as_str())
-            .and_then(|url| DisplaySafeUrl::parse(url).ok())
-            .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
+            .is_none_or(|url| url != index.url.without_credentials().as_str())
         {
             let mut formatted = Formatted::new(index.url.without_credentials().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
@@ -552,6 +552,9 @@ impl PyProjectTomlMut {
                     table.set_position(position + 1);
                 }
             }
+        } else {
+            let position = isize::try_from(size).expect("TOML table size fits in `isize`");
+            table.set_position(position);
         }
 
         // Push the item to the table.

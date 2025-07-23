@@ -12186,7 +12186,7 @@ requires-python = ">3.8"
 fn prerelease_path_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an a package that requires a pre-release version of `flask`.
+    // Create a package that requires a pre-release version of `flask`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -12240,7 +12240,7 @@ requires-python = ">3.8"
 fn prerelease_editable_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an a package that requires a pre-release version of `flask`.r
+    // Create a package that requires a pre-release version of `flask`.r
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -14860,16 +14860,17 @@ fn universal_conflicting_override_urls() -> Result<()> {
             .arg("requirements.in")
             .arg("--overrides")
             .arg("overrides.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
-    - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
-    - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
-    "###
+      × Failed to resolve dependencies for `anyio` (v4.3.0)
+      ╰─▶ Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
+          - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
+          - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+    "
     );
 
     Ok(())

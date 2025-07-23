@@ -186,13 +186,13 @@ pub struct PylockToml {
     lock_version: Version,
     created_by: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    requires_python: Option<RequiresPython>,
+    pub requires_python: Option<RequiresPython>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    extras: Vec<ExtraName>,
+    pub extras: Vec<ExtraName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    dependency_groups: Vec<GroupName>,
+    pub dependency_groups: Vec<GroupName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    default_groups: Vec<GroupName>,
+    pub default_groups: Vec<GroupName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -966,9 +966,12 @@ impl<'lock> PylockToml {
         self,
         install_path: &Path,
         markers: &MarkerEnvironment,
+        extras: &[ExtraName],
+        groups: &[GroupName],
         tags: &Tags,
         build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
+        // Convert the extras and dependency groups specifications to a concrete environment.
         let mut graph =
             petgraph::graph::DiGraph::with_capacity(self.packages.len(), self.packages.len());
 
@@ -977,7 +980,7 @@ impl<'lock> PylockToml {
 
         for package in self.packages {
             // Omit packages that aren't relevant to the current environment.
-            if !package.marker.evaluate(markers, &[]) {
+            if !package.marker.evaluate_pep751(markers, extras, groups) {
                 continue;
             }
 

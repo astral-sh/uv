@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -261,7 +260,7 @@ pub(crate) async fn install(
         with,
         constraints,
         overrides,
-        BTreeMap::default(),
+        None,
         &client_builder,
     )
     .await?;

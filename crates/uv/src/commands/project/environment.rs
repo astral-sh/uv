@@ -63,7 +63,7 @@ impl EphemeralEnvironment {
     /// environment's `site-packages` directory to Python's import search paths in addition to
     /// the ephemeral environment's `site-packages` directory. This works well at runtime, but
     /// is too dynamic for static analysis tools like ty to understand. As such, we
-    /// additionally write the `sys.prefix` of the parent environment to to the
+    /// additionally write the `sys.prefix` of the parent environment to the
     /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
     /// easier for these tools to statically and reliably understand the relationship between
     /// the two environments.
@@ -77,6 +77,20 @@ impl EphemeralEnvironment {
             &parent_environment_sys_prefix.escape_for_python(),
         )?;
         Ok(())
+    }
+
+    /// Returns the path to the environment's scripts directory.
+    pub(crate) fn scripts(&self) -> &Path {
+        self.0.scripts()
+    }
+
+    /// Returns the path to the environment's Python executable.
+    pub(crate) fn sys_executable(&self) -> &Path {
+        self.0.interpreter().sys_executable()
+    }
+
+    pub(crate) fn sys_prefix(&self) -> &Path {
+        self.0.interpreter().sys_prefix()
     }
 }
 

@@ -147,6 +147,11 @@ Provides the HTTP Basic authentication username for a named index.
 The `name` parameter is the name of the index. For example, given an index named `foo`,
 the environment variable key would be `UV_INDEX_FOO_USERNAME`.
 
+### `UV_INIT_BUILD_BACKEND`
+
+Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
+to use when creating a new project.
+
 ### `UV_INSECURE_HOST`
 
 Equivalent to the `--allow-insecure-host` argument.
@@ -251,6 +256,10 @@ Ignore `.env` files when executing `uv run` commands.
 ### `UV_NO_GITHUB_FAST_PATH`
 
 Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
+
+### `UV_NO_HF_TOKEN`
+
+Disable Hugging Face authentication, even if `HF_TOKEN` is set.
 
 ### `UV_NO_INSTALLER_METADATA`
 
@@ -527,6 +536,11 @@ See [force-color.org](https://force-color.org).
 ### `GITHUB_ACTIONS`
 
 Used for trusted publishing via `uv publish`.
+
+### `HF_TOKEN`
+
+Authentication token for Hugging Face requests. When set, uv will use this token
+when making requests to `https://huggingface.co/` and any subdomains.
 
 ### `HOME`
 

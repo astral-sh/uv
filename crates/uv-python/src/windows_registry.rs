@@ -3,6 +3,7 @@
 use crate::managed::ManagedPythonInstallation;
 use crate::platform::Arch;
 use crate::{COMPANY_DISPLAY_NAME, COMPANY_KEY, PythonInstallationKey, PythonVersion};
+use anyhow::anyhow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -238,8 +239,7 @@ pub fn remove_registry_entry<'a>(
             } else {
                 errors.push((
                     installation.key().clone(),
-                    anyhow::Error::new(err)
-                        .context("Failed to clear registry entries under HKCU:\\{python_entry}"),
+                    anyhow!("Failed to clear registry entries under HKCU:\\{python_entry}: {err}"),
                 ));
             }
         }

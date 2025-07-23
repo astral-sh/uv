@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
 use std::fmt::Write;
+use std::iter;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
@@ -944,7 +945,13 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 min_version.release()[0] == 0,
                 "migrate to major version bumps"
             );
-            let max_version = Version::new([0, min_version.release()[1] + 1]);
+            let max_version = Version::new(
+                [0, min_version.release()[1] + 1]
+                    .into_iter()
+                    // Add trailing zeroes to match the version length, to use the same style
+                    // as `--bounds`.
+                    .chain(iter::repeat_n(0, min_version.release().len() - 2)),
+            );
             indoc::formatdoc! {r#"
                 [build-system]
                 requires = ["uv_build>={min_version},<{max_version}"]

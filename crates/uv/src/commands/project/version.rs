@@ -21,7 +21,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
-    DiscoveryOptions, WorkspaceCache,
+    DiscoveryOptions, WorkspaceCache, WorkspaceError,
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 use uv_workspace::{VirtualProject, Workspace};
@@ -59,6 +59,7 @@ pub(crate) async fn project_version(
     output_format: VersionFormat,
     project_dir: &Path,
     package: Option<PackageName>,
+    explicit_project: bool,
     dry_run: bool,
     locked: bool,
     frozen: bool,
@@ -78,7 +79,7 @@ pub(crate) async fn project_version(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Read the metadata
-    let project = find_target(project_dir, package.as_ref()).await?;
+    let project = find_target(project_dir, package.as_ref(), explicit_project).await?;
 
     let pyproject_path = project.root().join("pyproject.toml");
     let Some(name) = project.project_name().cloned() else {
@@ -325,10 +326,30 @@ pub(crate) async fn project_version(
     Ok(status)
 }
 
+/// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
+/// and --project was not explicitly passed
+fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
+    if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
+        anyhow!(
+            "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
+            err,
+            "hint".bold().cyan(),
+            ":".bold(),
+            "uv self version".green()
+        )
+    } else {
+        err.into()
+    }
+}
+
 /// Find the pyproject.toml we're modifying
 ///
 /// Note that `uv version` never needs to support PEP 723 scripts, as those are unversioned.
-async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Result<VirtualProject> {
+async fn find_target(
+    project_dir: &Path,
+    package: Option<&PackageName>,
+    explicit_project: bool,
+) -> Result<VirtualProject> {
     // Find the project in the workspace.
     // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
@@ -338,7 +359,8 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Resul
                 &DiscoveryOptions::default(),
                 &WorkspaceCache::default(),
             )
-            .await?
+            .await
+            .map_err(|err| hint_uv_self_version(err, explicit_project))?
             .with_current_project(package.clone())
             .with_context(|| format!("Package `{package}` not found in workspace"))?,
         )
@@ -348,7 +370,8 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Resul
             &DiscoveryOptions::default(),
             &WorkspaceCache::default(),
         )
-        .await?
+        .await
+        .map_err(|err| hint_uv_self_version(err, explicit_project))?
     };
     Ok(project)
 }

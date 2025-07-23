@@ -1087,6 +1087,65 @@ fn python_install_freethreaded() {
     ----- stderr -----
     "###);
 
+    // Create a virtual environment with the freethreaded Python
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.13t"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.5
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    // `python`, `python3`, `python3.13`, and `python3.13t` should all be present
+    let scripts = context
+        .venv
+        .join(if cfg!(windows) { "Scripts" } else { "bin" });
+    assert!(
+        scripts
+            .join(format!("python{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    #[cfg(windows)]
+    assert!(
+        scripts
+            .join(format!("pythonw{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    #[cfg(unix)]
+    assert!(
+        scripts
+            .join(format!("python3{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    #[cfg(unix)]
+    assert!(
+        scripts
+            .join(format!("python3.13{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    assert!(
+        scripts
+            .join(format!("python3.13t{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    #[cfg(windows)]
+    assert!(
+        scripts
+            .join(format!("pythonw3.13t{}", std::env::consts::EXE_SUFFIX))
+            .exists()
+    );
+
+    // Remove the virtual environment
+    fs_err::remove_dir_all(&context.venv).unwrap();
+
     // Should be distinct from 3.13
     uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r"
     success: true
@@ -1099,14 +1158,14 @@ fn python_install_freethreaded() {
     ");
 
     // Should not work with older Python versions
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12t"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12t"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No download found for request: cpython-3.12t-[PLATFORM]
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @r"
     success: true
@@ -1996,8 +2055,8 @@ fn python_install_314() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0b4 in [TIME]
-     + cpython-3.14.0b4-[PLATFORM] (python3.14)
+    Installed Python 3.14.0rc1 in [TIME]
+     + cpython-3.14.0rc1-[PLATFORM] (python3.14)
     ");
 
     // Install a specific pre-release
@@ -2028,7 +2087,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.14.0rc1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2038,7 +2097,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.14.0rc1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2047,7 +2106,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0b4-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.14.0rc1-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");

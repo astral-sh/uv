@@ -53,8 +53,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Generator, Iterable, NamedTuple, Self
-from urllib.parse import unquote
+from typing import Any, Generator, Iterable, NamedTuple, Self
 
 import httpx
 
@@ -255,13 +254,7 @@ class CPythonFinder(Finder):
                 # Sort the assets to ensure deterministic results
                 row["assets"].sort(key=lambda asset: asset["browser_download_url"])
                 for asset in row["assets"]:
-                    # On older versions, GitHub didn't backfill the digest.
-                    if digest := asset["digest"]:
-                        sha256 = digest.removeprefix("sha256:")
-                    else:
-                        sha256 = None
-                    url = asset["browser_download_url"]
-                    download = self._parse_download_url(url, sha256)
+                    download = self._parse_download_asset(asset)
                     if download is None:
                         continue
                     if (
@@ -355,16 +348,19 @@ class CPythonFinder(Finder):
                 continue
             download.sha256 = checksums.get(download.filename)
 
-    def _parse_download_url(
-        self, url: str, sha256: str | None
-    ) -> PythonDownload | None:
-        """Parse an indygreg download URL into a PythonDownload object."""
+    def _parse_download_asset(self, asset: dict[str, Any]) -> PythonDownload | None:
+        """Parse a python-build-standalone download asset into a PythonDownload object."""
+        url = asset["browser_download_url"]
         # Ex)
         # https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
         if url.endswith(".sha256"):
             return None
-        filename = unquote(url.rsplit("/", maxsplit=1)[-1])
         release = int(url.rsplit("/")[-2])
+        filename = asset["name"]
+        sha256 = None
+        # On older versions, GitHub didn't backfill the digest.
+        if digest := asset["digest"]:
+            sha256 = digest.removeprefix("sha256:")
 
         match = self._filename_re.match(filename) or self._legacy_filename_re.match(
             filename
@@ -611,6 +607,9 @@ class GraalPyFinder(Finder):
                 platform = self._normalize_os(m.group(1))
                 arch = self._normalize_arch(m.group(2))
                 libc = "gnu" if platform == "linux" else "none"
+                sha256 = None
+                if digest := asset["digest"]:
+                    sha256 = digest.removeprefix("sha256:")
                 download = PythonDownload(
                     release=0,
                     version=python_version,
@@ -623,6 +622,7 @@ class GraalPyFinder(Finder):
                     implementation=self.implementation,
                     filename=asset["name"],
                     url=url,
+                    sha256=sha256,
                 )
                 # Only keep the latest GraalPy version of each arch/platform
                 if (python_version, arch, platform) not in results:
@@ -637,6 +637,7 @@ class GraalPyFinder(Finder):
         return self.PLATFORM_MAPPING.get(os, os)
 
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
+        downloads = list(filter(lambda d: not d.sha256, downloads))
         for idx, batch in enumerate(batched(downloads, n)):
             logging.info("Fetching GraalPy checksums: %d/%d", idx * n, len(downloads))
             checksum_requests = []

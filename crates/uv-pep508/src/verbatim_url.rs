@@ -62,6 +62,7 @@ impl VerbatimUrl {
     ///
     /// If no root directory is provided, relative paths are resolved against the current working
     /// directory.
+    #[cfg(feature = "non-pep508-extensions")] // PEP 508 arguably only allows absolute file URLs.
     pub fn from_url_or_path(
         input: &str,
         root_dir: Option<&Path>,

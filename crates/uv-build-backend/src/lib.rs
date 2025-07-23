@@ -680,7 +680,7 @@ mod tests {
             license = { file = "license.txt" }
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
         "#
             },
@@ -748,7 +748,7 @@ mod tests {
             version = "1.0.0"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
         "#
             },
@@ -812,7 +812,7 @@ mod tests {
             version = "1.0.0"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
 
             [tool.uv.build-backend]
@@ -854,7 +854,7 @@ mod tests {
             version = "1.0.0"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
 
             [tool.uv.build-backend]
@@ -879,7 +879,7 @@ mod tests {
             version = "1.0.0"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
 
             [tool.uv.build-backend]
@@ -928,7 +928,7 @@ mod tests {
             version = "1.0.0"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
 
             [tool.uv.build-backend]
@@ -959,7 +959,7 @@ mod tests {
             version = "1.0.0"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
             "#
         };
@@ -1010,7 +1010,7 @@ mod tests {
             version = "1.0.0"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
 
             [tool.uv.build-backend]
@@ -1036,7 +1036,7 @@ mod tests {
             module-name = "simple_namespace.part"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
             "#
         };
@@ -1104,7 +1104,7 @@ mod tests {
             namespace = true
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
             "#
         };
@@ -1127,7 +1127,7 @@ mod tests {
             namespace = true
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
             "#
         };
@@ -1188,7 +1188,7 @@ mod tests {
             namespace = true
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
             "#
         };
@@ -1211,7 +1211,7 @@ mod tests {
             module-name = "cloud-stubs.db.schema"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
             "#
         };
@@ -1261,7 +1261,7 @@ mod tests {
             module-name = ["foo", "simple_namespace.part_a", "simple_namespace.part_b"]
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
             build-backend = "uv_build"
             "#
         };

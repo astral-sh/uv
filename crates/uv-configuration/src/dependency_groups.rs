@@ -186,6 +186,18 @@ impl DependencyGroupsInner {
         self.include.names().chain(&self.exclude)
     }
 
+    /// Returns an iterator over all groups that are included in the specification,
+    /// assuming `all_names` is an iterator over all groups.
+    pub fn group_names<'a, Names>(
+        &'a self,
+        all_names: Names,
+    ) -> impl Iterator<Item = &'a GroupName> + 'a
+    where
+        Names: Iterator<Item = &'a GroupName> + 'a,
+    {
+        all_names.filter(move |name| self.contains(name))
+    }
+
     /// Iterate over all groups the user explicitly asked for on the CLI
     pub fn explicit_names(&self) -> impl Iterator<Item = &GroupName> {
         let DependencyGroupsHistory {

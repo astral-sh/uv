@@ -9,8 +9,9 @@ use anyhow::{Context, anyhow, bail};
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use thiserror::Error;
 use tokio::process::Command;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use url::Url;
 
 use uv_cache::Cache;
@@ -22,7 +23,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
-use uv_fs::{PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{
@@ -1071,6 +1072,67 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 requirements_site_packages.escape_for_python(),
             ))?;
 
+            // N.B. The order here matters — earlier interpreters take precedence over the
+            // later ones.
+            for interpreter in [requirements_env.interpreter(), &base_interpreter] {
+                // Copy each entrypoint from the base environments to the ephemeral environment,
+                // updating the Python executable target to ensure they run in the ephemeral
+                // environment.
+                for entry in fs_err::read_dir(interpreter.scripts())? {
+                    let entry = entry?;
+                    if !entry.file_type()?.is_file() {
+                        continue;
+                    }
+                    match copy_entrypoint(
+                        &entry.path(),
+                        &ephemeral_env.scripts().join(entry.file_name()),
+                        interpreter.sys_executable(),
+                        ephemeral_env.sys_executable(),
+                    ) {
+                        Ok(()) => {}
+                        // If the entrypoint already exists, skip it.
+                        Err(CopyEntrypointError::Io(err))
+                            if err.kind() == std::io::ErrorKind::AlreadyExists =>
+                        {
+                            trace!(
+                                "Skipping copy of entrypoint `{}`: already exists",
+                                &entry.path().display()
+                            );
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+
+                // Link data directories from the base environment to the ephemeral environment.
+                //
+                // This is critical for Jupyter Lab, which cannot operate without the files it
+                // writes to `<prefix>/share/jupyter`.
+                //
+                // See https://github.com/jupyterlab/jupyterlab/issues/17716
+                for dir in &["etc/jupyter", "share/jupyter"] {
+                    let source = interpreter.sys_prefix().join(dir);
+                    if !matches!(source.try_exists(), Ok(true)) {
+                        continue;
+                    }
+                    if !source.is_dir() {
+                        continue;
+                    }
+                    let target = ephemeral_env.sys_prefix().join(dir);
+                    if let Some(parent) = target.parent() {
+                        fs_err::create_dir_all(parent)?;
+                    }
+                    match create_symlink(&source, &target) {
+                        Ok(()) => trace!(
+                            "Created link for {} -> {}",
+                            target.user_display(),
+                            source.user_display()
+                        ),
+                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+            }
+
             // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
             // file. This helps out static-analysis tools such as ty (see docs on
             // `CachedEnvironment::set_parent_environment`).
@@ -1668,4 +1730,127 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
     envvar
         .parse::<u32>()
         .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+}
+
+#[derive(Error, Debug)]
+enum CopyEntrypointError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[cfg(windows)]
+    #[error(transparent)]
+    Trampoline(#[from] uv_trampoline_builder::Error),
+}
+
+/// Create a copy of the entrypoint at `source` at `target`, if it has a Python shebang, replacing
+/// the previous Python executable with a new one.
+///
+/// This is a no-op if the target already exists.
+///
+/// Note on Windows, the entrypoints do not use shebangs and require a rewrite of the trampoline.
+#[cfg(unix)]
+fn copy_entrypoint(
+    source: &Path,
+    target: &Path,
+    previous_executable: &Path,
+    python_executable: &Path,
+) -> Result<(), CopyEntrypointError> {
+    use std::io::{Seek, Write};
+    use std::os::unix::fs::PermissionsExt;
+
+    use fs_err::os::unix::fs::OpenOptionsExt;
+
+    let mut file = fs_err::File::open(source)?;
+    let mut buffer = [0u8; 2];
+    if file.read_exact(&mut buffer).is_err() {
+        // File is too small to have a shebang
+        trace!(
+            "Skipping copy of entrypoint `{}`: file is too small to contain a shebang",
+            source.user_display()
+        );
+        return Ok(());
+    }
+
+    // Check if it starts with `#!` to avoid reading binary files and such into memory
+    if &buffer != b"#!" {
+        trace!(
+            "Skipping copy of entrypoint `{}`: does not start with #!",
+            source.user_display()
+        );
+        return Ok(());
+    }
+
+    let mut contents = String::new();
+    file.seek(std::io::SeekFrom::Start(0))?;
+    match file.read_to_string(&mut contents) {
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::InvalidData => {
+            // If the file is not valid UTF-8, we skip it in case it was a binary file with `#!` at
+            // the start (which seems pretty niche, but being defensive here seems safe)
+            trace!(
+                "Skipping copy of entrypoint `{}`: is not valid UTF-8",
+                source.user_display()
+            );
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    }
+
+    let Some(contents) = contents
+        // Check for a relative path or relocatable shebang
+        .strip_prefix(
+            r#"#!/bin/sh
+'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
+' '''
+"#,
+        )
+        // Or an absolute path shebang
+        .or_else(|| contents.strip_prefix(&format!("#!{}\n", previous_executable.display())))
+    else {
+        // If it's not a Python shebang, we'll skip it
+        trace!(
+            "Skipping copy of entrypoint `{}`: does not start with expected shebang",
+            source.user_display()
+        );
+        return Ok(());
+    };
+
+    let contents = format!("#!{}\n{}", python_executable.display(), contents);
+    let mode = fs_err::metadata(source)?.permissions().mode();
+    let mut file = fs_err::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(mode)
+        .open(target)?;
+    file.write_all(contents.as_bytes())?;
+
+    trace!("Updated entrypoint at {}", target.user_display());
+
+    Ok(())
+}
+
+/// Create a copy of the entrypoint at `source` at `target`, if it's a Python script launcher,
+/// replacing the target Python executable with a new one.
+#[cfg(windows)]
+fn copy_entrypoint(
+    source: &Path,
+    target: &Path,
+    _previous_executable: &Path,
+    python_executable: &Path,
+) -> Result<(), CopyEntrypointError> {
+    use uv_trampoline_builder::Launcher;
+
+    let Some(launcher) = Launcher::try_from_path(source)? else {
+        return Ok(());
+    };
+
+    let launcher = launcher.with_python_path(python_executable.to_path_buf());
+    let mut file = fs_err::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(target)?;
+    launcher.write_to_file(&mut file)?;
+
+    trace!("Updated entrypoint at {}", target.user_display());
+
+    Ok(())
 }

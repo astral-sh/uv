@@ -1545,86 +1545,6 @@ fn git_version_info_expected() -> bool {
     git_dir.exists()
 }
 
-// version_get_fallback with `--json`
-#[test]
-fn version_get_fallback_unmanaged_json() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
-        [project]
-        name = "myapp"
-        version = "0.1.2"
-
-        [tool.uv]
-        managed = false
-        "#,
-    )?;
-
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (
-                r#"version": "\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?""#,
-                r#"version": "[VERSION]""#,
-            ),
-            (
-                r#"short_commit_hash": ".*""#,
-                r#"short_commit_hash": "[HASH]""#,
-            ),
-            (r#"commit_hash": ".*""#, r#"commit_hash": "[LONGHASH]""#),
-            (r#"commit_date": ".*""#, r#"commit_date": "[DATE]""#),
-            (r#"last_tag": (".*"|null)"#, r#"last_tag": "[TAG]""#),
-            (
-                r#"commits_since_last_tag": .*"#,
-                r#"commits_since_last_tag": [COUNT]"#,
-            ),
-        ])
-        .collect::<Vec<_>>();
-    if git_version_info_expected() {
-        uv_snapshot!(filters, context.version()
-          .arg("--output-format").arg("json"), @r"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: The project is marked as unmanaged: `[TEMP_DIR]/`
-        ");
-    } else {
-        uv_snapshot!(filters, context.version()
-          .arg("--output-format").arg("json"), @r#"
-      success: true
-      exit_code: 0
-      ----- stdout -----
-      {
-        "package_name": "uv",
-        "version": "[VERSION]",
-        "commit_info": null
-      }
-
-      ----- stderr -----
-      warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
-      "#);
-    }
-
-    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
-    assert_snapshot!(
-        pyproject,
-    @r#"
-    [project]
-    name = "myapp"
-    version = "0.1.2"
-
-    [tool.uv]
-    managed = false
-    "#
-    );
-    Ok(())
-}
-
 // Should error if this pyproject.toml isn't usable for whatever reason
 // and --project was passed explicitly.
 #[test]
@@ -1687,20 +1607,20 @@ fn version_get_fallback_missing_strict() -> Result<()> {
     Ok(())
 }
 
-// Should error if this pyproject.toml is missing
-// and --preview was passed explicitly.
+/// Should error with hint if pyproject.toml is missing in normal mode
 #[test]
-fn version_get_fallback_missing_strict_preview() -> Result<()> {
+fn version_get_missing_with_hint() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.version()
-        .arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.version(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
+
+    hint: If you meant to view uv's version, use `uv self version` instead
     ");
 
     Ok(())
@@ -2073,7 +1993,7 @@ fn version_set_workspace() -> Result<()> {
         );
     });
 
-    // Set the other child's version, refereshing the lock and sync
+    // Set the other child's version, refreshing the lock and sync
     let mut version_cmd = context.version();
     version_cmd
         .arg("--package")

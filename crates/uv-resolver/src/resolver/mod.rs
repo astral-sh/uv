@@ -635,19 +635,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                     ForkedDependencies::Unforked(dependencies) => {
                         // Enrich the state with any URLs, etc.
-                        state.visit_package_version_dependencies(
-                            next_id,
-                            &version,
-                            &self.urls,
-                            &self.indexes,
-                            &dependencies,
-                            &self.git,
-                            &self.workspace_members,
-                            self.selector.resolution_strategy(),
-                        )?;
+                        state
+                            .visit_package_version_dependencies(
+                                next_id,
+                                &version,
+                                &self.urls,
+                                &self.indexes,
+                                &dependencies,
+                                &self.git,
+                                &self.workspace_members,
+                                self.selector.resolution_strategy(),
+                            )
+                            .map_err(|err| {
+                                enrich_dependency_error(err, next_id, &version, &state.pubgrub)
+                            })?;
 
                         // Emit a request to fetch the metadata for each registry package.
-                        self.visit_dependencies(&dependencies, &state, &request_sink)?;
+                        self.visit_dependencies(&dependencies, &state, &request_sink)
+                            .map_err(|err| {
+                                enrich_dependency_error(err, next_id, &version, &state.pubgrub)
+                            })?;
 
                         // Add the dependencies to the state.
                         state.add_package_version_dependencies(next_id, &version, dependencies);
@@ -870,19 +877,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             })
             .map(move |(fork, mut forked_state)| {
                 // Enrich the state with any URLs, etc.
-                forked_state.visit_package_version_dependencies(
-                    package,
-                    version,
-                    &self.urls,
-                    &self.indexes,
-                    &fork.dependencies,
-                    &self.git,
-                    &self.workspace_members,
-                    self.selector.resolution_strategy(),
-                )?;
+                forked_state
+                    .visit_package_version_dependencies(
+                        package,
+                        version,
+                        &self.urls,
+                        &self.indexes,
+                        &fork.dependencies,
+                        &self.git,
+                        &self.workspace_members,
+                        self.selector.resolution_strategy(),
+                    )
+                    .map_err(|err| {
+                        enrich_dependency_error(err, package, version, &forked_state.pubgrub)
+                    })?;
 
                 // Emit a request to fetch the metadata for each registry package.
-                self.visit_dependencies(&fork.dependencies, &forked_state, request_sink)?;
+                self.visit_dependencies(&fork.dependencies, &forked_state, request_sink)
+                    .map_err(|err| {
+                        enrich_dependency_error(err, package, version, &forked_state.pubgrub)
+                    })?;
 
                 // Add the dependencies to the state.
                 forked_state.add_package_version_dependencies(package, version, fork.dependencies);
@@ -3834,6 +3848,20 @@ pub(crate) struct VersionFork {
     id: Id<PubGrubPackage>,
     /// The initial version to set for the selected package in the fork.
     version: Option<Version>,
+}
+
+/// Enrich a [`ResolveError`] with additional information about why a given package was included.
+fn enrich_dependency_error(
+    error: ResolveError,
+    id: Id<PubGrubPackage>,
+    version: &Version,
+    pubgrub: &State<UvDependencyProvider>,
+) -> ResolveError {
+    let Some(name) = pubgrub.package_store[id].name_no_root() else {
+        return error;
+    };
+    let chain = DerivationChainBuilder::from_state(id, version, pubgrub).unwrap_or_default();
+    ResolveError::Dependencies(Box::new(error), name.clone(), version.clone(), chain)
 }
 
 /// Compute the set of markers for which a package is known to be relevant.

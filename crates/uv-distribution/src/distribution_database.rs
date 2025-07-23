@@ -20,7 +20,7 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, InstalledDist, Name, SourceDist,
+    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, IndexUrl, InstalledDist, Name, SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -201,6 +201,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 match self
                     .stream_wheel(
                         url.clone(),
+                        dist.index(),
                         &wheel.filename,
                         wheel.file.size,
                         &wheel_entry,
@@ -236,6 +237,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let archive = self
                             .download_wheel(
                                 url,
+                                dist.index(),
                                 &wheel.filename,
                                 wheel.file.size,
                                 &wheel_entry,
@@ -272,6 +274,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 match self
                     .stream_wheel(
                         wheel.url.raw().clone(),
+                        None,
                         &wheel.filename,
                         None,
                         &wheel_entry,
@@ -301,6 +304,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let archive = self
                             .download_wheel(
                                 wheel.url.raw().clone(),
+                                None,
                                 &wheel.filename,
                                 None,
                                 &wheel_entry,
@@ -534,6 +538,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn stream_wheel(
         &self,
         url: DisplaySafeUrl,
+        index: Option<&IndexUrl>,
         filename: &WheelFilename,
         size: Option<u64>,
         wheel_entry: &CacheEntry,
@@ -616,13 +621,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Fetch the archive from the cache, or download it if necessary.
         let req = self.request(url.clone())?;
 
+        // Determine the cache control policy for the URL.
         let cache_control = match self.client.unmanaged.connectivity() {
-            Connectivity::Online => CacheControl::from(
-                self.build_context
-                    .cache()
-                    .freshness(&http_entry, Some(&filename.name), None)
-                    .map_err(Error::CacheRead)?,
-            ),
+            Connectivity::Online => {
+                if let Some(header) = index.and_then(|index| {
+                    self.build_context
+                        .locations()
+                        .artifact_cache_control_for(index)
+                }) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.build_context
+                            .cache()
+                            .freshness(&http_entry, Some(&filename.name), None)
+                            .map_err(Error::CacheRead)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -654,7 +670,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(async |client| {
                     client
                         .cached_client()
-                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(
+                            self.request(url)?,
+                            &http_entry,
+                            cache_control,
+                            download,
+                        )
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
@@ -671,6 +692,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn download_wheel(
         &self,
         url: DisplaySafeUrl,
+        index: Option<&IndexUrl>,
         filename: &WheelFilename,
         size: Option<u64>,
         wheel_entry: &CacheEntry,
@@ -783,13 +805,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Fetch the archive from the cache, or download it if necessary.
         let req = self.request(url.clone())?;
 
+        // Determine the cache control policy for the URL.
         let cache_control = match self.client.unmanaged.connectivity() {
-            Connectivity::Online => CacheControl::from(
-                self.build_context
-                    .cache()
-                    .freshness(&http_entry, Some(&filename.name), None)
-                    .map_err(Error::CacheRead)?,
-            ),
+            Connectivity::Online => {
+                if let Some(header) = index.and_then(|index| {
+                    self.build_context
+                        .locations()
+                        .artifact_cache_control_for(index)
+                }) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.build_context
+                            .cache()
+                            .freshness(&http_entry, Some(&filename.name), None)
+                            .map_err(Error::CacheRead)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -821,7 +854,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(async |client| {
                     client
                         .cached_client()
-                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(
+                            self.request(url)?,
+                            &http_entry,
+                            cache_control,
+                            download,
+                        )
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,

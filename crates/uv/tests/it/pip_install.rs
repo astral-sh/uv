@@ -118,7 +118,7 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -129,16 +129,15 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
         |
       1 | 123 - 456
         |     ^
-      expected `.`, `=`
+      key with no value, expected `=`
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
       |
     1 | 123 - 456
       |     ^
-    expected `.`, `=`
-
-    "###
+    key with no value, expected `=`
+    "
     );
 
     Ok(())
@@ -1298,27 +1297,27 @@ fn install_extras() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `<dir>[extra]` syntax or `-r <file>` instead.
-    "###
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `<dir>[extra]` syntax or `-r <file>` instead.
+    "
     );
 
     // Request extras for a source tree
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
-    "###
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    "
     );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -1327,14 +1326,14 @@ fn install_extras() -> Result<()> {
     // Request extras for a requirements file
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
-        .arg("-r").arg("requirements.txt"), @r###"
+        .arg("-r").arg("requirements.txt"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
-    "###
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    "
     );
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -11386,6 +11385,250 @@ fn pep_751_multiple_sources() -> Result<()> {
 
     ----- stderr -----
     error: Package `typing-extensions` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_groups() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(
+        r#"
+lock-version = "1.0"
+requires-python = "==3.13.*"
+environments = [
+    "python_version == \"3.13\"",
+]
+extras = ["async", "dev"]
+dependency-groups = ["default", "test"]
+default-groups = ["default"]
+created-by = "pdm"
+[[packages]]
+name = "anyio"
+version = "4.9.0"
+requires-python = ">=3.9"
+sdist = {name = "anyio-4.9.0.tar.gz", url = "https://files.pythonhosted.org/packages/95/7d/4c1bd541d4dffa1b52bd83fb8527089e097a106fc90b467a7313b105f840/anyio-4.9.0.tar.gz", hashes = {sha256 = "673c0c244e15788651a4ff38710fea9675823028a6f08a5eda409e0c9840a028"}}
+wheels = [
+    {name = "anyio-4.9.0-py3-none-any.whl",url = "https://files.pythonhosted.org/packages/a1/ee/48ca1a7c89ffec8b6a0c5d02b89c305671d5ffd8d3c94acf8b8c408575bb/anyio-4.9.0-py3-none-any.whl",hashes = {sha256 = "9f76d541cad6e36af7beb62e978876f3b41e3e04f2c1fbf0884604c0a9c4d93c"}},
+]
+marker = "\"async\" in extras"
+
+[packages.tool.pdm]
+dependencies = [
+    "exceptiongroup>=1.0.2; python_version < \"3.11\"",
+    "idna>=2.8",
+    "sniffio>=1.1",
+    "typing-extensions>=4.5; python_version < \"3.13\"",
+]
+
+[[packages]]
+name = "blinker"
+version = "1.9.0"
+requires-python = ">=3.9"
+sdist = {name = "blinker-1.9.0.tar.gz", url = "https://files.pythonhosted.org/packages/21/28/9b3f50ce0e048515135495f198351908d99540d69bfdc8c1d15b73dc55ce/blinker-1.9.0.tar.gz", hashes = {sha256 = "b4ce2265a7abece45e7cc896e98dbebe6cead56bcf805a3d23136d145f5445bf"}}
+wheels = [
+    {name = "blinker-1.9.0-py3-none-any.whl",url = "https://files.pythonhosted.org/packages/10/cb/f2ad4230dc2eb1a74edf38f1a38b9b52277f75bef262d8908e60d957e13c/blinker-1.9.0-py3-none-any.whl",hashes = {sha256 = "ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc"}},
+]
+marker = "\"dev\" in extras"
+
+[packages.tool.pdm]
+dependencies = []
+
+[[packages]]
+name = "idna"
+version = "3.10"
+requires-python = ">=3.6"
+sdist = {name = "idna-3.10.tar.gz", url = "https://files.pythonhosted.org/packages/f1/70/7703c29685631f5a7590aa73f1f1d3fa9a380e654b86af429e0934a32f7d/idna-3.10.tar.gz", hashes = {sha256 = "12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9"}}
+wheels = [
+    {name = "idna-3.10-py3-none-any.whl",url = "https://files.pythonhosted.org/packages/76/c6/c88e154df9c4e1a2a66ccf0005a88dfb2650c1dffb6f5ce603dfbd452ce3/idna-3.10-py3-none-any.whl",hashes = {sha256 = "946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3"}},
+]
+marker = "\"async\" in extras"
+
+[packages.tool.pdm]
+dependencies = []
+
+[[packages]]
+name = "iniconfig"
+version = "2.1.0"
+requires-python = ">=3.8"
+sdist = {name = "iniconfig-2.1.0.tar.gz", url = "https://files.pythonhosted.org/packages/f2/97/ebf4da567aa6827c909642694d71c9fcf53e5b504f2d96afea02718862f3/iniconfig-2.1.0.tar.gz", hashes = {sha256 = "3abbd2e30b36733fee78f9c7f7308f2d0050e88f0087fd25c2645f63c773e1c7"}}
+wheels = [
+    {name = "iniconfig-2.1.0-py3-none-any.whl",url = "https://files.pythonhosted.org/packages/2c/e1/e6716421ea10d38022b952c159d5161ca1193197fb744506875fbb87ea7b/iniconfig-2.1.0-py3-none-any.whl",hashes = {sha256 = "9deba5723312380e77435581c6bf4935c94cbfab9b1ed33ef8d238ea168eb760"}},
+]
+marker = "\"default\" in dependency_groups"
+
+[packages.tool.pdm]
+dependencies = []
+
+[[packages]]
+name = "pygments"
+version = "2.19.2"
+requires-python = ">=3.8"
+sdist = {name = "pygments-2.19.2.tar.gz", url = "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz", hashes = {sha256 = "636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887"}}
+wheels = [
+    {name = "pygments-2.19.2-py3-none-any.whl",url = "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl",hashes = {sha256 = "86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b"}},
+]
+marker = "\"test\" in dependency_groups"
+
+[packages.tool.pdm]
+dependencies = []
+
+[[packages]]
+name = "sniffio"
+version = "1.3.1"
+requires-python = ">=3.7"
+sdist = {name = "sniffio-1.3.1.tar.gz", url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hashes = {sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"}}
+wheels = [
+    {name = "sniffio-1.3.1-py3-none-any.whl",url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl",hashes = {sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"}},
+]
+marker = "\"async\" in extras"
+
+[packages.tool.pdm]
+dependencies = []
+
+[tool.pdm]
+hashes = {sha256 = "51795362d337720c28bd6c3a26eb33751f2b69590261f599ffb4172ee2c441c6"}
+
+[[tool.pdm.targets]]
+requires_python = "==3.13.*"
+        "#,
+    )?;
+
+    // By default, only `iniconfig` should be installed, since it's in the default group.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.1.0
+    "
+    );
+
+    // With `--extra async`, `anyio` should be installed.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml")
+        .arg("--extra")
+        .arg("async"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.9.0
+     + idna==3.10
+     + sniffio==1.3.1
+    "
+    );
+
+    // With `--group test`, `pygments` should be installed.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml")
+        .arg("--group")
+        .arg("test"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + pygments==2.19.2
+    "
+    );
+
+    // With `--all-extras`, `blinker` should be installed.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml")
+        .arg("--all-extras"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + blinker==1.9.0
+    "
+    );
+
+    // `--group pylock.toml:test` should be rejeceted.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml")
+        .arg("--group")
+        .arg("pylock.toml:test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'pylock.toml:test' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: pylock.toml
+
+    For more information, try '--help'.
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.13"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the `pylock.toml`'s Python requirement: `>=3.13`
     "
     );
 

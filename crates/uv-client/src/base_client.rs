@@ -67,6 +67,7 @@ pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
+    built_in_root_certs: bool,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -127,6 +128,7 @@ impl BaseClientBuilder<'_> {
             keyring: KeyringProviderType::default(),
             allow_insecure_host: vec![],
             native_tls: false,
+            built_in_root_certs: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -189,6 +191,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.native_tls = native_tls;
+        self
+    }
+
+    #[must_use]
+    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
+        self.built_in_root_certs = built_in_root_certs;
         self
     }
 
@@ -388,7 +396,7 @@ impl<'a> BaseClientBuilder<'a> {
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
             .read_timeout(timeout)
-            .tls_built_in_root_certs(false)
+            .tls_built_in_root_certs(self.built_in_root_certs)
             .redirect(redirect_policy.reqwest_policy());
 
         // If necessary, accept invalid certificates.
@@ -920,18 +928,34 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
     }
 
     // IO Errors may be nested through custom IO errors.
+    let mut has_io_error = false;
     for io_err in find_sources::<io::Error>(&err) {
-        if io_err.kind() == io::ErrorKind::ConnectionReset
-            || io_err.kind() == io::ErrorKind::UnexpectedEof
-            || io_err.kind() == io::ErrorKind::BrokenPipe
-        {
-            trace!("Retrying error: `ConnectionReset` or `UnexpectedEof`");
+        has_io_error = true;
+        let retryable_io_err_kinds = [
+            // https://github.com/astral-sh/uv/issues/12054
+            io::ErrorKind::BrokenPipe,
+            // From reqwest-middleware
+            io::ErrorKind::ConnectionAborted,
+            // https://github.com/astral-sh/uv/issues/3514
+            io::ErrorKind::ConnectionReset,
+            // https://github.com/astral-sh/uv/issues/14699
+            io::ErrorKind::InvalidData,
+            // https://github.com/astral-sh/uv/issues/9246
+            io::ErrorKind::UnexpectedEof,
+        ];
+        if retryable_io_err_kinds.contains(&io_err.kind()) {
+            trace!("Retrying error: `{}`", io_err.kind());
             return true;
         }
-        trace!("Cannot retry IO error: not one of `ConnectionReset` or `UnexpectedEof`");
+        trace!(
+            "Cannot retry IO error `{}`, not a retryable IO error kind",
+            io_err.kind()
+        );
     }
 
-    trace!("Cannot retry error: not an IO error");
+    if !has_io_error {
+        trace!("Cannot retry error: not an extended IO error");
+    }
     false
 }
 

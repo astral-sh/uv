@@ -30,21 +30,20 @@ impl DependencyMetadata {
 
         if let Some(version) = version {
             // If a specific version was requested, search for an exact match, then a global match.
-            let metadata = versions
+            let metadata = if let Some(metadata) = versions
                 .iter()
-                .find(|v| v.version.as_ref() == Some(version))
-                .inspect(|_| {
-                    debug!("Found dependency metadata entry for `{package}=={version}`");
-                })
-                .or_else(|| versions.iter().find(|v| v.version.is_none()))
-                .inspect(|_| {
-                    debug!("Found global metadata entry for `{package}`");
-                });
-            let Some(metadata) = metadata else {
+                .find(|entry| entry.version.as_ref() == Some(version))
+            {
+                debug!("Found dependency metadata entry for `{package}=={version}`");
+                metadata
+            } else if let Some(metadata) = versions.iter().find(|entry| entry.version.is_none()) {
+                debug!("Found global metadata entry for `{package}`");
+                metadata
+            } else {
                 warn!("No dependency metadata entry found for `{package}=={version}`");
                 return None;
             };
-            debug!("Found dependency metadata entry for `{package}=={version}`");
+
             Some(ResolutionMetadata {
                 name: metadata.name.clone(),
                 version: version.clone(),
@@ -65,6 +64,7 @@ impl DependencyMetadata {
                 return None;
             };
             debug!("Found dependency metadata entry for `{package}` (assuming: `{version}`)");
+
             Some(ResolutionMetadata {
                 name: metadata.name.clone(),
                 version,
@@ -86,7 +86,7 @@ impl DependencyMetadata {
 /// <https://packaging.python.org/specifications/core-metadata/>.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct StaticMetadata {
     // Mandatory fields
     pub name: PackageName,

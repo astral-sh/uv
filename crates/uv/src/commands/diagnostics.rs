@@ -92,6 +92,15 @@ impl OperationDiagnostic {
                 requested_dist_error(kind, dist, &chain, err, self.hint);
                 None
             }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
+                error,
+                name,
+                version,
+                chain,
+            )) => {
+                dependencies_error(error, &name, &version, &chain, self.hint.clone());
+                None
+            }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
                 dist_error(
                     kind,
@@ -227,6 +236,54 @@ pub(crate) fn requested_dist_error(
         kind,
         dist,
         cause,
+        help,
+    });
+    anstream::eprint!("{report:?}");
+}
+
+/// Render an error in fetching a package's dependencies.
+pub(crate) fn dependencies_error(
+    error: Box<uv_resolver::ResolveError>,
+    name: &PackageName,
+    version: &Version,
+    chain: &DerivationChain,
+    help: Option<String>,
+) {
+    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[error("Failed to resolve dependencies for `{}` ({})", name.cyan(), format!("v{version}").cyan())]
+    #[diagnostic()]
+    struct Diagnostic {
+        name: PackageName,
+        version: Version,
+        #[source]
+        cause: Box<uv_resolver::ResolveError>,
+        #[help]
+        help: Option<String>,
+    }
+
+    let help = help.or_else(|| {
+        SUGGESTIONS
+            .get(name)
+            .map(|suggestion| {
+                format!(
+                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                    name.cyan(),
+                    suggestion.cyan(),
+                    suggestion.cyan(),
+                )
+            })
+            .or_else(|| {
+                if chain.is_empty() {
+                    None
+                } else {
+                    Some(format_chain(name, Some(version), chain))
+                }
+            })
+    });
+    let report = miette::Report::new(Diagnostic {
+        name: name.clone(),
+        version: version.clone(),
+        cause: error,
         help,
     });
     anstream::eprint!("{report:?}");

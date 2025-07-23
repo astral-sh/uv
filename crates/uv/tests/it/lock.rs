@@ -11088,13 +11088,14 @@ fn lock_editable() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `library` in all marker environments:
-    - file://[TEMP_DIR]/library
-    - file://[TEMP_DIR]/library (editable)
+      × Failed to resolve dependencies for `workspace` (v0.1.0)
+      ╰─▶ Requirements contain conflicting URLs for package `library` in all marker environments:
+          - file://[TEMP_DIR]/library
+          - file://[TEMP_DIR]/library (editable)
     ");
 
     Ok(())
@@ -18597,6 +18598,42 @@ fn lock_dependency_metadata() -> Result<()> {
     Removed sniffio v1.3.1
     "###);
 
+    // Update the static metadata.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "anyio"
+        version = "3.7.0"
+        requires_dist = ["typing-extensions"]
+        "#,
+    )?;
+
+    // The operation should warn.
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 9
+         |
+      11 |         requires_dist = ["typing-extensions"]
+         |         ^^^^^^^^^^^^^
+      unknown field `requires_dist`, expected one of `name`, `version`, `requires-dist`, `requires-python`, `provides-extras`
+
+    Resolved 4 packages in [TIME]
+    Added idna v3.6
+    Removed iniconfig v2.0.0
+    Added sniffio v1.3.1
+    "#);
+
     Ok(())
 }
 
@@ -18868,7 +18905,7 @@ fn lock_duplicate_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18878,17 +18915,16 @@ fn lock_duplicate_sources() -> Result<()> {
       TOML parse error at line 9, column 9
         |
       9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
-        |         ^
-      duplicate key `python-multipart` in table `tool.uv.sources`
+        |         ^^^^^^^^^^^^^^^^
+      duplicate key
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 9
       |
     9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
-      |         ^
-    duplicate key `python-multipart` in table `tool.uv.sources`
-
-    "###);
+      |         ^^^^^^^^^^^^^^^^
+    duplicate key
+    "#);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -20693,16 +20729,17 @@ fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting indexes for package `jinja2` in all marker environments:
-    - https://astral-sh.github.io/pytorch-mirror/whl/cu118
-    - https://astral-sh.github.io/pytorch-mirror/whl/cu124
-    "###);
+      × Failed to resolve dependencies for `project` (v0.1.0)
+      ╰─▶ Requirements contain conflicting indexes for package `jinja2` in all marker environments:
+          - https://astral-sh.github.io/pytorch-mirror/whl/cu118
+          - https://astral-sh.github.io/pytorch-mirror/whl/cu124
+    ");
 
     Ok(())
 }
@@ -28776,8 +28813,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -28787,8 +28823,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[tool.uv.index]]
         name = "pypi-proxy"
         url = "https://pypi-proxy.fly.dev/simple/"
-        "#,
-    )?;
+    "#})?;
 
     let no_trailing_slash_url = "https://pypi-proxy.fly.dev/simple";
 
@@ -28805,6 +28840,28 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
      + idna==3.6
      + sniffio==1.3.1
     ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+        ]
+
+        [[tool.uv.index]]
+        name = "pypi-proxy"
+        url = "https://pypi-proxy.fly.dev/simple"
+        "#
+        );
+    });
 
     let lock = context.read("uv.lock");
 
@@ -28867,13 +28924,12 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())

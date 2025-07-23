@@ -171,7 +171,7 @@ impl PyProjectToml {
     ///
     /// ```toml
     /// [build-system]
-    /// requires = ["uv_build>=0.4.15,<0.5"]
+    /// requires = ["uv_build>=0.4.15,<0.5.0"]
     /// build-backend = "uv_build"
     /// ```
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
@@ -703,7 +703,7 @@ struct Project {
 /// The optional `project.readme` key in a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#readme>.
 #[derive(Deserialize, Debug, Clone)]
-#[serde(untagged, rename_all = "kebab-case")]
+#[serde(untagged, rename_all_fields = "kebab-case")]
 pub(crate) enum Readme {
     /// Relative path to the README.
     String(PathBuf),
@@ -713,7 +713,7 @@ pub(crate) enum Readme {
         content_type: String,
         charset: Option<String>,
     },
-    /// The full description of the project as inline value.
+    /// The full description of the project as an inline value.
     Text {
         text: String,
         content_type: String,
@@ -826,7 +826,7 @@ mod tests {
             {payload}
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<0.5"]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "uv_build"
         "#
         }
@@ -909,7 +909,7 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<0.5"]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "uv_build"
         "#
         };
@@ -963,6 +963,65 @@ mod tests {
         foo-bar = foo:bar
 
         "###);
+    }
+
+    #[test]
+    fn readme() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("Readme.md"),
+            indoc! {r"
+            # Foo
+
+            This is the foo library.
+        "},
+        )
+        .unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("License.txt"),
+            indoc! {r#"
+                THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        "#},
+        )
+        .unwrap();
+
+        let contents = indoc! {r#"
+            # See https://github.com/pypa/sampleproject/blob/main/pyproject.toml for another example
+
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+            description = "A Python package"
+            readme = { file = "Readme.md", content-type = "text/markdown" }
+            requires_python = ">=3.12"
+
+            [build-system]
+            requires = ["uv_build>=0.4.15,<0.5"]
+            build-backend = "uv_build"
+        "#
+        };
+
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @r"
+        Metadata-Version: 2.3
+        Name: hello-world
+        Version: 0.1.0
+        Summary: A Python package
+        Description-Content-Type: text/markdown
+
+        # Foo
+
+        This is the foo library.
+        ");
     }
 
     #[test]
@@ -1036,7 +1095,7 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<0.5"]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "uv_build"
         "#
         };
@@ -1135,7 +1194,7 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<0.5", "wheel"]
+            requires = ["uv_build>=0.4.15,<0.5.0", "wheel"]
             build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
@@ -1171,7 +1230,7 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<0.5"]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "setuptools"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
