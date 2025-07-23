@@ -431,6 +431,18 @@ pub(crate) async fn add(
             };
 
             // Create a build dispatch.
+            let extra_build_requires = if let AddTarget::Project(project, _) = &target {
+                uv_distribution::ExtraBuildRequires::from_workspace(
+                    settings.resolver.extra_build_dependencies.clone(),
+                    project.workspace(),
+                    &settings.resolver.index_locations,
+                    settings.resolver.sources,
+                )?
+            } else {
+                uv_distribution::ExtraBuildRequires::from_lowered(
+                    settings.resolver.extra_build_dependencies.clone(),
+                )
+            };
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
@@ -444,7 +456,7 @@ pub(crate) async fn add(
                 &settings.resolver.config_setting,
                 &settings.resolver.config_settings_package,
                 build_isolation,
-                &settings.resolver.extra_build_dependencies,
+                &extra_build_requires,
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
                 &build_hasher,

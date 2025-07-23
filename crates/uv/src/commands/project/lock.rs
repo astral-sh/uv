@@ -671,6 +671,17 @@ async fn do_lock(
     };
 
     // Create a build dispatch.
+    let extra_build_requires = match &target {
+        LockTarget::Workspace(workspace) => uv_distribution::ExtraBuildRequires::from_workspace(
+            extra_build_dependencies.clone(),
+            workspace,
+            index_locations,
+            *sources,
+        )?,
+        LockTarget::Script(_) => uv_distribution::ExtraBuildRequires::from_lowered(
+            extra_build_dependencies.clone(),
+        ),
+    };
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -684,7 +695,7 @@ async fn do_lock(
         config_setting,
         config_settings_package,
         build_isolation,
-        extra_build_dependencies,
+        &extra_build_requires,
         *link_mode,
         build_options,
         &build_hasher,

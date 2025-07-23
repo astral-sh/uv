@@ -114,6 +114,24 @@ impl Operator {
     pub fn is_star(self) -> bool {
         matches!(self, Self::EqualStar | Self::NotEqualStar)
     }
+
+    /// Returns the string representation of this operator.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Equal => "==",
+            // Beware, this doesn't print the star
+            Self::EqualStar => "==",
+            #[allow(deprecated)]
+            Self::ExactEqual => "===",
+            Self::NotEqual => "!=",
+            Self::NotEqualStar => "!=",
+            Self::TildeEqual => "~=",
+            Self::LessThan => "<",
+            Self::LessThanEqual => "<=",
+            Self::GreaterThan => ">",
+            Self::GreaterThanEqual => ">=",
+        }
+    }
 }
 
 impl FromStr for Operator {
@@ -150,21 +168,7 @@ impl FromStr for Operator {
 impl std::fmt::Display for Operator {
     /// Note the `EqualStar` is also `==`.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let operator = match self {
-            Self::Equal => "==",
-            // Beware, this doesn't print the star
-            Self::EqualStar => "==",
-            #[allow(deprecated)]
-            Self::ExactEqual => "===",
-            Self::NotEqual => "!=",
-            Self::NotEqualStar => "!=",
-            Self::TildeEqual => "~=",
-            Self::LessThan => "<",
-            Self::LessThanEqual => "<=",
-            Self::GreaterThan => ">",
-            Self::GreaterThanEqual => ">=",
-        };
-
+        let operator = self.as_str();
         write!(f, "{operator}")
     }
 }

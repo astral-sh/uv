@@ -1573,8 +1573,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
         child = { path = "child" }
     "#})?;
 
+    context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1607,7 +1608,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
         child = ["anyio"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1620,7 +1622,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
      + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    // Adding `extra-build-dependencies` with the wrong name should not
+    // Adding `extra-build-dependencies` with the wrong name should fail the build
+    // (the cache is invalidated when extra build dependencies change)
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
@@ -1635,7 +1638,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
         wrong_name = ["anyio"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1703,7 +1707,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
     "#})?;
 
     // Confirm that `bad_child` fails if anyio is provided
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1738,7 +1743,8 @@ fn sync_extra_build_dependencies() -> Result<()> {
         child = ["anyio"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1747,10 +1753,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
     warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + bad-child==0.1.0 (from file://[TEMP_DIR]/bad_child)
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
     Ok(())
@@ -1815,7 +1820,7 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
     })?;
 
     // Running `uv sync` should succeed, as `anyio` is provided as a source
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1827,6 +1832,9 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
     Installed [N] packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
+
+    // TODO(zanieb): We want to test with `--no-sources` too but unfortunately that's not easy
+    // because it'll disable the `child` path source too!
 
     Ok(())
 }

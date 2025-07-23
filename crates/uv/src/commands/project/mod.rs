@@ -1733,6 +1733,9 @@ pub(crate) async fn resolve_names(
     let build_hasher = HashStrategy::default();
 
     // Create a build dispatch.
+    let extra_build_requires = uv_distribution::ExtraBuildRequires::from_lowered(
+        extra_build_dependencies.clone(),
+    );
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -1746,7 +1749,7 @@ pub(crate) async fn resolve_names(
         config_setting,
         config_settings_package,
         build_isolation,
-        extra_build_dependencies,
+        &extra_build_requires,
         *link_mode,
         build_options,
         &build_hasher,
@@ -1943,6 +1946,9 @@ pub(crate) async fn resolve_environment(
     let workspace_cache = WorkspaceCache::default();
 
     // Create a build dispatch.
+    let extra_build_requires = uv_distribution::ExtraBuildRequires::from_lowered(
+        extra_build_dependencies.clone(),
+    );
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -1956,7 +1962,7 @@ pub(crate) async fn resolve_environment(
         config_setting,
         config_settings_package,
         build_isolation,
-        extra_build_dependencies,
+        &extra_build_requires,
         *link_mode,
         build_options,
         &build_hasher,
@@ -2083,6 +2089,9 @@ pub(crate) async fn sync_environment(
     };
 
     // Create a build dispatch.
+    let extra_build_requires = uv_distribution::ExtraBuildRequires::from_lowered(
+        extra_build_dependencies.clone(),
+    );
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -2096,7 +2105,7 @@ pub(crate) async fn sync_environment(
         config_setting,
         config_settings_package,
         build_isolation,
-        extra_build_dependencies,
+        &extra_build_requires,
         link_mode,
         build_options,
         &build_hasher,
@@ -2309,6 +2318,9 @@ pub(crate) async fn update_environment(
     };
 
     // Create a build dispatch.
+    let extra_build_requires = uv_distribution::ExtraBuildRequires::from_lowered(
+        extra_build_dependencies.clone(),
+    );
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -2322,7 +2334,7 @@ pub(crate) async fn update_environment(
         config_setting,
         config_settings_package,
         build_isolation,
-        extra_build_dependencies,
+        &extra_build_requires,
         *link_mode,
         build_options,
         &build_hasher,

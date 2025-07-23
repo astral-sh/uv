@@ -5514,6 +5514,7 @@ dependencies = [
  "tracing-test",
  "unicode-width 0.2.1",
  "url",
+ "uv-cache-key",
  "uv-fs",
  "uv-normalize",
  "uv-pep440",

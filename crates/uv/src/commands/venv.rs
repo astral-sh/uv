@@ -275,7 +275,9 @@ pub(crate) async fn venv(
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
-        let extra_build_dependencies = ExtraBuildDependencies::default();
+        let extra_build_requires = uv_distribution::ExtraBuildRequires::from_lowered(
+            ExtraBuildDependencies::default(),
+        );
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
             &client,
@@ -290,7 +292,7 @@ pub(crate) async fn venv(
             &config_settings,
             &config_settings_package,
             BuildIsolation::Isolated,
-            &extra_build_dependencies,
+            &extra_build_requires,
             link_mode,
             &build_options,
             &build_hasher,

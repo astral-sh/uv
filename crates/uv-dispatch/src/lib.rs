@@ -40,7 +40,7 @@ use uv_types::{
     HashStrategy, InFlight,
 };
 use uv_workspace::WorkspaceCache;
-use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_distribution::ExtraBuildRequires;
 
 #[derive(Debug, Error)]
 pub enum BuildDispatchError {
@@ -89,7 +89,7 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
-    extra_build_dependencies: &'a ExtraBuildDependencies,
+    extra_build_requires: &'a ExtraBuildRequires,
     link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
@@ -118,7 +118,7 @@ impl<'a> BuildDispatch<'a> {
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
         build_isolation: BuildIsolation<'a>,
-        extra_build_dependencies: &'a ExtraBuildDependencies,
+        extra_build_requires: &'a ExtraBuildRequires,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
@@ -141,7 +141,7 @@ impl<'a> BuildDispatch<'a> {
             config_settings,
             config_settings_package,
             build_isolation,
-            extra_build_dependencies,
+            extra_build_requires,
             link_mode,
             build_options,
             hasher,
@@ -221,6 +221,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn workspace_cache(&self) -> &WorkspaceCache {
         &self.workspace_cache
+    }
+
+    fn extra_build_dependencies(&self) -> &uv_workspace::pyproject::ExtraBuildDependencies {
+        &self.extra_build_requires.extra_build_dependencies
     }
 
     async fn resolve<'data>(
@@ -456,7 +460,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.workspace_cache(),
             config_settings,
             self.build_isolation,
-            self.extra_build_dependencies,
+            &self.extra_build_requires.extra_build_dependencies,
             &build_stack,
             build_kind,
             self.build_extra_env_vars.clone(),

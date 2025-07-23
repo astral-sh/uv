@@ -101,6 +101,9 @@ pub trait BuildContext {
     /// Workspace discovery caching.
     fn workspace_cache(&self) -> &WorkspaceCache;
 
+    /// Get the extra build dependencies.
+    fn extra_build_dependencies(&self) -> &uv_workspace::pyproject::ExtraBuildDependencies;
+
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
         &'a self,
