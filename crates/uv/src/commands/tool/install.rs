@@ -20,6 +20,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
@@ -47,6 +48,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
+    with_executables_from: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
@@ -113,7 +115,7 @@ pub(crate) async fn install(
     };
 
     // Resolve the `--from` requirement.
-    let from = match &request {
+    let requirement = match &request {
         // Ex) `ruff`
         ToolRequest::Package {
             executable,
@@ -219,13 +221,15 @@ pub(crate) async fn install(
         }
         // Ex) `python`
         ToolRequest::Python { .. } => {
-            return Err(anyhow::anyhow!(
+            bail!(
                 "Cannot install Python with `{}`. Did you mean to use `{}`?",
                 "uv tool install".cyan(),
                 "uv python install".cyan(),
-            ));
+            );
         }
     };
+
+    let package_name = &requirement.name;
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
@@ -234,7 +238,7 @@ pub(crate) async fn install(
                 upgrade: settings
                     .resolver
                     .upgrade
-                    .combine(Upgrade::package(from.name.clone())),
+                    .combine(Upgrade::package(package_name.clone())),
                 ..settings.resolver
             },
             ..settings
@@ -248,7 +252,7 @@ pub(crate) async fn install(
         ResolverInstallerSettings {
             reinstall: settings
                 .reinstall
-                .combine(Reinstall::package(from.name.clone())),
+                .combine(Reinstall::package(package_name.clone())),
             ..settings
         }
     } else {
@@ -268,7 +272,7 @@ pub(crate) async fn install(
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
-        requirements.push(from.clone());
+        requirements.push(requirement.clone());
         requirements.extend(
             resolve_names(
                 spec.requirements.clone(),
@@ -332,16 +336,16 @@ pub(crate) async fn install(
     // (If we find existing entrypoints later on, and the tool _doesn't_ exist, we'll avoid removing
     // the external tool's entrypoints (without `--force`).)
     let (existing_tool_receipt, invalid_tool_receipt) =
-        match installed_tools.get_tool_receipt(&from.name) {
+        match installed_tools.get_tool_receipt(package_name) {
             Ok(None) => (None, false),
             Ok(Some(receipt)) => (Some(receipt), false),
             Err(_) => {
                 // If the tool is not installed properly, remove the environment and continue.
-                match installed_tools.remove_environment(&from.name) {
+                match installed_tools.remove_environment(package_name) {
                     Ok(()) => {
                         warn_user!(
-                            "Removed existing `{from}` with invalid receipt",
-                            from = from.name.cyan()
+                            "Removed existing `{}` with invalid receipt",
+                            package_name.cyan()
                         );
                     }
                     Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -355,20 +359,20 @@ pub(crate) async fn install(
 
     let existing_environment =
         installed_tools
-            .get_environment(&from.name, &cache)?
+            .get_environment(package_name, &cache)?
             .filter(|environment| {
                 if environment.uses(&interpreter) {
                     trace!(
                         "Existing interpreter matches the requested interpreter for `{}`: {}",
-                        from.name,
+                        package_name,
                         environment.interpreter().sys_executable().display()
                     );
                     true
                 } else {
                     let _ = writeln!(
                         printer.stderr(),
-                        "Ignoring existing environment for `{from}`: the requested Python interpreter does not match the environment interpreter",
-                        from = from.name.cyan(),
+                        "Ignoring existing environment for `{}`: the requested Python interpreter does not match the environment interpreter",
+                        package_name.cyan(),
                     );
                     false
                 }
@@ -393,15 +397,17 @@ pub(crate) async fn install(
             {
                 if *tool_receipt.options() != options {
                     // ...but the options differ, we need to update the receipt.
-                    installed_tools
-                        .add_tool_receipt(&from.name, tool_receipt.clone().with_options(options))?;
+                    installed_tools.add_tool_receipt(
+                        package_name,
+                        tool_receipt.clone().with_options(options),
+                    )?;
                 }
 
                 // We're done, though we might need to update the receipt.
                 writeln!(
                     printer.stderr(),
-                    "`{from}` is already installed",
-                    from = from.cyan()
+                    "`{}` is already installed",
+                    requirement.cyan()
                 )?;
 
                 return Ok(ExitStatus::Success);
@@ -559,7 +565,7 @@ pub(crate) async fn install(
             },
         };
 
-        let environment = installed_tools.create_environment(&from.name, interpreter, preview)?;
+        let environment = installed_tools.create_environment(package_name, interpreter, preview)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.
@@ -586,8 +592,8 @@ pub(crate) async fn install(
         .await
         .inspect_err(|_| {
             // If we failed to sync, remove the newly created environment.
-            debug!("Failed to sync environment; removing `{}`", from.name);
-            let _ = installed_tools.remove_environment(&from.name);
+            debug!("Failed to sync environment; removing `{}`", package_name);
+            let _ = installed_tools.remove_environment(package_name);
         }) {
             Ok(environment) => environment,
             Err(ProjectError::Operation(err)) => {
@@ -599,11 +605,32 @@ pub(crate) async fn install(
         }
     };
 
+    let entrypoints = with_executables_from
+        .iter()
+        .map(|source| match source {
+            RequirementsSource::Package(name) => {
+                if let RequirementsTxtRequirement::Named(requirement) = name {
+                    Ok(requirement.name.clone())
+                } else {
+                    bail!(
+                        "Expected a named requirement, but got: {}",
+                        source.to_string().cyan()
+                    )
+                }
+            }
+            _ => bail!(
+                "Expected a package requirement, but got: {}",
+                source.to_string().cyan()
+            ),
+        })
+        .collect::<Result<Vec<_>>>()?;
+
     finalize_tool_install(
         &environment,
-        &from.name,
+        package_name,
+        &entrypoints,
         &installed_tools,
-        options,
+        &options,
         force || invalid_tool_receipt,
         python_request,
         requirements,
@@ -611,5 +638,7 @@ pub(crate) async fn install(
         overrides,
         build_constraints,
         printer,
-    )
+    )?;
+
+    Ok(ExitStatus::Success)
 }

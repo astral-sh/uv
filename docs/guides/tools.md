@@ -213,6 +213,14 @@ As with `uvx`, installations can include additional packages:
 $ uv tool install mkdocs --with mkdocs-material
 ```
 
+Multiple related executables can be installed together in the same tool environment, using the
+`--with-executables-from` flag. For example, the following will install the executables from
+`ansible`, plus those ones provided by `ansible-core` and `ansible-lint`:
+
+```console
+$ uv tool install --with-executables-from ansible-core,ansible-lint ansible
+```
+
 ## Upgrading tools
 
 To upgrade a tool, use `uv tool upgrade`:

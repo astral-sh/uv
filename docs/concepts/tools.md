@@ -209,6 +209,40 @@ $ uvx -w <extra-package> <tool-package>
 If the requested version conflicts with the requirements of the tool package, package resolution
 will fail and the command will error.
 
+## Installing executables from additional packages
+
+When installing a tool, you may want to include executables from additional packages in the same
+tool environment. This is useful when you have related tools that work together or when you want to
+install multiple executables that share dependencies.
+
+The `--with-executables-from` option allows you to specify additional packages whose executables
+should be installed alongside the main tool:
+
+```console
+$ uv tool install --with-executables-from <package1>,<package2> <tool-package>
+```
+
+For example, to install Ansible along with executables from `ansible-core` and `ansible-lint`:
+
+```console
+$ uv tool install --with-executables-from ansible-core,ansible-lint ansible
+```
+
+This will install all executables from the `ansible`, `ansible-core`, and `ansible-lint` packages
+into the same tool environment, making them all available on the `PATH`.
+
+The `--with-executables-from` option can be combined with other installation options:
+
+```console
+$ uv tool install --with-executables-from ansible-core --with mkdocs-material ansible
+```
+
+Note that `--with-executables-from` differs from `--with` in that:
+
+- `--with` includes additional packages as dependencies but does not install their executables
+- `--with-executables-from` includes both the packages as dependencies and installs their
+  executables
+
 ## Python versions
 
 Each tool environment is linked to a specific Python version. This uses the same Python version
