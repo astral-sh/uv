@@ -151,7 +151,7 @@ impl UniversalMarker {
         match *item.kind() {
             ConflictKind::Extra(ref extra) => self.assume_extra(item.package(), extra),
             ConflictKind::Group(ref group) => self.assume_group(item.package(), group),
-            ConflictKind::Project => {}
+            ConflictKind::Project => self.assume_project(item.package()),
         }
         self.pep508 = self.marker.without_extras();
     }
@@ -165,8 +165,34 @@ impl UniversalMarker {
         match *item.kind() {
             ConflictKind::Extra(ref extra) => self.assume_not_extra(item.package(), extra),
             ConflictKind::Group(ref group) => self.assume_not_group(item.package(), group),
-            ConflictKind::Project => {}
+            ConflictKind::Project => self.assume_not_project(item.package()),
         }
+        self.pep508 = self.marker.without_extras();
+    }
+
+    /// Assumes that the "production" dependencies for the given project are
+    /// activated.
+    ///
+    /// This may simplify the conflicting marker component of this universal
+    /// marker.
+    fn assume_project(&mut self, package: &PackageName) {
+        let extra = encode_project(package);
+        self.marker = self
+            .marker
+            .simplify_extras_with(|candidate| *candidate == extra);
+        self.pep508 = self.marker.without_extras();
+    }
+
+    /// Assumes that the "production" dependencies for the given project are
+    /// not activated.
+    ///
+    /// This may simplify the conflicting marker component of this universal
+    /// marker.
+    fn assume_not_project(&mut self, package: &PackageName) {
+        let extra = encode_project(package);
+        self.marker = self
+            .marker
+            .simplify_not_extras_with(|candidate| *candidate == extra);
         self.pep508 = self.marker.without_extras();
     }
 
@@ -174,7 +200,7 @@ impl UniversalMarker {
     ///
     /// This may simplify the conflicting marker component of this universal
     /// marker.
-    pub(crate) fn assume_extra(&mut self, package: &PackageName, extra: &ExtraName) {
+    fn assume_extra(&mut self, package: &PackageName, extra: &ExtraName) {
         let extra = encode_package_extra(package, extra);
         self.marker = self
             .marker
@@ -186,7 +212,7 @@ impl UniversalMarker {
     ///
     /// This may simplify the conflicting marker component of this universal
     /// marker.
-    pub(crate) fn assume_not_extra(&mut self, package: &PackageName, extra: &ExtraName) {
+    fn assume_not_extra(&mut self, package: &PackageName, extra: &ExtraName) {
         let extra = encode_package_extra(package, extra);
         self.marker = self
             .marker
@@ -198,7 +224,7 @@ impl UniversalMarker {
     ///
     /// This may simplify the conflicting marker component of this universal
     /// marker.
-    pub(crate) fn assume_group(&mut self, package: &PackageName, group: &GroupName) {
+    fn assume_group(&mut self, package: &PackageName, group: &GroupName) {
         let extra = encode_package_group(package, group);
         self.marker = self
             .marker
@@ -210,7 +236,7 @@ impl UniversalMarker {
     ///
     /// This may simplify the conflicting marker component of this universal
     /// marker.
-    pub(crate) fn assume_not_group(&mut self, package: &PackageName, group: &GroupName) {
+    fn assume_not_group(&mut self, package: &PackageName, group: &GroupName) {
         let extra = encode_package_group(package, group);
         self.marker = self
             .marker
@@ -254,6 +280,7 @@ impl UniversalMarker {
     pub(crate) fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
+        projects: impl Iterator<Item = P>,
         extras: impl Iterator<Item = (P, E)>,
         groups: impl Iterator<Item = (P, G)>,
     ) -> bool
@@ -262,12 +289,18 @@ impl UniversalMarker {
         E: Borrow<ExtraName>,
         G: Borrow<GroupName>,
     {
+        let projects = projects.map(|package| encode_project(package.borrow()));
         let extras =
             extras.map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
         let groups =
             groups.map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
-        self.marker
-            .evaluate(env, &extras.chain(groups).collect::<Vec<ExtraName>>())
+        self.marker.evaluate(
+            env,
+            &projects
+                .chain(extras)
+                .chain(groups)
+                .collect::<Vec<ExtraName>>(),
+        )
     }
 
     /// Returns the internal marker that combines both the PEP 508
@@ -355,8 +388,18 @@ impl ConflictMarker {
         match *item.kind() {
             ConflictKind::Extra(ref extra) => ConflictMarker::extra(item.package(), extra),
             ConflictKind::Group(ref group) => ConflictMarker::group(item.package(), group),
-            ConflictKind::Project => ConflictMarker::TRUE,
+            ConflictKind::Project => ConflictMarker::project(item.package()),
         }
+    }
+
+    /// Create a conflict marker that is true only when the production
+    /// dependencies for the given package are activated.
+    pub fn project(package: &PackageName) -> ConflictMarker {
+        let operator = uv_pep508::ExtraOperator::Equal;
+        let name = uv_pep508::MarkerValueExtra::Extra(encode_project(package));
+        let expr = uv_pep508::MarkerExpression::Extra { operator, name };
+        let marker = MarkerTree::expression(expr);
+        ConflictMarker { marker }
     }
 
     /// Create a conflict marker that is true only when the given extra for the
@@ -522,8 +565,17 @@ fn encode_package_group(package: &PackageName, group: &GroupName) -> ExtraName {
     ExtraName::from_owned(format!("group-{package_len}-{package}-{group}")).unwrap()
 }
 
+/// Encodes the given project package name into a valid `extra` value in a PEP
+/// 508 marker.
+fn encode_project(package: &PackageName) -> ExtraName {
+    // See `encode_package_extra`, the same considerations apply here.
+    let package_len = package.as_str().len();
+    ExtraName::from_owned(format!("project-{package_len}-{package}")).unwrap()
+}
+
 #[derive(Debug)]
 enum ParsedRawExtra<'a> {
+    Project { package: &'a str },
     Extra { package: &'a str, extra: &'a str },
     Group { package: &'a str, group: &'a str },
 }
@@ -540,13 +592,13 @@ impl<'a> ParsedRawExtra<'a> {
         let Some((kind, tail)) = raw.split_once('-') else {
             return Err(mkerr(
                 raw_extra,
-                "expected to find leading `extra-` or `group-`",
+                "expected to find leading `package`, `extra-` or `group-`",
             ));
         };
         let Some((len, tail)) = tail.split_once('-') else {
             return Err(mkerr(
                 raw_extra,
-                "expected to find `{number}-` after leading `extra-` or `group-`",
+                "expected to find `{number}-` after leading `package-`, `extra-` or `group-`",
             ));
         };
         let len = len.parse::<usize>().map_err(|_| {
@@ -564,22 +616,28 @@ impl<'a> ParsedRawExtra<'a> {
                 ),
             ));
         };
-        if !tail.starts_with('-') {
-            return Err(mkerr(
-                raw_extra,
-                format!("expected `-` after package name `{package}`"),
-            ));
-        }
-        let tail = &tail[1..];
         match kind {
-            "extra" => Ok(ParsedRawExtra::Extra {
-                package,
-                extra: tail,
-            }),
-            "group" => Ok(ParsedRawExtra::Group {
-                package,
-                group: tail,
-            }),
+            "project" => Ok(ParsedRawExtra::Project { package }),
+            "extra" | "group" => {
+                if !tail.starts_with('-') {
+                    return Err(mkerr(
+                        raw_extra,
+                        format!("expected `-` after package name `{package}`"),
+                    ));
+                }
+                let tail = &tail[1..];
+                if kind == "extra" {
+                    Ok(ParsedRawExtra::Extra {
+                        package,
+                        extra: tail,
+                    })
+                } else {
+                    Ok(ParsedRawExtra::Group {
+                        package,
+                        group: tail,
+                    })
+                }
+            }
             _ => Err(mkerr(
                 raw_extra,
                 format!("unrecognized kind `{kind}` (must be `extra` or `group`)"),
@@ -595,6 +653,7 @@ impl<'a> ParsedRawExtra<'a> {
             }
         })?;
         match *self {
+            ParsedRawExtra::Project { .. } => Ok(ConflictItem::from(package)),
             ParsedRawExtra::Extra { extra, .. } => {
                 let extra = ExtraName::from_str(extra).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
@@ -618,6 +677,7 @@ impl<'a> ParsedRawExtra<'a> {
 
     fn package(&self) -> &'a str {
         match *self {
+            ParsedRawExtra::Project { package, .. } => package,
             ParsedRawExtra::Extra { package, .. } => package,
             ParsedRawExtra::Group { package, .. } => package,
         }
