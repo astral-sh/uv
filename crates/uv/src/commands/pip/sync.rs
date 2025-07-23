@@ -355,9 +355,8 @@ pub(crate) async fn pip_sync(
     let state = SharedState::default();
 
     // Create a build dispatch.
-    let extra_build_requires = uv_distribution::ExtraBuildRequires::from_lowered(
-        extra_build_dependencies.clone(),
-    );
+    let extra_build_requires =
+        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,

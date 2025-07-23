@@ -22,6 +22,7 @@ use uv_configuration::{
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
+use uv_distribution::ExtraBuildRequires;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, Identifier, IndexCapabilities, IndexLocations,
@@ -40,7 +41,6 @@ use uv_types::{
     HashStrategy, InFlight,
 };
 use uv_workspace::WorkspaceCache;
-use uv_distribution::ExtraBuildRequires;
 
 #[derive(Debug, Error)]
 pub enum BuildDispatchError {

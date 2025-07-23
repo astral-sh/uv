@@ -381,6 +381,8 @@ pub struct ToolUv {
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub extra_build_dependencies:
+        Option<BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
 

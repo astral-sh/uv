@@ -261,13 +261,15 @@ impl ExtraBuildRequires {
                                 workspace,
                                 None,
                             )
-                            .map(move |requirement| match requirement {
-                                Ok(requirement) => Ok(requirement.into_inner().into()),
-                                Err(err) => Err(MetadataError::LoweringError(
-                                    requirement_name.clone(),
-                                    Box::new(err),
-                                )),
-                            })
+                            .map(
+                                move |requirement| match requirement {
+                                    Ok(requirement) => Ok(requirement.into_inner().into()),
+                                    Err(err) => Err(MetadataError::LoweringError(
+                                        requirement_name.clone(),
+                                        Box::new(err),
+                                    )),
+                                },
+                            )
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     result.insert(package_name, lowered);

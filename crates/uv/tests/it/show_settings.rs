@@ -3931,6 +3931,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,

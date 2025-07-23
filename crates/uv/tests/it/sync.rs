@@ -1778,7 +1778,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
         [tool.uv.sources]
         child = { path = "child" }
         bad_child = { path = "bad_child" }
-        
+
         [tool.uv.extra-build-dependencies]
         child = ["anyio"]
     "#})?;
@@ -1833,7 +1833,7 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
         except ModuleNotFoundError:
             print("Missing `anyio` module", file=sys.stderr)
             sys.exit(1)
-        
+
         # Check that we got the local version of anyio by checking for the marker
         if not hasattr(anyio, 'LOCAL_ANYIO_MARKER'):
             print("Found system anyio instead of local anyio", file=sys.stderr)
@@ -1915,7 +1915,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
         except ModuleNotFoundError:
             print("Missing `anyio` module", file=sys.stderr)
             sys.exit(1)
-        
+
         # Check that we got the local version of anyio by checking for the marker
         if not hasattr(anyio, 'LOCAL_ANYIO_MARKER'):
             print("Found system anyio instead of local anyio", file=sys.stderr)
@@ -4588,6 +4588,187 @@ fn no_install_project_no_build() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_script() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import sys
+        from hatchling.build import *
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Create a script that depends on the child package
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        # ///
+    "#})?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/script-[a-z0-9]+",
+            "environments-v2/script-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    // Add extra build dependencies to the script
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        #
+        # [tool.uv.extra-build-dependencies]
+        # child = ["anyio"]
+        # ///
+    "#})?;
+
+    // Running `uv sync` should now succeed due to extra build-dependencies
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_script_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+
+    // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(&formatdoc! {r#"
+        import sys
+        from hatchling.build import *
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        # Check that we got the local version of anyio by checking for the marker
+        if not hasattr(anyio, 'LOCAL_ANYIO_MARKER'):
+            print("Found system anyio instead of local anyio", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Create a script that depends on the child package
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # anyio = {{ path = "{}" }}
+        # child = {{ path = "child" }}
+        #
+        # [tool.uv.extra-build-dependencies]
+        # child = ["anyio"]
+        # ///
+    "#, anyio_local.display()
+    })?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/script-[a-z0-9]+",
+            "environments-v2/script-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Running `uv sync` should succeed with the sources applied
+    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
     Ok(())

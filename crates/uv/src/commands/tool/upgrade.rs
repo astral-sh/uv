@@ -18,7 +18,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
-use uv_workspace::WorkspaceCache;
+use uv_workspace::{WorkspaceCache, pyproject::ExtraBuildDependencies};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
@@ -343,6 +343,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             build_constraints,
+            uv_distribution::ExtraBuildRequires::from_lowered(ExtraBuildDependencies::default()),
             &settings,
             network_settings,
             &state,
