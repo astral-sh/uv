@@ -203,7 +203,11 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.to_string().serialize(serializer)
+        match self {
+            Self::Pypi(url) => url.without_credentials().serialize(serializer),
+            Self::Url(url) => url.without_credentials().serialize(serializer),
+            Self::Path(url) => url.without_credentials().serialize(serializer),
+        }
     }
 }
 
@@ -404,6 +408,9 @@ impl<'a> IndexLocations {
         } else {
             let mut indexes = vec![];
 
+            // TODO(charlie): By only yielding the first default URL, we'll drop credentials if,
+            // e.g., an authenticated default URL is provided in a configuration file, but an
+            // unauthenticated default URL is present in the receipt.
             let mut seen = FxHashSet::default();
             let mut default = false;
             for index in {
