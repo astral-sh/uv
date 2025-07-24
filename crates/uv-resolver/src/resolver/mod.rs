@@ -3779,9 +3779,7 @@ impl Fork {
             if self.env.included_by_group(conflicting_item) {
                 return true;
             }
-            if let Some(conflicting_item) = dep.package.conflicting_item() {
-                self.conflicts.remove(&conflicting_item);
-            }
+            self.conflicts.remove(&conflicting_item);
             false
         });
         Some(self)
