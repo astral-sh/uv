@@ -399,7 +399,7 @@ impl AuthMiddleware {
             .is_ok_and(|response| response.error_for_status_ref().is_ok())
         {
             if let (Some(index_url), Some(keyring)) = (index_url, &self.keyring) {
-                keyring.store_if_native(index_url, &credentials);
+                keyring.store_if_native(index_url, &credentials).await;
             }
             trace!("Updating cached credentials for {url} to {credentials:?}");
             self.cache().insert(&url, credentials);
