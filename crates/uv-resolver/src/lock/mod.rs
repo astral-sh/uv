@@ -2872,6 +2872,11 @@ impl Package {
     pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
         &self.metadata.dependency_groups
     }
+
+    /// Returns the dependencies of the package.
+    pub fn dependencies(&self) -> &[Dependency] {
+        &self.dependencies
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
@@ -4454,7 +4459,7 @@ impl TryFrom<WheelWire> for Wheel {
 
 /// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-struct Dependency {
+pub struct Dependency {
     package_id: PackageId,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
@@ -4538,6 +4543,11 @@ impl Dependency {
         }
 
         table
+    }
+
+    /// Returns the package name of this dependency.
+    pub fn package_name(&self) -> &PackageName {
+        &self.package_id.name
     }
 }
 

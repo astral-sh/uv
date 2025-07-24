@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::{BTreeSet, VecDeque};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -368,5 +369,44 @@ impl<'lock> InstallTarget<'lock> {
         }
 
         Ok(())
+    }
+
+    /// Returns the names of all packages in the workspace that will be installed.
+    /// This includes the primary target(s) and any workspace members they depend on.
+    pub(crate) fn packages(&self) -> BTreeSet<PackageName> {
+        match self {
+            Self::Project { name, lock, .. } => {
+                // Start with the project itself
+                let mut packages = BTreeSet::new();
+                packages.insert((*name).clone());
+
+                // Find all workspace member dependencies recursively
+                let members = lock.members();
+                let mut queue = VecDeque::new();
+                queue.push_back(*name);
+
+                while let Some(pkg_name) = queue.pop_front() {
+                    // Find the package by iterating through all packages
+                    if let Some(package) = lock.packages().iter().find(|p| p.name() == pkg_name) {
+                        for dep in package.dependencies() {
+                            let dep_name = dep.package_name();
+                            if members.contains(dep_name) && packages.insert(dep_name.clone()) {
+                                queue.push_back(dep_name);
+                            }
+                        }
+                    }
+                }
+
+                packages
+            }
+            Self::Workspace { lock, .. } | Self::NonProjectWorkspace { lock, .. } => {
+                // Return all workspace members
+                lock.members().clone()
+            }
+            Self::Script { .. } => {
+                // Scripts don't have workspace members
+                BTreeSet::new()
+            }
+        }
     }
 }
