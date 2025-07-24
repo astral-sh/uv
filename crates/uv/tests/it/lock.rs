@@ -3643,7 +3643,6 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     Ok(())
 }
 
-
 /// This tests another "basic" case for specifying a group that conflicts with
 /// the project itself.
 #[test]

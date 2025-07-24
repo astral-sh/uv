@@ -3773,6 +3773,7 @@ impl Fork {
             }
             match conflicting_item.kind() {
                 // We should not filter entire projects unless they're a top-level dependency
+                // Otherwise, we'll fail to solve for children of the project, like extras
                 ConflictKindRef::Project => {
                     if dep.parent.is_some() {
                         return true;
@@ -3781,9 +3782,7 @@ impl Fork {
                 ConflictKindRef::Group(_) => {}
                 ConflictKindRef::Extra(_) => {}
             }
-            if let Some(conflicting_item) = dep.conflicting_item() {
-                self.conflicts.remove(&conflicting_item);
-            }
+            self.conflicts.remove(&conflicting_item);
             false
         });
         Some(self)
