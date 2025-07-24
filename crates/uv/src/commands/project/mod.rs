@@ -2497,10 +2497,15 @@ pub(crate) fn detect_conflicts(
     // group `g` are declared as conflicting, then enabling both of
     // those should result in an error.
     let lock = target.lock();
+    let packages = target.packages();
     let conflicts = lock.conflicts();
     for set in conflicts.iter() {
         let mut conflicts: Vec<ConflictKind> = vec![];
         for item in set.iter() {
+            if !packages.contains(item.package()) {
+                // Ignore items that are not in the install targets
+                continue;
+            }
             let is_conflicting = match item.kind() {
                 ConflictKind::Project => groups.prod(),
                 ConflictKind::Extra(extra) => extras.contains(extra),

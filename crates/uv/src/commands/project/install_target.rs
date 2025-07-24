@@ -372,7 +372,6 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Returns the names of all packages in the workspace that will be installed.
-    /// This includes the primary target(s) and any workspace members they depend on.
     pub(crate) fn packages(&self) -> BTreeSet<PackageName> {
         match self {
             Self::Project { name, lock, .. } => {
