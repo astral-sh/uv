@@ -1068,8 +1068,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             ephemeral_env.set_overlay(format!(
                 "import site; site.addsitedir(\"{}\"); site.addsitedir(\"{}\");",
-                base_site_packages.escape_for_python(),
                 requirements_site_packages.escape_for_python(),
+                base_site_packages.escape_for_python(),
             ))?;
 
             // N.B. The order here matters — earlier interpreters take precedence over the
