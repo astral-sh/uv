@@ -372,6 +372,8 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Returns the names of all packages in the workspace that will be installed.
+    ///
+    /// Note this only includes workspace members.
     pub(crate) fn packages(
         &self,
         extras: &ExtrasSpecification,
@@ -379,7 +381,7 @@ impl<'lock> InstallTarget<'lock> {
     ) -> BTreeSet<PackageName> {
         match self {
             Self::Project { name, lock, .. } => {
-                // Collect the packages by name for lookup
+                // Collect the packages by name for efficient lookup
                 let packages = lock
                     .packages()
                     .iter()
