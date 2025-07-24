@@ -3,6 +3,32 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.3
+
+### Python
+
+- Add CPython 3.14.0rc1
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250723) for more details.
+
+### Enhancements
+
+- Allow non-standard entrypoint names in `uv_build` ([#14867](https://github.com/astral-sh/uv/pull/14867))
+- Publish riscv64 wheels to PyPI ([#14852](https://github.com/astral-sh/uv/pull/14852))
+
+### Bug fixes
+
+- Avoid writing redacted credentials to tool receipt ([#14855](https://github.com/astral-sh/uv/pull/14855))
+- Respect `--with` versions over base environment versions ([#14863](https://github.com/astral-sh/uv/pull/14863))
+- Respect credentials from all defined indexes ([#14858](https://github.com/astral-sh/uv/pull/14858))
+- Fix missed stabilization of removal of registry entry during Python uninstall ([#14859](https://github.com/astral-sh/uv/pull/14859))
+- Improve concurrency safety of Python downloads into cache ([#14846](https://github.com/astral-sh/uv/pull/14846))
+
+### Documentation
+
+- Fix typos in `uv_build` reference documentation ([#14853](https://github.com/astral-sh/uv/pull/14853))
+- Move the "Cargo" install method further down in docs ([#14842](https://github.com/astral-sh/uv/pull/14842))
+
 ## 0.8.2
 
 ### Enhancements
