@@ -414,6 +414,20 @@ impl ResolverEnvironment {
             }
         }
     }
+
+    pub(crate) fn includes(&self) -> Option<&Arc<crate::FxHashbrownSet<ConflictItem>>> {
+        match self.kind {
+            Kind::Specific { .. } => None,
+            Kind::Universal { ref include, .. } => Some(include),
+        }
+    }
+
+    pub(crate) fn excludes(&self) -> Option<&Arc<crate::FxHashbrownSet<ConflictItem>>> {
+        match self.kind {
+            Kind::Specific { .. } => None,
+            Kind::Universal { ref exclude, .. } => Some(exclude),
+        }
+    }
 }
 
 /// A user visible representation of a resolver environment.

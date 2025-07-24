@@ -32,6 +32,7 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
+    trace_resolver_environment,
 };
 use crate::{InMemoryIndex, Options};
 
@@ -475,6 +476,8 @@ impl std::fmt::Display for NoSolutionError {
             workspace_members: &self.workspace_members,
             tags: self.tags.as_ref(),
         };
+
+        trace_resolver_environment(&self.env);
 
         // Transform the error tree for reporting
         let mut tree = self.error.clone();
