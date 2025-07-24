@@ -1431,7 +1431,7 @@ impl Lock {
         }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
-        let remotes = indexes.map(|locations| {
+        let mut remotes = indexes.map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1444,7 +1444,7 @@ impl Lock {
                 .collect::<BTreeSet<_>>()
         });
 
-        let locals = indexes.map(|locations| {
+        let mut locals = indexes.map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1715,6 +1715,38 @@ impl Lock {
                 }
             } else {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
+            }
+
+            // Add any explicit indexes to the list of known locals or remotes. These indexes may
+            // not be available as top-level configuration (i.e., if they're defined within a
+            // workspace member), but we already validated that the dependencies are up-to-date, so
+            // we can consider them "available".
+            for requirement in &package.metadata.requires_dist {
+                if let RequirementSource::Registry {
+                    index: Some(index), ..
+                } = &requirement.source
+                {
+                    match &index.url {
+                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                            if let Some(remotes) = remotes.as_mut() {
+                                remotes.insert(UrlString::from(
+                                    index.url().without_credentials().as_ref(),
+                                ));
+                            }
+                        }
+                        IndexUrl::Path(url) => {
+                            if let Some(locals) = locals.as_mut() {
+                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
+                                    relative_to(&path, root)
+                                        .or_else(|_| std::path::absolute(path))
+                                        .ok()
+                                }) {
+                                    locals.insert(path.into_boxed_path());
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Recurse.
