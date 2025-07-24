@@ -155,7 +155,7 @@ pub struct BuildBackendSettings {
     ///   with this package as build requirement use the include directory to find additional header
     ///   files.
     /// - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended
-    ///   to uses these two options.
+    ///   to use these two options.
     // TODO(konsti): We should show a flat example instead.
     // ```toml
     // [tool.uv.build-backend.data]
