@@ -622,7 +622,7 @@ impl PyProjectToml {
             {
                 warn!(
                     "Entrypoint names should consist of letters, numbers, dots, underscores and \
-                    dashes; non-complaint name: `{name}`"
+                    dashes; non-compliant name: `{name}`"
                 );
             }
 
