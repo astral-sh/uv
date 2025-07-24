@@ -3155,9 +3155,12 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-            { package = "example" },
-            { package = "example", extra = "foo"},
-            { package = "subexample" },
+                { package = "example" },
+                # TODO(zanieb): Technically, we shouldn't need to include the extra in the list of
+                # conflicts however, the resolver forking algorithm is not currently sophisticated
+                # enough to pick this up by itself
+                { package = "example", extra = "foo"},
+                { package = "subexample" },
             ],
         ]
 
@@ -3193,187 +3196,14 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     )?;
 
     // This should succeed, because the conflict is optional
-    uv_snapshot!(context.filters(), context.lock().arg("-vv"), @r#"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `subexample`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/subexample`
-    DEBUG No Python version file found in workspace: [TEMP_DIR]/
-    DEBUG Using Python request `>=3.12` from `requires-python` metadata
-    DEBUG Checking for Python environment at: `.venv`
-    TRACE Querying interpreter executable at [VENV]/bin/python3
-    DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
-    TRACE The project environment's Python version meets the Python requirement: `>=3.12`
-    TRACE The virtual environment's Python interpreter meets the Python preference: `prefer managed`
-    DEBUG Using request timeout of [TIME]
-    DEBUG Found static `pyproject.toml` for: example @ file://[TEMP_DIR]/
-    DEBUG Found static `pyproject.toml` for: subexample @ file://[TEMP_DIR]/subexample
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Cached workspace members for: `[TEMP_DIR]/`
-    TRACE Found `pyproject.toml` at: `[TEMP_DIR]/pyproject.toml`
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Cached workspace members for: `[TEMP_DIR]/`
-    TRACE Performing lookahead for example[foo] @ file://[TEMP_DIR]/
-    TRACE Performing lookahead for subexample @ file://[TEMP_DIR]/subexample
-    TRACE Performing lookahead for subexample @ file://[TEMP_DIR]/subexample ; extra == 'foo'
-    DEBUG Solving with installed Python version: 3.12.[X]
-    DEBUG Solving with target Python version: >=3.12
-    TRACE Assigned packages:
-    TRACE Chose package for decision: root. remaining choices:
-    TRACE Resolution environment
-       includes: `{}`
-       excludes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("example"), kind: Project }, ConflictItem { package: PackageName("subexample"), kind: Project }}`
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }}`
-       excludes: `{ConflictItem { package: PackageName("subexample"), kind: Project }, ConflictItem { package: PackageName("example"), kind: Project }}`
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("example"), kind: Project }}`
-       excludes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("subexample"), kind: Project }}`
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("subexample"), kind: Project }}`
-       excludes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("example"), kind: Project }}`
-    DEBUG Pre-fork all marker environments took [TIME]
-    DEBUG Splitting resolution on root==0a0.dev0 over example into 4 resolutions with separate markers
-    DEBUG Adding direct dependency: example[foo]*
-    DEBUG Adding direct dependency: example*
-    DEBUG Adding direct dependency: subexample*
-    TRACE Assigned packages: root==0a0.dev0
-    TRACE Chose package for decision: subexample. remaining choices:
-    DEBUG Searching for a compatible version of subexample @ file://[TEMP_DIR]/subexample (*)
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("subexample"), kind: Project }}`
-       excludes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("example"), kind: Project }}`
-    DEBUG Adding direct dependency: sortedcontainers>=2.4.0, <2.4.0+
-    TRACE Assigned packages: root==0a0.dev0, subexample==0.1.0
-    TRACE Chose package for decision: sortedcontainers. remaining choices:
-    TRACE Fetching metadata for sortedcontainers from https://pypi.org/simple/sortedcontainers/
-    TRACE No cache entry exists for [CACHE_DIR]/simple-v16/pypi/sortedcontainers.rkyv
-    DEBUG No cache entry for: https://pypi.org/simple/sortedcontainers/
-    TRACE Sending fresh GET request for https://pypi.org/simple/sortedcontainers/
-    TRACE Handling request for https://pypi.org/simple/sortedcontainers/ with authentication policy auto
-    TRACE Request for https://pypi.org/simple/sortedcontainers/ is unauthenticated, checking cache
-    TRACE No credentials in cache for URL https://pypi.org/simple/sortedcontainers/
-    TRACE Attempting unauthenticated request for https://pypi.org/simple/sortedcontainers/
-    TRACE Cached request https://pypi.org/simple/sortedcontainers/ is storable because its response has a 'public' cache-control directive
-    TRACE Received package metadata for: sortedcontainers
-    DEBUG Searching for a compatible version of sortedcontainers (>=2.4.0, <2.4.0+)
-    TRACE Selecting candidate for sortedcontainers with range >=2.4.0, <2.4.0+ with 40 remote versions
-    TRACE Selecting candidate for sortedcontainers with range >=2.4.0, <2.4.0+ with 40 remote versions
-    TRACE Found candidate for package sortedcontainers with range >=2.4.0, <2.4.0+ after 1 steps: 2.4.0 version
-    TRACE Returning candidate for package sortedcontainers with range >=2.4.0, <2.4.0+ after 1 steps
-    TRACE Found candidate for package sortedcontainers with range >=2.4.0, <2.4.0+ after 1 steps: 2.4.0 version
-    TRACE Returning candidate for package sortedcontainers with range >=2.4.0, <2.4.0+ after 1 steps
-    DEBUG Selecting: sortedcontainers==2.4.0 [compatible] (sortedcontainers-2.4.0-py2.py3-none-any.whl)
-    TRACE No cache entry exists for [CACHE_DIR]/wheels-v5/pypi/sortedcontainers/2.4.0-py2.py3-none-any.msgpack
-    DEBUG No cache entry for: https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata
-    TRACE Sending fresh GET request for https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata
-    TRACE Handling request for https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata with authentication policy auto
-    TRACE Request for https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata is unauthenticated, checking cache
-    TRACE No credentials in cache for URL https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata
-    TRACE Attempting unauthenticated request for https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata
-    TRACE Cached request https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata is storable because its response has a 'public' cache-control directive
-    TRACE Received built distribution metadata for: sortedcontainers==2.4.0
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("subexample"), kind: Project }}`
-       excludes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("example"), kind: Project }}`
-    TRACE Assigned packages: root==0a0.dev0, subexample==0.1.0, sortedcontainers==2.4.0
-    DEBUG Tried 2 versions: sortedcontainers 1, subexample 1
-    DEBUG all marker environments resolution took [TIME]
-    TRACE Assigned packages: root==0a0.dev0
-    TRACE Chose package for decision: example. remaining choices:
-    DEBUG Searching for a compatible version of example @ file://[TEMP_DIR]/ (*)
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("example"), kind: Project }}`
-       excludes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("subexample"), kind: Project }}`
-    DEBUG Adding direct dependency: sortedcontainers>=2.3.0, <2.3.0+
-    TRACE Assigned packages: root==0a0.dev0, example==0.1.0
-    TRACE Chose package for decision: sortedcontainers. remaining choices:
-    TRACE Selecting candidate for sortedcontainers with range >=2.3.0, <2.3.0+ with 40 remote versions
-    DEBUG Searching for a compatible version of sortedcontainers (>=2.3.0, <2.3.0+)
-    TRACE Selecting candidate for sortedcontainers with range >=2.3.0, <2.3.0+ with 40 remote versions
-    TRACE Found candidate for package sortedcontainers with range >=2.3.0, <2.3.0+ after 1 steps: 2.3.0 version
-    TRACE Found candidate for package sortedcontainers with range >=2.3.0, <2.3.0+ after 1 steps: 2.3.0 version
-    TRACE Returning candidate for package sortedcontainers with range >=2.3.0, <2.3.0+ after 1 steps
-    TRACE Returning candidate for package sortedcontainers with range >=2.3.0, <2.3.0+ after 1 steps
-    DEBUG Selecting: sortedcontainers==2.3.0 [compatible] (sortedcontainers-2.3.0-py2.py3-none-any.whl)
-    TRACE No cache entry exists for [CACHE_DIR]/wheels-v5/pypi/sortedcontainers/2.3.0-py2.py3-none-any.msgpack
-    DEBUG No cache entry for: https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl.metadata
-    TRACE Sending fresh GET request for https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl.metadata
-    TRACE Handling request for https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl.metadata with authentication policy auto
-    TRACE Request for https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl.metadata is unauthenticated, checking cache
-    TRACE No credentials in cache for URL https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl.metadata
-    TRACE Attempting unauthenticated request for https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl.metadata
-    TRACE Cached request https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl.metadata is storable because its response has a 'public' cache-control directive
-    TRACE Received built distribution metadata for: sortedcontainers==2.3.0
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("example"), kind: Project }}`
-       excludes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("subexample"), kind: Project }}`
-    TRACE Assigned packages: root==0a0.dev0, example==0.1.0, sortedcontainers==2.3.0
-    DEBUG Tried 2 versions: example 1, sortedcontainers 1
-    DEBUG all marker environments resolution took [TIME]
-    TRACE Assigned packages: root==0a0.dev0
-    TRACE Chose package for decision: example[foo]. remaining choices:
-    DEBUG Searching for a compatible version of example @ file://[TEMP_DIR]/ (*)
-    DEBUG Adding direct dependency: example==0.1.0
-    DEBUG Adding direct dependency: example[foo]==0.1.0
-    TRACE Assigned packages: root==0a0.dev0
-    TRACE Chose package for decision: example. remaining choices: example[foo]
-    DEBUG Searching for a compatible version of example @ file://[TEMP_DIR]/ (==0.1.0)
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }}`
-       excludes: `{ConflictItem { package: PackageName("subexample"), kind: Project }, ConflictItem { package: PackageName("example"), kind: Project }}`
-    DEBUG Adding direct dependency: sortedcontainers>=2.3.0, <2.3.0+
-    TRACE Assigned packages: root==0a0.dev0, example==0.1.0
-    TRACE Chose package for decision: example[foo]. remaining choices: sortedcontainers
-    TRACE Selecting candidate for sortedcontainers with range >=2.3.0, <2.3.0+ with 40 remote versions
-    DEBUG Searching for a compatible version of example @ file://[TEMP_DIR]/ (==0.1.0)
-    TRACE Found candidate for package sortedcontainers with range >=2.3.0, <2.3.0+ after 1 steps: 2.3.0 version
-    TRACE Returning candidate for package sortedcontainers with range >=2.3.0, <2.3.0+ after 1 steps
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }}`
-       excludes: `{ConflictItem { package: PackageName("subexample"), kind: Project }, ConflictItem { package: PackageName("example"), kind: Project }}`
-    TRACE Assigned packages: root==0a0.dev0, example==0.1.0, example[foo]==0.1.0
-    TRACE Chose package for decision: sortedcontainers. remaining choices:
-    DEBUG Searching for a compatible version of sortedcontainers (>=2.3.0, <2.3.0+)
-    TRACE Using preference sortedcontainers 2.3.0
-    DEBUG Selecting: sortedcontainers==2.3.0 [preference] (sortedcontainers-2.3.0-py2.py3-none-any.whl)
-    TRACE Resolution environment
-       includes: `{ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }}`
-       excludes: `{ConflictItem { package: PackageName("subexample"), kind: Project }, ConflictItem { package: PackageName("example"), kind: Project }}`
-    TRACE Assigned packages: root==0a0.dev0, example==0.1.0, example[foo]==0.1.0, sortedcontainers==2.3.0
-    DEBUG Tried 2 versions: example 1, sortedcontainers 1
-    DEBUG all marker environments resolution took [TIME]
-    TRACE Assigned packages: root==0a0.dev0
-    DEBUG Tried 0 versions:
-    DEBUG all marker environments resolution took [TIME]
-    INFO Solved your requirements for 4 environments
-    TRACE Resolution: ResolverEnvironment { kind: Universal { initial_forks: [], markers: true, include: {ConflictItem { package: PackageName("subexample"), kind: Project }}, exclude: {ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("example"), kind: Project }} } }
-    TRACE Resolution edge: ROOT -> subexample
-    TRACE Resolution edge:     0a0.dev0 -> 0.1.0
-    TRACE Resolution edge: subexample -> sortedcontainers
-    TRACE Resolution edge:     0.1.0 -> 2.4.0
-    TRACE Resolution: ResolverEnvironment { kind: Universal { initial_forks: [], markers: true, include: {ConflictItem { package: PackageName("example"), kind: Project }}, exclude: {ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("subexample"), kind: Project }} } }
-    TRACE Resolution edge: ROOT -> example
-    TRACE Resolution edge:     0a0.dev0 -> 0.1.0
-    TRACE Resolution edge: example -> sortedcontainers
-    TRACE Resolution edge:     0.1.0 -> 2.3.0
-    TRACE Resolution: ResolverEnvironment { kind: Universal { initial_forks: [], markers: true, include: {ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }}, exclude: {ConflictItem { package: PackageName("subexample"), kind: Project }, ConflictItem { package: PackageName("example"), kind: Project }} } }
-    TRACE Resolution edge: ROOT -> example
-    TRACE Resolution edge:     0a0.dev0 -> 0.1.0 (extra: foo)
-    TRACE Resolution edge: ROOT -> example
-    TRACE Resolution edge:     0a0.dev0 -> 0.1.0
-    TRACE Resolution edge: example -> sortedcontainers
-    TRACE Resolution edge:     0.1.0 -> 2.3.0
-    TRACE Resolution: ResolverEnvironment { kind: Universal { initial_forks: [], markers: true, include: {}, exclude: {ConflictItem { package: PackageName("example"), kind: Extra(ExtraName("foo")) }, ConflictItem { package: PackageName("example"), kind: Project }, ConflictItem { package: PackageName("subexample"), kind: Project }} } }
     Resolved 4 packages in [TIME]
-    "#);
+    ");
 
     let lock = context.read("uv.lock");
 
