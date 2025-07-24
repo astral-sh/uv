@@ -165,7 +165,7 @@ pub struct BuildBackendSettings {
     #[option(
         default = r#"{}"#,
         value_type = "dict[str, str]",
-        example = r#"data = { "headers": "include/headers", "scripts": "bin" }"#
+        example = r#"data = { headers = "include/headers", scripts = "bin" }"#
     )]
     pub data: WheelDataIncludes,
 }
