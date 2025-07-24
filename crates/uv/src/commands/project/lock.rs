@@ -1,6 +1,5 @@
 #![allow(clippy::single_match_else)]
 
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
@@ -18,8 +17,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Requirement, UnresolvedRequirementSpecification,
+    DependencyMetadata, HashGeneration, Index, IndexLocations, IndexUrl,
+    NameRequirementSpecification, Requirement, UnresolvedRequirementSpecification, UrlString,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{GroupName, PackageName};
@@ -1067,26 +1066,26 @@ impl ValidatedLock {
         // However, if _no_ indexes were provided, we assume that the user wants to reuse the existing
         // distributions, even though a failure to reuse the lockfile will result in re-resolving
         // against PyPI by default.
-        let validation_indexes = if index_locations.is_none() {
+        let indexes = if index_locations.is_none() {
             None
         } else {
-            // If indexes were defined as sources in path dependencies, add them to the
-            // index locations to use for validation.
-            if let LockTarget::Workspace(workspace) = target {
-                let path_dependency_source_indexes =
-                    workspace.collect_path_dependency_source_indexes();
-                if path_dependency_source_indexes.is_empty() {
-                    Some(Cow::Borrowed(index_locations))
-                } else {
-                    Some(Cow::Owned(index_locations.clone().combine(
-                        path_dependency_source_indexes,
-                        Vec::new(),
-                        false,
-                    )))
-                }
-            } else {
-                Some(Cow::Borrowed(index_locations))
-            }
+            Some(index_locations)
+        };
+
+        // Collect indexes specified in path dependencies
+        let path_dependency_indexes = if let LockTarget::Workspace(workspace) = target {
+            workspace
+                .collect_path_dependency_source_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                        Some(UrlString::from(index.url().without_credentials().as_ref()))
+                    }
+                    IndexUrl::Path(_) => None,
+                })
+                .collect::<BTreeSet<_>>()
+        } else {
+            BTreeSet::default()
         };
 
         // Determine whether the lockfile satisfies the workspace requirements.
@@ -1101,7 +1100,8 @@ impl ValidatedLock {
                 build_constraints,
                 dependency_groups,
                 dependency_metadata,
-                validation_indexes,
+                indexes,
+                &path_dependency_indexes,
                 interpreter.tags()?,
                 hasher,
                 index,

@@ -1,6 +1,7 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -939,10 +940,13 @@ impl Workspace {
         // We will only add indexes if we have not already seen the URLs.
         let known_urls: FxHashSet<_> = self.indexes.iter().map(Index::url).collect();
 
-        let mut pyprojects = std::collections::VecDeque::new();
-        pyprojects.push_back((self.install_path.clone(), self.pyproject_toml.clone()));
+        let mut pyproject_queue = VecDeque::new();
+        for package in self.packages.values() {
+            pyproject_queue
+                .push_back((package.root.clone(), Cow::Borrowed(&package.pyproject_toml)));
+        }
 
-        while let Some((base_path, pyproject)) = pyprojects.pop_front() {
+        while let Some((base_path, pyproject)) = pyproject_queue.pop_front() {
             if let Some(tool_uv_sources) = pyproject
                 .tool
                 .as_ref()
@@ -975,8 +979,8 @@ impl Workspace {
                             let dep_pyproject_path = canonical_path.join("pyproject.toml");
 
                             match pyproject_toml_from_path(dep_pyproject_path.clone()) {
-                                Ok(dep_pyproject) => {
-                                    if let Some(dep_indexes) = dep_pyproject
+                                Ok(pyproject_toml) => {
+                                    if let Some(dep_indexes) = pyproject_toml
                                         .tool
                                         .as_ref()
                                         .and_then(|tool| tool.uv.as_ref())
@@ -990,7 +994,8 @@ impl Workspace {
                                         );
                                     }
 
-                                    pyprojects.push_back((canonical_path, dep_pyproject));
+                                    pyproject_queue
+                                        .push_back((canonical_path, Cow::Owned(pyproject_toml)));
                                 }
                                 Err(e) => {
                                     debug!(

@@ -27634,6 +27634,104 @@ fn lock_path_dependency_explicit_index() -> Result<()> {
     Ok(())
 }
 
+/// Test that lockfile validation includes explicit indexes from path dependencies
+/// defined in a non-root workspace member.
+#[test]
+fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the path dependency with explicit index
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "inner-index" }
+
+        [[tool.uv.index]]
+        name = "inner-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+        explicit = true
+        "#,
+    )?;
+
+    // Create a project that depends on pkg_a
+    let member = context.temp_dir.child("member");
+    fs_err::create_dir_all(&member)?;
+
+    let pyproject_toml = member.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+        black = { index = "middle-index" }
+
+        [[tool.uv.index]]
+        name = "middle-index"
+        url = "https://middle-index.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    // Create a root with workspace member
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        anyio = { index = "outer-index" }
+
+        [[tool.uv.index]]
+        name = "outer-index"
+        url = "https://outer-index.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test that lockfile validation works correctly when path dependency has
 /// both explicit and non-explicit indexes.
 #[test]

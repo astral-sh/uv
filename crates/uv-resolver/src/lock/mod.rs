@@ -1233,7 +1233,8 @@ impl Lock {
         build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
-        indexes: Option<Cow<'_, IndexLocations>>,
+        indexes: Option<&IndexLocations>,
+        path_dependency_indexes: &BTreeSet<UrlString>,
         tags: &Tags,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
@@ -1399,7 +1400,7 @@ impl Lock {
         }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
-        let remotes = indexes.as_ref().map(|locations| {
+        let remotes = indexes.map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1412,7 +1413,7 @@ impl Lock {
                 .collect::<BTreeSet<_>>()
         });
 
-        let locals = indexes.as_ref().map(|locations| {
+        let locals = indexes.map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1452,10 +1453,9 @@ impl Lock {
             if let Source::Registry(index) = &package.id.source {
                 match index {
                     RegistrySource::Url(url) => {
-                        if remotes
-                            .as_ref()
-                            .is_some_and(|remotes| !remotes.contains(url))
-                        {
+                        if remotes.as_ref().is_some_and(|remotes| {
+                            !remotes.contains(url) && !path_dependency_indexes.contains(url)
+                        }) {
                             let name = &package.id.name;
                             let version = &package
                                 .id
