@@ -12462,14 +12462,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 fn overlapping_packages_warning() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    context
-        .build()
-        .arg("--preview")
-        .arg(context.workspace_root.join("scripts/packages/built-by-uv"))
-        .arg("--out-dir")
-        .arg(context.temp_dir.path())
-        .assert()
-        .success();
+    let built_by_uv = context.workspace_root.join("scripts/packages/built-by-uv");
 
     // Overlaps with `built-by-uv`
     let also_build_by_uv = context.temp_dir.child("also-built-by-uv");
@@ -12493,20 +12486,12 @@ fn overlapping_packages_warning() -> Result<()> {
         .child("built_by_uv")
         .child("__init__.py")
         .touch()?;
-    context
-        .build()
-        .arg("--preview")
-        .arg(also_build_by_uv.path())
-        .arg("--out-dir")
-        .arg(context.temp_dir.path())
-        .assert()
-        .success();
 
     // Check that overlapping packages show a warning
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
-        .arg(context.temp_dir.join("built_by_uv-0.1.0-py3-none-any.whl"))
-        .arg(context.temp_dir.join("also_built_by_uv-0.1.0-py3-none-any.whl")), @r"
+        .arg(&built_by_uv)
+        .arg(also_build_by_uv.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12516,8 +12501,8 @@ fn overlapping_packages_warning() -> Result<()> {
     Prepared 2 packages in [TIME]
     warning: The module `built_by_uv` is provided by more than one package, which causes an install race condition and can result in a broken module. Consider removing your dependency on either `built-by-uv` (v0.1.0) or `also-built-by-uv` (v0.1.0).
     Installed 2 packages in [TIME]
-     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also_built_by_uv-0.1.0-py3-none-any.whl)
-     + built-by-uv==0.1.0 (from file://[TEMP_DIR]/built_by_uv-0.1.0-py3-none-any.whl)
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
     "
     );
 
@@ -12548,7 +12533,7 @@ fn overlapping_packages_warning() -> Result<()> {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - built-by-uv==0.1.0 (from file://[TEMP_DIR]/built_by_uv-0.1.0-py3-none-any.whl)
+     - built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
     "
     );
     uv_snapshot!(context.filters(), context.pip_uninstall()
@@ -12559,36 +12544,38 @@ fn overlapping_packages_warning() -> Result<()> {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also_built_by_uv-0.1.0-py3-none-any.whl)
+     - also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
     "
     );
 
     // Check that installing one of the packages on their own doesn't warn.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
-        .arg(context.temp_dir.join("built_by_uv-0.1.0-py3-none-any.whl")), @r"
+        .arg(built_by_uv), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + built-by-uv==0.1.0 (from file://[TEMP_DIR]/built_by_uv-0.1.0-py3-none-any.whl)
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
     "
     );
     // Currently, we don't warn if we install them one wheel at a time.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
-        .arg(context.temp_dir.join("also_built_by_uv-0.1.0-py3-none-any.whl")), @r"
+        .arg(also_build_by_uv.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also_built_by_uv-0.1.0-py3-none-any.whl)
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
     "
     );
 
