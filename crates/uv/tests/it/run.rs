@@ -4031,17 +4031,8 @@ fn run_active_script_environment() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v1/main-\w+",
-            "environments-v1/main-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Running `uv run --script` with `VIRTUAL_ENV` should _not_ warn.
-    uv_snapshot!(&filters, context.run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
@@ -4058,7 +4049,7 @@ fn run_active_script_environment() -> Result<()> {
     "###);
 
     // Using `--no-active` should also _not_ warn.
-    uv_snapshot!(&filters, context.run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--no-active")
         .arg("--script")
         .arg("main.py")
@@ -4077,7 +4068,7 @@ fn run_active_script_environment() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Using `--active` should create the environment
-    uv_snapshot!(&filters, context.run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("--script")
         .arg("main.py")
@@ -4099,7 +4090,7 @@ fn run_active_script_environment() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Requesting a different Python version should invalidate the environment
-    uv_snapshot!(&filters, context.run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("-p").arg("3.12")
         .arg("--script")

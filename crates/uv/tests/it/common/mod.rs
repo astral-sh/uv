@@ -706,6 +706,11 @@ impl TestContext {
             ),
             r#"requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]"#.to_string(),
         ));
+        // Filter script environment hashes
+        filters.push((
+            r"environments-v(\d+)[\\/](\w+)-[a-z0-9]+".to_string(),
+            "environments-v$1/$2-[HASH]".to_string(),
+        ));
 
         Self {
             root: ChildPath::new(root.path()),
