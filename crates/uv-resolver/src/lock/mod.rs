@@ -2877,6 +2877,16 @@ impl Package {
     pub fn dependencies(&self) -> &[Dependency] {
         &self.dependencies
     }
+
+    /// Returns the optional dependencies of the package.
+    pub fn optional_dependencies(&self) -> &BTreeMap<ExtraName, Vec<Dependency>> {
+        &self.optional_dependencies
+    }
+
+    /// Returns the resolved PEP 735 dependency groups of the package.
+    pub fn resolved_dependency_groups(&self) -> &BTreeMap<GroupName, Vec<Dependency>> {
+        &self.dependency_groups
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
@@ -4548,6 +4558,11 @@ impl Dependency {
     /// Returns the package name of this dependency.
     pub fn package_name(&self) -> &PackageName {
         &self.package_id.name
+    }
+
+    /// Returns the extras specified on this dependency.
+    pub fn extra(&self) -> &BTreeSet<ExtraName> {
+        &self.extra
     }
 }
 

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -8,7 +8,7 @@ use rustc_hash::FxHashSet;
 
 use uv_configuration::{Constraints, DependencyGroupsWithDefaults, ExtrasSpecification};
 use uv_distribution_types::Index;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
 use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
@@ -372,31 +372,94 @@ impl<'lock> InstallTarget<'lock> {
     }
 
     /// Returns the names of all packages in the workspace that will be installed.
-    pub(crate) fn packages(&self) -> BTreeSet<PackageName> {
+    pub(crate) fn packages(
+        &self,
+        extras: &ExtrasSpecification,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> BTreeSet<PackageName> {
         match self {
             Self::Project { name, lock, .. } => {
-                // Start with the project itself
-                let mut packages = BTreeSet::new();
-                packages.insert((*name).clone());
+                // Collect the packages by name for lookup
+                let packages = lock
+                    .packages()
+                    .iter()
+                    .map(|p| (p.name(), p))
+                    .collect::<BTreeMap<_, _>>();
+
+                // We'll include the project itself
+                let mut required_members = BTreeSet::new();
+                required_members.insert((*name).clone());
 
                 // Find all workspace member dependencies recursively
-                let members = lock.members();
-                let mut queue = VecDeque::new();
-                queue.push_back(*name);
+                let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
+                let mut seen: FxHashSet<(&PackageName, Option<&ExtraName>)> = FxHashSet::default();
 
-                while let Some(pkg_name) = queue.pop_front() {
-                    // Find the package by iterating through all packages
-                    if let Some(package) = lock.packages().iter().find(|p| p.name() == pkg_name) {
-                        for dep in package.dependencies() {
-                            let dep_name = dep.package_name();
-                            if members.contains(dep_name) && packages.insert(dep_name.clone()) {
-                                queue.push_back(dep_name);
+                let Some(root_package) = packages.get(name) else {
+                    return required_members;
+                };
+
+                if groups.prod() {
+                    // Add the root package
+                    queue.push_back((name, None));
+                    seen.insert((name, None));
+
+                    // Add explicitly activated extras for the root package
+                    for extra in extras.extra_names(root_package.optional_dependencies().keys()) {
+                        if seen.insert((name, Some(extra))) {
+                            queue.push_back((name, Some(extra)));
+                        }
+                    }
+                }
+
+                // Add activated dependency groups for the root package
+                for (group_name, dependencies) in root_package.resolved_dependency_groups() {
+                    if !groups.contains(group_name) {
+                        continue;
+                    }
+                    for dependency in dependencies {
+                        let name = dependency.package_name();
+                        queue.push_back((name, None));
+                        for extra in dependency.extra() {
+                            queue.push_back((name, Some(extra)));
+                        }
+                    }
+                }
+
+                while let Some((pkg_name, extra)) = queue.pop_front() {
+                    if lock.members().contains(pkg_name) {
+                        required_members.insert(pkg_name.clone());
+                    }
+
+                    let Some(package) = packages.get(pkg_name) else {
+                        continue;
+                    };
+
+                    let Some(dependencies) = extra
+                        .map(|extra_name| {
+                            package
+                                .optional_dependencies()
+                                .get(extra_name)
+                                .map(Vec::as_slice)
+                        })
+                        .unwrap_or(Some(package.dependencies()))
+                    else {
+                        continue;
+                    };
+
+                    for dependency in dependencies {
+                        let name = dependency.package_name();
+                        if seen.insert((name, None)) {
+                            queue.push_back((name, None));
+                        }
+                        for extra in dependency.extra() {
+                            if seen.insert((name, Some(extra))) {
+                                queue.push_back((name, Some(extra)));
                             }
                         }
                     }
                 }
 
-                packages
+                required_members
             }
             Self::Workspace { lock, .. } | Self::NonProjectWorkspace { lock, .. } => {
                 // Return all workspace members
