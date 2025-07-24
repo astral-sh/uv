@@ -2768,14 +2768,14 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -2866,7 +2866,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `foo` and the project are incompatible with the declared conflicts: {`project:foo`, the project}
+    error: Group `foo` and package `project` are incompatible with the declared conflicts: {`project:foo`, project}
     ");
     // Another install, but this time with `--only-group=foo`,
     // which excludes the project and is thus okay.
@@ -2941,14 +2941,14 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     )?;
 
     // Lock should succeed because we declared the conflict
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -3118,6 +3118,82 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
 
     // This should fail to resolve, because these conflict
     uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because subexample depends on sortedcontainers==2.4.0 and example depends on sortedcontainers==2.3.0, we can conclude that example and subexample are incompatible.
+          And because example depends on subexample and your workspace requires example, we can conclude that your workspace's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// Like [`lock_conflicting_workspace_members_depends_direct`], but the root project depends on the
+/// conflicting workspace member via a direct optional dependency.
+#[test]
+fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.3.0"]
+
+        [project.optional-dependencies]
+        foo = ["subexample"]
+
+        [tool.uv.workspace]
+        members = ["subexample"]
+
+        [tool.uv]
+        conflicts = [
+            [
+            { package = "example" },
+            { package = "example", extra = "foo"},
+            { package = "subexample" },
+            ],
+        ]
+
+        [tool.uv.sources]
+        subexample = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.packages.find]
+        include = ["example"]
+        "#,
+    )?;
+
+    // Create the subproject
+    let subproject_dir = context.temp_dir.child("subexample");
+    subproject_dir.create_dir_all()?;
+
+    let sub_pyproject_toml = subproject_dir.child("pyproject.toml");
+    sub_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "subexample"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // This should succeed, because the conflict is optional
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3127,6 +3203,7 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
+
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -3136,6 +3213,7 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
         revision = 2
         requires-python = ">=3.12"
         conflicts = [[
+            { package = "example", extra = "foo" },
             { package = "example" },
             { package = "subexample" },
         ]]
@@ -3154,14 +3232,15 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-example'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-example-foo' or extra == 'project-7-example'" },
         ]
 
         [package.metadata]
         requires-dist = [
             { name = "sortedcontainers", specifier = "==2.3.0" },
-            { name = "subexample", editable = "subexample" },
+            { name = "subexample", marker = "extra == 'foo'", editable = "subexample" },
         ]
+        provides-extras = ["foo"]
 
         [[package]]
         name = "sortedcontainers"
@@ -3186,25 +3265,114 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample'" },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample' or (extra == 'extra-7-example-foo' and extra == 'project-7-example')" },
         ]
 
         [package.metadata]
         requires-dist = [{ name = "sortedcontainers", specifier = "==2.4.0" }]
-        "#)});
+        "#
+        );
+    });
 
-    // Syncing should fail too
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    // Install from the lockfile
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + example==0.1.0 (from file://[TEMP_DIR]/)
      + sortedcontainers==2.3.0
+    ");
+
+    // Attempt to install with the extra selected
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Extra `foo` and package `example` are incompatible with the declared conflicts: {`example[foo]`, example, subexample}
+    ");
+
+    // Install just the child package
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("subexample"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - example==0.1.0 (from file://[TEMP_DIR]/)
+     - sortedcontainers==2.3.0
+     + sortedcontainers==2.4.0
+     + subexample==0.1.0 (from file://[TEMP_DIR]/subexample)
+    ");
+
+    // Install with just development dependencies
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 2 packages in [TIME]
+     - sortedcontainers==2.4.0
+     - subexample==0.1.0 (from file://[TEMP_DIR]/subexample)
+    ");
+
+    Ok(())
+}
+
+/// Mar
+#[test]
+fn lock_conflicting_extras_depends() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["sortedcontainers==2.3.0", "example[bar]"]
+        bar = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "foo" },
+            { extra = "bar" },
+          ],
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.packages.find]
+        include = ["example"]
+        "#,
+    )?;
+
+    // This should fail to resolve, because the extras are always required together
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example[foo] depends on sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that example[foo]'s requirements are unsatisfiable.
+          And because your project requires example[foo], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -3373,7 +3541,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `foo` and the project are incompatible with the declared conflicts: {`example:foo`, the project}
+    error: Group `foo` and package `example` are incompatible with the declared conflicts: {`example:foo`, example}
     ");
     // Another install, but this time with `--only-group=foo`,
     // which excludes the project and is thus okay.

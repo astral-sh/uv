@@ -1049,23 +1049,23 @@ fn extra_unconditional() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
     // This should error since we're enabling two conflicting extras.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Found conflicting extras `proxy1[extra1]` and `proxy1[extra2]` enabled simultaneously
-    "###);
+    ");
 
     root_pyproject_toml.write_str(
         r#"
@@ -1084,14 +1084,14 @@ fn extra_unconditional() -> Result<()> {
         proxy1 = { workspace = true }
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
     // This is fine because we are only enabling one
     // extra, and thus, there is no conflict.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
@@ -1126,17 +1126,17 @@ fn extra_unconditional() -> Result<()> {
         proxy1 = { workspace = true }
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
     // This is fine because we are only enabling one
     // extra, and thus, there is no conflict.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1147,7 +1147,7 @@ fn extra_unconditional() -> Result<()> {
     Installed 1 package in [TIME]
      - anyio==4.1.0
      + anyio==4.2.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -1202,14 +1202,14 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // This *should* install `anyio==4.1.0`, but when this
     // test was initially written, it didn't. This was because
@@ -1425,26 +1425,26 @@ fn extra_unconditional_non_local_conflict() -> Result<()> {
     // that can never be installed! Namely, because two different
     // conflicting extras are enabled unconditionally in all
     // configurations.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // This should fail. If it doesn't and we generated a lock
     // file above, then this will likely result in the installation
     // of two different versions of the same package.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Found conflicting extras `c[x1]` and `c[x2]` enabled simultaneously
-    "###);
+    ");
 
     Ok(())
 }
@@ -1711,14 +1711,14 @@ fn group_basic() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -1866,14 +1866,14 @@ fn group_default() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -2398,14 +2398,14 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -2881,7 +2881,7 @@ fn non_optional_dependency_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2891,7 +2891,7 @@ fn non_optional_dependency_extra() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2928,7 +2928,7 @@ fn non_optional_dependency_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2938,7 +2938,7 @@ fn non_optional_dependency_group() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2978,7 +2978,7 @@ fn non_optional_dependency_mixed() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2988,7 +2988,7 @@ fn non_optional_dependency_mixed() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -3178,7 +3178,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
     )?;
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
-    uv_snapshot!(context.filters(), context.sync().arg("--group=baz").arg("--group=foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--group=baz").arg("--group=foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3190,7 +3190,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
      + anyio==4.3.0
      + idna==3.5
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -3605,7 +3605,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
     )?;
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
-    uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3617,7 +3617,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -3895,7 +3895,7 @@ fn shared_dependency_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3907,7 +3907,7 @@ fn shared_dependency_extra() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -3996,7 +3996,7 @@ fn shared_dependency_extra() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     // So this should remove `idna==3.6` installed above.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4008,9 +4008,9 @@ fn shared_dependency_extra() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.6
      + idna==3.5
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--extra=bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra=bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4021,9 +4021,9 @@ fn shared_dependency_extra() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.5
      + idna==3.6
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4031,7 +4031,7 @@ fn shared_dependency_extra() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Audited 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4070,7 +4070,7 @@ fn shared_dependency_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4082,7 +4082,7 @@ fn shared_dependency_group() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -4246,7 +4246,7 @@ fn shared_dependency_mixed() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4258,7 +4258,7 @@ fn shared_dependency_mixed() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
     insta::with_settings!({
@@ -4351,7 +4351,7 @@ fn shared_dependency_mixed() -> Result<()> {
 
     // This shouldn't install two versions of `idna`, only one, `idna==3.5`.
     // So this should remove `idna==3.6` installed above.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra=foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4363,9 +4363,9 @@ fn shared_dependency_mixed() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.6
      + idna==3.5
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--group=bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4376,9 +4376,9 @@ fn shared_dependency_mixed() -> Result<()> {
     Installed 1 package in [TIME]
      - idna==3.5
      + idna==3.6
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4386,7 +4386,7 @@ fn shared_dependency_mixed() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     Audited 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }

@@ -35,7 +35,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -3637,7 +3637,7 @@ impl Forks {
                     continue;
                 }
 
-                // Create a fork that excludes ALL extras.
+                // Create a fork that excludes ALL conflicts.
                 if let Some(fork_none) = fork.clone().filter(set.iter().cloned().map(Err)) {
                     new.push(fork_none);
                 }
@@ -3770,6 +3770,17 @@ impl Fork {
             };
             if self.env.included_by_group(conflicting_item) {
                 return true;
+            } else {
+                match conflicting_item.kind() {
+                    // We should not filter entire projects unless they're a top-level dependency
+                    ConflictKindRef::Project => {
+                        if dep.parent.is_some() {
+                            return true;
+                        }
+                    }
+                    ConflictKindRef::Group(_) => {}
+                    ConflictKindRef::Extra(_) => {}
+                }
             }
             if let Some(conflicting_item) = dep.conflicting_item() {
                 self.conflicts.remove(&conflicting_item);

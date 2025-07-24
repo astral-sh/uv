@@ -3,7 +3,7 @@ use tracing::trace;
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, ResolverMarkerEnvironment};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::resolver::ForkState;
