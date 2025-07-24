@@ -3773,17 +3773,16 @@ impl Fork {
             };
             if self.env.included_by_group(conflicting_item) {
                 return true;
-            } else {
-                match conflicting_item.kind() {
-                    // We should not filter entire projects unless they're a top-level dependency
-                    ConflictKindRef::Project => {
-                        if dep.parent.is_some() {
-                            return true;
-                        }
+            }
+            match conflicting_item.kind() {
+                // We should not filter entire projects unless they're a top-level dependency
+                ConflictKindRef::Project => {
+                    if dep.parent.is_some() {
+                        return true;
                     }
-                    ConflictKindRef::Group(_) => {}
-                    ConflictKindRef::Extra(_) => {}
                 }
+                ConflictKindRef::Group(_) => {}
+                ConflictKindRef::Extra(_) => {}
             }
             if let Some(conflicting_item) = dep.conflicting_item() {
                 self.conflicts.remove(&conflicting_item);
@@ -3910,24 +3909,27 @@ pub(crate) fn trace_resolver_environment(env: &ResolverEnvironment) {
     let markers = env
         .marker_environment()
         .map(|m| format!("{m:?}"))
-        .or_else(|| env.fork_markers().and_then(|m| m.try_to_string()));
+        .or_else(|| {
+            env.fork_markers()
+                .and_then(uv_pep508::MarkerTree::try_to_string)
+        });
 
     trace!(
         r"Resolution environment {}{}{}",
         if let Some(markers) = markers {
             format!("for split `{markers}`")
         } else {
-            "".to_string()
+            String::new()
         },
         if let Some(includes) = env.includes() {
             format!("\n   includes: `{includes:?}`")
         } else {
-            "".to_string()
+            String::new()
         },
         if let Some(excludes) = env.excludes() {
             format!("\n   excludes: `{excludes:?}`")
         } else {
-            "".to_string()
+            String::new()
         },
     );
 }
