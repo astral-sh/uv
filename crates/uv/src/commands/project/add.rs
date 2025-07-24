@@ -644,7 +644,9 @@ pub(crate) async fn add(
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
         let urls = IndexUrls::from_indexes(indexes);
-        for index in urls.defined_indexes() {
+        let mut indexes = urls.defined_indexes().collect::<Vec<_>>();
+        indexes.reverse();
+        for index in indexes {
             toml.add_index(index)?;
         }
     }

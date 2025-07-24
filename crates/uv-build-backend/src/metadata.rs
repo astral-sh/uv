@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use serde::Deserialize;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
 
@@ -54,10 +54,6 @@ pub enum ValidationError {
         "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `{0}`"
     )]
     InvalidGroup(String),
-    #[error(
-        "Entrypoint names must consist of letters, numbers, dots, underscores and dashes; invalid name: `{0}`"
-    )]
-    InvalidName(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
     ReservedScripts,
     #[error("Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`")]
@@ -620,12 +616,14 @@ impl PyProjectToml {
 
         let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
-            // More strict than the spec, we enforce the recommendation
             if !name
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
             {
-                return Err(ValidationError::InvalidName(name.to_string()));
+                warn!(
+                    "Entrypoint names should consist of letters, numbers, dots, underscores and \
+                    dashes; non-compliant name: `{name}`"
+                );
             }
 
             // TODO(konsti): Validate that the object references are valid Python identifiers.
@@ -1401,16 +1399,6 @@ mod tests {
         "#
         });
         assert_snapshot!(script_error(&contents), @"Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `a@b`");
-    }
-
-    #[test]
-    fn invalid_entry_point_name() {
-        let contents = extend_project(indoc! {r#"
-            [project.scripts]
-            "a@b" = "bar"
-        "#
-        });
-        assert_snapshot!(script_error(&contents), @"Entrypoint names must consist of letters, numbers, dots, underscores and dashes; invalid name: `a@b`");
     }
 
     #[test]

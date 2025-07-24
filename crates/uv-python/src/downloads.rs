@@ -988,7 +988,11 @@ impl ManagedPythonDownload {
             archive_writer.flush().await?;
         }
         // Move the completed file into place, invalidating the `File` instance.
-        fs_err::rename(&temp_file, target_cache_file)?;
+        match rename_with_retry(&temp_file, target_cache_file).await {
+            Ok(()) => {}
+            Err(_) if target_cache_file.is_file() => {}
+            Err(err) => return Err(err.into()),
+        }
         Ok(())
     }
 

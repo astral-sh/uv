@@ -6,7 +6,7 @@ use thiserror::Error;
 use uv_configuration::PreviewMode;
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use virtualenv::OnExisting;
+pub use virtualenv::{OnExisting, remove_virtualenv};
 
 mod virtualenv;
 

@@ -273,7 +273,7 @@ pub(crate) async fn sync(
                         dry_run: dry_run.enabled(),
                     };
                     if let Some(output) = report.format(output_format) {
-                        writeln!(printer.stdout(), "{output}")?;
+                        writeln!(printer.stdout_important(), "{output}")?;
                     }
                     return Ok(ExitStatus::Success);
                 }
@@ -363,7 +363,7 @@ pub(crate) async fn sync(
     };
 
     if let Some(output) = report.format(output_format) {
-        writeln!(printer.stdout(), "{output}")?;
+        writeln!(printer.stdout_important(), "{output}")?;
     }
 
     // Identify the installation target.

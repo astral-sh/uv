@@ -3629,3 +3629,206 @@ fn tool_install_mismatched_name() {
     error: Package name (`black`) provided with `--from` does not match install request (`flask`)
     "###);
 }
+
+/// When installing from an authenticated index, the credentials should be omitted from the receipt.
+#[test]
+fn tool_install_credentials() {
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `executable-application`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+         .arg("--index")
+        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    "###);
+
+    tool_dir
+        .child("executable-application")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("executable-application")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("app{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run black in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/executable-application/bin/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from executable_application import main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
+        ]
+
+        [tool.options]
+        index = [{ url = "https://pypi-proxy.fly.dev/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
+}
+
+/// When installing from an authenticated index, the credentials should be omitted from the receipt.
+#[test]
+fn tool_install_default_credentials() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Write a `uv.toml` with a default index that has credentials.
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc::indoc! {r#"
+        [[index]]
+        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        authenticate = "always"
+    "#})?;
+
+    // Install `executable-application`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    "###);
+
+    tool_dir
+        .child("executable-application")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("executable-application")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("app{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run black in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r###"
+        #![TEMP_DIR]/tools/executable-application/bin/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from executable_application import main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(main())
+        "###);
+
+    });
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "executable-application" }]
+        entrypoints = [
+            { name = "app", install-path = "[TEMP_DIR]/bin/app" },
+        ]
+
+        [tool.options]
+        index = [{ url = "https://pypi-proxy.fly.dev/basic-auth/simple", explicit = false, default = true, format = "simple", authenticate = "always" }]
+        exclude-newer = "2025-01-18T00:00:00Z"
+        "#);
+    });
+
+    // Attempt to upgrade without providing the credentials (from the config file).
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade executable-application
+      Caused by: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/executable-application/`
+      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/executable-application/
+    ");
+
+    // Attempt to upgrade.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}

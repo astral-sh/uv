@@ -203,7 +203,11 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        self.to_string().serialize(serializer)
+        match self {
+            Self::Pypi(url) => url.without_credentials().serialize(serializer),
+            Self::Url(url) => url.without_credentials().serialize(serializer),
+            Self::Path(url) => url.without_credentials().serialize(serializer),
+        }
     }
 }
 
@@ -396,14 +400,17 @@ impl<'a> IndexLocations {
     ///
     /// This includes explicit indexes, implicit indexes, flat indexes, and the default index.
     ///
-    /// The indexes will be returned in the order in which they were defined, such that the
-    /// last-defined index is the last item in the vector.
+    /// The indexes will be returned in the reverse of the order in which they were defined, such
+    /// that the last-defined index is the first item in the vector.
     pub fn allowed_indexes(&'a self) -> Vec<&'a Index> {
         if self.no_index {
             self.flat_index.iter().rev().collect()
         } else {
             let mut indexes = vec![];
 
+            // TODO(charlie): By only yielding the first default URL, we'll drop credentials if,
+            // e.g., an authenticated default URL is provided in a configuration file, but an
+            // unauthenticated default URL is present in the receipt.
             let mut seen = FxHashSet::default();
             let mut default = false;
             for index in {
@@ -429,9 +436,29 @@ impl<'a> IndexLocations {
         }
     }
 
+    /// Return a vector containing all known [`Index`] entries.
+    ///
+    /// This includes explicit indexes, implicit indexes, flat indexes, and default indexes;
+    /// in short, it includes all defined indexes, even if they're overridden by some other index
+    /// definition.
+    ///
+    /// The indexes will be returned in the reverse of the order in which they were defined, such
+    /// that the last-defined index is the first item in the vector.
+    pub fn known_indexes(&'a self) -> impl Iterator<Item = &'a Index> {
+        if self.no_index {
+            Either::Left(self.flat_index.iter().rev())
+        } else {
+            Either::Right(
+                std::iter::once(&*DEFAULT_INDEX)
+                    .chain(self.flat_index.iter().rev())
+                    .chain(self.indexes.iter().rev()),
+            )
+        }
+    }
+
     /// Add all authenticated sources to the cache.
     pub fn cache_index_credentials(&self) {
-        for index in self.allowed_indexes() {
+        for index in self.known_indexes() {
             if let Some(credentials) = index.credentials() {
                 let credentials = Arc::new(credentials);
                 uv_auth::store_credentials(index.raw_url(), credentials.clone());
