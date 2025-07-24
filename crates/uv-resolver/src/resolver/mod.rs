@@ -3663,9 +3663,6 @@ impl Forks {
             }
             forks = new;
         }
-        for fork in &forks {
-            trace_resolver_environment(&fork.env);
-        }
         Forks {
             forks,
             diverging_packages,
@@ -3898,38 +3895,4 @@ struct ConflictTracker {
     ///
     /// Distilled from `culprit` for fast checking in the hot loop.
     deprioritize: Vec<Id<PubGrubPackage>>,
-}
-
-/// When trace level logging is enabled, we emit the resolution environment
-pub(crate) fn trace_resolver_environment(env: &ResolverEnvironment) {
-    if !tracing::enabled!(Level::TRACE) {
-        return;
-    }
-
-    let markers = env
-        .marker_environment()
-        .map(|m| format!("{m:?}"))
-        .or_else(|| {
-            env.fork_markers()
-                .and_then(uv_pep508::MarkerTree::try_to_string)
-        });
-
-    trace!(
-        r"Resolution environment {}{}{}",
-        if let Some(markers) = markers {
-            format!("for split `{markers}`")
-        } else {
-            String::new()
-        },
-        if let Some(includes) = env.includes() {
-            format!("\n   includes: `{includes:?}`")
-        } else {
-            String::new()
-        },
-        if let Some(excludes) = env.excludes() {
-            format!("\n   excludes: `{excludes:?}`")
-        } else {
-            String::new()
-        },
-    );
 }
