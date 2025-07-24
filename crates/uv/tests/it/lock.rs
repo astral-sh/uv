@@ -2947,6 +2947,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved 4 packages in [TIME]
     ");
 
@@ -3123,6 +3124,7 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview` to disable this warning.
       × No solution found when resolving dependencies:
       ╰─▶ Because subexample depends on sortedcontainers==2.4.0 and example depends on sortedcontainers==2.3.0, we can conclude that example and subexample are incompatible.
           And because example depends on subexample and your workspace requires example, we can conclude that your workspace's requirements are unsatisfiable.
@@ -3202,6 +3204,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved 4 packages in [TIME]
     ");
 
@@ -3418,6 +3421,7 @@ fn lock_conflicting_workspace_members_depends_transitive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview` to disable this warning.
       × No solution found when resolving dependencies:
       ╰─▶ Because subexample depends on sortedcontainers==2.4.0 and indirection depends on subexample, we can conclude that indirection depends on sortedcontainers==2.4.0.
           And because example depends on sortedcontainers==2.3.0, we can conclude that example and indirection are incompatible.
@@ -3518,6 +3522,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview` to disable this warning.
     Resolved 5 packages in [TIME]
     ");
 
