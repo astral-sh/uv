@@ -158,7 +158,7 @@ impl VariantBuild {
         let out_file = self.temp_dir.path().join("output.json");
         let in_file = self.temp_dir.path().join("input.json");
         let in_writer = fs_err::File::create(&in_file)?;
-        serde_json::to_writer(in_writer, known_properties).expect("TODO(konsti)");
+        serde_json::to_writer(in_writer, known_properties)?;
 
         // Construct the appropriate build script based on the build kind.
         let script = formatdoc! {

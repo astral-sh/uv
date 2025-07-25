@@ -2061,7 +2061,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Variant::default();
         };
 
-        let filename = pins.get(name, version).unwrap().wheel_filename();
+        let filename = pins
+            .get(name, version)
+            .expect("Selected dist has pin")
+            .wheel_filename();
         let Some(filename) = filename else {
             // TODO(konsti): Handle installed dists too
             return Variant::default();
