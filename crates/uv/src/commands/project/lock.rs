@@ -477,19 +477,16 @@ async fn do_lock(
     }
 
     // Check if any conflicts contain project-level conflicts
-    if preview.is_enabled(PreviewFeatures::PACKAGE_CONFLICTS) {
-        for set in conflicts.iter() {
-            if set
-                .iter()
+    if !preview.is_enabled(PreviewFeatures::PACKAGE_CONFLICTS)
+        && conflicts.iter().any(|set| {
+            set.iter()
                 .any(|item| matches!(item.kind(), ConflictKind::Project))
-            {
-                warn_user_once!(
-                    "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                    PreviewFeatures::PACKAGE_CONFLICTS
-                );
-                break;
-            }
-        }
+        })
+    {
+        warn_user_once!(
+            "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::PACKAGE_CONFLICTS
+        );
     }
 
     // Collect the list of supported environments.
