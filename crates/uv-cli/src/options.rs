@@ -69,6 +69,7 @@ impl From<ResolverArgs> for PipOptions {
             exclude_newer,
             link_mode,
             no_sources,
+            no_sources_package,
         } = args;
 
         Self {
@@ -95,6 +96,7 @@ impl From<ResolverArgs> for PipOptions {
             exclude_newer,
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
+            no_sources_package: Some(no_sources_package),
             ..PipOptions::from(index_args)
         }
     }
@@ -118,6 +120,7 @@ impl From<InstallerArgs> for PipOptions {
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
+            no_sources_package,
         } = args;
 
         Self {
@@ -137,6 +140,7 @@ impl From<InstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
+            no_sources_package: Some(no_sources_package),
             ..PipOptions::from(index_args)
         }
     }
@@ -168,6 +172,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
+            no_sources_package,
         } = args;
 
         Self {
@@ -197,6 +202,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
+            no_sources_package: Some(no_sources_package),
             ..PipOptions::from(index_args)
         }
     }
@@ -285,6 +291,7 @@ pub fn resolver_options(
         exclude_newer,
         link_mode,
         no_sources,
+        no_sources_package,
     } = resolver_args;
 
     let BuildOptionsArgs {
@@ -354,6 +361,7 @@ pub fn resolver_options(
         no_binary: flag(no_binary, binary, "binary"),
         no_binary_package: Some(no_binary_package),
         no_sources: if no_sources { Some(true) } else { None },
+        no_sources_package: Some(no_sources_package),
     }
 }
 
@@ -386,6 +394,7 @@ pub fn resolver_installer_options(
         compile_bytecode,
         no_compile_bytecode,
         no_sources,
+        no_sources_package,
     } = resolver_installer_args;
 
     let BuildOptionsArgs {
@@ -480,5 +489,10 @@ pub fn resolver_installer_options(
             Some(no_binary_package)
         },
         no_sources: if no_sources { Some(true) } else { None },
+        no_sources_package: if no_sources_package.is_empty() {
+            None
+        } else {
+            Some(no_sources_package)
+        },
     }
 }

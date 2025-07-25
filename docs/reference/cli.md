@@ -198,7 +198,8 @@ uv run [OPTIONS] [COMMAND]
 <p>If a virtual environment is active or found in a current or parent directory, it will be used as if there was no project or workspace.</p>
 </dd><dt id="uv-run--no-python-downloads"><a href="#uv-run--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-run--no-sources"><a href="#uv-run--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-run--no-sync"><a href="#uv-run--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment.</p>
+</dd><dt id="uv-run--no-sources-package"><a href="#uv-run--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-run--no-sync"><a href="#uv-run--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment.</p>
 <p>Implies <code>--frozen</code>, as the project dependencies will be ignored (i.e., the lockfile will not be updated, since the environment will not be synced regardless).</p>
 <p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-run--offline"><a href="#uv-run--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -536,7 +537,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-add--no-python-downloads"><a href="#uv-add--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-add--no-sources"><a href="#uv-add--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-add--no-sync"><a href="#uv-add--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment</p>
+</dd><dt id="uv-add--no-sources-package"><a href="#uv-add--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-add--no-sync"><a href="#uv-add--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment</p>
 <p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-add--no-workspace"><a href="#uv-add--no-workspace"><code>--no-workspace</code></a></dt><dd><p>Don't add the dependency as a workspace member.</p>
 <p>By default, when adding a dependency that's a local path and is within the workspace directory, uv will add it as a workspace member; pass <code>--no-workspace</code> to add the package as direct path dependency instead.</p>
 </dd><dt id="uv-add--offline"><a href="#uv-add--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
@@ -725,7 +727,8 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-remove--no-python-downloads"><a href="#uv-remove--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-remove--no-sources"><a href="#uv-remove--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-remove--no-sync"><a href="#uv-remove--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
+</dd><dt id="uv-remove--no-sources-package"><a href="#uv-remove--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-remove--no-sync"><a href="#uv-remove--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
 <p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-remove--offline"><a href="#uv-remove--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-remove--optional"><a href="#uv-remove--optional"><code>--optional</code></a> <i>optional</i></dt><dd><p>Remove the packages from the project's optional dependencies for the specified extra</p>
@@ -903,7 +906,8 @@ uv version [OPTIONS] [VALUE]
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-version--no-python-downloads"><a href="#uv-version--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-version--no-sources"><a href="#uv-version--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-version--no-sync"><a href="#uv-version--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
+</dd><dt id="uv-version--no-sources-package"><a href="#uv-version--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-version--no-sync"><a href="#uv-version--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
 <p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p></dd><dt id="uv-version--offline"><a href="#uv-version--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-version--output-format"><a href="#uv-version--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The format of the output</p>
@@ -1113,7 +1117,8 @@ uv sync [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-sync--no-python-downloads"><a href="#uv-sync--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-sync--no-sources"><a href="#uv-sync--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-sync--offline"><a href="#uv-sync--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-sync--no-sources-package"><a href="#uv-sync--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-sync--offline"><a href="#uv-sync--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-sync--only-dev"><a href="#uv-sync--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
@@ -1333,7 +1338,8 @@ uv lock [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-lock--no-python-downloads"><a href="#uv-lock--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-lock--no-sources"><a href="#uv-lock--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-lock--offline"><a href="#uv-lock--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-lock--no-sources-package"><a href="#uv-lock--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-lock--offline"><a href="#uv-lock--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-lock--prerelease"><a href="#uv-lock--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -1529,7 +1535,8 @@ uv export [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-export--no-python-downloads"><a href="#uv-export--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-export--no-sources"><a href="#uv-export--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-export--offline"><a href="#uv-export--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-export--no-sources-package"><a href="#uv-export--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-export--offline"><a href="#uv-export--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-export--only-dev"><a href="#uv-export--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
@@ -1706,7 +1713,8 @@ uv tree [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-tree--no-python-downloads"><a href="#uv-tree--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-tree--no-sources"><a href="#uv-tree--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-tree--offline"><a href="#uv-tree--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-tree--no-sources-package"><a href="#uv-tree--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-tree--offline"><a href="#uv-tree--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tree--only-dev"><a href="#uv-tree--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
@@ -1957,7 +1965,8 @@ uv tool run [OPTIONS] [COMMAND]
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-tool-run--no-python-downloads"><a href="#uv-tool-run--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-tool-run--no-sources"><a href="#uv-tool-run--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-tool-run--offline"><a href="#uv-tool-run--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-tool-run--no-sources-package"><a href="#uv-tool-run--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-tool-run--offline"><a href="#uv-tool-run--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-run--overrides"><a href="#uv-tool-run--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 <p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
@@ -2127,7 +2136,8 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-tool-install--no-python-downloads"><a href="#uv-tool-install--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-tool-install--no-sources"><a href="#uv-tool-install--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-tool-install--offline"><a href="#uv-tool-install--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-tool-install--no-sources-package"><a href="#uv-tool-install--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-tool-install--offline"><a href="#uv-tool-install--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-install--overrides"><a href="#uv-tool-install--overrides"><code>--overrides</code></a>, <code>--override</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 <p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
@@ -2289,7 +2299,8 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-tool-upgrade--no-python-downloads"><a href="#uv-tool-upgrade--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-tool-upgrade--no-sources"><a href="#uv-tool-upgrade--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-tool-upgrade--offline"><a href="#uv-tool-upgrade--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+</dd><dt id="uv-tool-upgrade--no-sources-package"><a href="#uv-tool-upgrade--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-tool-upgrade--offline"><a href="#uv-tool-upgrade--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-tool-upgrade--prerelease"><a href="#uv-tool-upgrade--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -3460,7 +3471,8 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-compile--no-python-downloads"><a href="#uv-pip-compile--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-compile--no-sources"><a href="#uv-pip-compile--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-pip-compile--no-strip-extras"><a href="#uv-pip-compile--no-strip-extras"><code>--no-strip-extras</code></a></dt><dd><p>Include extras in the output file.</p>
+</dd><dt id="uv-pip-compile--no-sources-package"><a href="#uv-pip-compile--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-pip-compile--no-strip-extras"><a href="#uv-pip-compile--no-strip-extras"><code>--no-strip-extras</code></a></dt><dd><p>Include extras in the output file.</p>
 <p>By default, uv strips extras, as any packages pulled in by the extras are already included as dependencies in the output file directly. Further, output files generated with <code>--no-strip-extras</code> cannot be used as constraints files in <code>install</code> and <code>sync</code> invocations.</p>
 </dd><dt id="uv-pip-compile--no-strip-markers"><a href="#uv-pip-compile--no-strip-markers"><code>--no-strip-markers</code></a></dt><dd><p>Include environment markers in the output file.</p>
 <p>By default, uv strips environment markers, as the resolution generated by <code>compile</code> is only guaranteed to be correct for the target environment.</p>
@@ -3741,7 +3753,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-sync--no-python-downloads"><a href="#uv-pip-sync--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-sync--no-sources"><a href="#uv-pip-sync--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-pip-sync--no-verify-hashes"><a href="#uv-pip-sync--no-verify-hashes"><code>--no-verify-hashes</code></a></dt><dd><p>Disable validation of hashes in the requirements file.</p>
+</dd><dt id="uv-pip-sync--no-sources-package"><a href="#uv-pip-sync--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-pip-sync--no-verify-hashes"><a href="#uv-pip-sync--no-verify-hashes"><code>--no-verify-hashes</code></a></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 <p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
 <p>May also be set with the <code>UV_NO_VERIFY_HASHES</code> environment variable.</p></dd><dt id="uv-pip-sync--offline"><a href="#uv-pip-sync--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -4012,7 +4025,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-pip-install--no-python-downloads"><a href="#uv-pip-install--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-pip-install--no-sources"><a href="#uv-pip-install--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-pip-install--no-verify-hashes"><a href="#uv-pip-install--no-verify-hashes"><code>--no-verify-hashes</code></a></dt><dd><p>Disable validation of hashes in the requirements file.</p>
+</dd><dt id="uv-pip-install--no-sources-package"><a href="#uv-pip-install--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-pip-install--no-verify-hashes"><a href="#uv-pip-install--no-verify-hashes"><code>--no-verify-hashes</code></a></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 <p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
 <p>May also be set with the <code>UV_NO_VERIFY_HASHES</code> environment variable.</p></dd><dt id="uv-pip-install--offline"><a href="#uv-pip-install--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -4949,7 +4963,8 @@ uv build [OPTIONS] [SRC]
 <p>For example, spinners or progress bars.</p>
 <p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-build--no-python-downloads"><a href="#uv-build--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
 </dd><dt id="uv-build--no-sources"><a href="#uv-build--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
-</dd><dt id="uv-build--no-verify-hashes"><a href="#uv-build--no-verify-hashes"><code>--no-verify-hashes</code></a></dt><dd><p>Disable validation of hashes in the requirements file.</p>
+</dd><dt id="uv-build--no-sources-package"><a href="#uv-build--no-sources-package"><code>--no-sources-package</code></a> <i>no-sources-package</i></dt><dd><p>Don't use sources from the <code>tool.uv.sources</code> table for the specified packages</p>
+<p>May also be set with the <code>UV_NO_SOURCES_PACKAGE</code> environment variable.</p></dd><dt id="uv-build--no-verify-hashes"><a href="#uv-build--no-verify-hashes"><code>--no-verify-hashes</code></a></dt><dd><p>Disable validation of hashes in the requirements file.</p>
 <p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
 <p>May also be set with the <code>UV_NO_VERIFY_HASHES</code> environment variable.</p></dd><dt id="uv-build--offline"><a href="#uv-build--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
 <p>When disabled, uv will only use locally cached data and locally available files.</p>

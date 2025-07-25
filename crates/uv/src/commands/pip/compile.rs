@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, Preview, Reinstall, SourceStrategy,
+    IndexStrategy, NoBinary, NoBuild, NoSources, PackageConfigSettings, Preview, Reinstall,
     Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
@@ -100,7 +100,7 @@ pub(crate) async fn pip_compile(
     python_platform: Option<TargetTriple>,
     universal: bool,
     exclude_newer: Option<ExcludeNewer>,
-    sources: SourceStrategy,
+    sources: NoSources,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
     mut python: Option<String>,
