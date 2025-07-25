@@ -40,9 +40,9 @@ url = { workspace = true, features = ["serde"] }
 version-ranges = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.40.0" }
+insta = { workspace = true }
 serde_json = { workspace = true }
-tracing-test = { version = "0.2.5" }
+tracing-test = { workspace = true }
 
 [features]
 tracing = ["dep:tracing", "uv-pep440/tracing"]

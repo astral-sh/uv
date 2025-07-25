@@ -112,22 +112,22 @@ windows = { workspace = true }
 windows-result = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = { version = "2.0.16" }
-assert_fs = { version = "1.1.2" }
+assert_cmd = { workspace = true }
+assert_fs = { workspace = true }
 base64 = { workspace = true }
-byteorder = { version = "1.5.0" }
-filetime = { version = "0.2.25" }
+byteorder = { workspace = true }
+filetime = { workspace = true }
 flate2 = { workspace = true, default-features = false }
-ignore = { version = "0.4.23" }
+ignore = { workspace = true }
 indoc = { workspace = true }
-insta = { version = "1.40.0", features = ["filters", "json"] }
-predicates = { version = "3.1.2" }
+insta = { workspace = true }
+predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
-similar = { version = "2.6.0" }
+similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
-whoami = { version = "1.6.0" }
+whoami = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
 

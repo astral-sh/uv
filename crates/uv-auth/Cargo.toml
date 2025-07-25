@@ -33,8 +33,8 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.40.0" }
+insta = { workspace = true }
 tempfile = { workspace = true }
-test-log = { version = "0.2.16", features = ["trace"], default-features = false }
+test-log = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }
