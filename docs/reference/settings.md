@@ -425,7 +425,7 @@ data files are included by placing them in the Python module instead of using da
   with this package as build requirement use the include directory to find additional header
   files.
 - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended
-  to uses these two options.
+  to use these two options.
 
 **Default value**: `{}`
 
@@ -435,7 +435,7 @@ data files are included by placing them in the Python module instead of using da
 
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
-data = { "headers": "include/headers", "scripts": "bin" }
+data = { headers = "include/headers", scripts = "bin" }
 ```
 
 ---

@@ -60,14 +60,14 @@ fn locked() -> Result<()> {
     )?;
 
     // Running with `--locked` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
-    ");
+    "###);
 
     // Lock the initial requirements.
     context.lock().assert().success();
@@ -86,7 +86,7 @@ fn locked() -> Result<()> {
     )?;
 
     // Running with `--locked` should error.
-    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -94,7 +94,7 @@ fn locked() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    ");
+    "###);
 
     let updated = context.read("uv.lock");
 
@@ -120,14 +120,14 @@ fn frozen() -> Result<()> {
     )?;
 
     // Running with `--frozen` should error, if no lockfile is present.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
-    ");
+    "###);
 
     context.lock().assert().success();
 
@@ -422,7 +422,7 @@ fn sync_json() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync()
         .arg("--locked")
-        .arg("--output-format").arg("json"), @r"
+        .arg("--output-format").arg("json"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -430,7 +430,47 @@ fn sync_json() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
-    ");
+    "###);
+
+    // Test that JSON output is shown even with --quiet flag
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--quiet")
+        .arg("--frozen")
+        .arg("--output-format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "target": "project",
+      "project": {
+        "path": "[TEMP_DIR]/",
+        "workspace": {
+          "path": "[TEMP_DIR]/"
+        }
+      },
+      "sync": {
+        "environment": {
+          "path": "[VENV]/",
+          "python": {
+            "path": "[VENV]/[BIN]/[PYTHON]",
+            "version": "3.12.[X]",
+            "implementation": "cpython"
+          }
+        },
+        "action": "check"
+      },
+      "lock": {
+        "path": "[TEMP_DIR]/uv.lock",
+        "action": "use"
+      },
+      "dry_run": false
+    }
+
+    ----- stderr -----
+    "#);
 
     Ok(())
 }
@@ -892,7 +932,7 @@ fn check() -> Result<()> {
     )?;
 
     // Running `uv sync --check` should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -905,7 +945,7 @@ fn check() -> Result<()> {
     Would install 1 package
      + iniconfig==2.0.0
     The environment is outdated; run `uv sync` to update the environment
-    ");
+    "###);
 
     // Sync the environment.
     uv_snapshot!(context.filters(), context.sync(), @r"
@@ -1713,7 +1753,7 @@ fn sync_environment() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1721,7 +1761,7 @@ fn sync_environment() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The current Python platform is not compatible with the lockfile's supported environments: `python_full_version < '3.11'`
-    ");
+    "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -4745,7 +4785,7 @@ fn sync_active_project_environment() -> Result<()> {
     )?;
 
     // Running `uv sync` with `VIRTUAL_ENV` should warn
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4758,7 +4798,7 @@ fn sync_active_project_environment() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    ");
+    "###);
 
     context
         .temp_dir
@@ -4871,17 +4911,8 @@ fn sync_active_script_environment() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-[a-z0-9]+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Running `uv sync --script` with `VIRTUAL_ENV` should warn
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4903,7 +4934,7 @@ fn sync_active_script_environment() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Using `--active` should create the environment
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4923,7 +4954,7 @@ fn sync_active_script_environment() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // A subsequent sync will re-use the environment
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4935,7 +4966,7 @@ fn sync_active_script_environment() -> Result<()> {
     ");
 
     // Requesting another Python version will invalidate the environment
-    uv_snapshot!(&filters, context.sync()
+    uv_snapshot!(context.filters(), context.sync()
         .arg("--script")
         .arg("script.py")
         .env(EnvVars::VIRTUAL_ENV, "foo")
@@ -4977,17 +5008,8 @@ fn sync_active_script_environment_json() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-[a-z0-9]+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Running `uv sync --script` with `VIRTUAL_ENV` should warn
-    uv_snapshot!(&filters, context.sync()
+    uv_snapshot!(context.filters(), context.sync()
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @r#"
@@ -5033,7 +5055,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Using `--active` should create the environment
-    uv_snapshot!(&filters, context.sync()
+    uv_snapshot!(context.filters(), context.sync()
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
         .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r#"
@@ -5077,7 +5099,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // A subsequent sync will re-use the environment
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5089,7 +5111,7 @@ fn sync_active_script_environment_json() -> Result<()> {
     ");
 
     // Requesting another Python version will invalidate the environment
-    uv_snapshot!(&filters, context.sync()
+    uv_snapshot!(context.filters(), context.sync()
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
         .env(EnvVars::VIRTUAL_ENV, "foo")
@@ -6745,16 +6767,21 @@ fn sync_invalid_environment() -> Result<()> {
         ");
     }
 
-    // But if the Python executable is missing entirely we should also fail
+    // If the Python executable is missing entirely, we'll delete and use it
     fs_err::remove_dir_all(&bin)?;
-    uv_snapshot!(context.filters(), context.sync(), @r###"
-    success: false
-    exit_code: 2
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
-    "###);
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
 
     // But if it's not a virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
@@ -6787,6 +6814,17 @@ fn sync_invalid_environment() -> Result<()> {
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
     "###);
 
+    // Even if there's no Python executable
+    fs_err::remove_dir_all(&bin)?;
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
+    ");
+
     context
         .temp_dir
         .child(".venv")
@@ -6797,6 +6835,74 @@ fn sync_invalid_environment() -> Result<()> {
         .child(".venv")
         .child("file")
         .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_partial_environment_delete() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
+
+    context.init().arg("-p").arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    // Create a directory that's unreadable, erroring on trying to delete its children.
+    // This relies on our implementation listing directory entries before deleting them — which is a
+    // bit of a hack but accomplishes the goal here.
+    let unreadable2 = context.temp_dir.child(".venv/z2.txt");
+    fs_err::create_dir(&unreadable2)?;
+    let perms = std::fs::Permissions::from_mode(0o000);
+    fs_err::set_permissions(&unreadable2, perms)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: failed to remove directory `[VENV]/z2.txt`: Permission denied (os error 13)
+    ");
+
+    // Remove the unreadable directory
+    fs_err::remove_dir(unreadable2)?;
+
+    // We should be able to remove the venv now
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
 
     Ok(())
 }
@@ -8891,16 +8997,7 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-\w+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8932,7 +9029,7 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8958,7 +9055,7 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8983,7 +9080,7 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9001,7 +9098,7 @@ fn sync_script() -> Result<()> {
     ");
 
     // `--locked` and `--frozen` should fail with helpful error messages.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9011,7 +9108,7 @@ fn sync_script() -> Result<()> {
     error: `uv sync --locked` requires a script lockfile; run `uv lock --script script.py` to lock the script
     ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9041,17 +9138,8 @@ fn sync_locked_script() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-\w+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Lock the script.
-    uv_snapshot!(&filters, context.lock().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9111,7 +9199,7 @@ fn sync_locked_script() -> Result<()> {
         );
     });
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9141,7 +9229,7 @@ fn sync_locked_script() -> Result<()> {
     })?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9152,7 +9240,7 @@ fn sync_locked_script() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9243,7 +9331,7 @@ fn sync_locked_script() -> Result<()> {
     })?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9255,7 +9343,7 @@ fn sync_locked_script() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9300,16 +9388,7 @@ fn sync_script_with_compatible_build_constraints() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-\w+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9335,14 +9414,6 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     let context = TestContext::new("3.9");
 
     let test_script = context.temp_dir.child("script.py");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-\w+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
 
     // Incompatible build constraints.
     test_script.write_str(indoc! { r#"
@@ -9361,7 +9432,7 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -11266,6 +11337,52 @@ fn sync_config_settings_package() -> Result<()> {
         .site_packages()
         .join("__editable___dependency_0_1_0_finder.py");
     assert!(finder.exists());
+
+    Ok(())
+}
+
+/// Ensure that when we sync to an empty virtual environment directory, we don't attempt to remove
+/// it, which breaks Docker volume mounts.
+#[test]
+#[cfg(unix)]
+fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    let project_dir = context.temp_dir.child("project");
+    fs_err::create_dir(&project_dir)?;
+
+    let pyproject_toml = project_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    let venv_dir = project_dir.child(".venv");
+    fs_err::create_dir(&venv_dir)?;
+
+    // Ensure the parent is read-only, to prevent deletion of the virtual environment
+    fs_err::set_permissions(&project_dir, std::fs::Permissions::from_mode(0o555))?;
+
+    // Note we do _not_ fail to create the virtual environment — we fail later when writing to the
+    // project directory
+    uv_snapshot!(context.filters(), context.sync().current_dir(&project_dir), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    error: failed to write to file `[TEMP_DIR]/project/uv.lock`: Permission denied (os error 13)
+    ");
 
     Ok(())
 }

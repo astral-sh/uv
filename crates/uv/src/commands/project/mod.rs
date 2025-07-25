@@ -12,8 +12,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
+    PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredRequirement};
@@ -43,6 +43,7 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
@@ -651,7 +652,7 @@ impl ScriptInterpreter {
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // For now, we assume that scripts are never evaluated in the context of a workspace.
         let workspace = None;
@@ -891,7 +892,7 @@ impl ProjectInterpreter {
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // Resolve the Python request and requirement for the workspace.
         let WorkspacePython {
@@ -944,13 +945,19 @@ impl ProjectInterpreter {
                         ));
                     }
                     InvalidEnvironmentKind::MissingExecutable(_) => {
+                        // If it's not an empty directory
                         if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
-                            return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                root,
-                                "it is not a valid Python environment (no Python executable was found)"
-                                    .to_string(),
-                            ));
+                            // ... and there's no `pyvenv.cfg`
+                            if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
+                                // ... then it's not a valid Python environment
+                                return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                    root,
+                                    "it is not a valid Python environment (no Python executable was found)"
+                                        .to_string(),
+                                ));
+                            }
                         }
+                        // Otherwise, we'll delete it
                     }
                     // If the environment is an empty directory, it's fine to use
                     InvalidEnvironmentKind::Empty => {}
@@ -1267,7 +1274,7 @@ impl ProjectEnvironment {
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // Lock the project environment to avoid synchronization issues.
         let _lock = ProjectInterpreter::lock(workspace)
@@ -1277,7 +1284,7 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        let upgradeable = preview.is_enabled()
+        let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
             && python
                 .as_ref()
                 .is_none_or(|request| !request.includes_patch());
@@ -1378,7 +1385,7 @@ impl ProjectEnvironment {
 
                 // Remove the existing virtual environment if it doesn't meet the requirements.
                 if replace {
-                    match fs_err::remove_dir_all(&root) {
+                    match remove_virtualenv(&root) {
                         Ok(()) => {
                             writeln!(
                                 printer.stderr(),
@@ -1386,8 +1393,9 @@ impl ProjectEnvironment {
                                 root.user_display().cyan()
                             )?;
                         }
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(e) => return Err(e.into()),
+                        Err(uv_virtualenv::Error::Io(err))
+                            if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(err.into()),
                     }
                 }
 
@@ -1498,7 +1506,7 @@ impl ScriptEnvironment {
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // Lock the script environment to avoid synchronization issues.
         let _lock = ScriptInterpreter::lock(script)
@@ -1655,7 +1663,7 @@ pub(crate) async fn resolve_names(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
@@ -1826,7 +1834,7 @@ pub(crate) async fn resolve_environment(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ResolverOutput, ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
@@ -2014,7 +2022,7 @@ pub(crate) async fn sync_environment(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<PythonEnvironment, ProjectError> {
     let InstallerSettingsRef {
         index_locations,
@@ -2172,7 +2180,7 @@ pub(crate) async fn update_environment(
     workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<EnvironmentUpdate, ProjectError> {
     warn_on_requirements_txt_setting(&spec, &settings.resolver);
 
@@ -2413,7 +2421,7 @@ pub(crate) async fn init_script_python_requirement(
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     reporter: &PythonDownloadReporter,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> anyhow::Result<RequiresPython> {
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user

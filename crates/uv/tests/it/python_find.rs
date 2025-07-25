@@ -837,16 +837,7 @@ fn python_find_script() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/[\w-]+",
-            "environments-v2/[HASHEDNAME]",
-        )])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.init().arg("--script").arg("foo.py"), @r###"
+    uv_snapshot!(context.filters(), context.init().arg("--script").arg("foo.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -855,22 +846,22 @@ fn python_find_script() {
     Initialized script at `foo.py`
     "###);
 
-    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("foo.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
+    Creating script environment at: [CACHE_DIR]/environments-v2/foo-[HASH]
     Resolved in [TIME]
     Audited in [TIME]
     ");
 
-    uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [CACHE_DIR]/environments-v2/[HASHEDNAME]/[BIN]/[PYTHON]
+    [CACHE_DIR]/environments-v2/foo-[HASH]/[BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -936,15 +927,6 @@ fn python_find_script_no_such_version() {
         .with_filtered_python_names()
         .with_filtered_exe_suffix()
         .with_filtered_python_sources();
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/[\w-]+",
-            "environments-v2/[HASHEDNAME]",
-        )])
-        .collect::<Vec<_>>();
-
     let script = context.temp_dir.child("foo.py");
     script
         .write_str(indoc! {r#"
@@ -955,13 +937,13 @@ fn python_find_script_no_such_version() {
         "#})
         .unwrap();
 
-    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("foo.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
+    Creating script environment at: [CACHE_DIR]/environments-v2/foo-[HASH]
     Resolved in [TIME]
     Audited in [TIME]
     ");
@@ -975,7 +957,7 @@ fn python_find_script_no_such_version() {
         "#})
         .unwrap();
 
-    uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----

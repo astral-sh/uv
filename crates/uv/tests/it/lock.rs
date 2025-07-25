@@ -12418,13 +12418,14 @@ fn lock_editable() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `library` in all marker environments:
-    - file://[TEMP_DIR]/library
-    - file://[TEMP_DIR]/library (editable)
+      × Failed to resolve dependencies for `workspace` (v0.1.0)
+      ╰─▶ Requirements contain conflicting URLs for package `library` in all marker environments:
+          - file://[TEMP_DIR]/library
+          - file://[TEMP_DIR]/library (editable)
     ");
 
     Ok(())
@@ -22058,16 +22059,17 @@ fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting indexes for package `jinja2` in all marker environments:
-    - https://astral-sh.github.io/pytorch-mirror/whl/cu118
-    - https://astral-sh.github.io/pytorch-mirror/whl/cu124
-    "###);
+      × Failed to resolve dependencies for `project` (v0.1.0)
+      ╰─▶ Requirements contain conflicting indexes for package `jinja2` in all marker environments:
+          - https://astral-sh.github.io/pytorch-mirror/whl/cu118
+          - https://astral-sh.github.io/pytorch-mirror/whl/cu124
+    ");
 
     Ok(())
 }
@@ -30141,8 +30143,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -30152,8 +30153,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[tool.uv.index]]
         name = "pypi-proxy"
         url = "https://pypi-proxy.fly.dev/simple/"
-        "#,
-    )?;
+    "#})?;
 
     let no_trailing_slash_url = "https://pypi-proxy.fly.dev/simple";
 
@@ -30170,6 +30170,28 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
      + idna==3.6
      + sniffio==1.3.1
     ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+        ]
+
+        [[tool.uv.index]]
+        name = "pypi-proxy"
+        url = "https://pypi-proxy.fly.dev/simple"
+        "#
+        );
+    });
 
     let lock = context.read("uv.lock");
 
@@ -30232,13 +30254,12 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -30716,6 +30737,493 @@ fn test_tilde_equals_python_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that lockfile validation includes explicit indexes from path dependencies.
+/// <https://github.com/astral-sh/uv/issues/11419>
+#[test]
+fn lock_path_dependency_explicit_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the path dependency with explicit index
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "inner-index" }
+
+        [[tool.uv.index]]
+        name = "inner-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+        explicit = true
+        "#,
+    )?;
+
+    // Create a project that depends on pkg_a
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+
+    let pyproject_toml = pkg_b.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+        black = { index = "outer-index" }
+
+        [[tool.uv.index]]
+        name = "outer-index"
+        url = "https://outer-index.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that lockfile validation includes explicit indexes from path dependencies
+/// defined in a non-root workspace member.
+#[test]
+fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the path dependency with explicit index
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "inner-index" }
+
+        [[tool.uv.index]]
+        name = "inner-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+        explicit = true
+        "#,
+    )?;
+
+    // Create a project that depends on pkg_a
+    let member = context.temp_dir.child("member");
+    fs_err::create_dir_all(&member)?;
+
+    let pyproject_toml = member.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+        black = { index = "middle-index" }
+
+        [[tool.uv.index]]
+        name = "middle-index"
+        url = "https://middle-index.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    // Create a root with workspace member
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        anyio = { index = "outer-index" }
+
+        [[tool.uv.index]]
+        name = "outer-index"
+        url = "https://outer-index.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that lockfile validation works correctly when path dependency has
+/// both explicit and non-explicit indexes.
+#[test]
+fn lock_path_dependency_mixed_indexes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the path dependency with both explicit and non-explicit indexes.
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig", "anyio"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "explicit-index" }
+        anyio = { index = "non-explicit-index" }
+
+        [[tool.uv.index]]
+        name = "non-explicit-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+
+        [[tool.uv.index]]
+        name = "explicit-index"
+        url = "https://pypi.org/simple"
+        explicit = true
+        "#,
+    )?;
+
+    // Create a project that depends on pkg_a.
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+
+    let pyproject_toml = pkg_b.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+        black = { index = "outer-index" }
+
+        [[tool.uv.index]]
+        name = "outer-index"
+        url = "https://outer-index.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that path dependencies without an index don't affect validation.
+#[test]
+fn lock_path_dependency_no_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the path dependency without explicit indexes.
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests"]
+        "#,
+    )?;
+
+    // Create a project that depends on pkg_a.
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+
+    let pyproject_toml = pkg_b.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 7 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that a nested path dependency with an explicit index validates correctly.
+#[test]
+fn lock_nested_path_dependency_explicit_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create the inner dependency with explicit index.
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv.sources]
+        iniconfig = { index = "inner-index" }
+
+        [[tool.uv.index]]
+        name = "inner-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+        explicit = true
+        "#,
+    )?;
+
+    // Create intermediate dependency that depends on pkg_a.
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+
+    let pyproject_toml = pkg_b.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-a"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/", editable = true }
+        "#,
+    )?;
+
+    // Create a project that depends on intermediate dependency.
+    let pkg_c = context.temp_dir.child("pkg_c");
+    fs_err::create_dir_all(&pkg_c)?;
+
+    let pyproject_toml = pkg_c.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-c"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["pkg-b"]
+
+        [tool.uv.sources]
+        pkg-b = { path = "../pkg_b/", editable = true }
+        black = { index = "outer-index" }
+
+        [[tool.uv.index]]
+        name = "outer-index"
+        url = "https://outer-index.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_c), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_c), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that validating circular path dependency indexes doesn't cause an infinite loop.
+#[test]
+fn lock_circular_path_dependency_explicit_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create pkg_a (with explicit index) that depends on pkg_b.
+    let pkg_a = context.temp_dir.child("pkg_a");
+    fs_err::create_dir_all(&pkg_a)?;
+
+    let pyproject_toml = pkg_a.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["pkg-b", "iniconfig"]
+
+        [tool.uv.sources]
+        pkg-b = { path = "../pkg_b/" }
+        iniconfig = { index = "index-a" }
+
+        [[tool.uv.index]]
+        name = "index-a"
+        url = "https://pypi-proxy.fly.dev/simple"
+        explicit = true
+        "#,
+    )?;
+
+    // Create pkg_b that depends on pkg_a. This is a circular dependency.
+    let pkg_b = context.temp_dir.child("pkg_b");
+    fs_err::create_dir_all(&pkg_b)?;
+
+    let pyproject_toml = pkg_b.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = ["pkg-a", "anyio"]
+
+        [tool.uv.sources]
+        pkg-a = { path = "../pkg_a/" }
+        anyio = { index = "index-b" }
+
+        [[tool.uv.index]]
+        name = "index-b"
+        url = "https://pypi.org/simple"
+        explicit = true
+        default = true
+        "#,
+    )?;
+
+    // This should not hang or crash due to the circular dependency.
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_a), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 8 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_a), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 8 packages in [TIME]
     ");
 
     Ok(())

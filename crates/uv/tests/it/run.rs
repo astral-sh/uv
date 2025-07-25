@@ -1167,14 +1167,17 @@ fn run_with() -> Result<()> {
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
         import sniffio
+
+        print(sniffio.__version__)
        "
     })?;
 
     // Requesting an unsatisfied requirement should install it.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    1.3.0
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1186,24 +1189,26 @@ fn run_with() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Requesting a satisfied requirement should use the base environment.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio").arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    1.3.0
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Audited 2 packages in [TIME]
-    "###);
+    ");
 
     // Unless the user requests a different version.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.0").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("sniffio<1.3.0").arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    1.2.0
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1212,15 +1217,16 @@ fn run_with() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sniffio==1.2.0
-    "###);
+    ");
 
     // If we request a dependency that isn't in the base environment, we should still respect any
     // other dependencies. In this case, `sniffio==1.3.0` is not the latest-compatible version, but
     // we should use it anyway.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio").arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    1.3.0
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1231,13 +1237,14 @@ fn run_with() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.0
-    "###);
+    ");
 
     // Even if we run with` --no-sync`.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio==4.2.0").arg("--no-sync").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("anyio==4.2.0").arg("--no-sync").arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    1.3.0
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -1246,7 +1253,7 @@ fn run_with() -> Result<()> {
      + anyio==4.2.0
      + idna==3.6
      + sniffio==1.3.0
-    "###);
+    ");
 
     // If the dependencies can't be resolved, we should reference `--with`.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @r###"
@@ -4024,17 +4031,8 @@ fn run_active_script_environment() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v1/main-\w+",
-            "environments-v1/main-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Running `uv run --script` with `VIRTUAL_ENV` should _not_ warn.
-    uv_snapshot!(&filters, context.run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
@@ -4051,7 +4049,7 @@ fn run_active_script_environment() -> Result<()> {
     "###);
 
     // Using `--no-active` should also _not_ warn.
-    uv_snapshot!(&filters, context.run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--no-active")
         .arg("--script")
         .arg("main.py")
@@ -4070,7 +4068,7 @@ fn run_active_script_environment() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Using `--active` should create the environment
-    uv_snapshot!(&filters, context.run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("--script")
         .arg("main.py")
@@ -4092,7 +4090,7 @@ fn run_active_script_environment() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Requesting a different Python version should invalidate the environment
-    uv_snapshot!(&filters, context.run()
+    uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("-p").arg("3.12")
         .arg("--script")

@@ -9,8 +9,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, PackageConfigSettings, PreviewMode, Reinstall, SourceStrategy,
-    Upgrade,
+    HashCheckingMode, IndexStrategy, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
+    SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -83,7 +83,7 @@ pub(crate) async fn pip_sync(
     cache: Cache,
     dry_run: DryRun,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
@@ -126,9 +126,10 @@ pub(crate) async fn pip_sync(
     .await?;
 
     if pylock.is_some() {
-        if preview.is_disabled() {
+        if !preview.is_enabled(PreviewFeatures::PYLOCK) {
             warn_user!(
-                "The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+                "The `--pylock` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeatures::PYLOCK
             );
         }
     }

@@ -225,6 +225,9 @@ impl EnvVars {
     /// Equivalent to the `--preview` argument. Enables preview mode.
     pub const UV_PREVIEW: &'static str = "UV_PREVIEW";
 
+    /// Equivalent to the `--preview-features` argument. Enables specific preview features.
+    pub const UV_PREVIEW_FEATURES: &'static str = "UV_PREVIEW_FEATURES";
+
     /// Equivalent to the `--token` argument for self update. A GitHub token for authentication.
     pub const UV_GITHUB_TOKEN: &'static str = "UV_GITHUB_TOKEN";
 
@@ -256,6 +259,10 @@ impl EnvVars {
 
     /// Specifies the "bin" directory for installing tool executables.
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
+
+    /// Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
+    /// to use when creating a new project.
+    pub const UV_INIT_BUILD_BACKEND: &'static str = "UV_INIT_BUILD_BACKEND";
 
     /// Specifies the path to the directory to use for a project virtual environment.
     ///

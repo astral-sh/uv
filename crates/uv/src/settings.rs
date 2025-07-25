@@ -23,9 +23,9 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, PreviewMode,
-    ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost,
-    TrustedPublishing, Upgrade, VersionControlSystem,
+    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, ProjectBuildBackend,
+    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
+    Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl, Requirement};
 use uv_install_wheel::LinkMode;
@@ -63,7 +63,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) network_settings: NetworkSettings,
     pub(crate) concurrency: Concurrency,
     pub(crate) show_settings: bool,
-    pub(crate) preview: PreviewMode,
+    pub(crate) preview: Preview,
     pub(crate) python_preference: PythonPreference,
     pub(crate) python_downloads: PythonDownloads,
     pub(crate) no_progress: bool,
@@ -117,10 +117,12 @@ impl GlobalSettings {
                     .unwrap_or_else(Concurrency::threads),
             },
             show_settings: args.show_settings,
-            preview: PreviewMode::from(
+            preview: Preview::from_args(
                 flag(args.preview, args.no_preview, "preview")
                     .combine(workspace.and_then(|workspace| workspace.globals.preview))
                     .unwrap_or(false),
+                args.no_preview,
+                &args.preview_features,
             ),
             python_preference,
             python_downloads: flag(

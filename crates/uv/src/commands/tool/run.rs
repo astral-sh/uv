@@ -17,7 +17,7 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Constraints;
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_configuration::{Concurrency, Preview};
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
     IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
@@ -101,7 +101,7 @@ pub(crate) async fn run(
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
@@ -686,7 +686,7 @@ async fn get_or_create_environment(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?

@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroupsWithDefaults, PreviewMode, ProjectBuildBackend, VersionControlError,
+    DependencyGroupsWithDefaults, Preview, ProjectBuildBackend, VersionControlError,
     VersionControlSystem,
 };
 use uv_fs::{CWD, Simplified};
@@ -62,7 +62,7 @@ pub(crate) async fn init(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     match init_kind {
         InitKind::Script => {
@@ -201,7 +201,7 @@ async fn init_script(
     pin_python: bool,
     package: bool,
     no_config: bool,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -296,7 +296,7 @@ async fn init_project(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();

@@ -9,7 +9,7 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Preview,
 };
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -79,7 +79,7 @@ pub(crate) async fn export(
     quiet: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();

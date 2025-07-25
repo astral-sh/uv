@@ -14,7 +14,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
-use uv_configuration::PreviewMode;
+use uv_configuration::{Preview, PreviewFeatures};
 use uv_fs::Simplified;
 use uv_python::downloads::{
     self, ArchRequest, DownloadResult, ManagedPythonDownload, PythonDownloadRequest,
@@ -161,7 +161,7 @@ pub(crate) async fn install(
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
-    preview: PreviewMode,
+    preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -170,15 +170,17 @@ pub(crate) async fn install(
     // `--default` is used. It's not clear how this overlaps with a global Python pin, but I'd be
     // surprised if `uv python find` returned the "newest" Python version rather than the one I just
     // installed with the `--default` flag.
-    if default && !preview.is_enabled() {
+    if default && !preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT) {
         warn_user!(
-            "The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning"
+            "The `--default` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
+            PreviewFeatures::PYTHON_INSTALL_DEFAULT
         );
     }
 
-    if upgrade && preview.is_disabled() {
+    if upgrade && !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) {
         warn_user!(
-            "`uv python upgrade` is experimental and may change without warning. Pass `--preview` to disable this warning"
+            "`uv python upgrade` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
+            PreviewFeatures::PYTHON_UPGRADE
         );
     }
 
@@ -737,12 +739,13 @@ fn create_bin_links(
     installations: &[&ManagedPythonInstallation],
     changelog: &mut Changelog,
     errors: &mut Vec<(InstallErrorKind, PythonInstallationKey, Error)>,
-    preview: PreviewMode,
+    preview: Preview,
 ) {
     // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
     // it. In particular, it may be confusing because it does not apply when versions are loaded
     // from a `.python-version` file.
-    let targets = if (default || (is_default_install && preview.is_enabled()))
+    let targets = if (default
+        || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT)))
         && first_request.matches_installation(installation)
     {
         vec![

@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_configuration::{
     Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Preview,
 };
 use uv_fs::Simplified;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
@@ -60,7 +60,7 @@ pub(crate) async fn remove(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.

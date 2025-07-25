@@ -37,6 +37,14 @@ use crate::{InMemoryIndex, Options};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
+    #[error("Failed to resolve dependencies for package `{1}=={2}`")]
+    Dependencies(
+        #[source] Box<ResolveError>,
+        PackageName,
+        Version,
+        DerivationChain,
+    ),
+
     #[error(transparent)]
     Client(#[from] uv_client::Error),
 
@@ -92,9 +100,11 @@ pub enum ResolveError {
     ConflictingIndexes(PackageName, String, String),
 
     #[error(
-        "Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file."
+        "Package `{name}` was included as a URL dependency. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{requirement}` to your dependencies or constraints file.",
+        name = name.cyan(),
+        requirement = format!("{name} @ {url}").cyan(),
     )]
-    DisallowedUrl(PackageName, String),
+    DisallowedUrl { name: PackageName, url: String },
 
     #[error(transparent)]
     DistributionType(#[from] uv_distribution_types::Error),

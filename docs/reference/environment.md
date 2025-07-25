@@ -147,6 +147,11 @@ Provides the HTTP Basic authentication username for a named index.
 The `name` parameter is the name of the index. For example, given an index named `foo`,
 the environment variable key would be `UV_INDEX_FOO_USERNAME`.
 
+### `UV_INIT_BUILD_BACKEND`
+
+Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
+to use when creating a new project.
+
 ### `UV_INSECURE_HOST`
 
 Equivalent to the `--allow-insecure-host` argument.
@@ -300,6 +305,10 @@ Equivalent to the `--prerelease` command-line argument. For example, if set to
 ### `UV_PREVIEW`
 
 Equivalent to the `--preview` argument. Enables preview mode.
+
+### `UV_PREVIEW_FEATURES`
+
+Equivalent to the `--preview-features` argument. Enables specific preview features.
 
 ### `UV_PROJECT`
 

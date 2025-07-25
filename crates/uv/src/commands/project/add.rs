@@ -18,8 +18,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
-    PreviewMode, SourceStrategy,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, Preview,
+    PreviewFeatures, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -95,10 +95,13 @@ pub(crate) async fn add(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
-    if bounds.is_some() && preview.is_disabled() {
-        warn_user_once!("The bounds option is in preview and may change in any future release.");
+    if bounds.is_some() && !preview.is_enabled(PreviewFeatures::ADD_BOUNDS) {
+        warn_user_once!(
+            "The `bounds` option is in preview and may change in any future release. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::ADD_BOUNDS
+        );
     }
 
     for source in &requirements {
@@ -644,7 +647,9 @@ pub(crate) async fn add(
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
         let urls = IndexUrls::from_indexes(indexes);
-        for index in urls.defined_indexes() {
+        let mut indexes = urls.defined_indexes().collect::<Vec<_>>();
+        indexes.reverse();
+        for index in indexes {
             toml.add_index(index)?;
         }
     }
@@ -942,7 +947,7 @@ async fn lock_and_sync(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<(), ProjectError> {
     let mut lock = project::lock::LockOperation::new(
         if locked {

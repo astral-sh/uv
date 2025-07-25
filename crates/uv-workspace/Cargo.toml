@@ -48,8 +48,8 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-assert_fs = { version = "1.1.2" }
-insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
+assert_fs = { workspace = true }
+insta = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
 
