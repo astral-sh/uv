@@ -598,7 +598,7 @@ impl PrioritizedDist {
             let compatible_wheel = &self.wheels().nth(wheel_index).unwrap();
             debug!(
                 "{} {}",
-                "Selecting variant wheel".red(),
+                "Using variant wheel".red(),
                 compatible_wheel.0.filename
             );
 

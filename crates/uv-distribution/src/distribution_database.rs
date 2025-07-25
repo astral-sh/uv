@@ -1368,7 +1368,7 @@ pub struct VariantProviderCache {
 }
 
 impl VariantProviderCache {
-    pub fn get(&self, resource_id: &ResourceId) -> Option<ResolvedVariants> {
+    pub fn get_resolved_variants(&self, resource_id: &ResourceId) -> Option<ResolvedVariants> {
         self.cache
             .lock()
             .expect("there was a panic in another thread")
@@ -1376,7 +1376,11 @@ impl VariantProviderCache {
             .cloned()
     }
 
-    pub fn insert(&self, resource_id: ResourceId, resolved_variants: ResolvedVariants) {
+    pub fn insert_resolved_variants(
+        &self,
+        resource_id: ResourceId,
+        resolved_variants: ResolvedVariants,
+    ) {
         self.cache
             .lock()
             .expect("there was a panic in another thread")
@@ -1400,19 +1404,23 @@ pub async fn resolve_variants<Context: BuildContext>(
                 .filter_map(|node| extract_variants(node)),
         )
         .map(async |(variants_json, dist)| {
-            let resolved_variants =
-                if let Some(resolved_variants) = variants_cache.get(&variants_json.resource_id()) {
-                    resolved_variants.clone()
-                } else {
-                    // Fetch variants_json and run providers
-                    let resolved_variants = distribution_database
-                        .fetch_and_query_variants(variants_json)
-                        .await?;
+            let resolved_variants = if let Some(resolved_variants) =
+                variants_cache.get_resolved_variants(&variants_json.resource_id())
+            {
+                resolved_variants.clone()
+            } else {
+                // Fetch variants_json and run providers
+                let resolved_variants = distribution_database
+                    .fetch_and_query_variants(variants_json)
+                    .await?;
 
-                    variants_cache.insert(variants_json.resource_id(), resolved_variants.clone());
+                variants_cache.insert_resolved_variants(
+                    variants_json.resource_id(),
+                    resolved_variants.clone(),
+                );
 
-                    resolved_variants
-                };
+                resolved_variants
+            };
 
             Ok::<_, anyhow::Error>((dist.distribution_id(), resolved_variants))
         })
@@ -1467,7 +1475,7 @@ pub async fn resolve_variants<Context: BuildContext>(
         if let Some((wheel_index, _scores)) = highest_priority_variant_wheel {
             debug!(
                 "{} for {}: {}",
-                "Use variant wheel".red(),
+                "Using variant wheel".red(),
                 dist.name(),
                 dist.wheels[wheel_index].filename,
             );

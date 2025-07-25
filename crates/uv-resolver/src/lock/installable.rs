@@ -604,20 +604,22 @@ async fn determine_properties<Context: BuildContext>(
     let Some(variants_json) = package.to_registry_variants_json(workspace_root)? else {
         return Ok(None);
     };
-    let resolved_variants =
-        if let Some(resolved_variants) = variants_cache.get(&variants_json.resource_id()) {
-            resolved_variants.clone()
-        } else {
-            // Fetch variants_json and run providers
-            let resolved_variants = distribution_database
-                .fetch_and_query_variants(&variants_json)
-                .await
-                .expect("TODO(konsti)");
+    let resolved_variants = if let Some(resolved_variants) =
+        variants_cache.get_resolved_variants(&variants_json.resource_id())
+    {
+        resolved_variants.clone()
+    } else {
+        // Fetch variants_json and run providers
+        let resolved_variants = distribution_database
+            .fetch_and_query_variants(&variants_json)
+            .await
+            .expect("TODO(konsti)");
 
-            variants_cache.insert(variants_json.resource_id(), resolved_variants.clone());
+        variants_cache
+            .insert_resolved_variants(variants_json.resource_id(), resolved_variants.clone());
 
-            resolved_variants
-        };
+        resolved_variants
+    };
 
     // Select best wheel
     let mut highest_priority_variant_wheel: Option<(_, Vec<usize>)> = None;
