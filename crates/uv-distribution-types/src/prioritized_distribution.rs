@@ -91,13 +91,21 @@ impl CompatibleDist<'_> {
         }
     }
 
+    // For installable distributions, return the prioritized distribution it was derived from.
+    pub fn prioritized(&self) -> Option<&PrioritizedDist> {
+        match self {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { prioritized, .. }
+            | CompatibleDist::CompatibleWheel { prioritized, .. }
+            | CompatibleDist::IncompatibleWheel { prioritized, .. } => Some(prioritized),
+        }
+    }
+
     /// Return the set of supported platform the distribution, in terms of their markers.
     pub fn implied_markers(&self) -> MarkerTree {
-        match self {
-            CompatibleDist::InstalledDist(_) => MarkerTree::TRUE,
-            CompatibleDist::SourceDist { prioritized, .. } => prioritized.0.markers,
-            CompatibleDist::CompatibleWheel { prioritized, .. } => prioritized.0.markers,
-            CompatibleDist::IncompatibleWheel { prioritized, .. } => prioritized.0.markers,
+        match self.prioritized() {
+            Some(prioritized) => prioritized.0.markers,
+            None => MarkerTree::TRUE,
         }
     }
 }
