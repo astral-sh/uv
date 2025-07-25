@@ -697,6 +697,7 @@ pub(crate) async fn install(
                 }
             };
 
+            trace!("Error trace: {err:?}");
             writeln!(
                 printer.stderr(),
                 "{level}{} Failed to {verb} {}",

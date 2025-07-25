@@ -17,7 +17,7 @@ use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -2282,6 +2282,7 @@ where
     match result {
         Ok(code) => code.into(),
         Err(err) => {
+            trace!("Error trace: {err:?}");
             let mut causes = err.chain();
             eprintln!(
                 "{}: {}",

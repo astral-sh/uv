@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 use uv_auth::Credentials;
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
@@ -274,6 +274,7 @@ async fn gather_credentials(
                 fetching the trusted publishing token. If you don't want to use trusted \
                 publishing, you can ignore this error, but you need to provide credentials."
             )?;
+            trace!("Error trace: {err:?}");
             writeln!(
                 printer.stderr(),
                 "{}: {err}",
