@@ -11,7 +11,7 @@ use uv_cli::version::VersionInfo;
 use uv_cli::{VersionBump, VersionFormat};
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecification, InstallOptions, PreviewMode,
+    ExtrasSpecification, InstallOptions, Preview,
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
@@ -76,7 +76,7 @@ pub(crate) async fn project_version(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Read the metadata
     let project = find_target(project_dir, package.as_ref(), explicit_project).await?;
@@ -414,7 +414,7 @@ async fn print_frozen_version(
     short: bool,
     output_format: VersionFormat,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Discover the interpreter (this is the same interpreter --no-sync uses).
     let interpreter = ProjectInterpreter::discover(
@@ -509,7 +509,7 @@ async fn lock_and_sync(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // If frozen, don't touch the lock or sync at all
     if frozen {

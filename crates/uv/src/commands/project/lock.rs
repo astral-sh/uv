@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    PreviewMode, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
+    Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -93,7 +93,7 @@ pub(crate) async fn lock(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
     // If necessary, initialize the PEP 723 script.
     let script = match script {
@@ -271,7 +271,7 @@ pub(super) struct LockOperation<'env> {
     cache: &'env Cache,
     workspace_cache: &'env WorkspaceCache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 }
 
 impl<'env> LockOperation<'env> {
@@ -286,7 +286,7 @@ impl<'env> LockOperation<'env> {
         cache: &'env Cache,
         workspace_cache: &'env WorkspaceCache,
         printer: Printer,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Self {
         Self {
             mode,
@@ -418,7 +418,7 @@ async fn do_lock(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
 

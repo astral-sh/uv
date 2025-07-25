@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
+use uv_configuration::Preview;
 use uv_fs::{LockedFile, Simplified};
 use uv_pep440::Version;
 
@@ -153,7 +153,7 @@ impl PythonEnvironment {
         request: &PythonRequest,
         preference: EnvironmentPreference,
         cache: &Cache,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, Error> {
         let installation = match find_python_installation(
             request,

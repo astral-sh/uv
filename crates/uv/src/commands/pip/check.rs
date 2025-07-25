@@ -5,7 +5,7 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
+use uv_configuration::Preview;
 use uv_distribution_types::{Diagnostic, InstalledDist};
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
@@ -20,7 +20,7 @@ pub(crate) fn pip_check(
     system: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let start = Instant::now();
 

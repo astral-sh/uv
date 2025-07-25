@@ -11,7 +11,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, PreviewMode, SourceStrategy,
+    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures,
+    SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::Requirement;
@@ -81,7 +82,7 @@ pub(crate) async fn venv(
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
@@ -198,7 +199,7 @@ pub(crate) async fn venv(
         path.user_display().cyan()
     )?;
 
-    let upgradeable = preview.is_enabled()
+    let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
         && python_request
             .as_ref()
             .is_none_or(|request| !request.includes_patch());

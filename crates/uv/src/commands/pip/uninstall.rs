@@ -7,7 +7,7 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{DryRun, KeyringProviderType, PreviewMode};
+use uv_configuration::{DryRun, KeyringProviderType, Preview};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
@@ -37,7 +37,7 @@ pub(crate) async fn pip_uninstall(
     network_settings: &NetworkSettings,
     dry_run: DryRun,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 

@@ -266,7 +266,6 @@ impl CandidateSelector {
                             return Some(Candidate {
                                 name: package_name,
                                 version,
-                                prioritized: None,
                                 dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
                                     dist,
                                 )),
@@ -368,7 +367,6 @@ impl CandidateSelector {
                 return Some(Candidate {
                     name: package_name,
                     version,
-                    prioritized: None,
                     dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
                     choice_kind: VersionChoiceKind::Installed,
                 });
@@ -546,10 +544,14 @@ impl CandidateSelector {
             // exclude-newer in our error messages.
             if matches!(
                 candidate.dist(),
-                CandidateDist::Incompatible(
-                    IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(_))
-                        | IncompatibleDist::Wheel(IncompatibleWheel::ExcludeNewer(_))
-                )
+                CandidateDist::Incompatible {
+                    incompatible_dist: IncompatibleDist::Source(IncompatibleSource::ExcludeNewer(
+                        _
+                    )) | IncompatibleDist::Wheel(
+                        IncompatibleWheel::ExcludeNewer(_)
+                    ),
+                    ..
+                }
             ) {
                 continue;
             }
@@ -572,7 +574,7 @@ impl CandidateSelector {
             // even though there are compatible wheels on PyPI. Thus, we need to ensure that we
             // return the first _compatible_ candidate across all indexes, if such a candidate
             // exists.
-            if matches!(candidate.dist(), CandidateDist::Incompatible(_)) {
+            if matches!(candidate.dist(), CandidateDist::Incompatible { .. }) {
                 if incompatible.is_none() {
                     incompatible = Some(candidate);
                 }
@@ -602,7 +604,25 @@ impl CandidateSelector {
 #[derive(Debug, Clone)]
 pub(crate) enum CandidateDist<'a> {
     Compatible(CompatibleDist<'a>),
-    Incompatible(IncompatibleDist),
+    Incompatible {
+        /// The reason the prioritized distribution is incompatible.
+        incompatible_dist: IncompatibleDist,
+        /// The prioritized distribution that had no compatible wheelr or sdist.
+        prioritized_dist: &'a PrioritizedDist,
+    },
+}
+
+impl CandidateDist<'_> {
+    /// For an installable dist, return the prioritized distribution.
+    fn prioritized(&self) -> Option<&PrioritizedDist> {
+        match self {
+            CandidateDist::Compatible(dist) => dist.prioritized(),
+            CandidateDist::Incompatible {
+                incompatible_dist: _,
+                prioritized_dist: prioritized,
+            } => Some(prioritized),
+        }
+    }
 }
 
 impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
@@ -621,7 +641,10 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
             } else {
                 IncompatibleDist::Unavailable
             };
-            CandidateDist::Incompatible(dist)
+            CandidateDist::Incompatible {
+                incompatible_dist: dist,
+                prioritized_dist: value,
+            }
         }
     }
 }
@@ -654,8 +677,6 @@ pub(crate) struct Candidate<'a> {
     name: &'a PackageName,
     /// The version of the package.
     version: &'a Version,
-    /// The prioritized distribution for the package.
-    prioritized: Option<&'a PrioritizedDist>,
     /// The distributions to use for resolving and installing the package.
     dist: CandidateDist<'a>,
     /// Whether this candidate was selected from a preference.
@@ -672,7 +693,6 @@ impl<'a> Candidate<'a> {
         Self {
             name,
             version,
-            prioritized: Some(dist),
             dist: CandidateDist::from(dist),
             choice_kind,
         }
@@ -709,7 +729,7 @@ impl<'a> Candidate<'a> {
 
     /// Return the prioritized distribution for the candidate.
     pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
-        self.prioritized
+        self.dist.prioritized()
     }
 }
 

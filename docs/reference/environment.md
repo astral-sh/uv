@@ -306,6 +306,10 @@ Equivalent to the `--prerelease` command-line argument. For example, if set to
 
 Equivalent to the `--preview` argument. Enables preview mode.
 
+### `UV_PREVIEW_FEATURES`
+
+Equivalent to the `--preview-features` argument. Enables specific preview features.
+
 ### `UV_PROJECT`
 
 Equivalent to the `--project` command-line argument.
