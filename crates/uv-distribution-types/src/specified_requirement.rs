@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
 use uv_normalize::ExtraName;
-use uv_pep508::{MarkerEnvironment, UnnamedRequirement};
+use uv_pep508::{MarkerEnvironment, MarkerVariantsEnvironment, UnnamedRequirement};
 use uv_pypi_types::Hashes;
 
 use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
@@ -62,7 +62,7 @@ impl UnresolvedRequirement {
     pub fn evaluate_markers(
         &self,
         env: Option<&MarkerEnvironment>,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         match self {

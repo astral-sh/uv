@@ -33,7 +33,8 @@ pub use marker::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
-    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerValueVersion, MarkerVariantsEnvironment, MarkerVariantsUniversal, MarkerWarningKind,
+    StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -267,7 +268,7 @@ impl<T: Pep508Url> Requirement<T> {
     pub fn evaluate_markers(
         &self,
         env: &MarkerEnvironment,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.marker.evaluate(env, variants, extras)

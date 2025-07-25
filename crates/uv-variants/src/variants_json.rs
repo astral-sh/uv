@@ -1,17 +1,59 @@
+use std::ops::Deref;
+
 use indoc::formatdoc;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
-use uv_pep508::Requirement;
+use uv_pep508::{MarkerVariantsEnvironment, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
-
-/// Mapping of namespaces in a variant
-pub type Variant = FxHashMap<String, FxHashMap<String, Vec<String>>>;
 
 // TODO(konsti): Validate the string contents
 pub type VariantNamespace = String;
 pub type VariantFeature = String;
 pub type VariantProperty = String;
+
+/// Mapping of namespaces in a variant
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Variant(FxHashMap<String, FxHashMap<String, Vec<String>>>);
+
+impl MarkerVariantsEnvironment for Variant {
+    fn has_namespace(&self, namespace: &str) -> bool {
+        self.0.contains_key(namespace)
+    }
+
+    fn has_feature(&self, namespace: &str, feature: &str) -> bool {
+        let Some(features) = self.0.get(namespace) else {
+            return false;
+        };
+
+        let Some(properties) = features.get(feature) else {
+            return false;
+        };
+
+        !properties.is_empty()
+    }
+
+    fn has_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
+        let Some(features) = self.0.get(namespace) else {
+            return false;
+        };
+
+        let Some(properties) = features.get(feature) else {
+            return false;
+        };
+
+        properties.iter().any(|p| p == property)
+    }
+}
+
+impl Deref for Variant {
+    type Target = FxHashMap<String, FxHashMap<String, Vec<String>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Combined index metadata for wheel variants.
 ///

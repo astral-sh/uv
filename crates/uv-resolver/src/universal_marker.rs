@@ -7,7 +7,7 @@ use rustc_hash::FxHashMap;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{
     ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
-    MarkerTree,
+    MarkerTree, MarkerVariantsEnvironment, MarkerVariantsUniversal,
 };
 use uv_pypi_types::{ConflictItem, ConflictPackage, Conflicts};
 
@@ -239,12 +239,8 @@ impl UniversalMarker {
     ///
     /// This should only be used when evaluating a marker that is known not to
     /// have any extras. For example, the PEP 508 markers on a fork.
-    pub(crate) fn evaluate_no_extras(
-        self,
-        env: &MarkerEnvironment,
-        variants: Option<&[(String, String, String)]>,
-    ) -> bool {
-        self.marker.evaluate(env, variants, &[])
+    pub(crate) fn evaluate_no_extras(self, env: &MarkerEnvironment) -> bool {
+        self.marker.evaluate(env, MarkerVariantsUniversal, &[])
     }
 
     /// Returns true if this universal marker is satisfied by the given marker
@@ -256,7 +252,7 @@ impl UniversalMarker {
     pub(crate) fn evaluate<P, E, G>(
         self,
         env: &MarkerEnvironment,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: impl Iterator<Item = (P, E)>,
         groups: impl Iterator<Item = (P, G)>,
     ) -> bool
@@ -436,9 +432,9 @@ impl ConflictMarker {
     /// list of activated extras and groups.
     pub(crate) fn evaluate<P, E, G>(
         self,
-        variants: Option<&[(String, String, String)]>,
         extras: &[(P, E)],
         groups: &[(P, G)],
+        variants: impl MarkerVariantsEnvironment,
     ) -> bool
     where
         P: Borrow<PackageName>,
@@ -745,7 +741,7 @@ pub(crate) fn resolve_conflicts(
 mod tests {
     use super::*;
     use std::str::FromStr;
-
+    use uv_pep508::MarkerVariantsUniversal;
     use uv_pypi_types::ConflictSet;
 
     /// Creates a collection of declared conflicts from the sets
@@ -875,7 +871,7 @@ mod tests {
                 .collect::<Vec<(PackageName, ExtraName)>>();
             let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                !cm.evaluate(None, &extras, &groups),
+                !cm.evaluate(&extras, &groups, MarkerVariantsUniversal),
                 "expected `{extra_names:?}` to evaluate to `false` in `{cm:?}`"
             );
         }
@@ -898,7 +894,7 @@ mod tests {
                 .collect::<Vec<(PackageName, ExtraName)>>();
             let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                cm.evaluate(None, &extras, &groups),
+                cm.evaluate(&extras, &groups, MarkerVariantsUniversal),
                 "expected `{extra_names:?}` to evaluate to `true` in `{cm:?}`"
             );
         }

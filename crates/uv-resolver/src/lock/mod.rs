@@ -1111,7 +1111,6 @@ impl Lock {
         &self,
         name: &PackageName,
         marker_env: &MarkerEnvironment,
-        variants: Option<&[(String, String, String)]>,
     ) -> Result<Option<&Package>, String> {
         let mut found_dist = None;
         for dist in &self.packages {
@@ -1120,7 +1119,7 @@ impl Lock {
                     || dist
                         .fork_markers
                         .iter()
-                        .any(|marker| marker.evaluate_no_extras(marker_env, variants))
+                        .any(|marker| marker.evaluate_no_extras(marker_env))
                 {
                     if found_dist.is_some() {
                         return Err(format!("found multiple packages matching `{name}`"));
