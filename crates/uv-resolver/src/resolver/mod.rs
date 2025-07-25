@@ -1855,65 +1855,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If we're resolving for a specific environment, use the host variants, otherwise resolve
                 // for all variants.
-                // TODO(konsti): Is that the right default?
-                // TODO(konsti): We determine this value in choose version, pass it a parameter
-                //   This is in the hot path!
-                // TODO(konsti): More control for the user.
-                let variants = if env.marker_environment().is_some() {
-                    let resolved_variants = in_memory_index
-                        .variant_priorities()
-                        .get(&(version_id.clone(), index_url.cloned()));
-                    if let Some(resolved_variants) = resolved_variants {
-                        // TODO(konsti): Handle installed dists too
-                        // TODO(konsti): This is wrong, isn't it? We should be evaluating the
-                        //    markers of the provider, not of the host.
-
-                        if let Some(variant_label) = pins
-                            .get(name, version)
-                            .unwrap()
-                            .wheel_filename()
-                            .and_then(|filename| filename.variant())
-                        {
-                            // Collect the host properties for marker filtering.
-                            // TODO(konsti): Use the proper type everywhere, we shouldn't need to do
-                            // this conversion at all.
-                            let mut known_properties = BTreeSet::new();
-                            let namespaces = resolved_variants
-                                .variants_json
-                                .variants
-                                .get(variant_label)
-                                .expect("Missing previously select variant label");
-                            for (namespace, features) in namespaces {
-                                for (feature, values) in features {
-                                    for value in values {
-                                        known_properties.insert(VariantPropertyType {
-                                            namespace: namespace.clone(),
-                                            feature: feature.clone(),
-                                            value: value.clone(),
-                                        });
-                                    }
-                                }
-                            }
-                            let known_properties: Vec<(String, String, String)> = known_properties
-                                .into_iter()
-                                .map(|known_property| {
-                                    (
-                                        known_property.namespace,
-                                        known_property.feature,
-                                        known_property.value,
-                                    )
-                                })
-                                .collect();
-                            Some(known_properties)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
+                let variants = Self::variant_properties(
+                    name,
+                    version,
+                    &version_id,
+                    index_url,
+                    pins,
+                    env,
+                    in_memory_index,
+                );
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
@@ -2087,6 +2037,65 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
         Ok(Dependencies::Available(dependencies))
+    }
+
+    fn variant_properties(
+        name: &PackageName,
+        version: &Version,
+        version_id: &VersionId,
+        index_url: Option<&IndexUrl>,
+        pins: &FilePins,
+        env: &ResolverEnvironment,
+        in_memory_index: &InMemoryIndex,
+    ) -> Option<Vec<(String, String, String)>> {
+        // TODO(konsti): Perf/Caching with version selection: This is in the hot path!
+
+        env.marker_environment()?;
+        let resolved_variants = in_memory_index
+            .variant_priorities()
+            .get(&(version_id.clone(), index_url.cloned()))?;
+
+        let filename = pins.get(name, version).unwrap().wheel_filename();
+        let Some(filename) = filename else {
+            // TODO(konsti): Handle installed dists too
+            return None;
+        };
+        let Some(variant_label) = filename.variant() else {
+            warn!("Wheel variant has no associated variants: {filename}");
+            return None;
+        };
+
+        // Collect the host properties for marker filtering.
+        // TODO(konsti): Use the proper type everywhere, we shouldn't need to do
+        // this conversion at all.
+        let mut known_properties = BTreeSet::new();
+        let namespaces = resolved_variants
+            .variants_json
+            .variants
+            .get(variant_label)
+            .expect("Missing previously select variant label");
+        for (namespace, features) in namespaces {
+            for (feature, values) in features {
+                for value in values {
+                    known_properties.insert(VariantPropertyType {
+                        namespace: namespace.clone(),
+                        feature: feature.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+        }
+        let known_properties: Vec<(String, String, String)> = known_properties
+            .into_iter()
+            .map(|known_property| {
+                (
+                    known_property.namespace,
+                    known_property.feature,
+                    known_property.value,
+                )
+            })
+            .collect();
+        Some(known_properties)
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,

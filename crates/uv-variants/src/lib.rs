@@ -85,9 +85,6 @@ pub fn score_variant(
                         .flatten(),
                 )
                 .collect();
-            if !value_priorities.contains(feature) {
-                debug!("missing value priority {feature}");
-            }
             let Some(wheel_properties) = variants_properties
                 .get(namespace)
                 .and_then(|namespace| namespace.get(feature))
