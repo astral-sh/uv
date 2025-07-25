@@ -131,6 +131,7 @@ plugins:
           - concepts/build-backend.md
           - concepts/authentication.md
           - concepts/cache.md
+          - concepts/preview.md
         The pip interface:
           - pip/environments.md
           - pip/packages.md
@@ -210,6 +211,7 @@ nav:
       - Build backend: concepts/build-backend.md
       - Authentication: concepts/authentication.md
       - Caching: concepts/cache.md
+      - Preview features: concepts/preview.md
       # Note:  The `pip` section was moved to the `concepts/` section but the
       # top-level directory structure was retained to ease the transition.
       - The pip interface:

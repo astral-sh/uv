@@ -180,9 +180,9 @@ $ uv python upgrade
 After an upgrade, uv will prefer the new version, but will retain the existing version as it may
 still be used by virtual environments.
 
-If the Python version was installed with preview enabled, e.g., `uv python install 3.12 --preview`,
-virtual environments using the Python version will be automatically upgraded to the new patch
-version.
+If the Python version was installed with the `python-upgrade` [preview feature](./preview.md)
+enabled, e.g., `uv python install 3.12 --preview-features python-upgrade`, virtual environments
+using the Python version will be automatically upgraded to the new patch version.
 
 !!! note
 
