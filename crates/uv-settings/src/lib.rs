@@ -271,7 +271,6 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
             "environments",
         ));
     }
-
     if required_environments.is_some() {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
