@@ -417,7 +417,7 @@ jobs:
 
   linux-arm:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest-8
     timeout-minutes: 30
     strategy:
       matrix:
@@ -956,7 +956,7 @@ jobs:
 
   musllinux-cross:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest-8
     strategy:
       matrix:
         platform:
