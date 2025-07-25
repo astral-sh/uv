@@ -243,7 +243,7 @@ impl SitePackages {
 
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(markers, &[]) {
+                    if !dependency.evaluate_markers(markers, None, &[]) {
                         continue;
                     }
 
@@ -416,14 +416,15 @@ impl SitePackages {
         for requirement in requirements {
             if let Some(r#overrides) = overrides.get(&requirement.name) {
                 for dependency in r#overrides {
-                    if dependency.evaluate_markers(Some(markers), &[]) {
+                    if dependency.evaluate_markers(Some(markers), None, &[]) {
                         if seen.insert((*dependency).clone()) {
                             stack.push(Cow::Borrowed(*dependency));
                         }
                     }
                 }
             } else {
-                if requirement.evaluate_markers(Some(markers), &[]) {
+                // TODO(konsti): Evaluate variants
+                if requirement.evaluate_markers(Some(markers), None, &[]) {
                     if seen.insert(requirement.clone()) {
                         stack.push(Cow::Borrowed(requirement));
                     }
@@ -442,7 +443,7 @@ impl SitePackages {
                 }
                 [distribution] => {
                     // Validate that the requirement is satisfied.
-                    if requirement.evaluate_markers(Some(markers), &[]) {
+                    if requirement.evaluate_markers(Some(markers), None, &[]) {
                         match RequirementSatisfaction::check(distribution, &requirement.source) {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
@@ -455,7 +456,7 @@ impl SitePackages {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
-                        if constraint.evaluate_markers(Some(markers), &[]) {
+                        if constraint.evaluate_markers(Some(markers), None, &[]) {
                             match RequirementSatisfaction::check(distribution, &constraint.source) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
@@ -479,14 +480,19 @@ impl SitePackages {
                         let dependency = Requirement::from(dependency);
                         if let Some(r#overrides) = overrides.get(&dependency.name) {
                             for dependency in r#overrides {
-                                if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                                if dependency.evaluate_markers(
+                                    Some(markers),
+                                    None,
+                                    &requirement.extras,
+                                ) {
                                     if seen.insert((*dependency).clone()) {
                                         stack.push(Cow::Borrowed(*dependency));
                                     }
                                 }
                             }
                         } else {
-                            if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                            if dependency.evaluate_markers(Some(markers), None, &requirement.extras)
+                            {
                                 if seen.insert(dependency.clone()) {
                                     stack.push(Cow::Owned(dependency));
                                 }

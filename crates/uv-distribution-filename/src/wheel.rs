@@ -6,6 +6,9 @@ use memchr::memchr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 
+use crate::splitter::MemchrSplitter;
+use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
+use crate::{BuildTag, BuildTagError};
 use uv_cache_key::cache_digest;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
@@ -13,10 +16,6 @@ use uv_platform_tags::{
     AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, ParsePlatformTagError,
     PlatformTag, TagCompatibility, Tags,
 };
-
-use crate::splitter::MemchrSplitter;
-use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
-use crate::{BuildTag, BuildTagError};
 
 #[derive(
     Debug,
@@ -35,6 +34,7 @@ pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
     tags: WheelTag,
+    variant: Option<String>,
 }
 
 impl FromStr for WheelFilename {
@@ -75,6 +75,7 @@ impl WheelFilename {
         Self {
             name,
             version,
+            variant: None,
             tags: WheelTag::Small {
                 small: WheelTagSmall {
                     python_tag,
@@ -97,12 +98,22 @@ impl WheelFilename {
 
     /// The wheel filename without the extension.
     pub fn stem(&self) -> String {
-        format!(
-            "{}-{}-{}",
-            self.name.as_dist_info_name(),
-            self.version,
-            self.tags
-        )
+        if let Some(variant) = &self.variant {
+            format!(
+                "{}-{}-{}-{}",
+                self.name.as_dist_info_name(),
+                self.version,
+                self.tags,
+                variant
+            )
+        } else {
+            format!(
+                "{}-{}-{}",
+                self.name.as_dist_info_name(),
+                self.version,
+                self.tags
+            )
+        }
     }
 
     /// Returns a consistent cache key with a maximum length of 64 characters.
@@ -112,14 +123,24 @@ impl WheelFilename {
     pub fn cache_key(&self) -> String {
         const CACHE_KEY_MAX_LEN: usize = 64;
 
-        let full = format!("{}-{}", self.version, self.tags);
+        // Include variant in the cache key if it exists
+        let full = if let Some(variant) = &self.variant {
+            format!("{}-{}-{}", self.version, self.tags, variant)
+        } else {
+            format!("{}-{}", self.version, self.tags)
+        };
+
         if full.len() <= CACHE_KEY_MAX_LEN {
             return full;
         }
 
-        // Create a digest of the tag string (instead of its individual fields) to retain
+        // Create a digest of the tag string (and variant if it exists) to retain
         // compatibility across platforms, Rust versions, etc.
-        let digest = cache_digest(&format!("{}", self.tags));
+        let digest = if let Some(variant) = &self.variant {
+            cache_digest(&format!("{}-{}", self.tags, variant))
+        } else {
+            cache_digest(&format!("{}", self.tags))
+        };
 
         // Truncate the version, but avoid trailing dots, plus signs, etc. to avoid ambiguity.
         let version_width = CACHE_KEY_MAX_LEN - 1 /* dash */ - 16 /* digest */;
@@ -130,6 +151,11 @@ impl WheelFilename {
         let version = version.trim_end_matches(['.', '+']);
 
         format!("{version}-{digest}")
+    }
+
+    /// Return the wheel's variant tag, if present.
+    pub fn variant(&self) -> Option<&str> {
+        self.variant.as_deref()
     }
 
     /// Return the wheel's Python tags.
@@ -213,24 +239,62 @@ impl WheelFilename {
             ));
         };
 
-        let (name, version, build_tag, python_tag, abi_tag, platform_tag, is_small) =
+        let (name, version, build_tag, python_tag, abi_tag, platform_tag, variant, is_small) =
             if let Some(platform_tag) = splitter.next() {
-                if splitter.next().is_some() {
-                    return Err(WheelFilenameError::InvalidWheelFileName(
-                        filename.to_string(),
-                        "Must have 5 or 6 components, but has more".to_string(),
-                    ));
+                // Extract variant from filenames with the format, e.g., `ml_project-0.0.1-py3-none-any-cu128.whl`.
+                // TODO(charlie): Integrate this into the filename parsing; it's just easier to do it upfront
+                // for now.
+                // 7 components: We have both a build tag and a variant_tag
+                if let Some(variant_tag) = splitter.next() {
+                    if splitter.next().is_some() {
+                        return Err(WheelFilenameError::InvalidWheelFileName(
+                            filename.to_string(),
+                            "Must have 5 to 7 components, but has more".to_string(),
+                        ));
+                    }
+                    (
+                        &stem[..version],
+                        &stem[version + 1..build_tag_or_python_tag],
+                        Some(&stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag]),
+                        &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
+                        &stem[abi_tag_or_platform_tag + 1..platform_tag],
+                        &stem[platform_tag + 1..variant_tag],
+                        Some(&stem[variant_tag + 1..]),
+                        // Always take the slow path if build or variant tag are present.
+                        false,
+                    )
+                } else {
+                    // 6 components: Check whether we have a build tag or variant tag
+                    if LanguageTag::from_str(
+                        &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
+                    )
+                    .is_ok()
+                    {
+                        (
+                            &stem[..version],
+                            &stem[version + 1..build_tag_or_python_tag],
+                            None,
+                            &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
+                            &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
+                            &stem[abi_tag_or_platform_tag + 1..platform_tag],
+                            Some(&stem[platform_tag + 1..]),
+                            // Always take the slow path if a build tag is present.
+                            false,
+                        )
+                    } else {
+                        (
+                            &stem[..version],
+                            &stem[version + 1..build_tag_or_python_tag],
+                            Some(&stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag]),
+                            &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
+                            &stem[abi_tag_or_platform_tag + 1..platform_tag],
+                            &stem[platform_tag + 1..],
+                            None,
+                            // Always take the slow path if a build tag is present.
+                            false,
+                        )
+                    }
                 }
-                (
-                    &stem[..version],
-                    &stem[version + 1..build_tag_or_python_tag],
-                    Some(&stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag]),
-                    &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
-                    &stem[abi_tag_or_platform_tag + 1..platform_tag],
-                    &stem[platform_tag + 1..],
-                    // Always take the slow path if a build tag is present.
-                    false,
-                )
             } else {
                 (
                     &stem[..version],
@@ -239,6 +303,7 @@ impl WheelFilename {
                     &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
                     &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
                     &stem[abi_tag_or_platform_tag + 1..],
+                    None,
                     // Determine whether any of the tag types contain a period, which would indicate
                     // that at least one of the tag types includes multiple tags (which in turn
                     // necessitates taking the slow path).
@@ -295,6 +360,7 @@ impl WheelFilename {
             name,
             version,
             tags,
+            variant: variant.map(ToString::to_string),
         })
     }
 }
@@ -400,8 +466,9 @@ mod tests {
     #[test]
     fn err_too_many_parts() {
         let err =
-            WheelFilename::from_str("foo-1.2.3-202206090410-py3-none-any-whoops.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r###"The wheel filename "foo-1.2.3-202206090410-py3-none-any-whoops.whl" is invalid: Must have 5 or 6 components, but has more"###);
+            WheelFilename::from_str("foo-1.2.3-202206090410-py3-none-any-whoopsie-whoops.whl")
+                .unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename "foo-1.2.3-202206090410-py3-none-any-whoopsie-whoops.whl" is invalid: Must have 5 to 7 components, but has more"#);
     }
 
     #[test]
@@ -442,11 +509,22 @@ mod tests {
     }
 
     #[test]
+    fn ok_variant_tag() {
+        insta::assert_debug_snapshot!(WheelFilename::from_str(
+            "dummy_project-0.0.1-py3-none-any-36266d4d.whl"
+        ));
+        insta::assert_debug_snapshot!(WheelFilename::from_str(
+            "dummy_project-0.0.1-1234-py3-none-any-36266d4d.whl"
+        ));
+    }
+
+    #[test]
     fn from_and_to_string() {
         let wheel_names = &[
             "django_allauth-0.51.0-py3-none-any.whl",
             "osm2geojson-0.2.4-py3-none-any.whl",
             "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "dummy_project-0.0.1-py3-none-any-36266d4d.whl",
         ];
         for wheel_name in wheel_names {
             assert_eq!(
@@ -481,5 +559,10 @@ mod tests {
             "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2.3.4.5.6.7.8.9.0.1.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
         ).unwrap();
         insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2-80bf8598e9647cf7");
+
+        // Variant tags should be included in the cache key.
+        let filename =
+            WheelFilename::from_str("dummy_project-0.0.1-py3-none-any-36266d4d.whl").unwrap();
+        insta::assert_snapshot!(filename.cache_key(), @"0.0.1-py3-none-any-36266d4d-36266d4d");
     }
 }

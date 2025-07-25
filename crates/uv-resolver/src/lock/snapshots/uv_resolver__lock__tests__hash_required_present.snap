@@ -1,6 +1,7 @@
 ---
 source: crates/uv-resolver/src/lock/mod.rs
 expression: result
+snapshot_kind: text
 ---
 Ok(
     Lock {
@@ -84,9 +85,11 @@ Ok(
                                     platform_tag: Any,
                                 },
                             },
+                            variant: None,
                         },
                     },
                 ],
+                variants_json: None,
                 fork_markers: [],
                 dependencies: [],
                 optional_dependencies: {},
