@@ -50,8 +50,8 @@ impl KeyringProvider {
         }
     }
 
-    /// Store credentials for the given [`Url`] to the keyring if the
-    /// keyring provider backend is `Native`.
+    /// Store credentials for the given [`Url`]/`username` pair to the keyring if the
+    /// keyring provider backend is [`KeyringProviderBackend::Native`].
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn store_if_native(&self, url: &DisplaySafeUrl, credentials: &Credentials) {
         let Some(username) = credentials.username() else {
@@ -103,6 +103,35 @@ impl KeyringProvider {
                 );
             }
         }
+    }
+
+    /// Remove credentials for the given [`Url`]/`username` pair from the keyring if the
+    /// keyring provider backend is [`KeyringProviderBackend::Native`].
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
+    pub async fn remove_if_native(
+        &self,
+        url: &DisplaySafeUrl,
+        username: &str,
+    ) -> Result<(), uv_keyring::Error> {
+        if let KeyringProviderBackend::Native = &self.backend {
+            self.remove_native(url.as_str(), username).await?;
+            STORED_KEYRING_URLS.remove(url);
+        }
+        Ok(())
+    }
+
+    /// Remove credentials from the system keyring for the given `service_name`/`username`
+    /// pair.
+    #[instrument(skip(self))]
+    async fn remove_native(
+        &self,
+        service_name: &str,
+        username: &str,
+    ) -> Result<(), uv_keyring::Error> {
+        let entry = uv_keyring::Entry::new(service_name, username)?;
+        entry.delete_credential().await?;
+        trace!("Removing credentials for {service_name}/{username} from system keyring");
+        Ok(())
     }
 
     /// Fetch credentials for the given [`Url`] from the keyring.
@@ -328,6 +357,10 @@ impl StoredKeyringUrls {
 
     pub(crate) fn insert(&self, url: DisplaySafeUrl) -> bool {
         self.0.write().unwrap().insert(url)
+    }
+
+    pub(crate) fn remove(&self, url: &DisplaySafeUrl) -> bool {
+        self.0.write().unwrap().remove(url)
     }
 }
 

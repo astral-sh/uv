@@ -374,6 +374,13 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 pub enum Commands {
+    /// Configure credentials
+    #[command(
+        after_help = "Use `uv help auth` for more details.",
+        after_long_help = ""
+    )]
+    Auth(AuthNamespace),
+
     /// Manage Python projects.
     #[command(flatten)]
     Project(Box<ProjectCommand>),
@@ -4222,6 +4229,24 @@ pub struct ExportArgs {
 }
 
 #[derive(Args)]
+pub struct AuthNamespace {
+    #[command(subcommand)]
+    pub command: AuthCommand,
+}
+
+#[derive(Subcommand)]
+pub enum AuthCommand {
+    /// Set credentials for a URL.
+    ///
+    /// FIXME: Add details
+    Set(AuthSetArgs),
+    /// Unset credentials for a URL.
+    ///
+    /// FIXME: Add details
+    Unset(AuthUnsetArgs),
+}
+
+#[derive(Args)]
 pub struct ToolNamespace {
     #[command(subcommand)]
     pub command: ToolCommand,
@@ -5256,6 +5281,60 @@ pub struct PythonPinArgs {
     /// Remove the Python version pin.
     #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
     pub rm: bool,
+}
+
+#[derive(Args)]
+pub struct AuthUnsetArgs {
+    /// The authentication service to configure
+    pub service: Option<String>,
+
+    /// The username to set for the service
+    #[arg(long, short)]
+    pub username: Option<String>,
+
+    /// Set keyring provider for configuring credentials.
+    ///
+    /// At present, only `--keyring-provider native` is supported, which configures uv to use
+    /// the system keyring.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct AuthSetArgs {
+    /// The authentication service to configure
+    pub service: Option<String>,
+
+    /// The username to set for the service
+    #[arg(long, short, conflicts_with = "token")]
+    pub username: Option<String>,
+
+    /// The password to set for the service
+    // FIXME: It would be preferable to accept this value from stdin,
+    // perhaps checking here for `-` as an indicator to read stdin. We
+    // could then warn if the password is provided as a plaintext argument.
+    #[arg(long, conflicts_with = "token")]
+    pub password: Option<String>,
+
+    /// The token to set for the service.
+    ///
+    /// The username will be set to `__token__`.
+    // FIXME: It would be preferable to accept this value from stdin,
+    // perhaps checking here for `-` as an indicator to read stdin. We
+    // could then warn if the token is provided as a plaintext argument.
+    #[arg(long, short, conflicts_with = "username")]
+    pub token: Option<String>,
+
+    /// Set keyring provider for configuring credentials.
+    ///
+    /// At present, only `--keyring-provider native` is supported, which configures uv to use
+    /// the system keyring.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
+    pub keyring_provider: Option<KeyringProviderType>,
 }
 
 #[derive(Args)]

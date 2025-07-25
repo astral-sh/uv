@@ -7,12 +7,13 @@ use std::str::FromStr;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
+    AddArgs, AuthSetArgs, AuthUnsetArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs,
+    ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs,
+    PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs,
+    PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs,
+    ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump,
+    VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
@@ -3359,6 +3360,76 @@ impl PublishSettings {
                 Vec::new(),
                 false,
             ),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv auth unset` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthUnsetSettings {
+    // CLI only, see [`AuthUnsetArgs`] for docs.
+    pub(crate) service: Option<String>,
+    pub(crate) username: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) keyring_provider: KeyringProviderType,
+}
+
+impl AuthUnsetSettings {
+    /// Resolve the [`AuthUnsetSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthUnsetArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options { top_level, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
+        let ResolverInstallerOptions {
+            keyring_provider, ..
+        } = top_level;
+
+        Self {
+            service: args.service,
+            username: args.username,
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// The resolved settings to use for an invocation of the `uv auth set` CLI.
+#[derive(Debug, Clone)]
+pub(crate) struct AuthSetSettings {
+    // CLI only, see [`AuthSetArgs`] for docs.
+    pub(crate) service: Option<String>,
+    pub(crate) username: Option<String>,
+    pub(crate) password: Option<String>,
+    pub(crate) token: Option<String>,
+
+    // Both CLI and configuration.
+    pub(crate) keyring_provider: KeyringProviderType,
+}
+
+impl AuthSetSettings {
+    /// Resolve the [`AuthSetSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuthSetArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let Options { top_level, .. } = filesystem
+            .map(FilesystemOptions::into_options)
+            .unwrap_or_default();
+
+        let ResolverInstallerOptions {
+            keyring_provider, ..
+        } = top_level;
+
+        Self {
+            service: args.service,
+            username: args.username,
+            password: args.password,
+            token: args.token,
+            keyring_provider: args
+                .keyring_provider
+                .combine(keyring_provider)
+                .unwrap_or_default(),
         }
     }
 }
