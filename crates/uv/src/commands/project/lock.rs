@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    Reinstall, Upgrade,
+    PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -477,14 +477,15 @@ async fn do_lock(
     }
 
     // Check if any conflicts contain project-level conflicts
-    if preview.is_disabled() {
+    if preview.is_enabled(PreviewFeatures::PACKAGE_CONFLICTS) {
         for set in conflicts.iter() {
             if set
                 .iter()
                 .any(|item| matches!(item.kind(), ConflictKind::Project))
             {
                 warn_user_once!(
-                    "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview` to disable this warning."
+                    "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeatures::PACKAGE_CONFLICTS
                 );
                 break;
             }
