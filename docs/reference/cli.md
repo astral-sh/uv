@@ -2641,7 +2641,7 @@ uv python [OPTIONS] <COMMAND>
 
 <dl class="cli-reference"><dt><a href="#uv-python-list"><code>uv python list</code></a></dt><dd><p>List the available Python installations</p></dd>
 <dt><a href="#uv-python-install"><code>uv python install</code></a></dt><dd><p>Download and install Python versions</p></dd>
-<dt><a href="#uv-python-upgrade"><code>uv python upgrade</code></a></dt><dd><p>Upgrade installed Python versions to the latest supported patch release (requires the <code>--preview</code> flag)</p></dd>
+<dt><a href="#uv-python-upgrade"><code>uv python upgrade</code></a></dt><dd><p>Upgrade installed Python versions</p></dd>
 <dt><a href="#uv-python-find"><code>uv python find</code></a></dt><dd><p>Search for a Python installation</p></dd>
 <dt><a href="#uv-python-pin"><code>uv python pin</code></a></dt><dd><p>Pin to a specific Python version</p></dd>
 <dt><a href="#uv-python-dir"><code>uv python dir</code></a></dt><dd><p>Show the uv Python installation directory</p></dd>
@@ -2843,7 +2843,9 @@ uv python install [OPTIONS] [TARGETS]...
 
 ### uv python upgrade
 
-Upgrade installed Python versions to the latest supported patch release (requires the `--preview` flag).
+Upgrade installed Python versions.
+
+Upgrades versions to the latest supported patch release. Requires the `python-upgrade` preview feature.
 
 A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions may be provided to perform more than one upgrade.
 
