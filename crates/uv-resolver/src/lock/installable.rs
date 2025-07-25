@@ -14,11 +14,12 @@ use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOption
 use uv_distribution::{DistributionDatabase, VariantProviderCache};
 use uv_distribution_types::{Edge, Identifier, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep508::MarkerVariantsUniversal;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_types::BuildContext;
 use uv_variants::score_variant;
-use uv_variants::variants_json::VariantPropertyType;
+use uv_variants::variants_json::Variant;
 
 use crate::lock::{LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
@@ -151,7 +152,7 @@ pub trait Installable<'lock> {
                 // TODO(konsti): Evaluate variant declarations on workspace/path dependencies.
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    None,
+                    MarkerVariantsUniversal,
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {
@@ -215,14 +216,17 @@ pub trait Installable<'lock> {
         // Add any requirements that are exclusive to the workspace root (e.g., dependencies in
         // PEP 723 scripts).
         for dependency in self.lock().requirements() {
-            if !dependency.marker.evaluate(marker_env, None, &[]) {
+            if !dependency
+                .marker
+                .evaluate(marker_env, MarkerVariantsUniversal, &[])
+            {
                 continue;
             }
 
             let root_name = &dependency.name;
             let dist = self
                 .lock()
-                .find_by_markers(root_name, marker_env, None)
+                .find_by_markers(root_name, marker_env)
                 .map_err(|_| LockErrorKind::MultipleRootPackages {
                     name: root_name.clone(),
                 })?
@@ -267,7 +271,10 @@ pub trait Installable<'lock> {
             })
             .flatten()
         {
-            if !dependency.marker.evaluate(marker_env, None, &[]) {
+            if !dependency
+                .marker
+                .evaluate(marker_env, MarkerVariantsUniversal, &[])
+            {
                 continue;
             }
 
@@ -275,7 +282,7 @@ pub trait Installable<'lock> {
             // TODO(konsti): Evaluate variant declarations on workspace/path dependencies.
             let dist = self
                 .lock()
-                .find_by_markers(root_name, marker_env, None)
+                .find_by_markers(root_name, marker_env)
                 .map_err(|_| LockErrorKind::MultipleRootPackages {
                     name: root_name.clone(),
                 })?
@@ -378,7 +385,7 @@ pub trait Installable<'lock> {
                     // TODO(konsti): Evaluate variants
                     if !dep.complexified_marker.evaluate(
                         marker_env,
-                        None,
+                        MarkerVariantsUniversal,
                         activated_extras
                             .iter()
                             .chain(additional_activated_extras.iter())
@@ -475,7 +482,7 @@ pub trait Installable<'lock> {
             for dep in deps {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    variant_properties.as_deref(),
+                    &variant_properties,
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {
@@ -600,9 +607,10 @@ async fn determine_properties<Context: BuildContext>(
     workspace_root: &Path,
     distribution_database: &DistributionDatabase<'_, Context>,
     variants_cache: &VariantProviderCache,
-) -> Result<Option<Vec<(String, String, String)>>, LockError> {
+) -> Result<Variant, LockError> {
     let Some(variants_json) = package.to_registry_variants_json(workspace_root)? else {
-        return Ok(None);
+        // When selecting a non-variant wheel, all variant markers evaluate to false.
+        return Ok(Variant::default());
     };
     let resolved_variants = if let Some(resolved_variants) =
         variants_cache.get_resolved_variants(&variants_json.resource_id())
@@ -654,39 +662,15 @@ async fn determine_properties<Context: BuildContext>(
     }
 
     if let Some((best_variant, _)) = highest_priority_variant_wheel {
-        // TODO(konsti): Use the proper type everywhere, we shouldn't need to do
-        // this conversion at all.
-        let mut known_properties = BTreeSet::new();
-        for (namespace, features) in resolved_variants
+        // TODO(konsti): We shouldn't need to clone
+        let known_properties = resolved_variants
             .variants_json
             .variants
             .get(best_variant)
-            .expect("TODO(konsti): error handling")
-        {
-            for (feature, values) in features {
-                for value in values {
-                    known_properties.insert(VariantPropertyType {
-                        namespace: namespace.clone(),
-                        feature: feature.clone(),
-                        value: value.clone(),
-                    });
-                }
-            }
-        }
-        let known_properties: Vec<(String, String, String)> = known_properties
-            .into_iter()
-            .map(|known_property| {
-                (
-                    known_property.namespace,
-                    known_property.feature,
-                    known_property.value,
-                )
-            })
-            .collect();
-        Ok(Some(known_properties))
+            .expect("TODO(konsti): error handling");
+        Ok(known_properties.clone())
     } else {
-        // When selecting the non-variant wheel, all variant markers evaluate to
-        // false.
-        Ok(Some(Vec::new()))
+        // When selecting the non-variant wheel, all variant markers evaluate to false.
+        Ok(Variant::default())
     }
 }
