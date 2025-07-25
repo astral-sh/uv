@@ -15,16 +15,6 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
-use crate::cached_client::CacheControl;
-use crate::flat_index::FlatIndexEntry;
-use crate::html::SimpleHtml;
-use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
-use crate::{
-    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries,
-    RedirectClientWithMiddleware,
-};
 use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
@@ -45,6 +35,17 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 use uv_variants::variants_json::VariantsJsonContent;
+
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
+use crate::cached_client::CacheControl;
+use crate::flat_index::FlatIndexEntry;
+use crate::html::SimpleHtml;
+use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::rkyvutil::OwnedArchive;
+use crate::{
+    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries,
+    RedirectClientWithMiddleware,
+};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
