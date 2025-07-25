@@ -798,7 +798,8 @@ fn help_flag_subsubcommand() {
 
     Options:
       -i, --install-dir <INSTALL_DIR>
-              The directory to store the Python installation in [env: UV_PYTHON_INSTALL_DIR=]
+              The directory to store the Python installation in [env:
+              UV_PYTHON_INSTALL_DIR=[MANAGED_PYTHON_DIR]/]
           --no-bin
               Do not install a Python executable into the `bin` directory
           --no-registry

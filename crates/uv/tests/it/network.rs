@@ -241,7 +241,7 @@ async fn python_install_http_500() {
     let context = TestContext::new("3.12")
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
@@ -273,7 +273,7 @@ async fn python_install_io_error() {
     let context = TestContext::new("3.12")
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 

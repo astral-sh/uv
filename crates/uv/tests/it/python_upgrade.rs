@@ -10,7 +10,7 @@ fn python_upgrade() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
@@ -59,7 +59,7 @@ fn python_upgrade_without_version() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Should be a no-op when no versions have been installed
     uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview"), @r"
@@ -127,7 +127,7 @@ fn python_upgrade_transparent_from_venv() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
@@ -229,7 +229,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install an earlier patch version using `--preview`
     uv_snapshot!(context.filters(), context.python_install().arg("3.10.17").arg("--preview"), @r"
@@ -292,7 +292,7 @@ fn python_upgrade_ignored_with_python_pin() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
@@ -357,7 +357,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
@@ -423,7 +423,7 @@ fn python_transparent_upgrade_venv_venv() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_virtualenv_bin()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
@@ -515,7 +515,7 @@ fn python_upgrade_transparent_from_venv_module() {
     let context = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs()
+        .with_python_downloads_enabled()
         .with_filtered_python_install_bin();
 
     let bin_dir = context.temp_dir.child("bin");
@@ -582,7 +582,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     let context = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs()
+        .with_python_downloads_enabled()
         .with_filtered_python_install_bin();
 
     let bin_dir = context.temp_dir.child("bin");
@@ -669,7 +669,7 @@ fn python_upgrade_force_install() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     context
         .bin_dir
