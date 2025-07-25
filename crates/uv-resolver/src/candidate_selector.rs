@@ -703,19 +703,17 @@ impl<'a> Candidate<'a> {
     pub(crate) fn allow_variant_wheels(self) -> Self {
         // Optimization: Only if the current candidate is incompatible for being a variant, it can
         // change if we allow variants.
-        let CandidateDist::Incompatible(IncompatibleDist::Wheel(IncompatibleWheel::Variant)) =
-            self.dist
+        let CandidateDist::Incompatible {
+            incompatible_dist: IncompatibleDist::Wheel(IncompatibleWheel::Variant),
+            prioritized_dist,
+        } = self.dist
         else {
             return self;
         };
 
-        if let Some(prioritized_dist) = self.prioritized {
-            Self {
-                dist: CandidateDist::from_prioritized_dist(prioritized_dist, true),
-                ..self
-            }
-        } else {
-            self
+        Self {
+            dist: CandidateDist::from_prioritized_dist(prioritized_dist, true),
+            ..self
         }
     }
 
@@ -725,7 +723,6 @@ impl<'a> Candidate<'a> {
         prioritized_dist: &'a PrioritizedDist,
     ) -> Self {
         Self {
-            prioritized: Some(prioritized_dist),
             dist: CandidateDist::from_prioritized_dist(prioritized_dist, true),
             ..self
         }
