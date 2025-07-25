@@ -1969,6 +1969,10 @@ jobs:
       - name: "Print Python path"
         run: echo $(which python3)
 
+      # Needed for building Pydantic
+      - name: "Install build tools"
+        run: dnf install -y gcc
+
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv
 
@@ -2464,6 +2468,9 @@ jobs:
 
       - name: "Print Python path"
         run: echo $(which python3)
+
+      - name: Install build tools
+        run: yum install -y gcc
 
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv
