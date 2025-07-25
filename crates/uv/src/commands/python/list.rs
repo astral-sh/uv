@@ -11,7 +11,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_python::downloads::PythonDownloadRequest;
+use uv_python::downloads::{ManagedPythonDownloader, PythonDownloadRequest};
 use uv_python::{
     DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
     PythonPreference, PythonRequest, PythonSource, find_python_installations,
@@ -19,7 +19,7 @@ use uv_python::{
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::PythonListKinds;
+use crate::settings::{NetworkSettings, PythonListKinds};
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 enum Kind {
@@ -61,6 +61,7 @@ pub(crate) async fn list(
     show_urls: bool,
     output_format: PythonListFormat,
     python_downloads_json_url: Option<String>,
+    network_settings: NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -104,10 +105,17 @@ pub(crate) async fn list(
         // Include pre-release versions
         .map(|request| request.with_prereleases(true));
 
+        let client = uv_client::BaseClientBuilder::new()
+            .retries_from_env()?
+            .connectivity(network_settings.connectivity)
+            .native_tls(network_settings.native_tls)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone())
+            .build();
+        let downloader =
+            ManagedPythonDownloader::new(&client, python_downloads_json_url.as_deref()).await?;
         let downloads = download_request
             .as_ref()
-            .map(|a| PythonDownloadRequest::iter_downloads(a, python_downloads_json_url.as_deref()))
-            .transpose()?
+            .map(|a| PythonDownloadRequest::iter_downloads(a, &downloader))
             .into_iter()
             .flatten();
 

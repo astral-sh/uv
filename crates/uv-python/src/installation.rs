@@ -7,14 +7,16 @@ use ref_cast::RefCast;
 use tracing::{debug, info};
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClient, BaseClientBuilder};
 use uv_configuration::PreviewMode;
 use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
 };
-use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest, Reporter};
+use crate::downloads::{
+    DownloadResult, ManagedPythonDownload, ManagedPythonDownloader, PythonDownloadRequest, Reporter,
+};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
@@ -125,9 +127,12 @@ impl PythonInstallation {
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
 
-        let download = download_request.clone().fill().map(|request| {
-            ManagedPythonDownload::from_request(&request, python_downloads_json_url)
-        });
+        let client = client_builder.build();
+        let downloader = ManagedPythonDownloader::new(&client, python_downloads_json_url).await?;
+        let download = download_request
+            .clone()
+            .fill()
+            .map(|request| downloader.from_request(&request));
 
         // Regardless of whether downloads are enabled, we want to determine if the download is
         // available to power error messages. However, if downloads aren't enabled, we don't want to
@@ -202,7 +207,7 @@ impl PythonInstallation {
 
         Self::fetch(
             download,
-            client_builder,
+            &client,
             cache,
             reporter,
             python_install_mirror,
@@ -214,8 +219,8 @@ impl PythonInstallation {
 
     /// Download and install the requested installation.
     pub async fn fetch(
-        download: &'static ManagedPythonDownload,
-        client_builder: &BaseClientBuilder<'_>,
+        download: &ManagedPythonDownload,
+        client: &BaseClient,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
@@ -227,12 +232,10 @@ impl PythonInstallation {
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        let client = client_builder.build();
-
         info!("Fetching requested Python...");
         let result = download
             .fetch_with_retry(
-                &client,
+                client,
                 installations_dir,
                 &scratch_dir,
                 false,

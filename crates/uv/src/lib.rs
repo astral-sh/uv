@@ -1372,6 +1372,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_urls,
                 args.output_format,
                 args.python_downloads_json_url,
+                globals.network_settings,
                 globals.python_preference,
                 globals.python_downloads,
                 &cache,
