@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, PreviewMode, Reinstall,
+    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
     SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
@@ -112,11 +112,14 @@ pub(crate) async fn pip_compile(
     quiet: bool,
     cache: Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
-    if preview.is_disabled() && !extra_build_dependencies.is_empty() {
+    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+        && !extra_build_dependencies.is_empty()
+    {
         warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning."
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
         );
     }
 

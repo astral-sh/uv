@@ -1655,7 +1655,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1685,7 +1685,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -1754,7 +1754,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
       ├─▶ The build backend returned an error
@@ -1790,7 +1790,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1866,7 +1866,7 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1946,7 +1946,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview` to disable this warning.
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -5487,17 +5487,8 @@ fn sync_active_script_environment() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-[a-z0-9]+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Running `uv sync --script` with `VIRTUAL_ENV` should warn
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5519,7 +5510,7 @@ fn sync_active_script_environment() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Using `--active` should create the environment
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5539,7 +5530,7 @@ fn sync_active_script_environment() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // A subsequent sync will re-use the environment
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5551,7 +5542,7 @@ fn sync_active_script_environment() -> Result<()> {
     ");
 
     // Requesting another Python version will invalidate the environment
-    uv_snapshot!(&filters, context.sync()
+    uv_snapshot!(context.filters(), context.sync()
         .arg("--script")
         .arg("script.py")
         .env(EnvVars::VIRTUAL_ENV, "foo")
@@ -5593,17 +5584,8 @@ fn sync_active_script_environment_json() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-[a-z0-9]+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Running `uv sync --script` with `VIRTUAL_ENV` should warn
-    uv_snapshot!(&filters, context.sync()
+    uv_snapshot!(context.filters(), context.sync()
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @r#"
@@ -5649,7 +5631,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Using `--active` should create the environment
-    uv_snapshot!(&filters, context.sync()
+    uv_snapshot!(context.filters(), context.sync()
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
         .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r#"
@@ -5693,7 +5675,7 @@ fn sync_active_script_environment_json() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // A subsequent sync will re-use the environment
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5705,7 +5687,7 @@ fn sync_active_script_environment_json() -> Result<()> {
     ");
 
     // Requesting another Python version will invalidate the environment
-    uv_snapshot!(&filters, context.sync()
+    uv_snapshot!(context.filters(), context.sync()
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
         .env(EnvVars::VIRTUAL_ENV, "foo")
@@ -9591,16 +9573,7 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-\w+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9632,7 +9605,7 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9658,7 +9631,7 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9683,7 +9656,7 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9701,7 +9674,7 @@ fn sync_script() -> Result<()> {
     ");
 
     // `--locked` and `--frozen` should fail with helpful error messages.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9711,7 +9684,7 @@ fn sync_script() -> Result<()> {
     error: `uv sync --locked` requires a script lockfile; run `uv lock --script script.py` to lock the script
     ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--frozen"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9741,17 +9714,8 @@ fn sync_locked_script() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-\w+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Lock the script.
-    uv_snapshot!(&filters, context.lock().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9811,7 +9775,7 @@ fn sync_locked_script() -> Result<()> {
         );
     });
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9841,7 +9805,7 @@ fn sync_locked_script() -> Result<()> {
     })?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9852,7 +9816,7 @@ fn sync_locked_script() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9943,7 +9907,7 @@ fn sync_locked_script() -> Result<()> {
     })?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9955,7 +9919,7 @@ fn sync_locked_script() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10000,16 +9964,7 @@ fn sync_script_with_compatible_build_constraints() -> Result<()> {
        "#
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-\w+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10035,14 +9990,6 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     let context = TestContext::new("3.9");
 
     let test_script = context.temp_dir.child("script.py");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-\w+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
 
     // Incompatible build constraints.
     test_script.write_str(indoc! { r#"
@@ -10061,7 +10008,7 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----

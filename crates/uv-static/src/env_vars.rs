@@ -225,6 +225,9 @@ impl EnvVars {
     /// Equivalent to the `--preview` argument. Enables preview mode.
     pub const UV_PREVIEW: &'static str = "UV_PREVIEW";
 
+    /// Equivalent to the `--preview-features` argument. Enables specific preview features.
+    pub const UV_PREVIEW_FEATURES: &'static str = "UV_PREVIEW_FEATURES";
+
     /// Equivalent to the `--token` argument for self update. A GitHub token for authentication.
     pub const UV_GITHUB_TOKEN: &'static str = "UV_GITHUB_TOKEN";
 

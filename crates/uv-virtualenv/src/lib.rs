@@ -3,7 +3,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::PreviewMode;
+use uv_configuration::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 
 pub use virtualenv::{OnExisting, remove_virtualenv};
@@ -56,7 +56,7 @@ pub fn create_venv(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(

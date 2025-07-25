@@ -1271,7 +1271,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let dist = match candidate.dist() {
             CandidateDist::Compatible(dist) => dist,
-            CandidateDist::Incompatible(incompatibility) => {
+            CandidateDist::Incompatible {
+                incompatible_dist: incompatibility,
+                prioritized_dist: _,
+            } => {
                 // If the version is incompatible because no distributions are compatible, exit early.
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
@@ -3779,9 +3782,7 @@ impl Fork {
             if self.env.included_by_group(conflicting_item) {
                 return true;
             }
-            if let Some(conflicting_item) = dep.package.conflicting_item() {
-                self.conflicts.remove(&conflicting_item);
-            }
+            self.conflicts.remove(&conflicting_item);
             false
         });
         Some(self)

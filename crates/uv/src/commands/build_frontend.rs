@@ -16,7 +16,7 @@ use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
     DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    PackageConfigSettings, PreviewMode, SourceStrategy,
+    PackageConfigSettings, Preview, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
@@ -118,7 +118,7 @@ pub(crate) async fn build_frontend(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let build_result = build_impl(
         project_dir,
@@ -186,7 +186,7 @@ async fn build_impl(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<BuildResult> {
     // Extract the resolver settings.
     let ResolverSettings {
@@ -441,7 +441,7 @@ async fn build_package(
     link_mode: LinkMode,
     config_setting: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<Vec<BuildMessage>, Error> {
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)

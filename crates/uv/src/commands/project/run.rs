@@ -19,7 +19,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, PreviewMode,
+    InstallOptions, Preview,
 };
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
@@ -94,7 +94,7 @@ pub(crate) async fn run(
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
-    preview: PreviewMode,
+    preview: Preview,
     max_recursion_depth: u32,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
@@ -1071,8 +1071,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             ephemeral_env.set_overlay(format!(
                 "import site; site.addsitedir(\"{}\"); site.addsitedir(\"{}\");",
-                base_site_packages.escape_for_python(),
                 requirements_site_packages.escape_for_python(),
+                base_site_packages.escape_for_python(),
             ))?;
 
             // N.B. The order here matters — earlier interpreters take precedence over the

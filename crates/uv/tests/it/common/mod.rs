@@ -21,7 +21,7 @@ use regex::Regex;
 
 use tokio::io::AsyncWriteExt;
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
+use uv_configuration::Preview;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::{
@@ -705,6 +705,11 @@ impl TestContext {
                 uv_version::version()
             ),
             r#"requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]"#.to_string(),
+        ));
+        // Filter script environment hashes
+        filters.push((
+            r"environments-v(\d+)[\\/](\w+)-[a-z0-9]+".to_string(),
+            "environments-v$1/$2-[HASH]".to_string(),
         ));
 
         Self {
@@ -1500,7 +1505,7 @@ pub fn python_installations_for_versions(
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
                 &cache,
-                PreviewMode::Disabled,
+                Preview::default(),
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {

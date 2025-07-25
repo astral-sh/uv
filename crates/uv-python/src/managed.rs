@@ -12,7 +12,7 @@ use itertools::Itertools;
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_configuration::PreviewMode;
+use uv_configuration::{Preview, PreviewFeatures};
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
@@ -519,7 +519,7 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self, preview: PreviewMode) -> Result<(), Error> {
+    pub fn ensure_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
         if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
             minor_version_link.create_directory()?;
         }
@@ -531,7 +531,7 @@ impl ManagedPythonInstallation {
     ///
     /// Unlike [`ensure_minor_version_link`], will not create a new symlink directory
     /// if one doesn't already exist,
-    pub fn update_minor_version_link(&self, preview: PreviewMode) -> Result<(), Error> {
+    pub fn update_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
         if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
             if !minor_version_link.exists() {
                 return Ok(());
@@ -702,7 +702,7 @@ impl PythonMinorVersionLink {
     pub fn from_executable(
         executable: &Path,
         key: &PythonInstallationKey,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Option<Self> {
         let implementation = key.implementation();
         if !matches!(
@@ -755,7 +755,7 @@ impl PythonMinorVersionLink {
         // If preview mode is disabled, still return a `MinorVersionSymlink` for
         // existing symlinks, allowing continued operations without the `--preview`
         // flag after initial symlink directory installation.
-        if preview.is_disabled() && !minor_version_link.exists() {
+        if !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) && !minor_version_link.exists() {
             return None;
         }
         Some(minor_version_link)
@@ -763,7 +763,7 @@ impl PythonMinorVersionLink {
 
     pub fn from_installation(
         installation: &ManagedPythonInstallation,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Option<Self> {
         PythonMinorVersionLink::from_executable(
             installation.executable(false).as_path(),

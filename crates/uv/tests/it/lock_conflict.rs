@@ -1057,6 +1057,7 @@ fn extra_unconditional() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     "###);
+
     // This should error since we're enabling two conflicting extras.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: false
@@ -1648,6 +1649,249 @@ fn extra_nested_across_workspace() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     "###);
+
+    Ok(())
+}
+
+/// The project declares conflicting extras, but one of the extras directly depends on the other.
+#[test]
+fn extra_depends_on_conflicting_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["sortedcontainers==2.3.0", "example[bar]"]
+        bar = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "foo" },
+            { extra = "bar" },
+          ],
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.packages.find]
+        include = ["example"]
+        "#,
+    )?;
+
+    // This should fail to resolve, because the extras are always required together and
+    // `example[foo]` is unusable.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because example[foo] depends on sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that example[foo]'s requirements are unsatisfiable.
+          And because your project requires example[foo], we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// Like [`extra_depends_on_conflicting_extra`], but the conflict between the extras is mediated by
+/// another package.
+#[test]
+fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["sortedcontainers==2.3.0", "indirection"]
+        bar = ["sortedcontainers==2.4.0"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "foo" },
+            { extra = "bar" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        indirection = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["indirection"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.packages.find]
+        include = ["example"]
+        "#,
+    )?;
+
+    // Create the indirection subproject
+    let subproject_dir = context.temp_dir.child("indirection");
+    subproject_dir.create_dir_all()?;
+
+    let sub_pyproject_toml = subproject_dir.child("pyproject.toml");
+    sub_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "indirection"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["example[bar]"]
+
+        [tool.uv.sources]
+        example = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // This succeeds, but probably shouldn't. There's an unconditional conflict in `example[foo]
+    // -> indirection[bar] -> example[bar]`, which means `example[foo]` can never be used.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "example", extra = "bar" },
+            { package = "example", extra = "foo" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "example",
+            "indirection",
+        ]
+
+        [[package]]
+        name = "example"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.optional-dependencies]
+        bar = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        foo = [
+            { name = "indirection" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "indirection", marker = "extra == 'foo'", editable = "indirection" },
+            { name = "sortedcontainers", marker = "extra == 'bar'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'foo'", specifier = "==2.3.0" },
+        ]
+        provides-extras = ["foo", "bar"]
+
+        [[package]]
+        name = "indirection"
+        version = "0.1.0"
+        source = { editable = "indirection" }
+        dependencies = [
+            { name = "example" },
+            { name = "example", extra = ["bar"], marker = "extra == 'extra-7-example-bar'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "example", extras = ["bar"], editable = "." }]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+        "#
+        );
+    });
+
+    // Install from the lockfile
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + example==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // Install with `foo`
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extras `example[bar]` and `example[foo]` enabled simultaneously
+    ");
+
+    // Install the child package
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("indirection"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + indirection==0.1.0 (from file://[TEMP_DIR]/indirection)
+     + sortedcontainers==2.4.0
+    ");
 
     Ok(())
 }

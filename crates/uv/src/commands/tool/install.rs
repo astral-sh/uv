@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, PreviewMode, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, DryRun, Preview, Reinstall, Upgrade};
 use uv_distribution_types::{
     NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
@@ -62,7 +62,7 @@ pub(crate) async fn install(
     concurrency: Concurrency,
     cache: Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?

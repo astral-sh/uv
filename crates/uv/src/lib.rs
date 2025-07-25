@@ -28,7 +28,7 @@ use uv_cli::{
     ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
     ToolNamespace, TopLevelArgs, compat::CompatArgs,
 };
-use uv_configuration::min_stack_size;
+use uv_configuration::{PreviewFeatures, min_stack_size};
 use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
@@ -443,9 +443,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, filesystem);
             show_settings!(args);
-            if !args.settings.extra_build_dependencies.is_empty() && globals.preview.is_disabled() {
+            if !args.settings.extra_build_dependencies.is_empty()
+                && !globals
+                    .preview
+                    .is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+            {
                 warn_user_once!(
-                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
                 );
             }
 
@@ -549,9 +554,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, filesystem);
             show_settings!(args);
-            if !args.settings.extra_build_dependencies.is_empty() && globals.preview.is_disabled() {
+            if !args.settings.extra_build_dependencies.is_empty()
+                && !globals
+                    .preview
+                    .is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+            {
                 warn_user_once!(
-                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
                 );
             }
 
@@ -633,9 +643,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let mut args = PipInstallSettings::resolve(args, filesystem);
             show_settings!(args);
-            if !args.settings.extra_build_dependencies.is_empty() && globals.preview.is_disabled() {
+            if !args.settings.extra_build_dependencies.is_empty()
+                && !globals
+                    .preview
+                    .is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+            {
                 warn_user_once!(
-                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
                 );
             }
 

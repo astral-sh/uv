@@ -12,7 +12,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
-use uv_configuration::PreviewMode;
+use uv_configuration::Preview;
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_pypi_types::Scheme;
 use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
@@ -59,7 +59,7 @@ pub(crate) fn create(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.

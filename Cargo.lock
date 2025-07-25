@@ -759,7 +759,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1035,23 +1035,23 @@ dependencies = [
 
 [[package]]
 name = "dirs"
-version = "5.0.1"
+version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
+checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
 dependencies = [
  "dirs-sys",
 ]
 
 [[package]]
 name = "dirs-sys"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520f05a5cbd335fae5a99ff7a6ab8627577660ee5cfd6a94a6a929b52ff0321c"
+checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
 dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.48.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1591,11 +1591,11 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "home"
-version = "0.5.9"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3d1354bf6b7235cb4a0576c2619fd4ed18183f689b12b006a0ee7329eeff9a5"
+checksum = "589533453244b0995c858700322199b2becb13b627df2851f64a2775d024abcf"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2994,13 +2994,13 @@ dependencies = [
 
 [[package]]
 name = "redox_users"
-version = "0.4.6"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43"
+checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
 dependencies = [
  "getrandom 0.2.15",
  "libredox",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -3654,9 +3654,9 @@ checksum = "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
 
 [[package]]
 name = "shellexpand"
-version = "3.1.0"
+version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da03fa3b94cc19e3ebfc88c4229c49d8f08cdbd1228870a45f0ffdf84988e14b"
+checksum = "8b1fdf65dd6331831494dd616b30351c38e96e45921a27745cf98490458b90bb"
 dependencies = [
  "bstr",
  "dirs",
@@ -4645,7 +4645,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4656,7 +4656,7 @@ dependencies = [
  "base64 0.22.1",
  "byteorder",
  "clap",
- "console 0.15.11",
+ "console 0.16.0",
  "ctrlc",
  "dotenvy",
  "dunce",
@@ -4811,7 +4811,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "anyhow",
  "uv-build-backend",
@@ -5037,6 +5037,7 @@ name = "uv-configuration"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bitflags 2.9.1",
  "clap",
  "either",
  "fs-err 3.1.1",
@@ -5061,13 +5062,14 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-static",
+ "uv-warnings",
 ]
 
 [[package]]
 name = "uv-console"
 version = "0.0.1"
 dependencies = [
- "console 0.15.11",
+ "console 0.16.0",
 ]
 
 [[package]]
@@ -5705,7 +5707,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "configparser",
- "console 0.15.11",
+ "console 0.16.0",
  "fs-err 3.1.1",
  "futures",
  "rustc-hash",
@@ -6006,13 +6008,13 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.8.2"
+version = "0.8.3"
 
 [[package]]
 name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
- "console 0.15.11",
+ "console 0.16.0",
  "fs-err 3.1.1",
  "itertools 0.14.0",
  "owo-colors",
@@ -6340,7 +6342,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

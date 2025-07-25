@@ -18,7 +18,7 @@ use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
     BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PackageConfigSettings,
-    PreviewMode, Reinstall, SourceStrategy,
+    Preview, Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -101,7 +101,7 @@ pub struct BuildDispatch<'a> {
     sources: SourceStrategy,
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
-    preview: PreviewMode,
+    preview: Preview,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -126,7 +126,7 @@ impl<'a> BuildDispatch<'a> {
         sources: SourceStrategy,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Self {
         Self {
             client,

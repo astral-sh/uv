@@ -12,7 +12,7 @@ use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
-use uv_configuration::{Concurrency, Constraints, PreviewMode};
+use uv_configuration::{Concurrency, Constraints, Preview};
 use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
@@ -119,7 +119,7 @@ impl CachedEnvironment {
         concurrency: Concurrency,
         cache: &Cache,
         printer: Printer,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Result<Self, ProjectError> {
         let interpreter = Self::base_interpreter(interpreter, cache)?;
 

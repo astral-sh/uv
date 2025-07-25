@@ -71,7 +71,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -257,7 +261,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -444,7 +452,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -663,7 +675,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -851,7 +867,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -1015,7 +1035,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -1228,7 +1252,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -1449,7 +1477,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -1728,7 +1760,11 @@ fn resolve_find_links() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -1938,7 +1974,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -2107,7 +2147,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -2326,7 +2370,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -2568,7 +2616,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -2727,7 +2779,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -2886,7 +2942,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -3047,7 +3107,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -3227,7 +3291,11 @@ fn resolve_tool() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -3398,7 +3466,11 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -3591,7 +3663,11 @@ fn resolve_both() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -3822,7 +3898,11 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -4132,7 +4212,11 @@ fn resolve_config_file() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -4418,7 +4502,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -4580,7 +4668,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -4761,7 +4853,11 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -4934,7 +5030,11 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -5155,7 +5255,11 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -5382,7 +5486,11 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -5604,7 +5712,11 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -5833,7 +5945,11 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -6055,7 +6171,11 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -6290,7 +6410,11 @@ fn verify_hashes() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -6442,7 +6566,11 @@ fn verify_hashes() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -6592,7 +6720,11 @@ fn verify_hashes() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -6744,7 +6876,11 @@ fn verify_hashes() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -6894,7 +7030,11 @@ fn verify_hashes() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -7045,7 +7185,11 @@ fn verify_hashes() -> anyhow::Result<()> {
             installs: 8,
         },
         show_settings: true,
-        preview: Disabled,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
@@ -7174,4 +7318,640 @@ fn verify_hashes() -> anyhow::Result<()> {
     );
 
     Ok(())
+}
+
+/// Test preview feature flagging.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn preview_features() {
+    let context = TestContext::new("3.12");
+
+    let cmd = || {
+        let mut cmd = context.version();
+        cmd.arg("--show-settings");
+        add_shared_args(cmd, context.temp_dir.path())
+    };
+
+    uv_snapshot!(context.filters(), cmd().arg("--preview"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | EXTRA_BUILD_DEPENDENCIES,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        locked: false,
+        frozen: false,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: None,
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                no_build_isolation: false,
+                no_build_isolation_package: [],
+                extra_build_dependencies: {},
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: Enabled,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    uv_snapshot!(context.filters(), cmd().arg("--preview").arg("--no-preview"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        locked: false,
+        frozen: false,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: None,
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                no_build_isolation: false,
+                no_build_isolation_package: [],
+                extra_build_dependencies: {},
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: Enabled,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    uv_snapshot!(context.filters(), cmd().arg("--preview").arg("--preview-features").arg("python-install-default"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | EXTRA_BUILD_DEPENDENCIES,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        locked: false,
+        frozen: false,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: None,
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                no_build_isolation: false,
+                no_build_isolation_package: [],
+                extra_build_dependencies: {},
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: Enabled,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    uv_snapshot!(context.filters(), cmd().arg("--preview-features").arg("python-install-default,python-upgrade"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        locked: false,
+        frozen: false,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: None,
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                no_build_isolation: false,
+                no_build_isolation_package: [],
+                extra_build_dependencies: {},
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: Enabled,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    uv_snapshot!(context.filters(), cmd().arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        locked: false,
+        frozen: false,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: None,
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                no_build_isolation: false,
+                no_build_isolation_package: [],
+                extra_build_dependencies: {},
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: Enabled,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    uv_snapshot!(context.filters(), cmd()
+        .arg("--preview-features").arg("python-install-default").arg("--preview-feature").arg("python-upgrade")
+        .arg("--no-preview"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        locked: false,
+        frozen: false,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: None,
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                no_build_isolation: false,
+                no_build_isolation_package: [],
+                extra_build_dependencies: {},
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: Enabled,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
 }
