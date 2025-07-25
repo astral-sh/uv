@@ -48,6 +48,11 @@ impl VersionSpecifiers {
         Self(Box::new([]))
     }
 
+    /// The number of specifiers.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     /// Whether all specifiers match the given version.
     pub fn contains(&self, version: &Version) -> bool {
         self.iter().all(|specifier| specifier.contains(version))

@@ -184,6 +184,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -373,6 +374,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -563,6 +565,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -785,6 +788,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -942,6 +946,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1143,6 +1148,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1392,6 +1398,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1651,6 +1658,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1865,6 +1873,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2044,6 +2053,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2283,6 +2293,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2505,6 +2516,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2683,6 +2695,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2845,6 +2858,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3007,6 +3021,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3171,6 +3186,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3327,6 +3343,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             config_settings_package: None,
             no_build_isolation: None,
             no_build_isolation_package: None,
+            extra_build_dependencies: None,
             exclude_newer: None,
             link_mode: Some(
                 Clone,
@@ -3369,6 +3386,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
+                extra_build_dependencies: {},
                 prerelease: IfNecessaryOrExplicit,
                 resolution: LowestDirect,
                 sources: Enabled,
@@ -3527,6 +3545,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3757,6 +3776,7 @@ fn resolve_both() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3991,6 +4011,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4304,6 +4325,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4384,7 +4406,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4559,6 +4581,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4724,6 +4747,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4908,6 +4932,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5153,6 +5178,7 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5377,6 +5403,7 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5607,6 +5634,7 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5832,6 +5860,7 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6064,6 +6093,7 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6289,6 +6319,7 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6458,6 +6489,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6613,6 +6645,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6766,6 +6799,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6921,6 +6955,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7074,6 +7109,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7228,6 +7264,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
+            extra_build_dependencies: {},
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7320,7 +7357,7 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS,
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | EXTRA_BUILD_DEPENDENCIES,
             ),
         },
         python_preference: Managed,
@@ -7386,6 +7423,7 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
+                extra_build_dependencies: {},
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7488,6 +7526,7 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
+                extra_build_dependencies: {},
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7524,7 +7563,7 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS,
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | EXTRA_BUILD_DEPENDENCIES,
             ),
         },
         python_preference: Managed,
@@ -7590,6 +7629,7 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
+                extra_build_dependencies: {},
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7692,6 +7732,7 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
+                extra_build_dependencies: {},
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7794,6 +7835,7 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
+                extra_build_dependencies: {},
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7898,6 +7940,7 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
+                extra_build_dependencies: {},
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,

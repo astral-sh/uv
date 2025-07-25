@@ -23,7 +23,7 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
-use uv_workspace::WorkspaceCache;
+use uv_workspace::{WorkspaceCache, pyproject::ExtraBuildDependencies};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
@@ -439,6 +439,7 @@ pub(crate) async fn install(
             spec,
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
+            uv_distribution::ExtraBuildRequires::from_lowered(ExtraBuildDependencies::default()),
             &settings,
             &network_settings,
             &state,

@@ -386,6 +386,7 @@ pub(crate) async fn remove(
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum RemoveTarget {
     /// A PEP 723 script, with inline metadata.
     Project(VirtualProject),
