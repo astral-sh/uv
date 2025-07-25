@@ -262,6 +262,9 @@ pub enum ErrorKind {
 
     #[error("Invalid cache control header: `{0}`")]
     InvalidCacheControl(String),
+
+    #[error("Invalid variants.json format: {0}")]
+    VariantsJsonFormat(DisplaySafeUrl, #[source] serde_json::Error),
 }
 
 impl ErrorKind {

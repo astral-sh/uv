@@ -67,8 +67,8 @@ uv-tool = { path = "crates/uv-tool" }
 uv-torch = { path = "crates/uv-torch" }
 uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-types = { path = "crates/uv-types" }
-uv-variants = { path = "crates/uv-variants" }
 uv-variant-frontend = { path = "crates/uv-variant-frontend" }
+uv-variants = { path = "crates/uv-variants" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
