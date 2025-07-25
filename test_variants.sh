@@ -3,7 +3,7 @@
 set -e
 
 cargo build
-uv=target/uv/debug
+uv="$(pwd)/target/debug/uv"
 unset VIRTUAL_ENV
 export RUST_LOG=uv_distribution_types=debug,uv_distribution::distribution_database=debug
 
