@@ -29,6 +29,8 @@ pub enum Error {
     ProviderBackend(#[from] ProviderBackendError),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Error)]

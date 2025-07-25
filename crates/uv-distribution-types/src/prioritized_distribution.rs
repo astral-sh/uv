@@ -595,17 +595,16 @@ impl PrioritizedDist {
         if let Some((wheel_index, _)) = highest_priority_variant_wheel {
             use owo_colors::OwoColorize;
 
-            let compatible_wheel = &self.wheels().nth(wheel_index).unwrap();
+            let inner = PrioritizedDistInner {
+                best_wheel_index: Some(wheel_index),
+                ..(*self.0).clone()
+            };
+            let compatible_wheel = &inner.wheels[wheel_index];
             debug!(
                 "{} {}",
                 "Using variant wheel".red(),
                 compatible_wheel.0.filename
             );
-
-            let inner = PrioritizedDistInner {
-                best_wheel_index: Some(wheel_index),
-                ..(*self.0).clone()
-            };
             Some(Self(Box::new(inner)))
         } else {
             None
