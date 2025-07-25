@@ -550,6 +550,92 @@ class PyPyFinder(Finder):
             download.sha256 = checksums.get(download.filename)
 
 
+class PyodideFinder(Finder):
+    implementation = ImplementationName.CPYTHON
+
+    RELEASE_URL = "https://api.github.com/repos/pyodide/pyodide/releases"
+    METADATA_URL = (
+        "https://pyodide.github.io/pyodide/api/pyodide-cross-build-environments.json"
+    )
+
+    TRIPLE = PlatformTriple(
+        platform="emscripten",
+        arch=Arch("wasm32"),
+        libc="musl",
+    )
+
+    def __init__(self, client: httpx.AsyncClient):
+        self.client = client
+
+    async def find(self) -> list[PythonDownload]:
+        downloads = await self._fetch_downloads()
+        await self._fetch_checksums(downloads, n=10)
+        return downloads
+
+    async def _fetch_downloads(self) -> list[PythonDownload]:
+        # This will only download the first page, i.e., ~30 releases
+        [release_resp, meta_resp] = await asyncio.gather(
+            self.client.get(self.RELEASE_URL), self.client.get(self.METADATA_URL)
+        )
+        release_resp.raise_for_status()
+        meta_resp.raise_for_status()
+        releases = release_resp.json()
+        metadata = meta_resp.json()["releases"]
+
+        maj_minor_seen = set()
+        results = []
+        for release in releases:
+            pyodide_version = release["tag_name"]
+            meta = metadata.get(pyodide_version, None)
+            if meta is None:
+                continue
+
+            maj_min = pyodide_version.rpartition(".")[0]
+            # Only keep latest
+            if maj_min in maj_minor_seen:
+                continue
+            maj_minor_seen.add(maj_min)
+
+            python_version = Version.from_str(meta["python_version"])
+            # Find xbuildenv asset
+            for asset in release["assets"]:
+                if asset["name"].startswith("xbuildenv"):
+                    break
+
+            url = asset["browser_download_url"]
+            results.append(
+                PythonDownload(
+                    release=0,
+                    version=python_version,
+                    triple=self.TRIPLE,
+                    flavor=pyodide_version,
+                    implementation=self.implementation,
+                    filename=asset["name"],
+                    url=url,
+                )
+            )
+
+        return results
+
+    async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
+        for idx, batch in enumerate(batched(downloads, n)):
+            logging.info("Fetching Pyodide checksums: %d/%d", idx * n, len(downloads))
+            checksum_requests = []
+            for download in batch:
+                url = download.url + ".sha256"
+                checksum_requests.append(self.client.get(url))
+            for download, resp in zip(
+                batch, await asyncio.gather(*checksum_requests), strict=False
+            ):
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        continue
+                    raise
+                download.sha256 = resp.text.strip()
+
+
 class GraalPyFinder(Finder):
     implementation = ImplementationName.GRAALPY
 
@@ -751,6 +837,7 @@ async def find() -> None:
         CPythonFinder(client),
         PyPyFinder(client),
         GraalPyFinder(client),
+        PyodideFinder(client),
     ]
     downloads = []
 
