@@ -58,7 +58,7 @@ mod revision;
 
 /// Fetch and build a source distribution from a remote source, or from a local cache.
 pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
-    pub build_context: &'a T,
+    build_context: &'a T,
     build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
 }

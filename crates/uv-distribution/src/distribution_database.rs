@@ -10,7 +10,6 @@ use anyhow::anyhow;
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use reqwest::Response;
 use rustc_hash::FxHashMap;
 use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
@@ -561,76 +560,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         variants_json: &RegistryVariantsJson,
     ) -> Result<VariantsJsonContent, Error> {
-        let url = variants_json.file.url.to_url()?;
-
-        // If the URL is a file URL, load the variants directly from the file system.
-        let variants_json = if url.scheme() == "file" {
-            let path = url
-                .to_file_path()
-                .map_err(|()| Error::NonFileUrl(url.clone()))?;
-            let bytes = fs_err::tokio::read(&path).await.expect("TODO(konsti)");
-            info_span!("parse_variants_json")
-                .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
-                .expect("TODO(konsti)")
-        } else {
-            let req = self
-                .client
-                .unmanaged
-                .uncached_client(&url)
-                .get(Url::from(url.clone()))
-                .build()?;
-
-            let cache_entry = self.build_context.cache().entry(
-                // TODO(konsti): Get our own bucket?
-                CacheBucket::Wheels,
-                WheelCache::Index(&variants_json.index)
-                    .wheel_dir(variants_json.filename.name.as_ref()),
-                format!("variants-{}.msgpack", variants_json.filename.cache_key()),
-            );
-
-            let cache_control = match self.client.unmanaged.connectivity() {
-                Connectivity::Online => {
-                    if let Some(header) = self
-                        .build_context
-                        .locations()
-                        .artifact_cache_control_for(&variants_json.index)
-                    {
-                        CacheControl::Override(header)
-                    } else {
-                        CacheControl::from(
-                            self.build_context
-                                .cache()
-                                .freshness(&cache_entry, Some(&variants_json.filename.name), None)
-                                .map_err(Error::CacheRead)?,
-                        )
-                    }
-                }
-                Connectivity::Offline => CacheControl::AllowStale,
-            };
-
-            let response_callback = async |response: Response| {
-                let bytes = response.bytes().await.expect("TODO(konsti)");
-
-                info_span!("parse_variants_json")
-                    .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
-            };
-
-            self.client
-                .managed(|client| {
-                    client.cached_client().get_serde_with_retry(
-                        req,
-                        &cache_entry,
-                        cache_control,
-                        response_callback,
-                    )
-                })
-                .await
-                .map_err(|err| match err {
-                    CachedClientError::Callback { err, .. } => panic!("TODO(konsti): {err:?}"),
-                    CachedClientError::Client { err, .. } => Error::Client(err),
-                })?
-        };
-        Ok(variants_json)
+        Ok(self
+            .client
+            .managed(|client| client.fetch_variants_json(variants_json))
+            .await?)
     }
 
     async fn query_variant_providers(

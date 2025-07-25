@@ -15,26 +15,6 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
-use uv_auth::Indexes;
-use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
-use uv_configuration::KeyringProviderType;
-use uv_configuration::{IndexStrategy, TrustedHost};
-use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexEntryFilename, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
-    VariantsJson,
-};
-use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
-use uv_normalize::PackageName;
-use uv_pep440::Version;
-use uv_pep508::MarkerEnvironment;
-use uv_platform_tags::Platform;
-use uv_pypi_types::{ResolutionMetadata, SimpleJson};
-use uv_redacted::DisplaySafeUrl;
-use uv_small_str::SmallString;
-use uv_torch::TorchStrategy;
-
 use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
@@ -45,6 +25,26 @@ use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries,
     RedirectClientWithMiddleware,
 };
+use uv_auth::Indexes;
+use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_configuration::KeyringProviderType;
+use uv_configuration::{IndexStrategy, TrustedHost};
+use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
+use uv_distribution_types::{
+    BuiltDist, File, IndexCapabilities, IndexEntryFilename, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    RegistryVariantsJson, VariantsJson,
+};
+use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::MarkerEnvironment;
+use uv_platform_tags::Platform;
+use uv_pypi_types::{ResolutionMetadata, SimpleJson};
+use uv_redacted::DisplaySafeUrl;
+use uv_small_str::SmallString;
+use uv_torch::TorchStrategy;
+use uv_variants::variants_json::VariantsJsonContent;
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -676,6 +676,86 @@ impl RegistryClient {
         };
         let metadata = SimpleMetadata::from_html(&text, package_name, url)?;
         OwnedArchive::from_unarchived(&metadata)
+    }
+
+    /// Fetch the variants.json contents from a remote index (cached) a local index.
+    pub async fn fetch_variants_json(
+        &self,
+        variants_json: &RegistryVariantsJson,
+    ) -> Result<VariantsJsonContent, Error> {
+        let url = variants_json
+            .file
+            .url
+            .to_url()
+            .map_err(ErrorKind::InvalidUrl)?;
+
+        // If the URL is a file URL, load the variants directly from the file system.
+        let variants_json = if url.scheme() == "file" {
+            let path = url
+                .to_file_path()
+                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+            let bytes = match fs_err::tokio::read(&path).await {
+                Ok(text) => text,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(Error::from(ErrorKind::FileNotFound(
+                        variants_json.filename.to_string(),
+                    )));
+                }
+                Err(err) => {
+                    return Err(Error::from(ErrorKind::Io(err)));
+                }
+            };
+            info_span!("parse_variants_json")
+                .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+                .map_err(|err| ErrorKind::VariantsJsonFormat(url, err))?
+        } else {
+            let cache_entry = self.cache.entry(
+                // TODO(konsti): Get our own bucket?
+                CacheBucket::Wheels,
+                WheelCache::Index(&variants_json.index)
+                    .wheel_dir(variants_json.filename.name.as_ref()),
+                format!("variants-{}.msgpack", variants_json.filename.cache_key()),
+            );
+
+            let cache_control = match self.connectivity {
+                Connectivity::Online => {
+                    if let Some(header) = self
+                        .index_urls
+                        .artifact_cache_control_for(&variants_json.index)
+                    {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&variants_json.filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                }
+                Connectivity::Offline => CacheControl::AllowStale,
+            };
+
+            let response_callback = async |response: Response| {
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+
+                info_span!("parse_variants_json")
+                    .in_scope(|| serde_json::from_slice::<VariantsJsonContent>(&bytes))
+                    .map_err(|err| Error::from(ErrorKind::VariantsJsonFormat(url.clone(), err)))
+            };
+
+            let req = self
+                .uncached_client(&url)
+                .get(Url::from(url.clone()))
+                .build()
+                .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+            self.cached_client()
+                .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
+                .await?
+        };
+        Ok(variants_json)
     }
 
     /// Fetch the metadata for a remote wheel file.
