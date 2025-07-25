@@ -71,7 +71,7 @@ pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
-    VersionsResponse, WheelMetadataResult,
+    VariantProviderResult, VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::resolver::system::SystemDependency;
