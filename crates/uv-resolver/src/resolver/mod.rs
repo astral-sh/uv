@@ -1271,7 +1271,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let dist = match candidate.dist() {
             CandidateDist::Compatible(dist) => dist,
-            CandidateDist::Incompatible(incompatibility) => {
+            CandidateDist::Incompatible {
+                incompatible_dist: incompatibility,
+                prioritized_dist: _,
+            } => {
                 // If the version is incompatible because no distributions are compatible, exit early.
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
