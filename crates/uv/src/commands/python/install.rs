@@ -173,14 +173,14 @@ pub(crate) async fn install(
     if default && !preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT) {
         warn_user!(
             "The `--default` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-            PreviewFeatures::PYTHON_INSTALL_DEFAULT.as_str()
+            PreviewFeatures::PYTHON_INSTALL_DEFAULT
         );
     }
 
     if upgrade && !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) {
         warn_user!(
             "`uv python upgrade` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-            PreviewFeatures::PYTHON_UPGRADE.as_str()
+            PreviewFeatures::PYTHON_UPGRADE
         );
     }
 

@@ -84,7 +84,7 @@ pub(crate) async fn sync(
     {
         warn_user!(
             "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::JSON_OUTPUT.as_str()
+            PreviewFeatures::JSON_OUTPUT
         );
     }
 

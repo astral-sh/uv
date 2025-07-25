@@ -286,7 +286,7 @@ pub struct GlobalArgs {
     ///
     /// Preview features may change without warning.
     ///
-    /// Use comma-separated values or pass multiple times to to enable multiple features.
+    /// Use comma-separated values or pass multiple times to enable multiple features.
     ///
     /// The following features are available: `python-install-default`, `python-upgrade`,
     /// `json-output`, `pylock`, `add-bounds`.
