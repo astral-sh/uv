@@ -1902,7 +1902,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
         [tool.uv.sources]
         anyio = {{ path = "{}" }}
-    "#, anyio_local.display()
+    "#, anyio_local.portable_display()
     })?;
     let build_backend = child.child("build_backend.py");
     build_backend.write_str(&formatdoc! {r#"
@@ -4745,7 +4745,7 @@ fn sync_extra_build_dependencies_script_sources() -> Result<()> {
         # [tool.uv.extra-build-dependencies]
         # child = ["anyio"]
         # ///
-    "#, anyio_local.display()
+    "#, anyio_local.portable_display()
     })?;
 
     let filters = context
