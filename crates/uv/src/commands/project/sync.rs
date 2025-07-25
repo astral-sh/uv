@@ -14,7 +14,7 @@ use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
-    PreviewMode, TargetTriple,
+    Preview, PreviewFeatures, TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
@@ -77,12 +77,14 @@ pub(crate) async fn sync(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
     output_format: SyncFormat,
 ) -> Result<ExitStatus> {
-    if preview.is_enabled() && matches!(output_format, SyncFormat::Json) {
+    if preview.is_enabled(PreviewFeatures::JSON_OUTPUT) && matches!(output_format, SyncFormat::Json)
+    {
         warn_user!(
-            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview` to disable this warning."
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::JSON_OUTPUT
         );
     }
 
@@ -564,7 +566,7 @@ pub(super) async fn do_sync(
     workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<(), ProjectError> {
     // Extract the project settings.
     let InstallerSettingsRef {

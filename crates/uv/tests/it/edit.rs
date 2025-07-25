@@ -13021,7 +13021,7 @@ fn add_bounds() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The bounds option is in preview and may change in any future release.
+    warning: The `bounds` option is in preview and may change in any future release. Pass `--preview-features add-bounds` to disable this warning.
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13061,7 +13061,7 @@ fn add_bounds() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The bounds option is in preview and may change in any future release.
+    warning: The `bounds` option is in preview and may change in any future release. Pass `--preview-features add-bounds` to disable this warning.
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]

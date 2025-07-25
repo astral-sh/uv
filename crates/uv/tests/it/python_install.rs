@@ -630,14 +630,14 @@ fn python_install_preview() {
     "###);
 
     // Should be a no-op when already installed
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Python is already installed. Use `uv python install <request>` to install another version.
-    "###);
+    ");
 
     // You can opt-in to a reinstall
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("--reinstall"), @r"
@@ -1260,7 +1260,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
     Installed Python 3.13.5 in [TIME]
      + cpython-3.13.5-[PLATFORM] (python, python3)
     ");
@@ -1294,7 +1294,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
     Installed Python 3.13.5 in [TIME]
      + cpython-3.13.5-[PLATFORM] (python, python3, python3.13)
     ");
@@ -1379,7 +1379,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
     error: The `--default` flag cannot be used with multiple targets
     ");
 
@@ -1390,7 +1390,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `--default` option is experimental and may change without warning. Pass `--preview` to disable this warning
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
     Installed Python 3.12.11 in [TIME]
      + cpython-3.12.11-[PLATFORM] (python, python3, python3.12)
     ");

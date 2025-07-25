@@ -5037,6 +5037,7 @@ name = "uv-configuration"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bitflags 2.9.1",
  "clap",
  "either",
  "fs-err 3.1.1",
@@ -5061,6 +5062,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-static",
+ "uv-warnings",
 ]
 
 [[package]]
