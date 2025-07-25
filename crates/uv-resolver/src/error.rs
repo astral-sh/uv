@@ -48,7 +48,7 @@ pub enum ResolveError {
     ),
 
     #[error(transparent)]
-    VariantFrontend(anyhow::Error),
+    VariantFrontend(uv_distribution::Error),
 
     #[error(transparent)]
     Client(#[from] uv_client::Error),

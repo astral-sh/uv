@@ -20,6 +20,7 @@ use crate::yanks::AllowedYanks;
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
+pub type VariantProviderResult = Result<ResolvedVariants, uv_distribution::Error>;
 
 /// The response when requesting versions for a package
 #[derive(Debug)]
@@ -104,7 +105,7 @@ pub trait ResolverProvider {
     fn fetch_and_query_variants<'io>(
         &'io self,
         variants_json: &'io RegistryVariantsJson,
-    ) -> impl Future<Output = anyhow::Result<ResolvedVariants>> + 'io;
+    ) -> impl Future<Output = VariantProviderResult> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
@@ -312,8 +313,8 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn fetch_and_query_variants<'io>(
         &'io self,
         variants_json: &'io RegistryVariantsJson,
-    ) -> anyhow::Result<ResolvedVariants> {
-        Ok(self.fetcher.fetch_and_query_variants(variants_json).await?)
+    ) -> VariantProviderResult {
+        self.fetcher.fetch_and_query_variants(variants_json).await
     }
 
     /// Set the [`Reporter`] to use for this installer.
