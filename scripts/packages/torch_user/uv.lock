@@ -1,0 +1,670 @@
+version = 1
+revision = 2
+requires-python = "==3.13.*"
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+    "platform_machine != 'x86_64' or sys_platform != 'linux' or ('nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties)",
+]
+
+[[package]]
+name = "filelock"
+version = "3.18.0"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/10/c23352565a6544bdc5353e0b15fc1c563352101f30e24bf500207a54df9a/filelock-3.18.0.tar.gz", hash = "sha256:adbc88eabb99d2fec8c9c1b229b171f18afa655400173ddc653d5d01501fb9f2" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4d/36/2a115987e2d8c300a974597416d9de88f2444426de9571f4b59b2cca3acc/filelock-3.18.0-py3-none-any.whl", hash = "sha256:c401f4f8377c4464e6db25fff06205fd89bdd83b65eb0488ed1b160f780e21de" },
+]
+
+[[package]]
+name = "fsspec"
+version = "2025.5.1"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/f7/27f15d41f0ed38e8fcc488584b57e902b331da7f7c6dcda53721b15838fc/fsspec-2025.5.1.tar.gz", hash = "sha256:2e55e47a540b91843b755e83ded97c6e897fa0942b11490113f09e9c443c2475" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bb/61/78c7b3851add1481b048b5fdc29067397a1784e2910592bc81bb3f608635/fsspec-2025.5.1-py3-none-any.whl", hash = "sha256:24d3a2e663d5fc735ab256263c4075f374a174c3410c0b25e5bd1970bceaa462" },
+]
+
+[[package]]
+name = "jinja2"
+version = "3.1.6"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+dependencies = [
+    { name = "markupsafe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67" },
+]
+
+[[package]]
+name = "markupsafe"
+version = "3.0.2"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/97/5d42485e71dfc078108a86d6de8fa46db44a1a9295e89c5d6d4a06e23a62/markupsafe-3.0.2.tar.gz", hash = "sha256:ee55d3edf80167e48ea11a923c7386f4669df67d7994554387f84e7d8b0a2bf0" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/0e/67eb10a7ecc77a0c2bbe2b0235765b98d164d81600746914bebada795e97/MarkupSafe-3.0.2-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:ba9527cdd4c926ed0760bc301f6728ef34d841f405abf9d4f959c478421e4efd" },
+    { url = "https://files.pythonhosted.org/packages/2b/6d/9409f3684d3335375d04e5f05744dfe7e9f120062c9857df4ab490a1031a/MarkupSafe-3.0.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:f8b3d067f2e40fe93e1ccdd6b2e1d16c43140e76f02fb1319a05cf2b79d99430" },
+    { url = "https://files.pythonhosted.org/packages/d2/f5/6eadfcd3885ea85fe2a7c128315cc1bb7241e1987443d78c8fe712d03091/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:569511d3b58c8791ab4c2e1285575265991e6d8f8700c7be0e88f86cb0672094" },
+    { url = "https://files.pythonhosted.org/packages/0c/91/96cf928db8236f1bfab6ce15ad070dfdd02ed88261c2afafd4b43575e9e9/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15ab75ef81add55874e7ab7055e9c397312385bd9ced94920f2802310c930396" },
+    { url = "https://files.pythonhosted.org/packages/c2/cf/c9d56af24d56ea04daae7ac0940232d31d5a8354f2b457c6d856b2057d69/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:f3818cb119498c0678015754eba762e0d61e5b52d34c8b13d770f0719f7b1d79" },
+    { url = "https://files.pythonhosted.org/packages/2a/9f/8619835cd6a711d6272d62abb78c033bda638fdc54c4e7f4272cf1c0962b/MarkupSafe-3.0.2-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:cdb82a876c47801bb54a690c5ae105a46b392ac6099881cdfb9f6e95e4014c6a" },
+    { url = "https://files.pythonhosted.org/packages/f9/bf/176950a1792b2cd2102b8ffeb5133e1ed984547b75db47c25a67d3359f77/MarkupSafe-3.0.2-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:cabc348d87e913db6ab4aa100f01b08f481097838bdddf7c7a84b7575b7309ca" },
+    { url = "https://files.pythonhosted.org/packages/ce/4f/9a02c1d335caabe5c4efb90e1b6e8ee944aa245c1aaaab8e8a618987d816/MarkupSafe-3.0.2-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:444dcda765c8a838eaae23112db52f1efaf750daddb2d9ca300bcae1039adc5c" },
+    { url = "https://files.pythonhosted.org/packages/ee/55/c271b57db36f748f0e04a759ace9f8f759ccf22b4960c270c78a394f58be/MarkupSafe-3.0.2-cp313-cp313-win32.whl", hash = "sha256:bcf3e58998965654fdaff38e58584d8937aa3096ab5354d493c77d1fdd66d7a1" },
+    { url = "https://files.pythonhosted.org/packages/29/88/07df22d2dd4df40aba9f3e402e6dc1b8ee86297dddbad4872bd5e7b0094f/MarkupSafe-3.0.2-cp313-cp313-win_amd64.whl", hash = "sha256:e6a2a455bd412959b57a172ce6328d2dd1f01cb2135efda2e4576e8a23fa3b0f" },
+    { url = "https://files.pythonhosted.org/packages/62/6a/8b89d24db2d32d433dffcd6a8779159da109842434f1dd2f6e71f32f738c/MarkupSafe-3.0.2-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:b5a6b3ada725cea8a5e634536b1b01c30bcdcd7f9c6fff4151548d5bf6b3a36c" },
+    { url = "https://files.pythonhosted.org/packages/7a/06/a10f955f70a2e5a9bf78d11a161029d278eeacbd35ef806c3fd17b13060d/MarkupSafe-3.0.2-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:a904af0a6162c73e3edcb969eeeb53a63ceeb5d8cf642fade7d39e7963a22ddb" },
+    { url = "https://files.pythonhosted.org/packages/34/cf/65d4a571869a1a9078198ca28f39fba5fbb910f952f9dbc5220afff9f5e6/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4aa4e5faecf353ed117801a068ebab7b7e09ffb6e1d5e412dc852e0da018126c" },
+    { url = "https://files.pythonhosted.org/packages/0c/e3/90e9651924c430b885468b56b3d597cabf6d72be4b24a0acd1fa0e12af67/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c0ef13eaeee5b615fb07c9a7dadb38eac06a0608b41570d8ade51c56539e509d" },
+    { url = "https://files.pythonhosted.org/packages/66/8c/6c7cf61f95d63bb866db39085150df1f2a5bd3335298f14a66b48e92659c/MarkupSafe-3.0.2-cp313-cp313t-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:d16a81a06776313e817c951135cf7340a3e91e8c1ff2fac444cfd75fffa04afe" },
+    { url = "https://files.pythonhosted.org/packages/bb/35/cbe9238ec3f47ac9a7c8b3df7a808e7cb50fe149dc7039f5f454b3fba218/MarkupSafe-3.0.2-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:6381026f158fdb7c72a168278597a5e3a5222e83ea18f543112b2662a9b699c5" },
+    { url = "https://files.pythonhosted.org/packages/e6/32/7621a4382488aa283cc05e8984a9c219abad3bca087be9ec77e89939ded9/MarkupSafe-3.0.2-cp313-cp313t-musllinux_1_2_i686.whl", hash = "sha256:3d79d162e7be8f996986c064d1c7c817f6df3a77fe3d6859f6f9e7be4b8c213a" },
+    { url = "https://files.pythonhosted.org/packages/0d/80/0985960e4b89922cb5a0bac0ed39c5b96cbc1a536a99f30e8c220a996ed9/MarkupSafe-3.0.2-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:131a3c7689c85f5ad20f9f6fb1b866f402c445b220c19fe4308c0b147ccd2ad9" },
+    { url = "https://files.pythonhosted.org/packages/82/78/fedb03c7d5380df2427038ec8d973587e90561b2d90cd472ce9254cf348b/MarkupSafe-3.0.2-cp313-cp313t-win32.whl", hash = "sha256:ba8062ed2cf21c07a9e295d5b8a2a5ce678b913b45fdf68c32d95d6c1291e0b6" },
+    { url = "https://files.pythonhosted.org/packages/4f/65/6079a46068dfceaeabb5dcad6d674f5f5c61a6fa5673746f42a9f4c233b3/MarkupSafe-3.0.2-cp313-cp313t-win_amd64.whl", hash = "sha256:e444a31f8db13eb18ada366ab3cf45fd4b31e4db1236a4448f68778c1d1a5a2f" },
+]
+
+[[package]]
+name = "mpmath"
+version = "1.3.0"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/47/dd32fa426cc72114383ac549964eecb20ecfd886d1e5ccf5340b55b02f57/mpmath-1.3.0.tar.gz", hash = "sha256:7a28eb2a9774d00c7bc92411c19a89209d5da7c4c9a9e227be8330a23a25b91f" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c" },
+]
+
+[[package]]
+name = "networkx"
+version = "3.5"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/4f/ccdb8ad3a38e583f214547fd2f7ff1fc160c43a75af88e6aec213404b96a/networkx-3.5.tar.gz", hash = "sha256:d4c6f9cf81f52d69230866796b82afbccdec3db7ae4fbd1b65ea750feed50037" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/8d/776adee7bbf76365fdd7f2552710282c79a4ead5d2a46408c9043a2b70ba/networkx-3.5-py3-none-any.whl", hash = "sha256:0030d386a9a06dee3565298b4a734b68589749a544acbb6c412dc9e2489ec6ec" },
+]
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.6.4.1"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.6.4.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.6.4.1-variants.json" }
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.8.4.1"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.8.4.1-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.8.4.1-variants.json" }
+
+[[package]]
+name = "nvidia-cublas"
+version = "12.9.1.4"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+    "platform_machine != 'x86_64' or sys_platform != 'linux' or ('nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties)",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.9.1.4-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cublas/nvidia_cublas-12.9.1.4-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.6.80"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.6.80-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.6.80-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.8.90"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.8.90-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-cupti"
+version = "12.9.79"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.9.79-py3-none-manylinux_2_25_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-cupti/nvidia_cuda_cupti-12.9.79-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.6.77"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.6.77-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.8.93"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.8.93-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-nvrtc"
+version = "12.9.86"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-nvrtc/nvidia_cuda_nvrtc-12.9.86-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.6.77"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.6.77-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.8.90"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.8.90-variants.json" }
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "12.9.79"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cuda-runtime/nvidia_cuda_runtime-12.9.79-variants.json" }
+
+[[package]]
+name = "nvidia-cudnn"
+version = "9.10.2.21"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+dependencies = [
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine != 'x86_64' or sys_platform != 'linux' or ('nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties) or ('nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties)" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cudnn/nvidia_cudnn-9.10.2.21-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cudnn/nvidia_cudnn-9.10.2.21-variants.json" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.3.0.4"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.0.4-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.0.4-variants.json" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.3.3.83"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.3.3.83-variants.json" }
+
+[[package]]
+name = "nvidia-cufft"
+version = "11.4.1.4"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cufft/nvidia_cufft-11.4.1.4-variants.json" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.11.1.6"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.11.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.11.1.6-variants.json" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.13.1.3"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.13.1.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.13.1.3-variants.json" }
+
+[[package]]
+name = "nvidia-cufile"
+version = "1.14.1.1"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.14.1.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cufile/nvidia_cufile-1.14.1.1-variants.json" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.7.77"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.7.77-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.7.77-variants.json" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.9.90"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.9.90-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.9.90-variants.json" }
+
+[[package]]
+name = "nvidia-curand"
+version = "10.3.10.19"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.10.19-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-curand/nvidia_curand-10.3.10.19-variants.json" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.1.2"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.4.2", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.1.2-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.1.2-variants.json" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.3.90"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.8.93", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.3.90-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.3.90-variants.json" }
+
+[[package]]
+name = "nvidia-cusolver"
+version = "11.7.5.82"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.10.65", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.5.82-py3-none-manylinux_2_27_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cusolver/nvidia_cusolver-11.7.5.82-variants.json" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.4.2"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.4.2-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.4.2-variants.json" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.8.93"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.8.93-variants.json" }
+
+[[package]]
+name = "nvidia-cusparse"
+version = "12.5.10.65"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+dependencies = [
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.10.65-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cusparse/nvidia_cusparse-12.5.10.65-variants.json" }
+
+[[package]]
+name = "nvidia-cusparselt"
+version = "0.7.1"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-cusparselt/nvidia_cusparselt-0.7.1-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-cusparselt/nvidia_cusparselt-0.7.1-variants.json" }
+
+[[package]]
+name = "nvidia-nccl"
+version = "2.27.3"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-nccl/nvidia_nccl-2.27.3-variants.json" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.6.85"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.6.85-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.6.85-variants.json" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.8.93"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.8.93-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.8.93-variants.json" }
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "12.9.86"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-nvjitlink/nvidia_nvjitlink-12.9.86-variants.json" }
+
+[[package]]
+name = "nvidia-nvshmem"
+version = "3.2.5"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvshmem/nvidia_nvshmem-3.2.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-nvshmem/nvidia_nvshmem-3.2.5-variants.json" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.6.77"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.6.77-py3-none-manylinux2014_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.6.77-variants.json" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.8.90"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.8.90-variants.json" }
+
+[[package]]
+name = "nvidia-nvtx"
+version = "12.9.79"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+resolution-markers = [
+    "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties",
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.9.79-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64-cu12.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/nvidia-nvtx/nvidia_nvtx-12.9.79-variants.json" }
+
+[[package]]
+name = "setuptools"
+version = "80.9.0"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/5d/3bf57dcd21979b887f014ea83c24ae194cfcd12b9e0fda66b957c69d1fca/setuptools-80.9.0.tar.gz", hash = "sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl", hash = "sha256:062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922" },
+]
+
+[[package]]
+name = "sympy"
+version = "1.14.0"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+dependencies = [
+    { name = "mpmath" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5" },
+]
+
+[[package]]
+name = "torch"
+version = "2.8.0"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+dependencies = [
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
+    { name = "nvidia-cublas", version = "12.6.4.1", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.8.4.1", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cublas", version = "12.9.1.4", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.6.80", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.8.90", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-cupti", version = "12.9.79", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.6.77", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.8.93", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-nvrtc", version = "12.9.86", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.6.77", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.8.90", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cuda-runtime", version = "12.9.79", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cudnn", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia' in variant_namespaces" },
+    { name = "nvidia-cufft", version = "11.3.0.4", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cufft", version = "11.3.3.83", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cufft", version = "11.4.1.4", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cufile", version = "1.11.1.6", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cufile", version = "1.13.1.3", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cufile", version = "1.14.1.1", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.7.77", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.9.90", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-curand", version = "10.3.10.19", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.1.2", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.3.90", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusolver", version = "11.7.5.82", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.4.2", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.8.93", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-cusparse", version = "12.5.10.65", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-cusparselt", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia' in variant_namespaces" },
+    { name = "nvidia-nccl", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia' in variant_namespaces" },
+    { name = "nvidia-nvjitlink", version = "12.6.85", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.8.93", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvjitlink", version = "12.9.86", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "nvidia-nvshmem", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties) or (platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties)" },
+    { name = "nvidia-nvtx", version = "12.6.77", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.8.90", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties" },
+    { name = "nvidia-nvtx", version = "12.9.79", source = { registry = "https://variants-index.wheelnext.dev/" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' in variant_properties" },
+    { name = "setuptools" },
+    { name = "sympy" },
+    { name = "triton", marker = "sys_platform == 'linux' and 'nvidia' in variant_namespaces" },
+    { name = "typing-extensions" },
+]
+wheels = [
+    { url = "https://variants-index.wheelnext.dev/torch/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-00000000.whl" },
+    { url = "https://variants-index.wheelnext.dev/torch/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu126.whl" },
+    { url = "https://variants-index.wheelnext.dev/torch/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu128.whl" },
+    { url = "https://variants-index.wheelnext.dev/torch/torch-2.8.0-cp313-cp313-manylinux_2_28_x86_64-cu129.whl" },
+]
+variants-json = { url = "https://variants-index.wheelnext.dev/torch/torch-2.8.0-variants.json" }
+
+[[package]]
+name = "torch-user"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "torch" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "torch" }]
+
+[[package]]
+name = "triton"
+version = "3.4.0"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+dependencies = [
+    { name = "setuptools" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/test/triton-3.4.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/test/triton-3.4.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/test/triton-3.4.0-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/test/triton-3.4.0-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" },
+]
+
+[[package]]
+name = "typing-extensions"
+version = "4.14.1"
+source = { registry = "https://variants-index.wheelnext.dev/" }
+sdist = { url = "https://files.pythonhosted.org/packages/98/5a/da40306b885cc8c09109dc2e1abd358d5684b1425678151cdaed4731c822/typing_extensions-4.14.1.tar.gz", hash = "sha256:38b39f4aeeab64884ce9f74c94263ef78f3c22467c8724005483154c26648d36" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b5/00/d631e67a838026495268c2f6884f3711a15a9a2a96cd244fdaea53b823fb/typing_extensions-4.14.1-py3-none-any.whl", hash = "sha256:d1e1e3b58374dc93031d6eda2420a48ea44a36c2b4766a4fdeb3710755731d76" },
+]
