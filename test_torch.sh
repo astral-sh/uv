@@ -25,8 +25,7 @@ uv venv --clear -q -p 3.13 &&  echo "torch" | cargo run -- pip compile - --index
 
 export NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION=12.8
 export NV_VARIANT_PROVIDER_FORCE_SM_ARCH=9.0
-export TRACING_DURATIONS_FILE=target/torch-traces.ndjson
-uv venv --clear -q -p 3.13 && echo "torch" | cargo run --features tracing-durations-export -- pip compile - --index https://variants-index.wheelnext.dev --no-annotate # --no-cache
+uv venv --clear -q -p 3.13 && echo "torch" | cargo run -- pip compile - --index https://variants-index.wheelnext.dev --no-annotate # --no-cache
 
 # For user testing
 # cargo run pip install torch --index https://download.pytorch.org/whl/test/variant/ --no-cache
