@@ -1,5 +1,6 @@
 pub use distribution_database::{
-    DistributionDatabase, HttpArchivePointer, LocalArchivePointer, resolve_variants,
+    DistributionDatabase, HttpArchivePointer, LocalArchivePointer, VariantProviderCache,
+    resolve_variants,
 };
 pub use download::LocalWheel;
 pub use error::Error;

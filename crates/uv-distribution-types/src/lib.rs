@@ -1481,6 +1481,16 @@ pub struct RegistryVariantsJson {
     pub index: IndexUrl,
 }
 
+impl Identifier for RegistryVariantsJson {
+    fn distribution_id(&self) -> DistributionId {
+        self.file.distribution_id()
+    }
+
+    fn resource_id(&self) -> ResourceId {
+        self.file.resource_id()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};

@@ -3,7 +3,7 @@ use std::future::Future;
 use std::io;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use anyhow::anyhow;
@@ -29,7 +29,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildableSource, BuiltDist, Dist, DistributionId, HashPolicy, Hashed, Identifier, IndexUrl,
     InstalledDist, Name, Node, RegistryBuiltDist, RegistryVariantsJson, Resolution, ResolvedDist,
-    SourceDist,
+    ResourceId, SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -1358,10 +1358,37 @@ impl LocalArchivePointer {
     }
 }
 
+/// A very simple variants provider cache
+///
+/// TODO(konsti): Cache by provider provider plugin and `requires` compatibility
+/// TODO(konsti): Cache to disk
+#[derive(Debug, Default)]
+pub struct VariantProviderCache {
+    cache: Mutex<FxHashMap<ResourceId, ResolvedVariants>>,
+}
+
+impl VariantProviderCache {
+    pub fn get(&self, resource_id: &ResourceId) -> Option<ResolvedVariants> {
+        self.cache
+            .lock()
+            .expect("there was a panic in another thread")
+            .get(resource_id)
+            .cloned()
+    }
+
+    pub fn insert(&self, resource_id: ResourceId, resolved_variants: ResolvedVariants) {
+        self.cache
+            .lock()
+            .expect("there was a panic in another thread")
+            .insert(resource_id, resolved_variants);
+    }
+}
+
 /// TODO(konsti): Find a better home for those functions
 pub async fn resolve_variants<Context: BuildContext>(
     resolution: Resolution,
     distribution_database: DistributionDatabase<'_, Context>,
+    variants_cache: Arc<VariantProviderCache>,
 ) -> anyhow::Result<Resolution> {
     // Fetch variants.json and then query providers, running in parallel for all dists
     // TODO(konsti): Reuse in memory index from resolve phase and merge equivalent requests.
@@ -1373,10 +1400,20 @@ pub async fn resolve_variants<Context: BuildContext>(
                 .filter_map(|node| extract_variants(node)),
         )
         .map(async |(variants_json, dist)| {
-            // Fetch variants_json and run providers
-            let resolved_variants = distribution_database
-                .fetch_and_query_variants(variants_json)
-                .await?;
+            let resolved_variants =
+                if let Some(resolved_variants) = variants_cache.get(&variants_json.resource_id()) {
+                    resolved_variants.clone()
+                } else {
+                    // Fetch variants_json and run providers
+                    let resolved_variants = distribution_database
+                        .fetch_and_query_variants(variants_json)
+                        .await?;
+
+                    variants_cache.insert(variants_json.resource_id(), resolved_variants.clone());
+
+                    resolved_variants
+                };
+
             Ok::<_, anyhow::Error>((dist.distribution_id(), resolved_variants))
         })
         // TODO(konsti): Buffer size
