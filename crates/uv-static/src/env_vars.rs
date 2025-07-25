@@ -434,6 +434,9 @@ impl EnvVars {
     /// The number of retries for HTTP requests. (default: 3)
     pub const UV_HTTP_RETRIES: &'static str = "UV_HTTP_RETRIES";
 
+    /// The number of retries for git operations. (default: 3)
+    pub const UV_GIT_RETRIES: &'static str = "UV_GIT_RETRIES";
+
     /// Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
     pub const UV_REQUEST_TIMEOUT: &'static str = "UV_REQUEST_TIMEOUT";
 

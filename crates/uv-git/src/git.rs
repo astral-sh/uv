@@ -6,6 +6,7 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self};
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use cargo_util::{ProcessBuilder, paths};
@@ -25,6 +26,9 @@ use crate::rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited};
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".ok";
+
+/// Default number of retries for git operations.
+const DEFAULT_GIT_RETRIES: u32 = 3;
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitError {
@@ -66,6 +70,11 @@ enum ReferenceOrOid<'reference> {
 impl ReferenceOrOid<'_> {
     /// Resolves the [`ReferenceOrOid`] to an object ID with objects the `repo` currently has.
     fn resolve(&self, repo: &GitRepository) -> Result<GitOid> {
+        self.resolve_with_url(repo, None)
+    }
+
+    /// Resolves the [`ReferenceOrOid`] to an object ID with optional remote URL for recovery.
+    fn resolve_with_url(&self, repo: &GitRepository, remote_url: Option<&Url>) -> Result<GitOid> {
         let refkind = self.kind_str();
         let result = match self {
             // Resolve the commit pointed to by the tag.
@@ -73,33 +82,41 @@ impl ReferenceOrOid<'_> {
             // `^0` recursively peels away from the revision to the underlying commit object.
             // This also verifies that the tag indeed refers to a commit.
             Self::Reference(GitReference::Tag(s)) => {
-                repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))
+                repo.rev_parse_with_url(&format!("refs/remotes/origin/tags/{s}^0"), remote_url)
             }
 
             // Resolve the commit pointed to by the branch.
-            Self::Reference(GitReference::Branch(s)) => repo.rev_parse(&format!("origin/{s}^0")),
+            Self::Reference(GitReference::Branch(s)) => {
+                repo.rev_parse_with_url(&format!("origin/{s}^0"), remote_url)
+            }
 
             // Attempt to resolve the branch, then the tag.
             Self::Reference(GitReference::BranchOrTag(s)) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0"))),
+                .rev_parse_with_url(&format!("origin/{s}^0"), remote_url)
+                .or_else(|_| {
+                    repo.rev_parse_with_url(&format!("refs/remotes/origin/tags/{s}^0"), remote_url)
+                }),
 
             // Attempt to resolve the branch, then the tag, then the commit.
             Self::Reference(GitReference::BranchOrTagOrCommit(s)) => repo
-                .rev_parse(&format!("origin/{s}^0"))
-                .or_else(|_| repo.rev_parse(&format!("refs/remotes/origin/tags/{s}^0")))
-                .or_else(|_| repo.rev_parse(&format!("{s}^0"))),
+                .rev_parse_with_url(&format!("origin/{s}^0"), remote_url)
+                .or_else(|_| {
+                    repo.rev_parse_with_url(&format!("refs/remotes/origin/tags/{s}^0"), remote_url)
+                })
+                .or_else(|_| repo.rev_parse_with_url(&format!("{s}^0"), remote_url)),
 
             // We'll be using the HEAD commit.
             Self::Reference(GitReference::DefaultBranch) => {
-                repo.rev_parse("refs/remotes/origin/HEAD")
+                repo.rev_parse_with_url("refs/remotes/origin/HEAD", remote_url)
             }
 
             // Resolve a named reference.
-            Self::Reference(GitReference::NamedRef(s)) => repo.rev_parse(&format!("{s}^0")),
+            Self::Reference(GitReference::NamedRef(s)) => {
+                repo.rev_parse_with_url(&format!("{s}^0"), remote_url)
+            }
 
             // Resolve a specific commit.
-            Self::Oid(s) => repo.rev_parse(&format!("{s}^0")),
+            Self::Oid(s) => repo.rev_parse_with_url(&format!("{s}^0"), remote_url),
         };
 
         result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
@@ -153,6 +170,161 @@ pub(crate) struct GitCheckout {
     repo: GitRepository,
 }
 
+/// Determines if a git command error is retryable.
+fn is_retryable_git_error(output: &std::process::Output) -> bool {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Network-related errors
+    if stderr.contains("Could not read from remote repository")
+        || stderr.contains("unable to access")
+        || stderr.contains("Connection reset by peer")
+        || stderr.contains("Failed to connect")
+        || stderr.contains("Connection timed out")
+        || stderr.contains("Operation timed out")
+        || stderr.contains("Network is unreachable")
+        || stderr.contains("Temporary failure in name resolution")
+        || stderr.contains("Could not resolve host")
+    {
+        return true;
+    }
+
+    // Rate limiting indicators
+    if stderr.contains("rate limit") || stdout.contains("rate limit") {
+        return true;
+    }
+
+    // Partial clone/fetch errors that might be transient
+    if stderr.contains("fatal: the remote end hung up unexpectedly")
+        || stderr.contains("fatal: early EOF")
+        || stderr.contains("fatal: index-pack failed")
+    {
+        return true;
+    }
+
+    false
+}
+
+/// Executes a git command with retries on transient failures.
+fn exec_git_with_retry(
+    cmd: &mut ProcessBuilder,
+    max_retries: Option<u32>,
+) -> Result<std::process::Output> {
+    let max_retries = max_retries
+        .or_else(|| env::var(EnvVars::UV_GIT_RETRIES).ok()?.parse().ok())
+        .unwrap_or(DEFAULT_GIT_RETRIES);
+
+    let mut attempt = 0;
+    loop {
+        match cmd.exec_with_output() {
+            Ok(output) => {
+                if output.status.success() {
+                    return Ok(output);
+                }
+
+                // Check if the error is retryable
+                if attempt < max_retries && is_retryable_git_error(&output) {
+                    attempt += 1;
+                    let delay = calculate_backoff(attempt);
+                    debug!(
+                        "Git command failed with retryable error, retrying in {}ms (attempt {}/{})",
+                        delay.as_millis(),
+                        attempt,
+                        max_retries
+                    );
+                    std::thread::sleep(delay);
+                    continue;
+                }
+
+                // Non-retryable error or exhausted retries
+                return Ok(output);
+            }
+            Err(err) => {
+                // Process execution failed (e.g., git not found)
+                if attempt < max_retries {
+                    attempt += 1;
+                    let delay = calculate_backoff(attempt);
+                    debug!(
+                        "Git command execution failed: {}, retrying in {}ms (attempt {}/{})",
+                        err,
+                        delay.as_millis(),
+                        attempt,
+                        max_retries
+                    );
+                    std::thread::sleep(delay);
+                    continue;
+                }
+                return Err(err);
+            }
+        }
+    }
+}
+
+/// Executes a git rev-parse command with special handling for unknown revision errors.
+/// If the revision is not found, this may indicate an incomplete fetch, so we'll
+/// trigger a re-fetch and retry.
+fn exec_rev_parse_with_recovery(
+    repo: &GitRepository,
+    refname: &str,
+    remote_url: Option<&Url>,
+) -> Result<std::process::Output> {
+    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    cmd.arg("rev-parse").arg(refname).cwd(&repo.path);
+
+    let output = exec_git_with_retry(&mut cmd, None)?;
+
+    // Check if we got an "unknown revision" error
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("unknown revision") || stderr.contains("bad revision") {
+            // This might be due to an incomplete fetch
+            if let Some(url) = remote_url {
+                debug!(
+                    "Git rev-parse failed with 'unknown revision' for {}, attempting to fetch missing objects",
+                    refname
+                );
+
+                // Try to fetch all refs to ensure we have everything
+                let mut fetch_cmd = ProcessBuilder::new(GIT.as_ref()?);
+                fetch_cmd
+                    .arg("fetch")
+                    .arg(url.as_str())
+                    .arg("--force")
+                    .arg("--update-head-ok")
+                    .cwd(&repo.path);
+
+                if let Err(e) = exec_git_with_retry(&mut fetch_cmd, None) {
+                    debug!("Recovery fetch failed: {}", e);
+                    // Return the original error if recovery fails
+                    return Ok(output);
+                }
+
+                // Retry the rev-parse after fetch
+                let mut retry_cmd = ProcessBuilder::new(GIT.as_ref()?);
+                retry_cmd.arg("rev-parse").arg(refname).cwd(&repo.path);
+
+                return exec_git_with_retry(&mut retry_cmd, None);
+            }
+        }
+    }
+
+    Ok(output)
+}
+
+/// Calculates exponential backoff delay for retry attempts.
+fn calculate_backoff(attempt: u32) -> Duration {
+    // Check for test environment to disable delays
+    if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+        return Duration::from_millis(0);
+    }
+
+    // Exponential backoff: 100ms, 200ms, 400ms, 800ms, etc.
+    let base_delay_ms = 100;
+    let delay_ms = base_delay_ms * 2_u64.pow(attempt.saturating_sub(1));
+    // Cap at 10 seconds
+    Duration::from_millis(delay_ms.min(10_000))
+}
+
 /// A local Git repository.
 pub(crate) struct GitRepository {
     /// Path to the underlying Git repository on the local filesystem.
@@ -163,10 +335,10 @@ impl GitRepository {
     /// Opens an existing Git repository at `path`.
     pub(crate) fn open(path: &Path) -> Result<GitRepository> {
         // Make sure there is a Git repository at the specified path.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("rev-parse")
-            .cwd(path)
-            .exec_with_output()?;
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("rev-parse").cwd(path);
+
+        exec_git_with_retry(&mut cmd, None)?;
 
         Ok(GitRepository {
             path: path.to_path_buf(),
@@ -182,10 +354,10 @@ impl GitRepository {
         // opts.external_template(false);
 
         // Initialize the repository.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("init")
-            .cwd(path)
-            .exec_with_output()?;
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("init").cwd(path);
+
+        exec_git_with_retry(&mut cmd, None)?;
 
         Ok(GitRepository {
             path: path.to_path_buf(),
@@ -194,11 +366,21 @@ impl GitRepository {
 
     /// Parses the object ID of the given `refname`.
     fn rev_parse(&self, refname: &str) -> Result<GitOid> {
-        let result = ProcessBuilder::new(GIT.as_ref()?)
-            .arg("rev-parse")
-            .arg(refname)
-            .cwd(&self.path)
-            .exec_with_output()?;
+        self.rev_parse_with_url(refname, None)
+    }
+
+    /// Parses the object ID of the given `refname` with optional remote URL for recovery.
+    fn rev_parse_with_url(&self, refname: &str, remote_url: Option<&Url>) -> Result<GitOid> {
+        let result = if remote_url.is_some() {
+            // Use the recovery-enabled version when we have a remote URL
+            exec_rev_parse_with_recovery(self, refname, remote_url)?
+        } else {
+            // Use the standard retry version without recovery
+            let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+            cmd.arg("rev-parse").arg(refname).cwd(&self.path);
+
+            exec_git_with_retry(&mut cmd, None)?
+        };
 
         let mut result = String::from_utf8(result.stdout)?;
         result.truncate(result.trim_end().len());
@@ -257,7 +439,7 @@ impl GitRemote {
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
-                None => reference.resolve(&db.repo).ok(),
+                None => reference.resolve_with_url(&db.repo, Some(&self.url)).ok(),
             };
 
             if let Some(rev) = resolved_commit_hash {
@@ -291,7 +473,7 @@ impl GitRemote {
         .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
-            None => reference.resolve(&repo)?,
+            None => reference.resolve_with_url(&repo, Some(&self.url))?,
         };
         if enable_lfs_fetch {
             fetch_lfs(&mut repo, &self.url, &rev, disable_ssl)
@@ -370,25 +552,27 @@ impl GitCheckout {
         // Perform a local clone of the repository, which will attempt to use
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
-        let res = ProcessBuilder::new(GIT.as_ref()?)
-            .arg("clone")
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("clone")
             .arg("--local")
             // Make sure to pass the local file path and not a file://... url. If given a url,
             // Git treats the repository as a remote origin and gets confused because we don't
             // have a HEAD checked out.
             .arg(database.repo.path.simplified_display().to_string())
-            .arg(into.simplified_display().to_string())
-            .exec_with_output();
+            .arg(into.simplified_display().to_string());
+
+        let res = exec_git_with_retry(&mut cmd, None);
 
         if let Err(e) = res {
             debug!("Cloning git repo with --local failed, retrying without hardlinks: {e}");
 
-            ProcessBuilder::new(GIT.as_ref()?)
-                .arg("clone")
+            let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+            cmd.arg("clone")
                 .arg("--no-hardlinks")
                 .arg(database.repo.path.simplified_display().to_string())
-                .arg(into.simplified_display().to_string())
-                .exec_with_output()?;
+                .arg(into.simplified_display().to_string());
+
+            exec_git_with_retry(&mut cmd, None)?;
         }
 
         let repo = GitRepository::open(into)?;
@@ -427,22 +611,23 @@ impl GitCheckout {
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("reset")
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("reset")
             .arg("--hard")
             .arg(self.revision.as_str())
-            .cwd(&self.repo.path)
-            .exec_with_output()?;
+            .cwd(&self.repo.path);
+
+        exec_git_with_retry(&mut cmd, None)?;
 
         // Update submodules (`git submodule update --recursive`).
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("submodule")
+        let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+        cmd.arg("submodule")
             .arg("update")
             .arg("--recursive")
             .arg("--init")
-            .cwd(&self.repo.path)
-            .exec_with_output()
-            .map(drop)?;
+            .cwd(&self.repo.path);
+
+        exec_git_with_retry(&mut cmd, None).map(drop)?;
 
         paths::create(ok_file)?;
         Ok(())
@@ -645,7 +830,7 @@ fn fetch_with_cli(
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
-    cmd.exec_with_output().map_err(|err| {
+    exec_git_with_retry(&mut cmd, None).map_err(|err| {
         let msg = err.to_string();
         if msg.contains("transport '") && msg.contains("' not allowed") && offline {
             return GitError::TransportNotAllowed.into();
@@ -701,7 +886,7 @@ fn fetch_lfs(
         .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
         .cwd(&repo.path);
 
-    cmd.exec_with_output()?;
+    exec_git_with_retry(&mut cmd, None)?;
     Ok(())
 }
 
