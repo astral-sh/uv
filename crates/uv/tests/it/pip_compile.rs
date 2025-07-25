@@ -14266,8 +14266,6 @@ matplotlib
 fn importlib_metadata_not_repeated() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let uv_toml = context.temp_dir.child("uv.toml");
-    uv_toml.write_str(r#"environments = ["python_version >= '3.10'", "python_version >= '3.8' and python_version < '3.10'", "python_version < '3.8'"]"#)?;
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("build")?;
 
