@@ -775,31 +775,40 @@ impl<'a> ExtrasEnvironment<'a> {
 
 /// The environment to use for evaluating `variant_namespaces`, `variant_features` and
 /// `variant_properties`
+// TODO(konsti): Ask for a better way with traits for this.
 pub trait MarkerVariantsEnvironment {
-    /// Whether there is a property with the given namespace, for evaluating `variant_namespaces`.
-    fn has_namespace(&self, namespace: &str) -> bool;
+    /// Whether there is a property with the given namespace, for evaluating
+    /// `... in variant_namespaces`.
+    fn contains_namespace(&self, namespace: &str) -> bool;
 
-    /// Whether there is a property with the given feature, for evaluating `variant_features`.
-    fn has_feature(&self, namespace: &str, feature: &str) -> bool;
+    /// Whether there is a property with the given feature, for evaluating
+    /// `... in variant_features`.
+    fn contains_feature(&self, namespace: &str, feature: &str) -> bool;
 
-    /// Whether there is the given property, for evaluating `variant_properties`.
-    fn has_property(&self, namespace: &str, feature: &str, property: &str) -> bool;
+    /// Whether there is the given property, for evaluating `... in variant_properties`.
+    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool;
+
+    /// Whether variant markers always evaluate to `true`.
+    // TODO(konsti): This should be encoded in the type system.
+    fn is_universal(&self) -> bool {
+        false
+    }
 }
 
 // Useful for tests
 impl<S: AsRef<str>> MarkerVariantsEnvironment for &[(S, S, S)] {
-    fn has_namespace(&self, namespace: &str) -> bool {
+    fn contains_namespace(&self, namespace: &str) -> bool {
         self.iter()
             .any(|(namespace_, _feature, _property)| namespace == namespace_.as_ref())
     }
 
-    fn has_feature(&self, namespace: &str, feature: &str) -> bool {
+    fn contains_feature(&self, namespace: &str, feature: &str) -> bool {
         self.iter().any(|(namespace_, feature_, _property)| {
             namespace == namespace_.as_ref() && feature == feature_.as_ref()
         })
     }
 
-    fn has_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
+    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
         self.iter().any(|(namespace_, feature_, property_)| {
             namespace == namespace_.as_ref()
                 && feature == feature_.as_ref()
@@ -810,16 +819,16 @@ impl<S: AsRef<str>> MarkerVariantsEnvironment for &[(S, S, S)] {
 
 // TODO(konsti): Use `AsRef` instead?
 impl<T: MarkerVariantsEnvironment> MarkerVariantsEnvironment for &T {
-    fn has_namespace(&self, namespace: &str) -> bool {
-        T::has_namespace(self, namespace)
+    fn contains_namespace(&self, namespace: &str) -> bool {
+        T::contains_namespace(self, namespace)
     }
 
-    fn has_feature(&self, namespace: &str, feature: &str) -> bool {
-        T::has_feature(self, namespace, feature)
+    fn contains_feature(&self, namespace: &str, feature: &str) -> bool {
+        T::contains_feature(self, namespace, feature)
     }
 
-    fn has_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
-        T::has_property(self, namespace, feature, property)
+    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
+        T::contains_property(self, namespace, feature, property)
     }
 }
 
@@ -827,15 +836,19 @@ impl<T: MarkerVariantsEnvironment> MarkerVariantsEnvironment for &T {
 pub struct MarkerVariantsUniversal;
 
 impl MarkerVariantsEnvironment for MarkerVariantsUniversal {
-    fn has_namespace(&self, _namespace: &str) -> bool {
+    fn contains_namespace(&self, _namespace: &str) -> bool {
         true
     }
 
-    fn has_feature(&self, _namespace: &str, _feature: &str) -> bool {
+    fn contains_feature(&self, _namespace: &str, _feature: &str) -> bool {
         true
     }
 
-    fn has_property(&self, _namespace: &str, _feature: &str, _property: &str) -> bool {
+    fn contains_property(&self, _namespace: &str, _feature: &str, _property: &str) -> bool {
+        true
+    }
+
+    fn is_universal(&self) -> bool {
         true
     }
 }
@@ -1206,13 +1219,22 @@ impl MarkerTree {
             MarkerTreeKind::List(marker) => {
                 let edge = match marker.pair() {
                     CanonicalMarkerListPair::VariantNamespaces(namespace) => {
-                        variants.has_namespace(namespace)
+                        if variants.is_universal() {
+                            return true;
+                        }
+                        variants.contains_namespace(namespace)
                     }
                     CanonicalMarkerListPair::VariantFeatures(namespace, feature) => {
-                        variants.has_feature(namespace, feature)
+                        if variants.is_universal() {
+                            return true;
+                        }
+                        variants.contains_feature(namespace, feature)
                     }
                     CanonicalMarkerListPair::VariantProperties(namespace, feature, property) => {
-                        variants.has_property(namespace, feature, property)
+                        if variants.is_universal() {
+                            return true;
+                        }
+                        variants.contains_property(namespace, feature, property)
                     }
                     CanonicalMarkerListPair::Extras(extra) => extras.extras().contains(extra),
                     CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
