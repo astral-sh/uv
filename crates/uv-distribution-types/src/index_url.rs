@@ -27,6 +27,15 @@ static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     ))))
 });
 
+static VARIANT_URL: LazyLock<DisplaySafeUrl> =
+    LazyLock::new(|| DisplaySafeUrl::parse("https://variants-index.wheelnext.dev").unwrap());
+
+static VARIANT_INDEX: LazyLock<Index> = LazyLock::new(|| {
+    Index::from_extra_index_url(IndexUrl::Url(Arc::new(VerbatimUrl::from_url(
+        VARIANT_URL.clone(),
+    ))))
+});
+
 /// The URL of an index to use for fetching packages (e.g., PyPI).
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum IndexUrl {
@@ -330,7 +339,8 @@ impl<'a> IndexLocations {
                 self.indexes
                     .iter()
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                    .filter(|index| !index.default && !index.explicit),
+                    .filter(|index| !index.default && !index.explicit)
+                    .chain(std::iter::once(&*VARIANT_INDEX)),
             )
         }
     }
@@ -360,7 +370,8 @@ impl<'a> IndexLocations {
             Either::Right(
                 self.indexes
                     .iter()
-                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name))),
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                    .chain(std::iter::once(&*VARIANT_INDEX)),
             )
         }
     }
@@ -402,6 +413,7 @@ impl<'a> IndexLocations {
                     .iter()
                     .chain(self.flat_index.iter())
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                    .chain(std::iter::once(&*VARIANT_INDEX))
             } {
                 if index.default {
                     if default {
@@ -434,6 +446,7 @@ impl<'a> IndexLocations {
         } else {
             Either::Right(
                 std::iter::once(&*DEFAULT_INDEX)
+                    .chain(std::iter::once(&*VARIANT_INDEX))
                     .chain(self.flat_index.iter().rev())
                     .chain(self.indexes.iter().rev()),
             )
@@ -547,7 +560,8 @@ impl<'a> IndexUrls {
                 self.indexes
                     .iter()
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                    .filter(|index| !index.default && !index.explicit),
+                    .filter(|index| !index.default && !index.explicit)
+                    .chain(std::iter::once(&*VARIANT_INDEX)),
             )
         }
     }
