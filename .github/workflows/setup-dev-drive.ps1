@@ -1,13 +1,43 @@
 # Configures a drive for testing in CI.
+#
+# When using standard GitHub Actions runners, a `D:` drive is present and has
+# similar or better performance characteristics than a ReFS dev drive. Sometimes
+# using a larger runner is still more performant (e.g., when running the test
+# suite) and we need to create a dev drive. This script automatically configures
+# the appropriate drive.
+#
+# When using GitHub Actions' "larger runners", the `D:` drive is not present and
+# we create a DevDrive mount on `C:`. This is purported to be more performant
+# than an ReFS drive, though we did not see a change when we switched over.
+#
+# When using Depot runners, the underling infrastructure is EC2, which does not
+# support Hyper-V. The `New-VHD` commandlet only works with Hyper-V, but we can
+# create a ReFS drive using `diskpart` and `format` directory. We cannot use a
+# DevDrive, as that also requires Hyper-V. The Depot runners use `D:` already,
+# so we must check if it's a Depot runner first, and we use `V:` as the target
+# instead.
 
-# When not using a GitHub Actions "larger runner", the `D:` drive is present and
-# has similar or better performance characteristics than a ReFS dev drive.
-# Sometimes using a larger runner is still more performant (e.g., when running
-# the test suite) and we need to create a dev drive. This script automatically
-# configures the appropriate drive.
 
-# Note we use `Get-PSDrive` is not sufficient because the drive letter is assigned.
-if (Test-Path "D:\") {
+if ($env:DEPOT_RUNNER -eq "1") {
+    Write-Output "DEPOT_RUNNER detected, setting up custom dev drive..."
+
+    # Create VHD and configure drive using diskpart
+    $vhdPath = "C:\uv_dev_drive.vhdx"
+    @"
+create vdisk file="$vhdPath" maximum=20480 type=expandable
+attach vdisk
+create partition primary
+active
+assign letter=V
+"@ | diskpart
+
+    # Format the drive as ReFS
+    format V: /fs:ReFS /q /y
+    $Drive = "V:"
+
+    Write-Output "Custom dev drive created at $Drive"
+} elseif (Test-Path "D:\") {
+	# Note `Get-PSDrive` is not sufficient because the drive letter is assigned.
     Write-Output "Using existing drive at D:"
     $Drive = "D:"
 } else {
@@ -55,10 +85,8 @@ Write-Output `
 	"DEV_DRIVE=$($Drive)" `
 	"TMP=$($Tmp)" `
 	"TEMP=$($Tmp)" `
-	"UV_INTERNAL__TEST_DIR=$($Tmp)" `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
 	"CARGO_HOME=$($Drive)/.cargo" `
 	"UV_WORKSPACE=$($Drive)/uv" `
 	"PATH=$($Drive)/.cargo/bin;$env:PATH" `
 	>> $env:GITHUB_ENV
-

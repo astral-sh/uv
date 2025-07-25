@@ -66,15 +66,8 @@ impl RequiresPython {
     ) -> Option<Self> {
         // Convert to PubGrub range and perform an intersection.
         let range = specifiers
-            .into_iter()
-            .map(|specifier| release_specifiers_to_ranges(specifier.clone()))
-            .fold(None, |range: Option<Ranges<Version>>, requires_python| {
-                if let Some(range) = range {
-                    Some(range.intersection(&requires_python))
-                } else {
-                    Some(requires_python)
-                }
-            })?;
+            .map(|specs| release_specifiers_to_ranges(specs.clone()))
+            .reduce(|acc, r| acc.intersection(&r))?;
 
         // If the intersection is empty, return `None`.
         if range.is_empty() {

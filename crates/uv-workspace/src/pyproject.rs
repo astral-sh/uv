@@ -6,6 +6,8 @@
 //!
 //! Then lowers them into a dependency specification.
 
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::ops::Deref;
@@ -15,7 +17,8 @@ use std::str::FromStr;
 use glob::Pattern;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
+use serde::de::{IntoDeserializer, SeqAccess};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use uv_build_backend::BuildBackendSettings;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
@@ -23,6 +26,7 @@ use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{
@@ -63,14 +67,14 @@ pub struct PyProjectToml {
 
     /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    build_system: Option<serde::de::IgnoredAny>,
+    pub build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
-        let pyproject: toml_edit::ImDocument<_> =
-            toml_edit::ImDocument::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
+        let pyproject =
+            toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
         let pyproject = PyProjectToml::deserialize(pyproject.into_deserializer())
             .map_err(PyprojectTomlError::TomlSchema)?;
         Ok(PyProjectToml { raw, ..pyproject })
@@ -78,19 +82,22 @@ impl PyProjectToml {
 
     /// Returns `true` if the project should be considered a Python package, as opposed to a
     /// non-package ("virtual") project.
-    pub fn is_package(&self) -> bool {
+    pub fn is_package(&self, require_build_system: bool) -> bool {
         // If `tool.uv.package` is set, defer to that explicit setting.
-        if let Some(is_package) = self
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.package)
-        {
+        if let Some(is_package) = self.tool_uv_package() {
             return is_package;
         }
 
         // Otherwise, a project is assumed to be a package if `build-system` is present.
-        self.build_system.is_some()
+        self.build_system.is_some() || !require_build_system
+    }
+
+    /// Returns the value of `tool.uv.package` if set.
+    fn tool_uv_package(&self) -> Option<bool> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.package)
     }
 
     /// Returns `true` if the project uses a dynamic version.
@@ -609,7 +616,7 @@ pub struct ToolUv {
     /// Note that those settings only apply when using the `uv_build` backend, other build backends
     /// (such as hatchling) have their own configuration.
     #[option_group]
-    pub build_backend: Option<BuildBackendSettings>,
+    pub build_backend: Option<BuildBackendSettingsSchema>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -813,12 +820,12 @@ impl<'de> serde::Deserialize<'de> for SerdePattern {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerdePattern {
-    fn schema_name() -> String {
-        <String as schemars::JsonSchema>::schema_name()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("SerdePattern")
     }
 
-    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        <String as schemars::JsonSchema>::json_schema(r#gen)
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        <String as schemars::JsonSchema>::json_schema(generator)
     }
 }
 
@@ -1682,4 +1689,45 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct BuildBackendSettingsSchema;
+
+impl<'de> Deserialize<'de> for BuildBackendSettingsSchema {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(BuildBackendSettingsSchema)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for BuildBackendSettingsSchema {
+    fn schema_name() -> Cow<'static, str> {
+        BuildBackendSettings::schema_name()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        BuildBackendSettings::json_schema(generator)
+    }
+}
+
+impl OptionsMetadata for BuildBackendSettingsSchema {
+    fn record(visit: &mut dyn Visit) {
+        BuildBackendSettings::record(visit);
+    }
+
+    fn documentation() -> Option<&'static str> {
+        BuildBackendSettings::documentation()
+    }
+
+    fn metadata() -> OptionSet
+    where
+        Self: Sized + 'static,
+    {
+        BuildBackendSettings::metadata()
+    }
 }

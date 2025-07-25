@@ -768,6 +768,36 @@ impl Lock {
         }
     }
 
+    /// Checks whether the new requires-python specification is disjoint with
+    /// the fork markers in this lock file.
+    ///
+    /// If they are disjoint, then the union of the fork markers along with the
+    /// given requires-python specification (converted to a marker tree) are
+    /// returned.
+    ///
+    /// When disjoint, the fork markers in the lock file should be dropped and
+    /// not used.
+    pub fn requires_python_coverage(
+        &self,
+        new_requires_python: &RequiresPython,
+    ) -> Result<(), (MarkerTree, MarkerTree)> {
+        let fork_markers_union = if self.fork_markers().is_empty() {
+            self.requires_python.to_marker_tree()
+        } else {
+            let mut fork_markers_union = MarkerTree::FALSE;
+            for fork_marker in self.fork_markers() {
+                fork_markers_union.or(fork_marker.pep508());
+            }
+            fork_markers_union
+        };
+        let new_requires_python = new_requires_python.to_marker_tree();
+        if fork_markers_union.is_disjoint(new_requires_python) {
+            Err((fork_markers_union, new_requires_python))
+        } else {
+            Ok(())
+        }
+    }
+
     /// Returns the TOML representation of this lockfile.
     pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
         // Catch a lockfile where the union of fork markers doesn't cover the supported
@@ -1225,6 +1255,7 @@ impl Lock {
         root: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
+        required_members: &BTreeSet<PackageName>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
@@ -1252,7 +1283,10 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            let expected = !member.pyproject_toml().is_package();
+            // We don't require a build system, if the workspace member is a dependency
+            let expected = !member
+                .pyproject_toml()
+                .is_package(!required_members.contains(name));
             let actual = self
                 .find_by_name(name)
                 .ok()
@@ -1397,7 +1431,7 @@ impl Lock {
         }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
-        let remotes = indexes.map(|locations| {
+        let mut remotes = indexes.map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1410,7 +1444,7 @@ impl Lock {
                 .collect::<BTreeSet<_>>()
         });
 
-        let locals = indexes.map(|locations| {
+        let mut locals = indexes.map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1681,6 +1715,38 @@ impl Lock {
                 }
             } else {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
+            }
+
+            // Add any explicit indexes to the list of known locals or remotes. These indexes may
+            // not be available as top-level configuration (i.e., if they're defined within a
+            // workspace member), but we already validated that the dependencies are up-to-date, so
+            // we can consider them "available".
+            for requirement in &package.metadata.requires_dist {
+                if let RequirementSource::Registry {
+                    index: Some(index), ..
+                } = &requirement.source
+                {
+                    match &index.url {
+                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                            if let Some(remotes) = remotes.as_mut() {
+                                remotes.insert(UrlString::from(
+                                    index.url().without_credentials().as_ref(),
+                                ));
+                            }
+                        }
+                        IndexUrl::Path(url) => {
+                            if let Some(locals) = locals.as_mut() {
+                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
+                                    relative_to(&path, root)
+                                        .or_else(|_| std::path::absolute(path))
+                                        .ok()
+                                }) {
+                                    locals.insert(path.into_boxed_path());
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Recurse.
@@ -2341,7 +2407,13 @@ impl Package {
         let sdist = match &self.id.source {
             Source::Path(path) => {
                 // A direct path source can also be a wheel, so validate the extension.
-                let DistExtension::Source(ext) = DistExtension::from_path(path)? else {
+                let DistExtension::Source(ext) = DistExtension::from_path(path).map_err(|err| {
+                    LockErrorKind::MissingExtension {
+                        id: self.id.clone(),
+                        err,
+                    }
+                })?
+                else {
                     return Ok(None);
                 };
                 let install_path = absolute_path(workspace_root, path)?;
@@ -2360,8 +2432,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: false,
-                    r#virtual: false,
+                    editable: Some(false),
+                    r#virtual: Some(false),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -2371,8 +2443,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: true,
-                    r#virtual: false,
+                    editable: Some(true),
+                    r#virtual: Some(false),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -2382,8 +2454,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: false,
-                    r#virtual: true,
+                    editable: Some(false),
+                    r#virtual: Some(true),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -2414,7 +2486,14 @@ impl Package {
             }
             Source::Direct(url, direct) => {
                 // A direct URL source can also be a wheel, so validate the extension.
-                let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
+                let DistExtension::Source(ext) =
+                    DistExtension::from_path(url.base_str()).map_err(|err| {
+                        LockErrorKind::MissingExtension {
+                            id: self.id.clone(),
+                            err,
+                        }
+                    })?
+                else {
                     return Ok(None);
                 };
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
@@ -2453,7 +2532,12 @@ impl Package {
                     .ok_or_else(|| LockErrorKind::MissingFilename {
                         id: self.id.clone(),
                     })?;
-                let ext = SourceDistExtension::from_path(filename.as_ref())?;
+                let ext = SourceDistExtension::from_path(filename.as_ref()).map_err(|err| {
+                    LockErrorKind::MissingExtension {
+                        id: self.id.clone(),
+                        err,
+                    }
+                })?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename),
@@ -2493,19 +2577,41 @@ impl Package {
                     .as_ref()
                     .expect("version for registry source");
 
-                let file_path = sdist.path().ok_or_else(|| LockErrorKind::MissingPath {
-                    name: name.clone(),
-                    version: version.clone(),
-                })?;
-                let file_url =
-                    DisplaySafeUrl::from_file_path(workspace_root.join(path).join(file_path))
-                        .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_url = match sdist {
+                    SourceDist::Url { url: file_url, .. } => {
+                        FileLocation::AbsoluteUrl(file_url.clone())
+                    }
+                    SourceDist::Path {
+                        path: file_path, ..
+                    } => {
+                        let file_path = workspace_root.join(path).join(file_path);
+                        let file_url =
+                            DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
+                                LockErrorKind::PathToUrl {
+                                    path: file_path.into_boxed_path(),
+                                }
+                            })?;
+                        FileLocation::AbsoluteUrl(UrlString::from(file_url))
+                    }
+                    SourceDist::Metadata { .. } => {
+                        return Err(LockErrorKind::MissingPath {
+                            name: name.clone(),
+                            version: version.clone(),
+                        }
+                        .into());
+                    }
+                };
                 let filename = sdist
                     .filename()
                     .ok_or_else(|| LockErrorKind::MissingFilename {
                         id: self.id.clone(),
                     })?;
-                let ext = SourceDistExtension::from_path(filename.as_ref())?;
+                let ext = SourceDistExtension::from_path(filename.as_ref()).map_err(|err| {
+                    LockErrorKind::MissingExtension {
+                        id: self.id.clone(),
+                        err,
+                    }
+                })?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename),
@@ -2515,9 +2621,10 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
+                    url: file_url,
                     yanked: None,
                 });
+
                 let index = IndexUrl::from(
                     VerbatimUrl::from_absolute_path(workspace_root.join(path))
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
@@ -3179,9 +3286,9 @@ impl Source {
         let path = relative_to(&directory_dist.install_path, root)
             .or_else(|_| std::path::absolute(&directory_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        if directory_dist.editable {
+        if directory_dist.editable.unwrap_or(false) {
             Ok(Source::Editable(path.into_boxed_path()))
-        } else if directory_dist.r#virtual {
+        } else if directory_dist.r#virtual.unwrap_or(false) {
             Ok(Source::Virtual(path.into_boxed_path()))
         } else {
             Ok(Source::Directory(path.into_boxed_path()))
@@ -3197,7 +3304,9 @@ impl Source {
                 Ok(Source::Registry(source))
             }
             IndexUrl::Path(url) => {
-                let path = url.to_file_path().map_err(|()| LockErrorKind::UrlToPath)?;
+                let path = url
+                    .to_file_path()
+                    .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
                 let path = relative_to(&path, root)
                     .or_else(|_| std::path::absolute(&path))
                     .map_err(LockErrorKind::IndexRelativePath)?;
@@ -3630,14 +3739,6 @@ impl SourceDist {
         }
     }
 
-    fn path(&self) -> Option<&Path> {
-        match &self {
-            SourceDist::Metadata { .. } => None,
-            SourceDist::Url { .. } => None,
-            SourceDist::Path { path, .. } => Some(path),
-        }
-    }
-
     pub(crate) fn hash(&self) -> Option<&Hash> {
         match &self {
             SourceDist::Metadata { metadata } => metadata.hash.as_ref(),
@@ -3757,34 +3858,60 @@ impl SourceDist {
                 }))
             }
             IndexUrl::Path(path) => {
-                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath)?;
-                let reg_dist_path = reg_dist
+                let index_path = path
+                    .to_file_path()
+                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                let url = reg_dist
                     .file
                     .url
                     .to_url()
-                    .map_err(LockErrorKind::InvalidUrl)?
-                    .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath)?;
-                let path = relative_to(&reg_dist_path, index_path)
-                    .or_else(|_| std::path::absolute(&reg_dist_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?
-                    .into_boxed_path();
-                let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
-                let size = reg_dist.file.size;
-                let upload_time = reg_dist
-                    .file
-                    .upload_time_utc_ms
-                    .map(Timestamp::from_millisecond)
-                    .transpose()
-                    .map_err(LockErrorKind::InvalidTimestamp)?;
-                Ok(Some(SourceDist::Path {
-                    path,
-                    metadata: SourceDistMetadata {
-                        hash,
-                        size,
-                        upload_time,
-                    },
-                }))
+                    .map_err(LockErrorKind::InvalidUrl)?;
+
+                if url.scheme() == "file" {
+                    let reg_dist_path = url
+                        .to_file_path()
+                        .map_err(|()| LockErrorKind::UrlToPath { url })?;
+                    let path = relative_to(&reg_dist_path, index_path)
+                        .or_else(|_| std::path::absolute(&reg_dist_path))
+                        .map_err(LockErrorKind::DistributionRelativePath)?
+                        .into_boxed_path();
+                    let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
+                    let size = reg_dist.file.size;
+                    let upload_time = reg_dist
+                        .file
+                        .upload_time_utc_ms
+                        .map(Timestamp::from_millisecond)
+                        .transpose()
+                        .map_err(LockErrorKind::InvalidTimestamp)?;
+                    Ok(Some(SourceDist::Path {
+                        path,
+                        metadata: SourceDistMetadata {
+                            hash,
+                            size,
+                            upload_time,
+                        },
+                    }))
+                } else {
+                    let url = normalize_file_location(&reg_dist.file.url)
+                        .map_err(LockErrorKind::InvalidUrl)
+                        .map_err(LockError::from)?;
+                    let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
+                    let size = reg_dist.file.size;
+                    let upload_time = reg_dist
+                        .file
+                        .upload_time_utc_ms
+                        .map(Timestamp::from_millisecond)
+                        .transpose()
+                        .map_err(LockErrorKind::InvalidTimestamp)?;
+                    Ok(Some(SourceDist::Url {
+                        url,
+                        metadata: SourceDistMetadata {
+                            hash,
+                            size,
+                            upload_time,
+                        },
+                    }))
+                }
             }
         }
     }
@@ -4087,25 +4214,46 @@ impl Wheel {
                 })
             }
             IndexUrl::Path(path) => {
-                let index_path = path.to_file_path().map_err(|()| LockErrorKind::UrlToPath)?;
-                let wheel_path = wheel
-                    .file
-                    .url
-                    .to_url()
-                    .map_err(LockErrorKind::InvalidUrl)?
+                let index_path = path
                     .to_file_path()
-                    .map_err(|()| LockErrorKind::UrlToPath)?;
-                let path = relative_to(&wheel_path, index_path)
-                    .or_else(|_| std::path::absolute(&wheel_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?
-                    .into_boxed_path();
-                Ok(Wheel {
-                    url: WheelWireSource::Path { path },
-                    hash: None,
-                    size: None,
-                    upload_time: None,
-                    filename,
-                })
+                    .map_err(|()| LockErrorKind::UrlToPath { url: path.to_url() })?;
+                let wheel_url = wheel.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+
+                if wheel_url.scheme() == "file" {
+                    let wheel_path = wheel_url
+                        .to_file_path()
+                        .map_err(|()| LockErrorKind::UrlToPath { url: wheel_url })?;
+                    let path = relative_to(&wheel_path, index_path)
+                        .or_else(|_| std::path::absolute(&wheel_path))
+                        .map_err(LockErrorKind::DistributionRelativePath)?
+                        .into_boxed_path();
+                    Ok(Wheel {
+                        url: WheelWireSource::Path { path },
+                        hash: None,
+                        size: None,
+                        upload_time: None,
+                        filename,
+                    })
+                } else {
+                    let url = normalize_file_location(&wheel.file.url)
+                        .map_err(LockErrorKind::InvalidUrl)
+                        .map_err(LockError::from)?;
+                    let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+                    let size = wheel.file.size;
+                    let upload_time = wheel
+                        .file
+                        .upload_time_utc_ms
+                        .map(Timestamp::from_millisecond)
+                        .transpose()
+                        .map_err(LockErrorKind::InvalidTimestamp)?;
+                    Ok(Wheel {
+                        url: WheelWireSource::Url { url },
+                        hash,
+                        size,
+                        filename,
+                        upload_time,
+                    })
+                }
             }
         }
     }
@@ -4143,8 +4291,10 @@ impl Wheel {
 
         match source {
             RegistrySource::Url(url) => {
-                let file_url = match &self.url {
-                    WheelWireSource::Url { url } => url,
+                let file_location = match &self.url {
+                    WheelWireSource::Url { url: file_url } => {
+                        FileLocation::AbsoluteUrl(file_url.clone())
+                    }
                     WheelWireSource::Path { .. } | WheelWireSource::Filename { .. } => {
                         return Err(LockErrorKind::MissingUrl {
                             name: filename.name,
@@ -4160,7 +4310,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(file_url.clone()),
+                    url: file_location,
                     yanked: None,
                 });
                 let index = IndexUrl::from(VerbatimUrl::from_url(
@@ -4173,9 +4323,21 @@ impl Wheel {
                 })
             }
             RegistrySource::Path(index_path) => {
-                let file_path = match &self.url {
-                    WheelWireSource::Path { path } => path,
-                    WheelWireSource::Url { .. } | WheelWireSource::Filename { .. } => {
+                let file_location = match &self.url {
+                    WheelWireSource::Url { url: file_url } => {
+                        FileLocation::AbsoluteUrl(file_url.clone())
+                    }
+                    WheelWireSource::Path { path: file_path } => {
+                        let file_path = root.join(index_path).join(file_path);
+                        let file_url =
+                            DisplaySafeUrl::from_file_path(&file_path).map_err(|()| {
+                                LockErrorKind::PathToUrl {
+                                    path: file_path.into_boxed_path(),
+                                }
+                            })?;
+                        FileLocation::AbsoluteUrl(UrlString::from(file_url))
+                    }
+                    WheelWireSource::Filename { .. } => {
                         return Err(LockErrorKind::MissingPath {
                             name: filename.name,
                             version: filename.version,
@@ -4183,9 +4345,6 @@ impl Wheel {
                         .into());
                     }
                 };
-                let file_url =
-                    DisplaySafeUrl::from_file_path(root.join(index_path).join(file_path))
-                        .map_err(|()| LockErrorKind::PathToUrl)?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename.to_string()),
@@ -4193,7 +4352,7 @@ impl Wheel {
                     requires_python: None,
                     size: self.size,
                     upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
+                    url: file_location,
                     yanked: None,
                 });
                 let index = IndexUrl::from(
@@ -4567,7 +4726,7 @@ impl From<Hash> for Hashes {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.without_fragment()),
+        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.without_fragment().into_owned()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }
@@ -4677,8 +4836,8 @@ fn normalize_requirement(
                 marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Directory {
                     install_path,
-                    editable,
-                    r#virtual,
+                    editable: Some(editable.unwrap_or(false)),
+                    r#virtual: Some(r#virtual.unwrap_or(false)),
                     url,
                 },
                 origin: None,
@@ -5192,8 +5351,13 @@ enum LockErrorKind {
     ),
     /// An error that occurs when the extension can't be determined
     /// for a given wheel or source distribution.
-    #[error("Failed to parse file extension; expected one of: {0}")]
-    MissingExtension(#[from] ExtensionError),
+    #[error("Failed to parse file extension for `{id}`; expected one of: {err}", id = id.cyan())]
+    MissingExtension {
+        /// The filename that was expected to have an extension.
+        id: PackageId,
+        /// The list of valid extensions that were expected.
+        err: ExtensionError,
+    },
     /// Failed to parse a Git source URL.
     #[error("Failed to parse Git URL")]
     InvalidGitSourceUrl(
@@ -5391,11 +5555,11 @@ enum LockErrorKind {
         VerbatimUrlError,
     ),
     /// An error that occurs when converting a path to a URL.
-    #[error("Failed to convert path to URL")]
-    PathToUrl,
+    #[error("Failed to convert path to URL: {path}", path = path.display().cyan())]
+    PathToUrl { path: Box<Path> },
     /// An error that occurs when converting a URL to a path
-    #[error("Failed to convert URL to path")]
-    UrlToPath,
+    #[error("Failed to convert URL to path: {url}", url = url.cyan())]
+    UrlToPath { url: DisplaySafeUrl },
     /// An error that occurs when multiple packages with the same
     /// name were found when identifying the root packages.
     #[error("Found multiple packages matching `{name}`", name = name.cyan())]

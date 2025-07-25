@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, PreviewMode};
+use uv_configuration::{Concurrency, Constraints, DryRun, Preview};
 use uv_distribution_types::Requirement;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
@@ -29,7 +29,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{ExitStatus, conjunction, tool::common::install_executables};
+use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -47,7 +47,7 @@ pub(crate) async fn upgrade(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
@@ -80,6 +80,7 @@ pub(crate) async fn upgrade(
 
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -99,6 +100,7 @@ pub(crate) async fn upgrade(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -219,7 +221,7 @@ async fn upgrade_tool(
     filesystem: &ResolverInstallerOptions,
     installer_metadata: bool,
     concurrency: Concurrency,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<UpgradeOutcome> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
@@ -297,6 +299,7 @@ async fn upgrade_tool(
         let resolution = resolve_environment(
             spec.into(),
             interpreter,
+            build_constraints.clone(),
             &settings.resolver,
             network_settings,
             &state,
@@ -308,7 +311,7 @@ async fn upgrade_tool(
         )
         .await?;
 
-        let environment = installed_tools.create_environment(name, interpreter.clone())?;
+        let environment = installed_tools.create_environment(name, interpreter.clone(), preview)?;
 
         let environment = sync_environment(
             environment,
@@ -375,7 +378,7 @@ async fn upgrade_tool(
         remove_entrypoints(&existing_tool_receipt);
 
         // If we modified the target tool, reinstall the entrypoints.
-        install_executables(
+        finalize_tool_install(
             &environment,
             name,
             installed_tools,

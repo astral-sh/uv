@@ -121,28 +121,17 @@ present, uv will install all the Python versions listed in the file.
 
 ### Installing Python executables
 
-!!! important
-
-    Support for installing Python executables is in _preview_, this means the behavior is experimental
-    and subject to change.
-
-To install Python executables into your `PATH`, provide the `--preview` option:
-
-```console
-$ uv python install 3.12 --preview
-```
-
-This will install a Python executable for the requested version into `~/.local/bin`, e.g., as
-`python3.12`.
+uv installs Python executables into your `PATH` by default, e.g., `uv python install 3.12` will
+install a Python executable into `~/.local/bin`, e.g., as `python3.12`.
 
 !!! tip
 
     If `~/.local/bin` is not in your `PATH`, you can add it with `uv tool update-shell`.
 
-To install `python` and `python3` executables, include the `--default` option:
+To install `python` and `python3` executables, include the experimental `--default` option:
 
 ```console
-$ uv python install 3.12 --default --preview
+$ uv python install 3.12 --default
 ```
 
 When installing Python executables, uv will only overwrite an existing executable if it is managed
@@ -153,10 +142,74 @@ uv will update executables that it manages. However, it will prefer the latest p
 Python minor version by default. For example:
 
 ```console
-$ uv python install 3.12.7 --preview  # Adds `python3.12` to `~/.local/bin`
-$ uv python install 3.12.6 --preview  # Does not update `python3.12`
-$ uv python install 3.12.8 --preview  # Updates `python3.12` to point to 3.12.8
+$ uv python install 3.12.7  # Adds `python3.12` to `~/.local/bin`
+$ uv python install 3.12.6  # Does not update `python3.12`
+$ uv python install 3.12.8  # Updates `python3.12` to point to 3.12.8
 ```
+
+## Upgrading Python versions
+
+!!! important
+
+    Support for upgrading Python versions is in _preview_. This means the behavior is experimental
+    and subject to change.
+
+    Upgrades are only supported for uv-managed Python versions.
+
+    Upgrades are not currently supported for PyPy and GraalPy.
+
+uv allows transparently upgrading Python versions to the latest patch release, e.g., 3.13.4 to
+3.13.5. uv does not allow transparently upgrading across minor Python versions, e.g., 3.12 to 3.13,
+because changing minor versions can affect dependency resolution.
+
+uv-managed Python versions can be upgraded to the latest supported patch release with the
+`python upgrade` command:
+
+To upgrade a Python version to the latest supported patch release:
+
+```console
+$ uv python upgrade 3.12
+```
+
+To upgrade all installed Python versions:
+
+```console
+$ uv python upgrade
+```
+
+After an upgrade, uv will prefer the new version, but will retain the existing version as it may
+still be used by virtual environments.
+
+If the Python version was installed with the `python-upgrade` [preview feature](./preview.md)
+enabled, e.g., `uv python install 3.12 --preview-features python-upgrade`, virtual environments
+using the Python version will be automatically upgraded to the new patch version.
+
+!!! note
+
+    If the virtual environment was created _before_ opting in to the preview mode, it will not be
+    included in the automatic upgrades.
+
+If a virtual environment was created with an explicitly requested patch version, e.g.,
+`uv venv -p 3.10.8`, it will not be transparently upgraded to a new version.
+
+### Minor version directories
+
+Automatic upgrades for virtual environments are implemented using a directory with the Python minor
+version, e.g.:
+
+```
+~/.local/share/uv/python/cpython-3.12-macos-aarch64-none
+```
+
+which is a symbolic link (on Unix) or junction (on Windows) pointing to a specific patch version:
+
+```console
+$ readlink ~/.local/share/uv/python/cpython-3.12-macos-aarch64-none
+~/.local/share/uv/python/cpython-3.12.11-macos-aarch64-none
+```
+
+If this link is resolved by another tool, e.g., by canonicalizing the Python interpreter path, and
+used to create a virtual environment, it will not be automatically upgraded.
 
 ## Project Python versions
 
@@ -371,3 +424,18 @@ are not yet available for musl Linux on ARM).
 ### PyPy distributions
 
 PyPy distributions are provided by the PyPy project.
+
+## Registration in the Windows registry
+
+On Windows, installation of managed Python versions will register them with the Windows registry as
+defined by [PEP 514](https://peps.python.org/pep-0514/).
+
+After installation, the Python versions can be selected with the `py` launcher, e.g.:
+
+```console
+$ uv python install 3.13.1
+$ py -V:Astral/CPython3.13.1
+```
+
+On uninstall, uv will remove the registry entry for the target version as well as any broken
+registry entries.

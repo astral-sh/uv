@@ -3,9 +3,8 @@
 use std::env::current_dir;
 use std::fs;
 use std::io::Cursor;
-use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
@@ -2910,16 +2909,16 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
-    - git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
     - git+https://github.com/astral-test/uv-public-pypackage@test-branch
-    "###
+    - git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+    "
     );
 
     Ok(())
@@ -4801,97 +4800,6 @@ fn compile_editable_url_requirement() -> Result<()> {
     "###);
 
     Ok(())
-}
-
-#[test]
-#[ignore]
-fn cache_errors_are_non_fatal() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    // No git dep, git has its own locking strategy
-    requirements_in.write_str(indoc! {r"
-        # pypi wheel
-        pandas
-        # url wheel
-        flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
-        # url source dist
-        werkzeug @ https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz
-    "
-    })?;
-
-    // Pick a file from each kind of cache
-    let interpreter_cache = context
-        .cache_dir
-        .path()
-        .join("interpreter-v0")
-        .read_dir()?
-        .next()
-        .context("Expected a python interpreter cache file")??
-        .path();
-    let cache_files = [
-        PathBuf::from("simple-v0/pypi/numpy.msgpack"),
-        PathBuf::from(
-            "wheels-v0/pypi/python-dateutil/python_dateutil-2.8.2-py2.py3-none-any.msgpack",
-        ),
-        PathBuf::from("wheels-v0/url/4b8be67c801a7ecb/flask/flask-3.0.0-py3-none-any.msgpack"),
-        PathBuf::from("built-wheels-v0/url/6781bd6440ae72c2/werkzeug/metadata.msgpack"),
-        interpreter_cache,
-    ];
-
-    let check = || {
-        uv_snapshot!(context.filters(), context.pip_compile()
-                .arg("pip")
-                .arg("compile")
-                .arg(requirements_in.path())
-                // It's sufficient to check that we resolve to a fix number of packages
-                .stdout(std::process::Stdio::null()), @r###"
-            success: true
-            exit_code: 0
-            ----- stdout -----
-
-            ----- stderr -----
-            Resolved 13 packages in [TIME]
-            "###
-        );
-    };
-
-    insta::allow_duplicates! {
-        check();
-
-        // Replace some cache files with invalid contents
-        for file in &cache_files {
-            let file = context.cache_dir.join(file);
-            if !file.is_file() {
-                bail!("Missing cache file {}", file.user_display());
-            }
-            fs_err::write(file, "I borken you cache")?;
-        }
-
-        check();
-
-        #[cfg(unix)]
-        {
-            use fs_err::os::unix::fs::OpenOptionsExt;
-
-            // Make some files unreadable, so that the read instead of the deserialization will fail
-            for file in cache_files {
-                let file = context.cache_dir.join(file);
-                if !file.is_file() {
-                    bail!("Missing cache file {}", file.user_display());
-                }
-
-                fs_err::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .mode(0o000)
-                    .open(file)?;
-            }
-        }
-
-        check();
-
-        Ok(())
-    }
 }
 
 /// Resolve a distribution from an HTML-only registry.
@@ -12278,7 +12186,7 @@ requires-python = ">3.8"
 fn prerelease_path_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an a package that requires a pre-release version of `flask`.
+    // Create a package that requires a pre-release version of `flask`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -12332,7 +12240,7 @@ requires-python = ">3.8"
 fn prerelease_editable_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an a package that requires a pre-release version of `flask`.r
+    // Create a package that requires a pre-release version of `flask`.r
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -12806,28 +12714,34 @@ fn emit_index_annotation_multiple_indexes() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("uv\nrequests")?;
+    requirements_in.write_str("httpcore\nrequests")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
-        .arg("--emit-index-annotation"), @r###"
+        .arg("--emit-index-annotation"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --emit-index-annotation
+    certifi==2016.8.8
+        # via httpcore
+        # from https://test.pypi.org/simple
+    h11==0.14.0
+        # via httpcore
+        # from https://pypi.org/simple
+    httpcore==1.0.4
+        # via -r requirements.in
+        # from https://pypi.org/simple
     requests==2.5.4.1
         # via -r requirements.in
         # from https://test.pypi.org/simple
-    uv==0.1.24
-        # via -r requirements.in
-        # from https://pypi.org/simple
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    "###
+    Resolved 4 packages in [TIME]
+    "
     );
 
     Ok(())
@@ -14352,8 +14266,6 @@ matplotlib
 fn importlib_metadata_not_repeated() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let uv_toml = context.temp_dir.child("uv.toml");
-    uv_toml.write_str(r#"environments = ["python_version >= '3.10'", "python_version >= '3.8' and python_version < '3.10'", "python_version < '3.8'"]"#)?;
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("build")?;
 
@@ -14765,10 +14677,7 @@ fn compile_derivation_chain() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_compile().arg("pyproject.toml"), @r###"
@@ -14817,7 +14726,7 @@ fn invalid_platform() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--python-platform")
-        .arg("linux")
+        .arg("x86_64-manylinux_2_17")
         .arg("requirements.in"), @r"
     success: false
     exit_code: 1
@@ -14949,16 +14858,17 @@ fn universal_conflicting_override_urls() -> Result<()> {
             .arg("requirements.in")
             .arg("--overrides")
             .arg("overrides.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
-    - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
-    - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
-    "###
+      × Failed to resolve dependencies for `anyio` (v4.3.0)
+      ╰─▶ Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
+          - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
+          - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+    "
     );
 
     Ok(())
@@ -15861,18 +15771,18 @@ fn project_and_group_workspace_inherit() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] --group packages/mysubproject/pyproject.toml:foo
+    -e file://[TEMP_DIR]/packages/pytest
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    -e file://[TEMP_DIR]/packages/sniffio
+        # via
+        #   mysubproject (packages/mysubproject/pyproject.toml:foo)
+        #   anyio
     anyio==4.3.0
         # via mysubproject (packages/mysubproject/pyproject.toml:foo)
     idna==3.6
         # via anyio
     iniconfig==2.0.0
         # via mysubproject (packages/mysubproject/pyproject.toml:foo)
-    pytest @ file://[TEMP_DIR]/packages/pytest
-        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
-    sniffio @ file://[TEMP_DIR]/packages/sniffio
-        # via
-        #   mysubproject (packages/mysubproject/pyproject.toml:foo)
-        #   anyio
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -16431,7 +16341,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16480,7 +16390,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "source-distribution"
@@ -16564,7 +16474,7 @@ fn pep_751_compile_directory() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16635,7 +16545,7 @@ fn pep_751_compile_git() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "uv-public-pypackage"
@@ -16685,7 +16595,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16749,7 +16659,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16818,7 +16728,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16856,7 +16766,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16897,7 +16807,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16936,7 +16846,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16973,7 +16883,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17014,7 +16924,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17054,7 +16964,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17093,7 +17003,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17141,7 +17051,7 @@ fn pep_751_compile_warn() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --emit-index-url
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -17354,7 +17264,7 @@ fn pep_751_compile_no_emit_package() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --no-emit-package idna
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17500,11 +17410,11 @@ fn compile_broken_active_venv() -> Result<()> {
         .arg(&broken_system_python)
         .arg("venv2"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No interpreter found at path `python3.14159`
+    error: No interpreter found at path `python3.14159`
     ");
 
     // Simulate a removed Python interpreter
@@ -17612,6 +17522,83 @@ fn pubgrub_panic_double_self_dependency_extra() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Sync a Git repository that depends on a package within the same repository via a `path` source.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13020>
+#[test]
+#[cfg(feature = "git")]
+fn git_path_transitive_dependency() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(
+        r"
+        git+https://git@github.com/astral-sh/uv-path-dependency-test.git#subdirectory=package2
+        ",
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    package1 @ git+https://git@github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1
+        # via package2
+    package2 @ git+https://git@github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Ensure that `--emit-index-annotation` plays nicely with `--annotation-style=line`.
+#[test]
+fn omit_python_patch_universal() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("redis")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    redis==5.0.3
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
+    async-timeout==4.0.3 ; python_full_version < '3.11.[X]'
+        # via redis
+    redis==5.0.3
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
 
     Ok(())
 }

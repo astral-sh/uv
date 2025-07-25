@@ -86,8 +86,8 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
             ParsedUrl::Directory(ParsedDirectoryUrl {
                 url,
                 install_path,
-                editable: false,
-                r#virtual: false,
+                editable: None,
+                r#virtual: None,
             })
         } else {
             ParsedUrl::Path(ParsedPathUrl {
@@ -118,8 +118,8 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
             ParsedUrl::Directory(ParsedDirectoryUrl {
                 url,
                 install_path,
-                editable: false,
-                r#virtual: false,
+                editable: None,
+                r#virtual: None,
             })
         } else {
             ParsedUrl::Path(ParsedPathUrl {
@@ -187,7 +187,10 @@ impl ParsedUrl {
     pub fn is_editable(&self) -> bool {
         matches!(
             self,
-            Self::Directory(ParsedDirectoryUrl { editable: true, .. })
+            Self::Directory(ParsedDirectoryUrl {
+                editable: Some(true),
+                ..
+            })
         )
     }
 }
@@ -226,16 +229,18 @@ pub struct ParsedDirectoryUrl {
     pub url: DisplaySafeUrl,
     /// The absolute path to the distribution which we use for installing.
     pub install_path: Box<Path>,
-    pub editable: bool,
-    pub r#virtual: bool,
+    /// Whether the project at the given URL should be installed in editable mode.
+    pub editable: Option<bool>,
+    /// Whether the project at the given URL should be treated as a virtual package.
+    pub r#virtual: Option<bool>,
 }
 
 impl ParsedDirectoryUrl {
     /// Construct a [`ParsedDirectoryUrl`] from a path requirement source.
     pub fn from_source(
         install_path: Box<Path>,
-        editable: bool,
-        r#virtual: bool,
+        editable: Option<bool>,
+        r#virtual: Option<bool>,
         url: DisplaySafeUrl,
     ) -> Self {
         Self {
@@ -399,8 +404,8 @@ impl TryFrom<DisplaySafeUrl> for ParsedUrl {
                 Ok(Self::Directory(ParsedDirectoryUrl {
                     url,
                     install_path: path.into_boxed_path(),
-                    editable: false,
-                    r#virtual: false,
+                    editable: None,
+                    r#virtual: None,
                 }))
             } else {
                 Ok(Self::Path(ParsedPathUrl {
@@ -445,7 +450,7 @@ impl From<&ParsedDirectoryUrl> for DirectUrl {
         Self::LocalDirectory {
             url: value.url.to_string(),
             dir_info: DirInfo {
-                editable: value.editable.then_some(true),
+                editable: value.editable,
             },
             subdirectory: None,
         }

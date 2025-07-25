@@ -14,6 +14,7 @@ use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerOptions};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::Sources;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
@@ -238,11 +239,25 @@ impl Pep723Script {
         let metadata = serialize_metadata(&default_metadata);
 
         let script = if let Some(existing_contents) = existing_contents {
+            let (mut shebang, contents) = extract_shebang(&existing_contents)?;
+            if !shebang.is_empty() {
+                shebang.push_str("\n#\n");
+                // If the shebang doesn't contain `uv`, it's probably something like
+                // `#! /usr/bin/env python`, which isn't going to respect the inline metadata.
+                // Issue a warning for users who might not know that.
+                // TODO: There are a lot of mistakes we could consider detecting here, like
+                // `uv run` without `--script` when the file doesn't end in `.py`.
+                if !regex::Regex::new(r"\buv\b").unwrap().is_match(&shebang) {
+                    warn_user!(
+                        "If you execute {} directly, it might ignore its inline metadata.\nConsider replacing its shebang with: {}",
+                        file.to_string_lossy().cyan(),
+                        "#!/usr/bin/env -S uv run --script".cyan(),
+                    );
+                }
+            }
             indoc::formatdoc! {r"
-            {metadata}
-            {content}
-            ",
-            content = String::from_utf8(existing_contents).map_err(|err| Pep723Error::Utf8(err.utf8_error()))?}
+            {shebang}{metadata}
+            {contents}" }
         } else {
             indoc::formatdoc! {r#"
             {metadata}

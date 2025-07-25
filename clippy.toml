@@ -6,6 +6,8 @@ doc-valid-idents = [
   "GraalPy",
   "ReFS",
   "PyTorch",
+  "ROCm",
+  "XPU",
   ".." # Include the defaults
 ]
 
@@ -35,7 +37,7 @@ disallowed-methods = [
   "std::fs::soft_link",
   "std::fs::symlink_metadata",
   "std::fs::write",
-  "std::os::unix::fs::symlink",
-  "std::os::windows::fs::symlink_dir",
-  "std::os::windows::fs::symlink_file",
+  { path = "std::os::unix::fs::symlink", allow-invalid = true },
+  { path = "std::os::windows::fs::symlink_dir", allow-invalid = true },
+  { path = "std::os::windows::fs::symlink_file", allow-invalid = true },
 ]

@@ -3,7 +3,10 @@ use std::path::Path;
 
 use thiserror::Error;
 
+use uv_configuration::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
+
+pub use virtualenv::{OnExisting, remove_virtualenv};
 
 mod virtualenv;
 
@@ -15,6 +18,8 @@ pub enum Error {
         "Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}"
     )]
     NotFound(String),
+    #[error(transparent)]
+    Python(#[from] uv_python::managed::Error),
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.
@@ -47,9 +52,11 @@ pub fn create_venv(
     interpreter: Interpreter,
     prompt: Prompt,
     system_site_packages: bool,
-    allow_existing: bool,
+    on_existing: OnExisting,
     relocatable: bool,
     seed: bool,
+    upgradeable: bool,
+    preview: Preview,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
@@ -57,9 +64,11 @@ pub fn create_venv(
         &interpreter,
         prompt,
         system_site_packages,
-        allow_existing,
+        on_existing,
         relocatable,
         seed,
+        upgradeable,
+        preview,
     )?;
 
     // Create the corresponding `PythonEnvironment`.

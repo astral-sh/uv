@@ -1,9 +1,9 @@
 use anyhow::Result;
 use std::fmt::Write;
 use std::path::Path;
-use uv_configuration::DependencyGroupsWithDefaults;
 
 use uv_cache::Cache;
+use uv_configuration::{DependencyGroupsWithDefaults, Preview};
 use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -32,6 +32,7 @@ pub(crate) async fn find(
     python_preference: PythonPreference,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let environment_preference = if system {
         EnvironmentPreference::OnlySystem
@@ -77,6 +78,7 @@ pub(crate) async fn find(
         environment_preference,
         python_preference,
         cache,
+        preview,
     )?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
@@ -121,6 +123,7 @@ pub(crate) async fn find_script(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let interpreter = match ScriptInterpreter::discover(
         script,
@@ -134,6 +137,7 @@ pub(crate) async fn find_script(
         Some(false),
         cache,
         printer,
+        preview,
     )
     .await
     {

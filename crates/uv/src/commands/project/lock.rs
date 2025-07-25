@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    PreviewMode, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
+    Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -93,12 +93,13 @@ pub(crate) async fn lock(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
     // If necessary, initialize the PEP 723 script.
     let script = match script {
         Some(ScriptPath::Path(path)) => {
             let client_builder = BaseClientBuilder::new()
+                .retries_from_env()?
                 .connectivity(network_settings.connectivity)
                 .native_tls(network_settings.native_tls)
                 .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -114,6 +115,7 @@ pub(crate) async fn lock(
                 &client_builder,
                 cache,
                 &reporter,
+                preview,
             )
             .await?;
             Some(Pep723Script::init(&path, requires_python.specifiers()).await?)
@@ -155,6 +157,7 @@ pub(crate) async fn lock(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -170,6 +173,7 @@ pub(crate) async fn lock(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -196,6 +200,7 @@ pub(crate) async fn lock(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -229,6 +234,10 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
+        Err(err @ ProjectError::LockMismatch(..)) => {
+            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
+            Ok(ExitStatus::Failure)
+        }
         Err(ProjectError::Operation(err)) => {
             diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
@@ -260,8 +269,9 @@ pub(super) struct LockOperation<'env> {
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
     cache: &'env Cache,
+    workspace_cache: &'env WorkspaceCache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 }
 
 impl<'env> LockOperation<'env> {
@@ -274,8 +284,9 @@ impl<'env> LockOperation<'env> {
         logger: Box<dyn ResolveLogger>,
         concurrency: Concurrency,
         cache: &'env Cache,
+        workspace_cache: &'env WorkspaceCache,
         printer: Printer,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Self {
         Self {
             mode,
@@ -286,6 +297,7 @@ impl<'env> LockOperation<'env> {
             logger,
             concurrency,
             cache,
+            workspace_cache,
             printer,
             preview,
         }
@@ -331,14 +343,18 @@ impl<'env> LockOperation<'env> {
                     self.logger,
                     self.concurrency,
                     self.cache,
+                    self.workspace_cache,
                     self.printer,
                     self.preview,
                 )
                 .await?;
 
                 // If the lockfile changed, return an error.
-                if matches!(result, LockResult::Changed(_, _)) {
-                    return Err(ProjectError::LockMismatch(Box::new(result.into_lock())));
+                if let LockResult::Changed(prev, cur) = result {
+                    return Err(ProjectError::LockMismatch(
+                        prev.map(Box::new),
+                        Box::new(cur),
+                    ));
                 }
 
                 Ok(result)
@@ -369,6 +385,7 @@ impl<'env> LockOperation<'env> {
                     self.logger,
                     self.concurrency,
                     self.cache,
+                    self.workspace_cache,
                     self.printer,
                     self.preview,
                 )
@@ -399,8 +416,9 @@ async fn do_lock(
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
 
@@ -414,6 +432,7 @@ async fn do_lock(
         fork_strategy,
         dependency_metadata,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
         exclude_newer,
@@ -426,6 +445,7 @@ async fn do_lock(
     // Collect the requirements, etc.
     let members = target.members();
     let packages = target.packages();
+    let required_members = target.required_members();
     let requirements = target.requirements();
     let overrides = target.overrides();
     let constraints = target.constraints();
@@ -578,21 +598,13 @@ async fn do_lock(
 
     // Initialize the client.
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
@@ -651,8 +663,6 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
-    let workspace_cache = WorkspaceCache::default();
-
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -665,13 +675,14 @@ async fn do_lock(
         state.fork().into_inner(),
         *index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
         *link_mode,
         build_options,
         &build_hasher,
         *exclude_newer,
         *sources,
-        workspace_cache,
+        workspace_cache.clone(),
         concurrency,
         preview,
     );
@@ -685,6 +696,7 @@ async fn do_lock(
             target.install_path(),
             packages,
             &members,
+            required_members,
             &requirements,
             &dependency_groups,
             &constraints,
@@ -898,6 +910,7 @@ impl ValidatedLock {
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
+        required_members: &BTreeSet<PackageName>,
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
@@ -934,7 +947,7 @@ impl ValidatedLock {
                 lock.prerelease_mode().cyan(),
                 options.prerelease_mode.cyan()
             );
-            return Ok(Self::Unusable(lock));
+            return Ok(Self::Preferable(lock));
         }
         if lock.fork_strategy() != options.fork_strategy {
             let _ = writeln!(
@@ -983,11 +996,52 @@ impl ValidatedLock {
                 return Ok(Self::Unusable(lock));
             }
             Upgrade::Packages(_) => {
-                // If the user specified `--upgrade-package`, then at best we can prefer some of
-                // the existing versions.
-                debug!("Ignoring existing lockfile due to `--upgrade-package`");
-                return Ok(Self::Preferable(lock));
+                // This is handled below, after some checks regarding fork
+                // markers. In particular, we'd like to return `Preferable`
+                // here, but we shouldn't if the fork markers cannot be
+                // reused.
             }
+        }
+
+        // NOTE: It's important that this appears before any possible path that
+        // returns `Self::Preferable`. In particular, if our fork markers are
+        // bunk, then we shouldn't return a result that indicates we should try
+        // to re-use the existing fork markers.
+        if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
+            warn_user!(
+                "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
+                fork_markers_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+                environments_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // NOTE: Similarly as above, this should also appear before any
+        // possible code path that can return `Self::Preferable`.
+        if let Err((fork_markers_union, requires_python_marker)) =
+            lock.requires_python_coverage(requires_python)
+        {
+            warn_user!(
+                "Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `{}` vs `{}`",
+                fork_markers_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+                requires_python_marker
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        if let Upgrade::Packages(_) = upgrade {
+            // If the user specified `--upgrade-package`, then at best we can prefer some of
+            // the existing versions.
+            debug!("Ignoring existing lockfile due to `--upgrade-package`");
+            return Ok(Self::Preferable(lock));
         }
 
         // If the Requires-Python bound has changed, we have to perform a clean resolution, since
@@ -1018,19 +1072,6 @@ impl ValidatedLock {
             debug!(
                 "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
-            );
-            return Ok(Self::Versions(lock));
-        }
-
-        if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
-            warn_user!(
-                "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
-                fork_markers_union
-                    .try_to_string()
-                    .unwrap_or("true".to_string()),
-                environments_union
-                    .try_to_string()
-                    .unwrap_or("true".to_string()),
             );
             return Ok(Self::Versions(lock));
         }
@@ -1081,6 +1122,7 @@ impl ValidatedLock {
                 install_path,
                 packages,
                 members,
+                required_members,
                 requirements,
                 constraints,
                 overrides,

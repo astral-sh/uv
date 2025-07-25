@@ -22,7 +22,7 @@ walkdir = { workspace = true }
 [dev-dependencies]
 anstream = { workspace = true }
 fs-err = { workspace = true }
-insta = "1.41.1"
+insta = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

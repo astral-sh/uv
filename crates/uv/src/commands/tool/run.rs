@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::Path;
@@ -18,7 +17,7 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Constraints;
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_configuration::{Concurrency, Preview};
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
     IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
@@ -42,6 +41,7 @@ use uv_warnings::warn_user;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
+use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -51,7 +51,6 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
@@ -102,7 +101,7 @@ pub(crate) async fn run(
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
@@ -687,9 +686,10 @@ async fn get_or_create_environment(
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -747,6 +747,7 @@ async fn get_or_create_environment(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await?
     .into_interpreter();
@@ -869,7 +870,7 @@ async fn get_or_create_environment(
         with,
         constraints,
         overrides,
-        BTreeMap::default(),
+        None,
         &client_builder,
     )
     .await?;
@@ -1036,6 +1037,7 @@ async fn get_or_create_environment(
                     python_preference,
                     python_downloads,
                     cache,
+                    preview,
                 )
                 .await
                 .ok()
@@ -1077,10 +1079,6 @@ async fn get_or_create_environment(
             err => return Err(err),
         },
     };
-
-    // Clear any existing overlay.
-    environment.clear_overlay()?;
-    environment.clear_system_site_packages()?;
 
     Ok((from, environment.into()))
 }

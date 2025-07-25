@@ -20,6 +20,8 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
 
+use crate::rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited};
+
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".ok";
@@ -787,7 +789,15 @@ fn github_fast_path(
         }
     };
 
-    let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{github_branch_name}");
+    // Check if we're rate-limited by GitHub before determining the FastPathRev
+    if GITHUB_RATE_LIMIT_STATUS.is_active() {
+        debug!("Skipping GitHub fast path attempt for: {url} (rate-limited)");
+        return Ok(FastPathRev::Indeterminate);
+    }
+
+    let base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
+        .unwrap_or("https://api.github.com/repos".to_owned());
+    let url = format!("{base_url}/{owner}/{repo}/commits/{github_branch_name}");
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -806,6 +816,11 @@ fn github_fast_path(
         }
 
         let response = request.send().await?;
+
+        if is_github_rate_limited(&response) {
+            // Mark that we are being rate-limited by GitHub
+            GITHUB_RATE_LIMIT_STATUS.activate();
+        }
 
         // GitHub returns a 404 if the repository does not exist, and a 422 if it exists but GitHub
         // is unable to resolve the requested revision.

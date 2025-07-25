@@ -2,6 +2,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
+use uv_configuration::Preview;
 use uv_pep440::Version;
 
 use anyhow::Result;
@@ -64,6 +65,7 @@ pub(crate) async fn list(
     python_downloads: PythonDownloads,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let request = request.as_deref().map(PythonRequest::parse);
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
@@ -79,6 +81,8 @@ pub(crate) async fn list(
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
+            } else if all_arches {
+                base_download_request.fill_platform()?.with_any_arch()
             } else {
                 base_download_request.fill_platform()?
             }),
@@ -124,6 +128,7 @@ pub(crate) async fn list(
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 cache,
+                preview,
             )
             // Raise discovery errors if critical
             .filter(|result| {

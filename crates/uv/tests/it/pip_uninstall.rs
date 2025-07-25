@@ -5,7 +5,7 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, get_bin, uv_snapshot, venv_to_interpreter};
+use crate::common::{TestContext, get_bin, uv_snapshot};
 
 #[test]
 fn no_arguments() {
@@ -113,12 +113,7 @@ fn uninstall() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&context.temp_dir)
-        .assert()
-        .success();
+    context.assert_command("import markupsafe").success();
 
     uv_snapshot!(context.pip_uninstall()
         .arg("MarkupSafe"), @r###"
@@ -132,12 +127,7 @@ fn uninstall() -> Result<()> {
     "###
     );
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&context.temp_dir)
-        .assert()
-        .failure();
+    context.assert_command("import markupsafe").failure();
 
     Ok(())
 }
@@ -156,12 +146,7 @@ fn missing_record() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import markupsafe")
-        .current_dir(&context.temp_dir)
-        .assert()
-        .success();
+    context.assert_command("import markupsafe").success();
 
     // Delete the RECORD file.
     let dist_info = context.site_packages().join("MarkupSafe-2.1.3.dist-info");
@@ -191,7 +176,7 @@ fn uninstall_editable_by_name() -> Result<()> {
         "-e {}",
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
+            .join("scripts/packages/flit_editable")
             .as_os_str()
             .to_str()
             .expect("Path is valid unicode")
@@ -202,30 +187,22 @@ fn uninstall_editable_by_name() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import poetry_editable")
-        .assert()
-        .success();
+    context.assert_command("import flit_editable").success();
 
     // Uninstall the editable by name.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("poetry-editable"), @r###"
+        .arg("flit-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     - flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
     "###
     );
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import poetry_editable")
-        .assert()
-        .failure();
+    context.assert_command("import flit_editable").failure();
 
     Ok(())
 }
@@ -239,7 +216,7 @@ fn uninstall_by_path() -> Result<()> {
     requirements_txt.write_str(
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
+            .join("scripts/packages/flit_editable")
             .as_os_str()
             .to_str()
             .expect("Path is valid unicode"),
@@ -251,30 +228,22 @@ fn uninstall_by_path() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import poetry_editable")
-        .assert()
-        .success();
+    context.assert_command("import flit_editable").success();
 
     // Uninstall the editable by path.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     - flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
     "###
     );
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import poetry_editable")
-        .assert()
-        .failure();
+    context.assert_command("import flit_editable").failure();
 
     Ok(())
 }
@@ -288,7 +257,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     requirements_txt.write_str(
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
+            .join("scripts/packages/flit_editable")
             .as_os_str()
             .to_str()
             .expect("Path is valid unicode"),
@@ -300,31 +269,23 @@ fn uninstall_duplicate_by_path() -> Result<()> {
         .assert()
         .success();
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import poetry_editable")
-        .assert()
-        .success();
+    context.assert_command("import flit_editable").success();
 
     // Uninstall the editable by both path and name.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("poetry-editable")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg("flit-editable")
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     - flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
     "###
     );
 
-    Command::new(venv_to_interpreter(&context.venv))
-        .arg("-c")
-        .arg("import poetry_editable")
-        .assert()
-        .failure();
+    context.assert_command("import flit_editable").failure();
 
     Ok(())
 }

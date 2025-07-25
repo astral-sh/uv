@@ -8,8 +8,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::DependencyGroupsWithDefaults;
-use uv_dirs::user_uv_config_dir;
+use uv_configuration::{DependencyGroupsWithDefaults, Preview};
 use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
@@ -40,6 +39,7 @@ pub(crate) async fn pin(
     network_settings: NetworkSettings,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let virtual_project = if no_project {
@@ -56,16 +56,13 @@ pub(crate) async fn pin(
         }
     };
 
-    let version_file = if global {
-        if let Some(path) = user_uv_config_dir() {
-            PythonVersionFile::discover_user_config(path, &VersionFileDiscoveryOptions::default())
-                .await
-        } else {
-            Ok(None)
-        }
-    } else {
-        PythonVersionFile::discover(project_dir, &VersionFileDiscoveryOptions::default()).await
-    };
+    // Search for an existing file, we won't necessarily write to this, we'll construct a target
+    // path if there's a request later on.
+    let version_file = PythonVersionFile::discover(
+        project_dir,
+        &VersionFileDiscoveryOptions::default().with_no_local(global),
+    )
+    .await;
 
     if rm {
         let Some(file) = version_file? else {
@@ -74,10 +71,20 @@ pub(crate) async fn pin(
             }
             bail!("No Python version file found");
         };
+
+        if !global && file.is_global() {
+            bail!("No Python version file found; use `--rm --global` to remove the global pin");
+        }
+
         fs_err::tokio::remove_file(file.path()).await?;
         writeln!(
             printer.stdout(),
-            "Removed Python version file at `{}`",
+            "Removed {} at `{}`",
+            if global {
+                "global Python pin"
+            } else {
+                "Python version file"
+            },
             file.path().user_display()
         )?;
         return Ok(ExitStatus::Success);
@@ -94,6 +101,7 @@ pub(crate) async fn pin(
                         virtual_project,
                         python_preference,
                         cache,
+                        preview,
                     );
                 }
             }
@@ -108,6 +116,7 @@ pub(crate) async fn pin(
     }
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -124,12 +133,14 @@ pub(crate) async fn pin(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await
     {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
-        Err(uv_python::Error::MissingPython(err)) if !resolved => {
+        Err(uv_python::Error::MissingPython(err, ..)) if !resolved => {
+            // N.B. We omit the hint and just show the inner error message
             warn_user_once!("{err}");
             None
         }
@@ -192,12 +203,11 @@ pub(crate) async fn pin(
     let existing = version_file.ok().flatten();
     // TODO(zanieb): Allow updating the discovered version file with an `--update` flag.
     let new = if global {
-        let Some(config_dir) = user_uv_config_dir() else {
-            return Err(anyhow::anyhow!("No user-level config directory found."));
+        let Some(new) = PythonVersionFile::global() else {
+            // TODO(zanieb): We should find a nice way to surface that as an error
+            bail!("Failed to determine directory for global Python pin");
         };
-        fs_err::tokio::create_dir_all(&config_dir).await?;
-        PythonVersionFile::new(config_dir.join(PYTHON_VERSION_FILENAME))
-            .with_versions(vec![request])
+        new.with_versions(vec![request])
     } else {
         PythonVersionFile::new(project_dir.join(PYTHON_VERSION_FILENAME))
             .with_versions(vec![request])
@@ -260,6 +270,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
     cache: &Cache,
+    preview: Preview,
 ) {
     // Check if the pinned version is compatible with the project.
     if let Some(pin_version) = pep440_version_from_request(pin) {
@@ -284,6 +295,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        preview,
     ) {
         Ok(python) => {
             let python_version = python.python_version();

@@ -19,11 +19,6 @@ doctest = false
 bench = false
 
 [[bench]]
-name = "distribution-filename"
-path = "benches/distribution_filename.rs"
-harness = false
-
-[[bench]]
 name = "uv"
 path = "benches/uv.rs"
 harness = false
@@ -34,7 +29,6 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
-uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true, optional = true }
 uv-install-wheel = { workspace = true }
@@ -48,8 +42,10 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-codspeed-criterion-compat = { version = "2.7.2", default-features = false, optional = true }
-criterion = { version = "0.6.0", default-features = false, features = ["async_tokio"] }
+codspeed-criterion-compat = { version = "3.0.2", default-features = false, optional = true }
+criterion = { version = "0.6.0", default-features = false, features = [
+  "async_tokio",
+] }
 jiff = { workspace = true }
 tokio = { workspace = true }
 

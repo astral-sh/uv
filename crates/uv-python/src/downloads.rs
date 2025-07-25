@@ -12,7 +12,7 @@ use futures::TryStreamExt;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
-use reqwest_retry::RetryPolicy;
+use reqwest_retry::{RetryError, RetryPolicy};
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
@@ -111,14 +111,41 @@ pub enum Error {
     },
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl Error {
+    // Return the number of attempts that were made to complete this request before this error was
+    // returned. Note that e.g. 3 retries equates to 4 attempts.
+    //
+    // It's easier to do arithmetic with "attempts" instead of "retries", because if you have
+    // nested retry loops you can just add up all the attempts directly, while adding up the
+    // retries requires +1/-1 adjustments.
+    fn attempts(&self) -> u32 {
+        // Unfortunately different variants of `Error` track retry counts in different ways. We
+        // could consider unifying the variants we handle here in `Error::from_reqwest_middleware`
+        // instead, but both approaches will be fragile as new variants get added over time.
+        if let Error::NetworkErrorWithRetries { retries, .. } = self {
+            return retries + 1;
+        }
+        // TODO(jack): let-chains are stable as of Rust 1.88. We should use them here as soon as
+        // our rust-version is high enough.
+        if let Error::NetworkMiddlewareError(_, anyhow_error) = self {
+            if let Some(RetryError::WithRetries { retries, .. }) =
+                anyhow_error.downcast_ref::<RetryError>()
+            {
+                return retries + 1;
+            }
+        }
+        1
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: &'static str,
     sha256: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct PythonDownloadRequest {
     pub(crate) version: Option<VersionRequest>,
     pub(crate) implementation: Option<ImplementationName>,
@@ -131,7 +158,7 @@ pub struct PythonDownloadRequest {
     pub(crate) prereleases: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArchRequest {
     Explicit(Arch),
     Environment(Arch),
@@ -695,7 +722,8 @@ impl ManagedPythonDownload {
         pypy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let mut n_past_retries = 0;
+        let mut total_attempts = 0;
+        let mut retried_here = false;
         let start_time = SystemTime::now();
         let retry_policy = client.retry_policy();
         loop {
@@ -710,25 +738,41 @@ impl ManagedPythonDownload {
                     reporter,
                 )
                 .await;
-            if result
-                .as_ref()
-                .err()
-                .is_some_and(|err| is_extended_transient_error(err))
-            {
-                let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    debug!(
-                        "Transient failure while handling response for {}; retrying...",
-                        self.key()
-                    );
-                    let duration = execute_after
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_else(|_| Duration::default());
-                    tokio::time::sleep(duration).await;
-                    n_past_retries += 1;
-                    continue;
+            let result = match result {
+                Ok(download_result) => Ok(download_result),
+                Err(err) => {
+                    // Inner retry loops (e.g. `reqwest-retry` middleware) might make more than one
+                    // attempt per error we see here.
+                    total_attempts += err.attempts();
+                    // We currently interpret e.g. "3 retries" to mean we should make 4 attempts.
+                    let n_past_retries = total_attempts - 1;
+                    if is_extended_transient_error(&err) {
+                        let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+                        if let reqwest_retry::RetryDecision::Retry { execute_after } =
+                            retry_decision
+                        {
+                            debug!(
+                                "Transient failure while handling response for {}; retrying...",
+                                self.key()
+                            );
+                            let duration = execute_after
+                                .duration_since(SystemTime::now())
+                                .unwrap_or_else(|_| Duration::default());
+                            tokio::time::sleep(duration).await;
+                            retried_here = true;
+                            continue; // Retry.
+                        }
+                    }
+                    if retried_here {
+                        Err(Error::NetworkErrorWithRetries {
+                            err: Box::new(err),
+                            retries: n_past_retries,
+                        })
+                    } else {
+                        Err(err)
+                    }
                 }
-            }
+            };
             return result;
         }
     }
@@ -772,7 +816,9 @@ impl ManagedPythonDownload {
 
         let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
 
-        if let Some(python_builds_dir) = env::var_os(EnvVars::UV_PYTHON_CACHE_DIR) {
+        if let Some(python_builds_dir) =
+            env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).filter(|s| !s.is_empty())
+        {
             let python_builds_dir = PathBuf::from(python_builds_dir);
             fs_err::create_dir_all(&python_builds_dir)?;
             let hash_prefix = match self.sha256 {
@@ -942,7 +988,11 @@ impl ManagedPythonDownload {
             archive_writer.flush().await?;
         }
         // Move the completed file into place, invalidating the `File` instance.
-        fs_err::rename(&temp_file, target_cache_file)?;
+        match rename_with_retry(&temp_file, target_cache_file).await {
+            Ok(()) => {}
+            Err(_) if target_cache_file.is_file() => {}
+            Err(err) => return Err(err.into()),
+        }
         Ok(())
     }
 

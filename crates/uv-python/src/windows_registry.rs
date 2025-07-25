@@ -3,6 +3,7 @@
 use crate::managed::ManagedPythonInstallation;
 use crate::platform::Arch;
 use crate::{COMPANY_DISPLAY_NAME, COMPANY_KEY, PythonInstallationKey, PythonVersion};
+use anyhow::anyhow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -129,12 +130,13 @@ fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<Window
 pub enum ManagedPep514Error {
     #[error("Windows has an unknown pointer width for arch: `{_0}`")]
     InvalidPointerSize(Arch),
+    #[error("Failed to write registry entry: {0}")]
+    WriteError(#[from] windows_result::Error),
 }
 
 /// Register a managed Python installation in the Windows registry following PEP 514.
 pub fn create_registry_entry(
     installation: &ManagedPythonInstallation,
-    errors: &mut Vec<(PythonInstallationKey, anyhow::Error)>,
 ) -> Result<(), ManagedPep514Error> {
     let pointer_width = match installation.key().arch().family().pointer_width() {
         Ok(PointerWidth::U32) => 32,
@@ -146,9 +148,7 @@ pub fn create_registry_entry(
         }
     };
 
-    if let Err(err) = write_registry_entry(installation, pointer_width) {
-        errors.push((installation.key().clone(), err.into()));
-    }
+    write_registry_entry(installation, pointer_width)?;
 
     Ok(())
 }
@@ -239,8 +239,7 @@ pub fn remove_registry_entry<'a>(
             } else {
                 errors.push((
                     installation.key().clone(),
-                    anyhow::Error::new(err)
-                        .context("Failed to clear registry entries under HKCU:\\{python_entry}"),
+                    anyhow!("Failed to clear registry entries under HKCU:\\{python_entry}: {err}"),
                 ));
             }
         }
@@ -269,6 +268,9 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
     // Separate assignment since `keys()` creates a borrow.
     let subkeys = match key.keys() {
         Ok(subkeys) => subkeys,
+        Err(err) if err.code() == ERROR_NOT_FOUND => {
+            return;
+        }
         Err(err) => {
             // TODO(konsti): We don't have an installation key here.
             warn_user_once!("Failed to list subkeys of HKCU:\\{astral_key}: {err}");
@@ -282,6 +284,9 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
         let python_entry = format!("{astral_key}\\{subkey}");
         debug!("Removing orphan registry key HKCU:\\{}", python_entry);
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
+            if err.code() == ERROR_NOT_FOUND {
+                continue;
+            }
             // TODO(konsti): We don't have an installation key here.
             warn_user_once!("Failed to remove orphan registry key HKCU:\\{python_entry}: {err}");
         }

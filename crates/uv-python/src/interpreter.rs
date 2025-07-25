@@ -26,12 +26,16 @@ use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
+use crate::managed::ManagedPythonInstallations;
 use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
     Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
     VirtualEnvironment,
 };
+
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE};
 
 /// A Python executable and its associated platform markers.
 #[derive(Debug, Clone)]
@@ -168,7 +172,7 @@ impl Interpreter {
             Ok(path) => path,
             Err(err) => {
                 warn!("Failed to find base Python executable: {err}");
-                uv_fs::canonicalize_executable(base_executable)?
+                canonicalize_executable(base_executable)?
             }
         };
         Ok(base_python)
@@ -261,6 +265,34 @@ impl Interpreter {
     /// Returns `true` if the environment is a `--prefix` environment.
     pub fn is_prefix(&self) -> bool {
         self.prefix.is_some()
+    }
+
+    /// Returns `true` if this interpreter is managed by uv.
+    ///
+    /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
+    pub fn is_managed(&self) -> bool {
+        if let Ok(test_managed) =
+            std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
+        {
+            // During testing, we collect interpreters into an artificial search path and need to
+            // be able to mock whether an interpreter is managed or not.
+            return test_managed.split_ascii_whitespace().any(|item| {
+                let version = <PythonVersion as std::str::FromStr>::from_str(item).expect(
+                    "`UV_INTERNAL__TEST_PYTHON_MANAGED` items should be valid Python versions",
+                );
+                if version.patch().is_some() {
+                    version.version() == self.python_version()
+                } else {
+                    (version.major(), version.minor()) == self.python_tuple()
+                }
+            });
+        }
+
+        let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
+            return false;
+        };
+
+        self.sys_base_prefix.starts_with(installations.root())
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -483,8 +515,17 @@ impl Interpreter {
     /// `python-build-standalone`.
     ///
     /// See: <https://github.com/astral-sh/python-build-standalone/issues/382>
+    #[cfg(unix)]
     pub fn is_standalone(&self) -> bool {
         self.standalone
+    }
+
+    /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
+    // TODO(john): Replace this approach with patching sysconfig on Windows to
+    // set `PYTHON_BUILD_STANDALONE=1`.`
+    #[cfg(windows)]
+    pub fn is_standalone(&self) -> bool {
+        self.standalone || (self.is_managed() && self.markers().implementation_name() == "cpython")
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -608,6 +649,29 @@ impl Interpreter {
     }
 }
 
+/// Calls `fs_err::canonicalize` on Unix. On Windows, avoids attempting to resolve symlinks
+/// but will resolve junctions if they are part of a trampoline target.
+pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+    let path = path.as_ref();
+    debug_assert!(
+        path.is_absolute(),
+        "path must be absolute: {}",
+        path.display()
+    );
+
+    #[cfg(windows)]
+    {
+        if let Ok(Some(launcher)) = uv_trampoline_builder::Launcher::try_from_path(path) {
+            Ok(dunce::canonicalize(launcher.python_path)?)
+        } else {
+            Ok(path.to_path_buf())
+        }
+    }
+
+    #[cfg(unix)]
+    fs_err::canonicalize(path)
+}
+
 /// The `EXTERNALLY-MANAGED` file in a Python installation.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/externally-managed-environments/>
@@ -708,6 +772,13 @@ pub enum Error {
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
     SpawnFailed {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[cfg(windows)]
+    #[error("Failed to query Python interpreter at `{path}`")]
+    CorruptWindowsPackage {
         path: PathBuf,
         #[source]
         err: io::Error,
@@ -824,10 +895,23 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(|err| Error::SpawnFailed {
-                path: interpreter.to_path_buf(),
-                err,
-            })?;
+            .map_err(
+                |err| match err.raw_os_error().and_then(|code| u32::try_from(code).ok()) {
+                    // These error codes are returned if the Python interpreter is a corrupt MSIX
+                    // package, which we want to differentiate from a typical spawn failure.
+                    #[cfg(windows)]
+                    Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) => {
+                        Error::CorruptWindowsPackage {
+                            path: interpreter.to_path_buf(),
+                            err,
+                        }
+                    }
+                    _ => Error::SpawnFailed {
+                        path: interpreter.to_path_buf(),
+                        err,
+                    },
+                },
+            )?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -919,6 +1003,31 @@ impl InterpreterInfo {
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
+        // Provide a better error message if the link is broken or the file does not exist. Since
+        // `canonicalize_executable` does not resolve the file on Windows, we must re-use this logic
+        // for the subsequent metadata read as we may not have actually resolved the path.
+        let handle_io_error = |err: io::Error| -> Error {
+            if err.kind() == io::ErrorKind::NotFound {
+                // Check if it looks like a venv interpreter where the underlying Python
+                // installation was removed.
+                if absolute
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.is_symlink())
+                {
+                    Error::BrokenSymlink(BrokenSymlink {
+                        path: executable.to_path_buf(),
+                        venv: uv_fs::is_virtualenv_executable(executable),
+                    })
+                } else {
+                    Error::NotFound(executable.to_path_buf())
+                }
+            } else {
+                err.into()
+            }
+        };
+
+        let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
+
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
@@ -929,38 +1038,18 @@ impl InterpreterInfo {
                 sys_info::os_release().unwrap_or_default(),
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
-            // paths. But we don't to query the executable with symbolic links resolved.
-            format!("{}.msgpack", cache_digest(&absolute)),
+            // paths. But we don't want to query the executable with symbolic links resolved because
+            // that can change reported values, e.g., `sys.executable`. We include the canonical
+            // path in the cache entry as well, otherwise we can have cache collisions if an
+            // absolute path refers to different interpreters with matching ctimes, e.g., if you
+            // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+            // modified at the same time.
+            format!("{}.msgpack", cache_digest(&(&absolute, &canonical))),
         );
 
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
-        let modified = uv_fs::canonicalize_executable(&absolute)
-            .and_then(Timestamp::from_path)
-            .map_err(|err| {
-                if err.kind() == io::ErrorKind::NotFound {
-                    // Check if it looks like a venv interpreter where the underlying Python
-                    // installation was removed.
-                    if absolute
-                        .symlink_metadata()
-                        .is_ok_and(|metadata| metadata.is_symlink())
-                    {
-                        let venv = executable
-                            .parent()
-                            .and_then(Path::parent)
-                            .map(|path| path.join("pyvenv.cfg").is_file())
-                            .unwrap_or(false);
-                        Error::BrokenSymlink(BrokenSymlink {
-                            path: executable.to_path_buf(),
-                            venv,
-                        })
-                    } else {
-                        Error::NotFound(executable.to_path_buf())
-                    }
-                } else {
-                    err.into()
-                }
-            })?;
+        let modified = Timestamp::from_path(canonical).map_err(handle_io_error)?;
 
         // Read from the cache.
         if cache
@@ -972,7 +1061,7 @@ impl InterpreterInfo {
                     Ok(cached) => {
                         if cached.timestamp == modified {
                             trace!(
-                                "Cached interpreter info for Python {}, skipping probing: {}",
+                                "Found cached interpreter info for Python {}, skipping query of: {}",
                                 cached.data.markers.python_full_version(),
                                 executable.user_display()
                             );

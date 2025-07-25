@@ -37,11 +37,14 @@ pub enum FilePreference {
 pub struct DiscoveryOptions<'a> {
     /// The path to stop discovery at.
     stop_discovery_at: Option<&'a Path>,
-    /// When `no_config` is set, Python version files will be ignored.
+    /// Ignore Python version files.
     ///
     /// Discovery will still run in order to display a log about the ignored file.
     no_config: bool,
+    /// Whether `.python-version` or `.python-versions` should be preferred.
     preference: FilePreference,
+    /// Whether to ignore local version files, and only search for a global one.
+    no_local: bool,
 }
 
 impl<'a> DiscoveryOptions<'a> {
@@ -62,6 +65,11 @@ impl<'a> DiscoveryOptions<'a> {
             ..self
         }
     }
+
+    #[must_use]
+    pub fn with_no_local(self, no_local: bool) -> Self {
+        Self { no_local, ..self }
+    }
 }
 
 impl PythonVersionFile {
@@ -70,33 +78,38 @@ impl PythonVersionFile {
         working_directory: impl AsRef<Path>,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Option<Self>, std::io::Error> {
-        let Some(path) = Self::find_nearest(&working_directory, options) else {
-            if let Some(stop_discovery_at) = options.stop_discovery_at {
-                if stop_discovery_at == working_directory.as_ref() {
-                    debug!(
-                        "No Python version file found in workspace: {}",
-                        working_directory.as_ref().display()
-                    );
+        let allow_local = !options.no_local;
+        let Some(path) = allow_local.then(|| {
+            // First, try to find a local version file.
+            let local = Self::find_nearest(&working_directory, options);
+            if local.is_none() {
+                // Log where we searched for the file, if not found
+                if let Some(stop_discovery_at) = options.stop_discovery_at {
+                    if stop_discovery_at == working_directory.as_ref() {
+                        debug!(
+                            "No Python version file found in workspace: {}",
+                            working_directory.as_ref().display()
+                        );
+                    } else {
+                        debug!(
+                            "No Python version file found between working directory `{}` and workspace root `{}`",
+                            working_directory.as_ref().display(),
+                            stop_discovery_at.display()
+                        );
+                    }
                 } else {
                     debug!(
-                        "No Python version file found between working directory `{}` and workspace root `{}`",
-                        working_directory.as_ref().display(),
-                        stop_discovery_at.display()
+                        "No Python version file found in ancestors of working directory: {}",
+                        working_directory.as_ref().display()
                     );
                 }
-            } else {
-                debug!(
-                    "No Python version file found in ancestors of working directory: {}",
-                    working_directory.as_ref().display()
-                );
             }
-            // Not found in directory or its ancestors. Looking in user-level config.
-            return Ok(match user_uv_config_dir() {
-                Some(user_dir) => Self::discover_user_config(user_dir, options)
-                    .await?
-                    .or(None),
-                None => None,
-            });
+            local
+        }).flatten().or_else(|| {
+            // Search for a global config
+            Self::find_global(options)
+        }) else {
+            return Ok(None);
         };
 
         if options.no_config {
@@ -111,20 +124,9 @@ impl PythonVersionFile {
         Self::try_from_path(path).await
     }
 
-    pub async fn discover_user_config(
-        user_config_working_directory: impl AsRef<Path>,
-        options: &DiscoveryOptions<'_>,
-    ) -> Result<Option<Self>, std::io::Error> {
-        if !options.no_config {
-            if let Some(path) =
-                Self::find_in_directory(user_config_working_directory.as_ref(), options)
-                    .into_iter()
-                    .find(|path| path.is_file())
-            {
-                return Self::try_from_path(path).await;
-            }
-        }
-        Ok(None)
+    fn find_global(options: &DiscoveryOptions<'_>) -> Option<PathBuf> {
+        let user_config_dir = user_uv_config_dir()?;
+        Self::find_in_directory(&user_config_dir, options)
     }
 
     fn find_nearest(path: impl AsRef<Path>, options: &DiscoveryOptions<'_>) -> Option<PathBuf> {
@@ -215,6 +217,19 @@ impl PythonVersionFile {
         }
     }
 
+    /// Create a new representation of a global Python version file.
+    ///
+    /// Returns [`None`] if the user configuration directory cannot be determined.
+    pub fn global() -> Option<Self> {
+        let path = user_uv_config_dir()?.join(PYTHON_VERSION_FILENAME);
+        Some(Self::new(path))
+    }
+
+    /// Returns `true` if the version file is a global version file.
+    pub fn is_global(&self) -> bool {
+        PythonVersionFile::global().is_some_and(|global| self.path() == global.path())
+    }
+
     /// Return the first request declared in the file, if any.
     pub fn version(&self) -> Option<&PythonRequest> {
         self.versions.first()
@@ -258,6 +273,9 @@ impl PythonVersionFile {
     /// Update the version file on the file system.
     pub async fn write(&self) -> Result<(), std::io::Error> {
         debug!("Writing Python versions to `{}`", self.path.display());
+        if let Some(parent) = self.path.parent() {
+            fs_err::tokio::create_dir_all(parent).await?;
+        }
         fs::tokio::write(
             &self.path,
             self.versions

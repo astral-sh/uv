@@ -15,7 +15,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, Preview};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
@@ -54,6 +54,7 @@ pub(crate) async fn pip_list(
     system: bool,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Disallow `--outdated` with `--format freeze`.
     if outdated && matches!(format, ListFormat::Freeze) {
@@ -65,6 +66,7 @@ pub(crate) async fn pip_list(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
@@ -85,6 +87,7 @@ pub(crate) async fn pip_list(
         let capabilities = IndexCapabilities::default();
 
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .keyring(keyring_provider)

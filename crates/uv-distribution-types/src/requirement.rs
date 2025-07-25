@@ -429,9 +429,9 @@ pub enum RequirementSource {
         /// The absolute path to the distribution which we use for installing.
         install_path: Box<Path>,
         /// For a source tree (a directory), whether to install as an editable.
-        editable: bool,
+        editable: Option<bool>,
         /// For a source tree (a directory), whether the project should be built and installed.
-        r#virtual: bool,
+        r#virtual: Option<bool>,
         /// The PEP 508 style URL in the format
         /// `file:///<path>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -545,7 +545,13 @@ impl RequirementSource {
 
     /// Returns `true` if the source is editable.
     pub fn is_editable(&self) -> bool {
-        matches!(self, Self::Directory { editable: true, .. })
+        matches!(
+            self,
+            Self::Directory {
+                editable: Some(true),
+                ..
+            }
+        )
     }
 
     /// Returns `true` if the source is empty.
@@ -792,11 +798,11 @@ impl From<RequirementSource> for RequirementSourceWire {
                 r#virtual,
                 url: _,
             } => {
-                if editable {
+                if editable.unwrap_or(false) {
                     Self::Editable {
                         editable: PortablePathBuf::from(install_path),
                     }
-                } else if r#virtual {
+                } else if r#virtual.unwrap_or(false) {
                     Self::Virtual {
                         r#virtual: PortablePathBuf::from(install_path),
                     }
@@ -908,8 +914,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 ))?;
                 Ok(Self::Directory {
                     install_path: directory,
-                    editable: false,
-                    r#virtual: false,
+                    editable: Some(false),
+                    r#virtual: Some(false),
                     url,
                 })
             }
@@ -920,8 +926,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 ))?;
                 Ok(Self::Directory {
                     install_path: editable,
-                    editable: true,
-                    r#virtual: false,
+                    editable: Some(true),
+                    r#virtual: Some(false),
                     url,
                 })
             }
@@ -932,8 +938,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 ))?;
                 Ok(Self::Directory {
                     install_path: r#virtual,
-                    editable: false,
-                    r#virtual: true,
+                    editable: Some(false),
+                    r#virtual: Some(true),
                     url,
                 })
             }
@@ -980,8 +986,8 @@ mod tests {
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
                 install_path: PathBuf::from(path).into_boxed_path(),
-                editable: false,
-                r#virtual: false,
+                editable: Some(false),
+                r#virtual: Some(false),
                 url: VerbatimUrl::from_absolute_path(path).unwrap(),
             },
             origin: None,

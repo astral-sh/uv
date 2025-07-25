@@ -4,7 +4,7 @@ use clap::Parser;
 use tracing::info;
 
 use uv_cache::{Cache, CacheArgs};
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, Preview};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
 #[derive(Parser)]
@@ -26,6 +26,7 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
             &PythonRequest::default(),
             EnvironmentPreference::OnlyVirtual,
             &cache,
+            Preview::default(),
         )?
         .into_interpreter();
         interpreter.sys_executable().to_path_buf()

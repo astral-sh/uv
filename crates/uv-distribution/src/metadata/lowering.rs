@@ -13,7 +13,7 @@ use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
-use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictItem, ParsedGitUrl, ParsedUrlError, VerbatimParsedUrl};
 use uv_redacted::DisplaySafeUrl;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
@@ -306,19 +306,22 @@ impl LoweredRequirement {
                                     },
                                     url,
                                 }
-                            } else if member.pyproject_toml().is_package() {
+                            } else if member
+                                .pyproject_toml()
+                                .is_package(!workspace.is_required_member(&requirement.name))
+                            {
                                 RequirementSource::Directory {
                                     install_path: install_path.into_boxed_path(),
                                     url,
-                                    editable: true,
-                                    r#virtual: false,
+                                    editable: Some(true),
+                                    r#virtual: Some(false),
                                 }
                             } else {
                                 RequirementSource::Directory {
                                     install_path: install_path.into_boxed_path(),
                                     url,
-                                    editable: false,
-                                    r#virtual: true,
+                                    editable: Some(false),
+                                    r#virtual: Some(true),
                                 }
                             };
                             (source, marker)
@@ -700,17 +703,23 @@ fn path_source(
     };
     if is_dir {
         if let Some(git_member) = git_member {
+            let git = git_member.git_source.git.clone();
             let subdirectory = uv_fs::relative_to(install_path, git_member.fetch_root)
                 .expect("Workspace member must be relative");
             let subdirectory = uv_fs::normalize_path_buf(subdirectory);
+            let subdirectory = if subdirectory == PathBuf::new() {
+                None
+            } else {
+                Some(subdirectory.into_boxed_path())
+            };
+            let url = DisplaySafeUrl::from(ParsedGitUrl {
+                url: git.clone(),
+                subdirectory: subdirectory.clone(),
+            });
             return Ok(RequirementSource::Git {
-                git: git_member.git_source.git.clone(),
-                subdirectory: if subdirectory == PathBuf::new() {
-                    None
-                } else {
-                    Some(subdirectory.into_boxed_path())
-                },
-                url,
+                git,
+                subdirectory,
+                url: VerbatimUrl::from_url(url),
             });
         }
 
@@ -718,26 +727,31 @@ fn path_source(
             Ok(RequirementSource::Directory {
                 install_path: install_path.into_boxed_path(),
                 url,
-                editable: true,
-                r#virtual: false,
+                editable,
+                r#virtual: Some(false),
             })
         } else {
             // Determine whether the project is a package or virtual.
+            // If the `package` option is unset, check if `tool.uv.package` is set
+            // on the path source (otherwise, default to `true`).
             let is_package = package.unwrap_or_else(|| {
                 let pyproject_path = install_path.join("pyproject.toml");
                 fs_err::read_to_string(&pyproject_path)
                     .ok()
                     .and_then(|contents| PyProjectToml::from_string(contents).ok())
-                    .map(|pyproject_toml| pyproject_toml.is_package())
+                    // We don't require a build system for path dependencies
+                    .map(|pyproject_toml| pyproject_toml.is_package(false))
                     .unwrap_or(true)
             });
+
+            // If the project is not a package, treat it as a virtual dependency.
+            let r#virtual = !is_package;
 
             Ok(RequirementSource::Directory {
                 install_path: install_path.into_boxed_path(),
                 url,
-                editable: false,
-                // If a project is not a package, treat it as a virtual dependency.
-                r#virtual: !is_package,
+                editable: Some(false),
+                r#virtual: Some(r#virtual),
             })
         }
     } else {

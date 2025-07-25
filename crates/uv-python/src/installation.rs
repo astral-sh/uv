@@ -1,10 +1,14 @@
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+use indexmap::IndexMap;
+use ref_cast::RefCast;
 use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_configuration::Preview;
 use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
@@ -54,8 +58,10 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
+        preview: Preview,
     ) -> Result<Self, Error> {
-        let installation = find_python_installation(request, environments, preference, cache)??;
+        let installation =
+            find_python_installation(request, environments, preference, cache, preview)??;
         Ok(installation)
     }
 
@@ -66,12 +72,14 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
+        preview: Preview,
     ) -> Result<Self, Error> {
         Ok(find_best_python_installation(
             request,
             environments,
             preference,
             cache,
+            preview,
         )??)
     }
 
@@ -89,26 +97,19 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
+        preview: Preview,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
-        let err = match Self::find(request, environments, preference, cache) {
+        let err = match Self::find(request, environments, preference, cache, preview) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };
 
-        let downloads_enabled = preference.allows_managed()
-            && python_downloads.is_automatic()
-            && client_builder.connectivity.is_online();
-
-        if !downloads_enabled {
-            return Err(err);
-        }
-
         match err {
             // If Python is missing, we should attempt a download
-            Error::MissingPython(_) => {}
+            Error::MissingPython(..) => {}
             // If we raised a non-critical error, we should attempt a download
             Error::Discovery(ref err) if !err.is_critical() => {}
             // Otherwise, this is fatal
@@ -116,46 +117,116 @@ impl PythonInstallation {
         }
 
         // If we can't convert the request to a download, throw the original error
-        let Some(request) = PythonDownloadRequest::from_request(request) else {
+        let Some(download_request) = PythonDownloadRequest::from_request(request) else {
             return Err(err);
         };
 
-        debug!("Requested Python not found, checking for available download...");
-        match Self::fetch(
-            request.fill()?,
+        let downloads_enabled = preference.allows_managed()
+            && python_downloads.is_automatic()
+            && client_builder.connectivity.is_online();
+
+        let download = download_request.clone().fill().map(|request| {
+            ManagedPythonDownload::from_request(&request, python_downloads_json_url)
+        });
+
+        // Regardless of whether downloads are enabled, we want to determine if the download is
+        // available to power error messages. However, if downloads aren't enabled, we don't want to
+        // report any errors related to them.
+        let download = match download {
+            Ok(Ok(download)) => Some(download),
+            // If the download cannot be found, return the _original_ discovery error
+            Ok(Err(downloads::Error::NoDownloadFound(_))) => {
+                if downloads_enabled {
+                    debug!("No downloads are available for {request}");
+                    return Err(err);
+                }
+                None
+            }
+            Err(err) | Ok(Err(err)) => {
+                if downloads_enabled {
+                    // We failed to determine the platform information
+                    return Err(err.into());
+                }
+                None
+            }
+        };
+
+        let Some(download) = download else {
+            // N.B. We should only be in this case when downloads are disabled; when downloads are
+            // enabled, we should fail eagerly when something goes wrong with the download.
+            debug_assert!(!downloads_enabled);
+            return Err(err);
+        };
+
+        // If the download is available, but not usable, we attach a hint to the original error.
+        if !downloads_enabled {
+            let for_request = match request {
+                PythonRequest::Default | PythonRequest::Any => String::new(),
+                _ => format!(" for {request}"),
+            };
+
+            match python_downloads {
+                PythonDownloads::Automatic => {}
+                PythonDownloads::Manual => {
+                    return Err(err.with_missing_python_hint(format!(
+                        "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
+                        request.to_canonical_string(),
+                    )));
+                }
+                PythonDownloads::Never => {
+                    return Err(err.with_missing_python_hint(format!(
+                        "A managed Python download is available{for_request}, but Python downloads are set to 'never'"
+                    )));
+                }
+            }
+
+            match preference {
+                PythonPreference::OnlySystem => {
+                    return Err(err.with_missing_python_hint(format!(
+                        "A managed Python download is available{for_request}, but the Python preference is set to 'only system'"
+                    )));
+                }
+                PythonPreference::Managed
+                | PythonPreference::OnlyManaged
+                | PythonPreference::System => {}
+            }
+
+            if !client_builder.connectivity.is_online() {
+                return Err(err.with_missing_python_hint(format!(
+                    "A managed Python download is available{for_request}, but uv is set to offline mode"
+                )));
+            }
+
+            return Err(err);
+        }
+
+        Self::fetch(
+            download,
             client_builder,
             cache,
             reporter,
             python_install_mirror,
             pypy_install_mirror,
-            python_downloads_json_url,
+            preview,
         )
         .await
-        {
-            Ok(installation) => Ok(installation),
-            // Throw the original error if we couldn't find a download
-            Err(Error::Download(downloads::Error::NoDownloadFound(_))) => Err(err),
-            // But if the download failed, throw that error
-            Err(err) => Err(err),
-        }
     }
 
     /// Download and install the requested installation.
     pub async fn fetch(
-        request: PythonDownloadRequest,
+        download: &'static ManagedPythonDownload,
         client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
-        python_downloads_json_url: Option<&str>,
+        preview: Preview,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        let download = ManagedPythonDownload::from_request(&request, python_downloads_json_url)?;
         let client = client_builder.build();
 
         info!("Fetching requested Python...");
@@ -180,6 +251,21 @@ impl PythonInstallation {
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
+
+        let minor_version = installed.minor_version_key();
+        let highest_patch = installations
+            .find_all()?
+            .filter(|installation| installation.minor_version_key() == minor_version)
+            .filter_map(|installation| installation.version().patch())
+            .fold(0, std::cmp::max);
+        if installed
+            .version()
+            .patch()
+            .is_some_and(|p| p >= highest_patch)
+        {
+            installed.ensure_minor_version_link(preview)?;
+        }
+
         if let Err(e) = installed.ensure_dylib_patched() {
             e.warn_user(&installed);
         }
@@ -340,6 +426,14 @@ impl PythonInstallationKey {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
 
+    pub fn major(&self) -> u8 {
+        self.major
+    }
+
+    pub fn minor(&self) -> u8 {
+        self.minor
+    }
+
     pub fn arch(&self) -> &Arch {
         &self.arch
     }
@@ -488,5 +582,114 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
             // Python variants are sorted in preferred order, with `Default` first
             .then_with(|| self.variant.cmp(&other.variant).reverse())
+    }
+}
+
+/// A view into a [`PythonInstallationKey`] that excludes the patch and prerelease versions.
+#[derive(Clone, Eq, Ord, PartialOrd, RefCast)]
+#[repr(transparent)]
+pub struct PythonInstallationMinorVersionKey(PythonInstallationKey);
+
+impl PythonInstallationMinorVersionKey {
+    /// Cast a `&PythonInstallationKey` to a `&PythonInstallationMinorVersionKey` using ref-cast.
+    #[inline]
+    pub fn ref_cast(key: &PythonInstallationKey) -> &Self {
+        RefCast::ref_cast(key)
+    }
+
+    /// Takes an [`IntoIterator`] of [`ManagedPythonInstallation`]s and returns an [`FxHashMap`] from
+    /// [`PythonInstallationMinorVersionKey`] to the installation with highest [`PythonInstallationKey`]
+    /// for that minor version key.
+    #[inline]
+    pub fn highest_installations_by_minor_version_key<'a, I>(
+        installations: I,
+    ) -> IndexMap<Self, ManagedPythonInstallation>
+    where
+        I: IntoIterator<Item = &'a ManagedPythonInstallation>,
+    {
+        let mut minor_versions = IndexMap::default();
+        for installation in installations {
+            minor_versions
+                .entry(installation.minor_version_key().clone())
+                .and_modify(|high_installation: &mut ManagedPythonInstallation| {
+                    if installation.key() >= high_installation.key() {
+                        *high_installation = installation.clone();
+                    }
+                })
+                .or_insert_with(|| installation.clone());
+        }
+        minor_versions
+    }
+}
+
+impl fmt::Display for PythonInstallationMinorVersionKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Display every field on the wrapped key except the patch
+        // and prerelease (with special formatting for the variant).
+        let variant = match self.0.variant {
+            PythonVariant::Default => String::new(),
+            PythonVariant::Freethreaded => format!("+{}", self.0.variant),
+        };
+        write!(
+            f,
+            "{}-{}.{}{}-{}-{}-{}",
+            self.0.implementation,
+            self.0.major,
+            self.0.minor,
+            variant,
+            self.0.os,
+            self.0.arch,
+            self.0.libc,
+        )
+    }
+}
+
+impl fmt::Debug for PythonInstallationMinorVersionKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Display every field on the wrapped key except the patch
+        // and prerelease.
+        f.debug_struct("PythonInstallationMinorVersionKey")
+            .field("implementation", &self.0.implementation)
+            .field("major", &self.0.major)
+            .field("minor", &self.0.minor)
+            .field("variant", &self.0.variant)
+            .field("os", &self.0.os)
+            .field("arch", &self.0.arch)
+            .field("libc", &self.0.libc)
+            .finish()
+    }
+}
+
+impl PartialEq for PythonInstallationMinorVersionKey {
+    fn eq(&self, other: &Self) -> bool {
+        // Compare every field on the wrapped key except the patch
+        // and prerelease.
+        self.0.implementation == other.0.implementation
+            && self.0.major == other.0.major
+            && self.0.minor == other.0.minor
+            && self.0.os == other.0.os
+            && self.0.arch == other.0.arch
+            && self.0.libc == other.0.libc
+            && self.0.variant == other.0.variant
+    }
+}
+
+impl Hash for PythonInstallationMinorVersionKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Hash every field on the wrapped key except the patch
+        // and prerelease.
+        self.0.implementation.hash(state);
+        self.0.major.hash(state);
+        self.0.minor.hash(state);
+        self.0.os.hash(state);
+        self.0.arch.hash(state);
+        self.0.libc.hash(state);
+        self.0.variant.hash(state);
+    }
+}
+
+impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
+    fn from(key: PythonInstallationKey) -> Self {
+        PythonInstallationMinorVersionKey(key)
     }
 }

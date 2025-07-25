@@ -7,7 +7,9 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{
+    BuildKind, BuildOptions, BuildOutput, ConfigSettings, PackageConfigSettings, SourceStrategy,
+};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, DistributionId, IndexCapabilities, IndexLocations,
@@ -17,6 +19,8 @@ use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
+
+use crate::BuildArena;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -67,6 +71,9 @@ pub trait BuildContext {
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
 
+    /// Return a reference to the build arena.
+    fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
+
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
 
@@ -81,6 +88,9 @@ pub trait BuildContext {
 
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
+
+    /// The [`ConfigSettings`] used to build a specific package.
+    fn config_settings_package(&self) -> &PackageConfigSettings;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;
@@ -180,12 +190,12 @@ pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
 pub struct EmptyInstalledPackages;
 
 impl InstalledPackagesProvider for EmptyInstalledPackages {
-    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
-        Vec::new()
-    }
-
     fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         std::iter::empty()
+    }
+
+    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
+        Vec::new()
     }
 }
 

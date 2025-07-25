@@ -11,11 +11,13 @@
 //! let marker = r#"requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8""#;
 //! let dependency_specification = Requirement::<VerbatimUrl>::from_str(marker).unwrap();
 //! assert_eq!(dependency_specification.name.as_ref(), "requests");
-//! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()]);
+//! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()].into());
 //! ```
 
 #![warn(missing_docs)]
 
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
@@ -30,8 +32,8 @@ pub use marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
-    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
+    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -334,22 +336,15 @@ impl Reporter for TracingReporter {
 
 #[cfg(feature = "schemars")]
 impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
-    fn schema_name() -> String {
-        "Requirement".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Requirement")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`".to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`"
+        })
     }
 }
 

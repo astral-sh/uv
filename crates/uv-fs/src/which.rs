@@ -17,7 +17,7 @@ fn get_binary_type(path: &Path) -> windows::core::Result<u32> {
         .chain(Some(0))
         .collect::<Vec<u16>>();
     // SAFETY: winapi call
-    unsafe { GetBinaryTypeW(PCWSTR(name.as_ptr()), &mut binary_type)? };
+    unsafe { GetBinaryTypeW(PCWSTR(name.as_ptr()), &raw mut binary_type)? };
     Ok(binary_type)
 }
 

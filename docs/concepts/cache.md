@@ -19,12 +19,17 @@ The specifics of uv's caching semantics vary based on the nature of the dependen
 
 If you're running into caching issues, uv includes a few escape hatches:
 
+- To clear the cache entirely, run `uv cache clean`. To clear the cache for a specific package, run
+  `uv cache clean <package-name>`. For example, `uv cache clean ruff` will clear the cache for the
+  `ruff` package.
 - To force uv to revalidate cached data for all dependencies, pass `--refresh` to any command (e.g.,
   `uv sync --refresh` or `uv pip install --refresh ...`).
 - To force uv to revalidate cached data for a specific dependency pass `--refresh-package` to any
-  command (e.g., `uv sync --refresh-package flask` or `uv pip install --refresh-package flask ...`).
+  command (e.g., `uv sync --refresh-package ruff` or `uv pip install --refresh-package ruff ...`).
 - To force uv to ignore existing installed versions, pass `--reinstall` to any installation command
-  (e.g., `uv sync --reinstall` or `uv pip install --reinstall ...`).
+  (e.g., `uv sync --reinstall` or `uv pip install --reinstall ...`). (Consider running
+  `uv cache clean <package-name>` first, to ensure that the cache is cleared prior to
+  reinstallation.)
 
 As a special case, uv will always rebuild and reinstall any local directory dependencies passed
 explicitly on the command-line (e.g., `uv pip install .`).
