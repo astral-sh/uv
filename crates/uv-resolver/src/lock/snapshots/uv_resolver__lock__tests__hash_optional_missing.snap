@@ -83,7 +83,6 @@ Ok(
                                     platform_tag: Any,
                                 },
                             },
-                            variant: None,
                         },
                     },
                 ],
