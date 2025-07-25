@@ -1971,7 +1971,7 @@ jobs:
 
       # Needed for building Pydantic
       - name: "Install build tools"
-        run: dnf groupinstall -y "Development Tools"
+        run: dnf install -y gcc
 
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv
@@ -2470,7 +2470,7 @@ jobs:
         run: echo $(which python3)
 
       - name: Install build tools
-        run: yum groupinstall -y "Development Tools"
+        run: yum install -y gcc
 
       - name: "Validate global Python install"
         run: python3 scripts/check_system_python.py --uv ./uv
