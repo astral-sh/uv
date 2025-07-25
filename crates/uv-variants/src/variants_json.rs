@@ -18,11 +18,11 @@ pub type VariantProperty = String;
 pub struct Variant(FxHashMap<String, FxHashMap<String, Vec<String>>>);
 
 impl MarkerVariantsEnvironment for Variant {
-    fn has_namespace(&self, namespace: &str) -> bool {
+    fn contains_namespace(&self, namespace: &str) -> bool {
         self.0.contains_key(namespace)
     }
 
-    fn has_feature(&self, namespace: &str, feature: &str) -> bool {
+    fn contains_feature(&self, namespace: &str, feature: &str) -> bool {
         let Some(features) = self.0.get(namespace) else {
             return false;
         };
@@ -34,7 +34,7 @@ impl MarkerVariantsEnvironment for Variant {
         !properties.is_empty()
     }
 
-    fn has_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
+    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
         let Some(features) = self.0.get(namespace) else {
             return false;
         };
