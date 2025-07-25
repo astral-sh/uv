@@ -11,8 +11,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::ExtrasSpecificationWithDefaults;
 use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
-use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
+use uv_distribution::{DistributionDatabase, VariantProviderCache};
+use uv_distribution_types::{Edge, Identifier, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
@@ -47,6 +47,7 @@ pub trait Installable<'lock> {
         build_options: &BuildOptions,
         install_options: &InstallOptions,
         distribution_database: DistributionDatabase<'_, Context>,
+        variants_cache: Arc<VariantProviderCache>,
     ) -> Result<Resolution, LockError> {
         let size_guess = self.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
@@ -463,97 +464,18 @@ pub trait Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
 
-            let known_properties: Option<Vec<(String, String, String)>> = if deps
-                .clone()
-                .any(|dep| dep.complexified_marker.combined().has_variant_expression())
-            {
-                if let Some(variants_json) = package
-                    .to_registry_variants_json(self.install_path())
-                    .expect("TODO(konsti)")
-                {
-                    let resolved_variants = distribution_database
-                        .fetch_and_query_variants(&variants_json)
-                        .await
-                        .expect("TODO(konsti)");
-
-                    // Select best wheel
-                    let mut highest_priority_variant_wheel: Option<(_, Vec<usize>)> = None;
-                    for wheel in &package.wheels {
-                        let Some(variant) = wheel.filename.variant() else {
-                            // The non-variant wheel is already supported
-                            continue;
-                        };
-
-                        let Some(variants_properties) =
-                            resolved_variants.variants_json.variants.get(variant)
-                        else {
-                            // TODO(konsti): For production, this should be a warning.
-                            panic!("Variant {variant} not found in variants.json");
-                        };
-
-                        let Some(scores) = score_variant(
-                            &resolved_variants.variants_json.default_priorities,
-                            &resolved_variants.target_variants,
-                            variants_properties,
-                        ) else {
-                            // The wheel is not compatible.
-                            continue;
-                        };
-
-                        if let Some((_, old_scores)) = &highest_priority_variant_wheel {
-                            if &scores > old_scores {
-                                highest_priority_variant_wheel = Some((variant, scores));
-                            }
-                        } else {
-                            highest_priority_variant_wheel = Some((variant, scores));
-                        }
-                    }
-
-                    if let Some((best_variant, _)) = highest_priority_variant_wheel {
-                        // TODO(konsti): Use the proper type everywhere, we shouldn't need to do
-                        // this conversion at all.
-                        let mut known_properties = BTreeSet::new();
-                        for (namespace, features) in resolved_variants
-                            .variants_json
-                            .variants
-                            .get(best_variant)
-                            .expect("TODO(konsti): error handling")
-                        {
-                            for (feature, values) in features {
-                                for value in values {
-                                    known_properties.insert(VariantPropertyType {
-                                        namespace: namespace.clone(),
-                                        feature: feature.clone(),
-                                        value: value.clone(),
-                                    });
-                                }
-                            }
-                        }
-                        let known_properties: Vec<(String, String, String)> = known_properties
-                            .into_iter()
-                            .map(|known_property| {
-                                (
-                                    known_property.namespace,
-                                    known_property.feature,
-                                    known_property.value,
-                                )
-                            })
-                            .collect();
-                        Some(known_properties)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+            let variant_properties = determine_properties(
+                package,
+                self.install_path(),
+                &distribution_database,
+                &variants_cache,
+            )
+            .await?;
 
             for dep in deps {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    known_properties.as_deref(),
+                    variant_properties.as_deref(),
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {
@@ -670,5 +592,99 @@ pub trait Installable<'lock> {
         } else {
             self.non_installable_node(package, tags)
         }
+    }
+}
+
+async fn determine_properties<Context: BuildContext>(
+    package: &Package,
+    workspace_root: &Path,
+    distribution_database: &DistributionDatabase<'_, Context>,
+    variants_cache: &VariantProviderCache,
+) -> Result<Option<Vec<(String, String, String)>>, LockError> {
+    let Some(variants_json) = package.to_registry_variants_json(workspace_root)? else {
+        return Ok(None);
+    };
+    let resolved_variants =
+        if let Some(resolved_variants) = variants_cache.get(&variants_json.resource_id()) {
+            resolved_variants.clone()
+        } else {
+            // Fetch variants_json and run providers
+            let resolved_variants = distribution_database
+                .fetch_and_query_variants(&variants_json)
+                .await
+                .expect("TODO(konsti)");
+
+            variants_cache.insert(variants_json.resource_id(), resolved_variants.clone());
+
+            resolved_variants
+        };
+
+    // Select best wheel
+    let mut highest_priority_variant_wheel: Option<(_, Vec<usize>)> = None;
+    for wheel in &package.wheels {
+        let Some(variant) = wheel.filename.variant() else {
+            // The non-variant wheel is already supported
+            continue;
+        };
+
+        let Some(variants_properties) = resolved_variants.variants_json.variants.get(variant)
+        else {
+            // TODO(konsti): For production, this should be a warning.
+            panic!("Variant {variant} not found in variants.json");
+        };
+
+        let Some(scores) = score_variant(
+            &resolved_variants.variants_json.default_priorities,
+            &resolved_variants.target_variants,
+            variants_properties,
+        ) else {
+            // The wheel is not compatible.
+            continue;
+        };
+
+        if let Some((_, old_scores)) = &highest_priority_variant_wheel {
+            if &scores > old_scores {
+                highest_priority_variant_wheel = Some((variant, scores));
+            }
+        } else {
+            highest_priority_variant_wheel = Some((variant, scores));
+        }
+    }
+
+    if let Some((best_variant, _)) = highest_priority_variant_wheel {
+        // TODO(konsti): Use the proper type everywhere, we shouldn't need to do
+        // this conversion at all.
+        let mut known_properties = BTreeSet::new();
+        for (namespace, features) in resolved_variants
+            .variants_json
+            .variants
+            .get(best_variant)
+            .expect("TODO(konsti): error handling")
+        {
+            for (feature, values) in features {
+                for value in values {
+                    known_properties.insert(VariantPropertyType {
+                        namespace: namespace.clone(),
+                        feature: feature.clone(),
+                        value: value.clone(),
+                    });
+                }
+            }
+        }
+        let known_properties: Vec<(String, String, String)> = known_properties
+            .into_iter()
+            .map(|known_property| {
+                (
+                    known_property.namespace,
+                    known_property.feature,
+                    known_property.value,
+                )
+            })
+            .collect();
+        Ok(Some(known_properties))
+    } else {
+        // When selecting the non-variant wheel, all variant markers evaluate to
+        // false.
+        Ok(Some(Vec::new()))
     }
 }
