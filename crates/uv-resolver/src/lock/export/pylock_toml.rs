@@ -31,7 +31,7 @@ use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
+use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerVariantsUniversal, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
@@ -982,7 +982,7 @@ impl<'lock> PylockToml {
             // Omit packages that aren't relevant to the current environment.
             if !package
                 .marker
-                .evaluate_pep751(markers, None, extras, groups)
+                .evaluate_pep751(markers, MarkerVariantsUniversal, extras, groups)
             {
                 continue;
             }

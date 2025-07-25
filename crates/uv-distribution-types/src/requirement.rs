@@ -11,7 +11,8 @@ use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
-    MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
+    MarkerEnvironment, MarkerTree, MarkerVariantsEnvironment, RequirementOrigin, VerbatimUrl,
+    VersionOrUrl, marker,
 };
 use uv_redacted::DisplaySafeUrl;
 
@@ -72,7 +73,7 @@ impl Requirement {
     pub fn evaluate_markers(
         &self,
         env: Option<&MarkerEnvironment>,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.marker

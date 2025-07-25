@@ -5,7 +5,7 @@ use petgraph::visit::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, MarkerVariantsUniversal};
 use uv_pypi_types::{ConflictItem, Conflicts};
 
 use crate::resolution::ResolutionGraphNode;
@@ -272,7 +272,7 @@ pub(crate) fn simplify_conflict_markers(
                 .collect::<Vec<_>>();
             graph[edge_index]
                 .conflict()
-                .evaluate(None, &extras, &groups)
+                .evaluate(&extras, &groups, MarkerVariantsUniversal)
         });
         if !all_paths_satisfied {
             continue;

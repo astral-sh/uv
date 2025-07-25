@@ -773,6 +773,73 @@ impl<'a> ExtrasEnvironment<'a> {
     }
 }
 
+/// The environment to use for evaluating `variant_namespaces`, `variant_features` and
+/// `variant_properties`
+pub trait MarkerVariantsEnvironment {
+    /// Whether there is a property with the given namespace, for evaluating `variant_namespaces`.
+    fn has_namespace(&self, namespace: &str) -> bool;
+
+    /// Whether there is a property with the given feature, for evaluating `variant_features`.
+    fn has_feature(&self, namespace: &str, feature: &str) -> bool;
+
+    /// Whether there is the given property, for evaluating `variant_properties`.
+    fn has_property(&self, namespace: &str, feature: &str, property: &str) -> bool;
+}
+
+// Useful for tests
+impl<S: AsRef<str>> MarkerVariantsEnvironment for &[(S, S, S)] {
+    fn has_namespace(&self, namespace: &str) -> bool {
+        self.iter()
+            .any(|(namespace_, _feature, _property)| namespace == namespace_.as_ref())
+    }
+
+    fn has_feature(&self, namespace: &str, feature: &str) -> bool {
+        self.iter().any(|(namespace_, feature_, _property)| {
+            namespace == namespace_.as_ref() && feature == feature_.as_ref()
+        })
+    }
+
+    fn has_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
+        self.iter().any(|(namespace_, feature_, property_)| {
+            namespace == namespace_.as_ref()
+                && feature == feature_.as_ref()
+                && property == property_.as_ref()
+        })
+    }
+}
+
+// TODO(konsti): Use `AsRef` instead?
+impl<T: MarkerVariantsEnvironment> MarkerVariantsEnvironment for &T {
+    fn has_namespace(&self, namespace: &str) -> bool {
+        T::has_namespace(self, namespace)
+    }
+
+    fn has_feature(&self, namespace: &str, feature: &str) -> bool {
+        T::has_feature(self, namespace, feature)
+    }
+
+    fn has_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
+        T::has_property(self, namespace, feature, property)
+    }
+}
+
+/// A marker variants environment that always evaluates to `true`.
+pub struct MarkerVariantsUniversal;
+
+impl MarkerVariantsEnvironment for MarkerVariantsUniversal {
+    fn has_namespace(&self, _namespace: &str) -> bool {
+        true
+    }
+
+    fn has_feature(&self, _namespace: &str, _feature: &str) -> bool {
+        true
+    }
+
+    fn has_property(&self, _namespace: &str, _feature: &str, _property: &str) -> bool {
+        true
+    }
+}
+
 /// Represents one or more nested marker expressions with and/or/parentheses.
 ///
 /// Marker trees are canonical, meaning any two functionally equivalent markers
@@ -1012,7 +1079,7 @@ impl MarkerTree {
     pub fn evaluate(
         self,
         env: &MarkerEnvironment,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.evaluate_reporter_impl(
@@ -1029,7 +1096,7 @@ impl MarkerTree {
     pub fn evaluate_pep751(
         self,
         env: &MarkerEnvironment,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
         groups: &[GroupName],
     ) -> bool {
@@ -1051,7 +1118,7 @@ impl MarkerTree {
     pub fn evaluate_optional_environment(
         self,
         env: Option<&MarkerEnvironment>,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         match env {
@@ -1071,7 +1138,7 @@ impl MarkerTree {
         self,
         env: &MarkerEnvironment,
         extras: &[ExtraName],
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         reporter: &mut impl Reporter,
     ) -> bool {
         self.evaluate_reporter_impl(
@@ -1086,7 +1153,7 @@ impl MarkerTree {
         self,
         env: &MarkerEnvironment,
         extras: ExtrasEnvironment,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         reporter: &mut impl Reporter,
     ) -> bool {
         match self.kind() {
@@ -1138,39 +1205,14 @@ impl MarkerTree {
             }
             MarkerTreeKind::List(marker) => {
                 let edge = match marker.pair() {
-                    CanonicalMarkerListPair::VariantNamespaces(marker_namespace) => {
-                        let Some(variants) = variants else {
-                            // If we're not limiting to specific variants, we're solving universally.
-                            return true;
-                        };
-
-                        variants
-                            .iter()
-                            .any(|(namespace, _feature, _property)| namespace == marker_namespace)
+                    CanonicalMarkerListPair::VariantNamespaces(namespace) => {
+                        variants.has_namespace(namespace)
                     }
-                    CanonicalMarkerListPair::VariantFeatures(marker_namespace, marker_feature) => {
-                        let Some(variants) = variants else {
-                            return true;
-                        };
-
-                        variants.iter().any(|(namespace, feature, _property)| {
-                            namespace == marker_namespace && feature == marker_feature
-                        })
+                    CanonicalMarkerListPair::VariantFeatures(namespace, feature) => {
+                        variants.has_feature(namespace, feature)
                     }
-                    CanonicalMarkerListPair::VariantProperties(
-                        marker_namespace,
-                        marker_feature,
-                        marker_property,
-                    ) => {
-                        let Some(variants) = variants else {
-                            return true;
-                        };
-
-                        variants.iter().any(|(namespace, feature, property)| {
-                            namespace == marker_namespace
-                                && feature == marker_feature
-                                && property == marker_property
-                        })
+                    CanonicalMarkerListPair::VariantProperties(namespace, feature, property) => {
+                        variants.has_property(namespace, feature, property)
                     }
                     CanonicalMarkerListPair::Extras(extra) => extras.extras().contains(extra),
                     CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
@@ -2057,7 +2099,9 @@ mod test {
     use uv_pep440::Version;
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
-    use crate::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+    use crate::{
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerVariantsUniversal,
+    };
 
     fn parse_err(input: &str) -> String {
         MarkerTree::from_str(input).unwrap_err().to_string()
@@ -2214,12 +2258,12 @@ mod test {
         let marker3 = MarkerTree::from_str(
             "python_version == \"2.7\" and (sys_platform == \"win32\" or sys_platform == \"linux\")",
         ).unwrap();
-        assert!(marker1.evaluate(&env27, None, &[]));
-        assert!(!marker1.evaluate(&env37, None, &[]));
-        assert!(marker2.evaluate(&env27, None, &[]));
-        assert!(marker2.evaluate(&env37, None, &[]));
-        assert!(marker3.evaluate(&env27, None, &[]));
-        assert!(!marker3.evaluate(&env37, None, &[]));
+        assert!(marker1.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(!marker1.evaluate(&env37, MarkerVariantsUniversal, &[]));
+        assert!(marker2.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(marker2.evaluate(&env37, MarkerVariantsUniversal, &[]));
+        assert!(marker3.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(!marker3.evaluate(&env37, MarkerVariantsUniversal, &[]));
     }
 
     #[test]
@@ -2241,48 +2285,48 @@ mod test {
         let env37 = env37();
 
         let marker = MarkerTree::from_str("python_version in \"2.7 3.2 3.3\"").unwrap();
-        assert!(marker.evaluate(&env27, None, &[]));
-        assert!(!marker.evaluate(&env37, None, &[]));
+        assert!(marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(!marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("python_version in \"2.7 3.7\"").unwrap();
-        assert!(marker.evaluate(&env27, None, &[]));
-        assert!(marker.evaluate(&env37, None, &[]));
+        assert!(marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("python_version in \"2.4 3.8 4.0\"").unwrap();
-        assert!(!marker.evaluate(&env27, None, &[]));
-        assert!(!marker.evaluate(&env37, None, &[]));
+        assert!(!marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(!marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("python_version not in \"2.7 3.2 3.3\"").unwrap();
-        assert!(!marker.evaluate(&env27, None, &[]));
-        assert!(marker.evaluate(&env37, None, &[]));
+        assert!(!marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("python_version not in \"2.7 3.7\"").unwrap();
-        assert!(!marker.evaluate(&env27, None, &[]));
-        assert!(!marker.evaluate(&env37, None, &[]));
+        assert!(!marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(!marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("python_version not in \"2.4 3.8 4.0\"").unwrap();
-        assert!(marker.evaluate(&env27, None, &[]));
-        assert!(marker.evaluate(&env37, None, &[]));
+        assert!(marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("python_full_version in \"2.7\"").unwrap();
-        assert!(marker.evaluate(&env27, None, &[]));
-        assert!(!marker.evaluate(&env37, None, &[]));
+        assert!(marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(!marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("implementation_version in \"2.7 3.2 3.3\"").unwrap();
-        assert!(marker.evaluate(&env27, None, &[]));
-        assert!(!marker.evaluate(&env37, None, &[]));
+        assert!(marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(!marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("implementation_version in \"2.7 3.7\"").unwrap();
-        assert!(marker.evaluate(&env27, None, &[]));
-        assert!(marker.evaluate(&env37, None, &[]));
+        assert!(marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("implementation_version not in \"2.7 3.7\"").unwrap();
-        assert!(!marker.evaluate(&env27, None, &[]));
-        assert!(!marker.evaluate(&env37, None, &[]));
+        assert!(!marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(!marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
         let marker = MarkerTree::from_str("implementation_version not in \"2.4 3.8 4.0\"").unwrap();
-        assert!(marker.evaluate(&env27, None, &[]));
-        assert!(marker.evaluate(&env37, None, &[]));
+        assert!(marker.evaluate(&env27, MarkerVariantsUniversal, &[]));
+        assert!(marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
     }
 
     #[test]
@@ -2291,7 +2335,7 @@ mod test {
     fn warnings1() {
         let env37 = env37();
         let compare_keys = MarkerTree::from_str("platform_version == sys_platform").unwrap();
-        compare_keys.evaluate(&env37, None, &[]);
+        compare_keys.evaluate(&env37, MarkerVariantsUniversal, &[]);
         logs_contain(
             "Comparing two markers with each other doesn't make any sense, will evaluate to false",
         );
@@ -2303,7 +2347,7 @@ mod test {
     fn warnings2() {
         let env37 = env37();
         let non_pep440 = MarkerTree::from_str("python_version >= '3.9.'").unwrap();
-        non_pep440.evaluate(&env37, None, &[]);
+        non_pep440.evaluate(&env37, MarkerVariantsUniversal, &[]);
         logs_contain(
             "Expected PEP 440 version to compare with python_version, found `3.9.`, \
              will evaluate to false: after parsing `3.9`, found `.`, which is \
@@ -2317,7 +2361,7 @@ mod test {
     fn warnings3() {
         let env37 = env37();
         let string_string = MarkerTree::from_str("'b' >= 'a'").unwrap();
-        string_string.evaluate(&env37, None, &[]);
+        string_string.evaluate(&env37, MarkerVariantsUniversal, &[]);
         logs_contain(
             "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false",
         );
@@ -2329,7 +2373,7 @@ mod test {
     fn warnings4() {
         let env37 = env37();
         let string_string = MarkerTree::from_str(r"os.name == 'posix' and platform.machine == 'x86_64' and platform.python_implementation == 'CPython' and 'Ubuntu' in platform.version and sys.platform == 'linux'").unwrap();
-        string_string.evaluate(&env37, None, &[]);
+        string_string.evaluate(&env37, MarkerVariantsUniversal, &[]);
         logs_assert(|lines: &[&str]| {
             let lines: Vec<_> = lines
                 .iter()
@@ -2361,18 +2405,18 @@ mod test {
         let env37 = env37();
         let result = MarkerTree::from_str("python_version > '3.6'")
             .unwrap()
-            .evaluate(&env37, None, &[]);
+            .evaluate(&env37, MarkerVariantsUniversal, &[]);
         assert!(result);
 
         let result = MarkerTree::from_str("'3.6' > python_version")
             .unwrap()
-            .evaluate(&env37, None, &[]);
+            .evaluate(&env37, MarkerVariantsUniversal, &[]);
         assert!(!result);
 
         // Meaningless expressions are ignored, so this is always true.
         let result = MarkerTree::from_str("'3.*' == python_version")
             .unwrap()
-            .evaluate(&env37, None, &[]);
+            .evaluate(&env37, MarkerVariantsUniversal, &[]);
         assert!(result);
     }
 
@@ -2381,12 +2425,12 @@ mod test {
         let env37 = env37();
         let result = MarkerTree::from_str("'nux' in sys_platform")
             .unwrap()
-            .evaluate(&env37, None, &[]);
+            .evaluate(&env37, MarkerVariantsUniversal, &[]);
         assert!(result);
 
         let result = MarkerTree::from_str("sys_platform in 'nux'")
             .unwrap()
-            .evaluate(&env37, None, &[]);
+            .evaluate(&env37, MarkerVariantsUniversal, &[]);
         assert!(!result);
     }
 
@@ -2395,7 +2439,7 @@ mod test {
         let env37 = env37();
         let result = MarkerTree::from_str("python_version == '3.7.*'")
             .unwrap()
-            .evaluate(&env37, None, &[]);
+            .evaluate(&env37, MarkerVariantsUniversal, &[]);
         assert!(result);
     }
 
@@ -2404,7 +2448,7 @@ mod test {
         let env37 = env37();
         let result = MarkerTree::from_str("python_version ~= '3.7'")
             .unwrap()
-            .evaluate(&env37, None, &[]);
+            .evaluate(&env37, MarkerVariantsUniversal, &[]);
         assert!(result);
     }
 
@@ -3754,68 +3798,69 @@ mod test {
     #[test]
     fn marker_evaluation_variants() {
         let env37 = env37();
-        let gpu_namespaces = [("gpu".to_string(), "cuda".to_string(), "12.4".to_string())];
-        let cpu_namespaces = [("cpu".to_string(), String::new(), String::new())];
+        let gpu_namespaces = [("gpu", "cuda", "12.4")].as_slice();
+        let cpu_namespaces = [("cpu", "", "")].as_slice();
 
         // namespace variant markers
         let marker1 = m("'gpu' in variant_namespaces");
         let marker2 = m("'gpu' not in variant_namespaces");
 
         // If no variants are provided, we solve universally.
-        assert!(marker1.evaluate(&env37, None, &[]));
-        assert!(marker2.evaluate(&env37, None, &[]));
+        assert!(marker1.evaluate(&env37, MarkerVariantsUniversal, &[]));
+        assert!(marker2.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
-        assert!(marker1.evaluate(&env37, Some(&gpu_namespaces), &[]));
-        assert!(!marker1.evaluate(&env37, Some(&cpu_namespaces), &[]));
-        assert!(!marker2.evaluate(&env37, Some(&gpu_namespaces), &[]));
-        assert!(marker2.evaluate(&env37, Some(&cpu_namespaces), &[]));
+        assert!(marker1.evaluate(&env37, gpu_namespaces, &[]));
+        assert!(!marker1.evaluate(&env37, cpu_namespaces, &[]));
+        assert!(!marker2.evaluate(&env37, gpu_namespaces, &[]));
+        assert!(marker2.evaluate(&env37, cpu_namespaces, &[]));
 
         // property variant markers
         let marker3 = m("'gpu :: cuda' in variant_features");
         let marker4 = m("'gpu :: rocm' in variant_features");
 
-        assert!(marker3.evaluate(&env37, None, &[]));
-        assert!(marker4.evaluate(&env37, None, &[]));
+        assert!(marker3.evaluate(&env37, MarkerVariantsUniversal, &[]));
+        assert!(marker4.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
-        assert!(marker3.evaluate(&env37, Some(&gpu_namespaces), &[]));
-        assert!(!marker3.evaluate(&env37, Some(&cpu_namespaces), &[]));
-        assert!(!marker4.evaluate(&env37, Some(&gpu_namespaces), &[]));
-        assert!(!marker4.evaluate(&env37, Some(&cpu_namespaces), &[]));
+        assert!(marker3.evaluate(&env37, gpu_namespaces, &[]));
+        assert!(!marker3.evaluate(&env37, cpu_namespaces, &[]));
+        assert!(!marker4.evaluate(&env37, gpu_namespaces, &[]));
+        assert!(!marker4.evaluate(&env37, cpu_namespaces, &[]));
 
         // feature variant markers
         let marker5 = m("'gpu :: cuda :: 12.4' in variant_properties");
         let marker6 = m("'gpu :: cuda :: 12.8' in variant_properties");
 
-        assert!(marker5.evaluate(&env37, None, &[]));
-        assert!(marker6.evaluate(&env37, None, &[]));
+        assert!(marker5.evaluate(&env37, MarkerVariantsUniversal, &[]));
+        assert!(marker6.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
-        assert!(marker5.evaluate(&env37, Some(&gpu_namespaces), &[]));
-        assert!(!marker5.evaluate(&env37, Some(&cpu_namespaces), &[]));
-        assert!(!marker6.evaluate(&env37, Some(&gpu_namespaces), &[]));
-        assert!(!marker6.evaluate(&env37, Some(&cpu_namespaces), &[]));
+        assert!(marker5.evaluate(&env37, gpu_namespaces, &[]));
+        assert!(!marker5.evaluate(&env37, cpu_namespaces, &[]));
+        assert!(!marker6.evaluate(&env37, gpu_namespaces, &[]));
+        assert!(!marker6.evaluate(&env37, cpu_namespaces, &[]));
     }
 
     #[test]
     fn marker_evaluation_variants_combined() {
         let env37 = env37();
         let namespaces = [
-            ("gpu".to_string(), "cuda".to_string(), "12.4".to_string()),
-            ("gpu".to_string(), "cuda".to_string(), "12.6".to_string()),
-            ("cpu".to_string(), "x86_64".to_string(), "v1".to_string()),
-            ("cpu".to_string(), "x86_64".to_string(), "v2".to_string()),
-            ("cpu".to_string(), "x86_64".to_string(), "v3".to_string()),
-        ];
+            ("gpu", "cuda", "12.4"),
+            ("gpu", "cuda", "12.6"),
+            ("cpu", "x86_64", "v1"),
+            ("cpu", "x86_64", "v2"),
+            ("cpu", "x86_64", "v3"),
+        ]
+        .as_slice();
 
         let marker1 = m("'gpu' in variant_namespaces \
             and 'cpu:: x86_64      :: v3' in variant_properties \
             and python_version >= '3.7' \
             and 'gpu :: rocm' not in variant_features");
-        assert!(marker1.evaluate(&env37, None, &[]));
-        assert!(marker1.evaluate(&env37, Some(&namespaces), &[]));
+        assert!(marker1.evaluate(&env37, MarkerVariantsUniversal, &[]));
+        assert!(marker1.evaluate(&env37, namespaces, &[]));
 
         let marker2 = m("python_version >= '3.7' and 'gpu' not in variant_namespaces");
-        assert!(marker2.evaluate(&env37, None, &[]));
-        assert!(!marker2.evaluate(&env37, Some(&namespaces), &[]));
+        assert!(marker2.evaluate(&env37, MarkerVariantsUniversal, &[]));
+        assert!(!marker2.evaluate(&env37, namespaces, &[]));
     }
 
     #[test]
@@ -3863,33 +3908,30 @@ mod test {
     #[test]
     fn variant_invalid() {
         let env37 = env37();
-        let namespaces = [("gpu".to_string(), "cuda".to_string(), "cuda126".to_string())];
+        let namespaces = [("gpu", "cuda", "cuda126")].as_slice();
 
         let marker = m(r"'gpu :: cuda :: cuda126 :: gtx1080' in variant_properties");
-        assert!(!marker.evaluate(&env37, Some(&namespaces), &[]));
+        assert!(!marker.evaluate(&env37, namespaces, &[]));
     }
 
     #[test]
     fn torch_variant_marker() {
         let env37 = env37();
-        let cu126 = [("nvidia".to_string(), "ctk".to_string(), "12.6".to_string())];
+        let cu126 = [("nvidia", "ctk", "12.6")].as_slice();
         let cu126_2 = [
-            ("nvidia".to_string(), "ctk".to_string(), "12.6".to_string()),
-            (
-                "nvidia".to_string(),
-                "cuda_version".to_string(),
-                ">=12.6,<13".to_string(),
-            ),
-        ];
-        let cu128 = [("nvidia".to_string(), "ctk".to_string(), "12.8".to_string())];
+            ("nvidia", "ctk", "12.6"),
+            ("nvidia", "cuda_version", ">=12.6,<13"),
+        ]
+        .as_slice();
+        let cu128 = [("nvidia", "ctk", "12.8")].as_slice();
 
         let marker = m(
             " platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.6' in variant_properties",
         );
 
-        assert!(marker.evaluate(&env37, None, &[]));
-        assert!(marker.evaluate(&env37, Some(&cu126), &[]));
-        assert!(marker.evaluate(&env37, Some(&cu126_2), &[]));
-        assert!(!marker.evaluate(&env37, Some(&cu128), &[]));
+        assert!(marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
+        assert!(marker.evaluate(&env37, cu126, &[]));
+        assert!(marker.evaluate(&env37, cu126_2, &[]));
+        assert!(!marker.evaluate(&env37, cu128, &[]));
     }
 }

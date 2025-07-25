@@ -39,7 +39,7 @@ pub fn score_variant(
     target_namespaces: &FxHashMap<VariantNamespace, VariantProviderOutput>,
     variants_properties: &Variant,
 ) -> Option<Vec<usize>> {
-    for (namespace, features) in variants_properties {
+    for (namespace, features) in &**variants_properties {
         for (feature, properties) in features {
             let resolved_properties = target_namespaces
                 .get(namespace)

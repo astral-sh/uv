@@ -8,6 +8,7 @@ use tracing::trace;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, DistributionMetadata, Requirement, RequirementSource};
+use uv_pep508::MarkerVariantsUniversal;
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
@@ -91,7 +92,9 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut queue: VecDeque<_> = self
             .constraints
             .apply(self.overrides.apply(self.requirements))
-            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), None, &[]))
+            .filter(|requirement| {
+                requirement.evaluate_markers(env.marker_environment(), MarkerVariantsUniversal, &[])
+            })
             .map(|requirement| (*requirement).clone())
             .collect();
 
@@ -112,7 +115,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     {
                         if requirement.evaluate_markers(
                             env.marker_environment(),
-                            None,
+                            MarkerVariantsUniversal,
                             lookahead.extras(),
                         ) {
                             queue.push_back((*requirement).clone());

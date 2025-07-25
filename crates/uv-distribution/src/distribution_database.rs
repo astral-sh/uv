@@ -641,7 +641,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // TODO(konsti): We shouldn't need to do this conversion.
         let mut known_properties = BTreeSet::default();
         for variant in variants_json.variants.values() {
-            for (namespace, features) in variant {
+            for (namespace, features) in &**variant {
                 for (feature, value) in features {
                     for value in value {
                         known_properties.insert(VariantPropertyType {

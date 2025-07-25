@@ -14,7 +14,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::VersionOrUrl;
+use uv_pep508::{MarkerVariantsUniversal, VersionOrUrl};
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_redacted::DisplaySafeUrl;
@@ -243,7 +243,7 @@ impl SitePackages {
 
                 // Verify that the dependencies are installed.
                 for dependency in &metadata.requires_dist {
-                    if !dependency.evaluate_markers(markers, None, &[]) {
+                    if !dependency.evaluate_markers(markers, MarkerVariantsUniversal, &[]) {
                         continue;
                     }
 
@@ -416,7 +416,7 @@ impl SitePackages {
         for requirement in requirements {
             if let Some(r#overrides) = overrides.get(&requirement.name) {
                 for dependency in r#overrides {
-                    if dependency.evaluate_markers(Some(markers), None, &[]) {
+                    if dependency.evaluate_markers(Some(markers), MarkerVariantsUniversal, &[]) {
                         if seen.insert((*dependency).clone()) {
                             stack.push(Cow::Borrowed(*dependency));
                         }
@@ -424,7 +424,7 @@ impl SitePackages {
                 }
             } else {
                 // TODO(konsti): Evaluate variants
-                if requirement.evaluate_markers(Some(markers), None, &[]) {
+                if requirement.evaluate_markers(Some(markers), MarkerVariantsUniversal, &[]) {
                     if seen.insert(requirement.clone()) {
                         stack.push(Cow::Borrowed(requirement));
                     }
@@ -443,7 +443,7 @@ impl SitePackages {
                 }
                 [distribution] => {
                     // Validate that the requirement is satisfied.
-                    if requirement.evaluate_markers(Some(markers), None, &[]) {
+                    if requirement.evaluate_markers(Some(markers), MarkerVariantsUniversal, &[]) {
                         match RequirementSatisfaction::check(distribution, &requirement.source) {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
@@ -456,7 +456,8 @@ impl SitePackages {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
-                        if constraint.evaluate_markers(Some(markers), None, &[]) {
+                        if constraint.evaluate_markers(Some(markers), MarkerVariantsUniversal, &[])
+                        {
                             match RequirementSatisfaction::check(distribution, &constraint.source) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
@@ -482,7 +483,7 @@ impl SitePackages {
                             for dependency in r#overrides {
                                 if dependency.evaluate_markers(
                                     Some(markers),
-                                    None,
+                                    MarkerVariantsUniversal,
                                     &requirement.extras,
                                 ) {
                                     if seen.insert((*dependency).clone()) {
@@ -491,8 +492,11 @@ impl SitePackages {
                                 }
                             }
                         } else {
-                            if dependency.evaluate_markers(Some(markers), None, &requirement.extras)
-                            {
+                            if dependency.evaluate_markers(
+                                Some(markers),
+                                MarkerVariantsUniversal,
+                                &requirement.extras,
+                            ) {
                                 if seen.insert(dependency.clone()) {
                                     stack.push(Cow::Owned(dependency));
                                 }

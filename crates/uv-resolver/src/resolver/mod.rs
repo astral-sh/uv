@@ -34,6 +34,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    MarkerVariantsEnvironment, MarkerVariantsUniversal,
 };
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, VerbatimParsedUrl};
@@ -84,7 +85,7 @@ use crate::{
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
 use uv_variants::resolved_variants::ResolvedVariants;
-use uv_variants::variants_json::VariantPropertyType;
+use uv_variants::variants_json::Variant;
 
 mod availability;
 mod batch_prefetch;
@@ -1819,7 +1820,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     None,
                     env,
-                    None,
+                    &MarkerVariantsUniversal,
                     python_requirement,
                 );
 
@@ -1855,7 +1856,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If we're resolving for a specific environment, use the host variants, otherwise resolve
                 // for all variants.
-                let variants = Self::variant_properties(
+                let variant = Self::variant_properties(
                     name,
                     version,
                     &version_id,
@@ -1948,7 +1949,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dev.as_ref(),
                     Some(name),
                     env,
-                    variants.as_deref(),
+                    &variant,
                     python_requirement,
                 );
 
@@ -2047,55 +2048,37 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &FilePins,
         env: &ResolverEnvironment,
         in_memory_index: &InMemoryIndex,
-    ) -> Option<Vec<(String, String, String)>> {
+    ) -> Variant {
         // TODO(konsti): Perf/Caching with version selection: This is in the hot path!
 
-        env.marker_environment()?;
-        let resolved_variants = in_memory_index
+        if env.marker_environment().is_none() {
+            return Variant::default();
+        }
+        let Some(resolved_variants) = in_memory_index
             .variant_priorities()
-            .get(&(version_id.clone(), index_url.cloned()))?;
+            .get(&(version_id.clone(), index_url.cloned()))
+        else {
+            return Variant::default();
+        };
 
         let filename = pins.get(name, version).unwrap().wheel_filename();
         let Some(filename) = filename else {
             // TODO(konsti): Handle installed dists too
-            return None;
+            return Variant::default();
         };
         let Some(variant_label) = filename.variant() else {
             warn!("Wheel variant has no associated variants: {filename}");
-            return None;
+            return Variant::default();
         };
 
         // Collect the host properties for marker filtering.
-        // TODO(konsti): Use the proper type everywhere, we shouldn't need to do
-        // this conversion at all.
-        let mut known_properties = BTreeSet::new();
-        let namespaces = resolved_variants
+        // TODO(konsti): We shouldn't need to clone
+        let variant = resolved_variants
             .variants_json
             .variants
             .get(variant_label)
             .expect("Missing previously select variant label");
-        for (namespace, features) in namespaces {
-            for (feature, values) in features {
-                for value in values {
-                    known_properties.insert(VariantPropertyType {
-                        namespace: namespace.clone(),
-                        feature: feature.clone(),
-                        value: value.clone(),
-                    });
-                }
-            }
-        }
-        let known_properties: Vec<(String, String, String)> = known_properties
-            .into_iter()
-            .map(|known_property| {
-                (
-                    known_property.namespace,
-                    known_property.feature,
-                    known_property.value,
-                )
-            })
-            .collect();
-        Some(known_properties)
+        variant.clone()
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,
@@ -2109,7 +2092,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
         env: &'a ResolverEnvironment,
-        variants: Option<&'a [(String, String, String)]>,
+        variants: &'a impl MarkerVariantsEnvironment,
         python_requirement: &'a PythonRequirement,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> {
         let python_marker = python_requirement.to_marker_tree();
@@ -2166,7 +2149,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     dependencies,
                     Some(&extra),
                     env,
-                    variants,
+                    &variants,
                     python_marker,
                     python_requirement,
                 ) {
@@ -2236,7 +2219,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
-        variants: Option<&'parameters [(String, String, String)]>,
+        variants: &'parameters impl MarkerVariantsEnvironment,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
@@ -2273,7 +2256,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requirement: &Requirement,
         extra: Option<&ExtraName>,
         env: &ResolverEnvironment,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         python_marker: MarkerTree,
         python_requirement: &PythonRequirement,
     ) -> bool {
@@ -2281,12 +2264,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         match extra {
             Some(source_extra) => {
                 // Only include requirements that are relevant for the current extra.
-                if requirement.evaluate_markers(env.marker_environment(), variants, &[]) {
+                if requirement.evaluate_markers(env.marker_environment(), &variants, &[]) {
                     return false;
                 }
                 if !requirement.evaluate_markers(
                     env.marker_environment(),
-                    variants,
+                    &variants,
                     slice::from_ref(source_extra),
                 ) {
                     return false;
@@ -2330,7 +2313,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         requirement: Cow<'data, Requirement>,
         extra: Option<&'parameters ExtraName>,
         env: &'parameters ResolverEnvironment,
-        variants: Option<&'parameters [(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment + 'parameters,
         python_marker: MarkerTree,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
@@ -2422,7 +2405,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     match extra {
                         Some(source_extra) => {
                             if !constraint
-                                .evaluate_markers(env.marker_environment(), variants, slice::from_ref(source_extra))
+                                .evaluate_markers(env.marker_environment(), &variants, slice::from_ref(source_extra))
                             {
                                 return None;
                             }
@@ -2432,7 +2415,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                         }
                         None => {
-                            if !constraint.evaluate_markers(env.marker_environment(), variants, &[]) {
+                            if !constraint.evaluate_markers(env.marker_environment(), &variants, &[]) {
                                 return None;
                             }
                         }

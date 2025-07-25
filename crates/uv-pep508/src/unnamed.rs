@@ -8,9 +8,10 @@ use uv_normalize::ExtraName;
 
 use crate::marker::parse;
 use crate::{
-    Cursor, MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
-    RequirementOrigin, Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError, expand_env_vars,
-    parse_extras_cursor, split_extras, split_scheme, strip_host,
+    Cursor, MarkerEnvironment, MarkerTree, MarkerVariantsEnvironment, Pep508Error,
+    Pep508ErrorSource, Pep508Url, Reporter, RequirementOrigin, Scheme, TracingReporter,
+    VerbatimUrl, VerbatimUrlError, expand_env_vars, parse_extras_cursor, split_extras,
+    split_scheme, strip_host,
 };
 
 /// An extension over [`Pep508Url`] that also supports parsing unnamed requirements, namely paths.
@@ -85,7 +86,7 @@ impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
     pub fn evaluate_markers(
         &self,
         env: &MarkerEnvironment,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.evaluate_optional_environment(Some(env), variants, extras)
@@ -95,7 +96,7 @@ impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
     pub fn evaluate_optional_environment(
         &self,
         env: Option<&MarkerEnvironment>,
-        variants: Option<&[(String, String, String)]>,
+        variants: impl MarkerVariantsEnvironment,
         extras: &[ExtraName],
     ) -> bool {
         self.marker
