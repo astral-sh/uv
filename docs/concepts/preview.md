@@ -63,6 +63,7 @@ The following preview features are available:
 - `add-bounds`: Allows configuring the
   [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
 - `json-output`: Allows `--output-format json` for various uv commands.
+- `package-conflicts`: Allows defining workspace conflicts at the package level.
 - `pylock`: Allows installing from `pylock.toml` files.
 - `python-install-default`: Allows
   [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).

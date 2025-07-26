@@ -48,6 +48,7 @@ pub trait Installable<'lock> {
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
+        let mut activated_projects: Vec<&PackageName> = vec![];
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
 
@@ -74,6 +75,7 @@ pub trait Installable<'lock> {
 
                 // Track the activated extras.
                 if dev.prod() {
+                    activated_projects.push(&dist.id.name);
                     for extra in extras.extra_names(dist.optional_dependencies.keys()) {
                         activated_extras.push((&dist.id.name, extra));
                     }
@@ -143,6 +145,7 @@ pub trait Installable<'lock> {
             {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
+                    activated_projects.iter().copied(),
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {
@@ -367,6 +370,7 @@ pub trait Installable<'lock> {
                     }
                     if !dep.complexified_marker.evaluate(
                         marker_env,
+                        activated_projects.iter().copied(),
                         activated_extras
                             .iter()
                             .chain(additional_activated_extras.iter())
@@ -454,6 +458,7 @@ pub trait Installable<'lock> {
             for dep in deps {
                 if !dep.complexified_marker.evaluate(
                     marker_env,
+                    activated_projects.iter().copied(),
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {
