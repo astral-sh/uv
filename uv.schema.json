@@ -1065,6 +1065,11 @@
           "const": "disabled"
         },
         {
+          "description": "Use the system keyring for credential lookup.",
+          "type": "string",
+          "const": "native"
+        },
+        {
           "description": "Use the `keyring` command for credential lookup.",
           "type": "string",
           "const": "subprocess"

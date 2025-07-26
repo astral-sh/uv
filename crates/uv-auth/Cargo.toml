@@ -10,6 +10,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-keyring = { workspace = true }
 uv-once-map = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
