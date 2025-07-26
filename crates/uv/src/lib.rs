@@ -2213,6 +2213,33 @@ async fn run_project(
             .boxed_local()
             .await
         }
+        ProjectCommand::Format(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::FormatSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            Box::pin(commands::format(
+                args.check,
+                args.diff,
+                args.files,
+                args.args,
+                args.python,
+                args.install_mirrors,
+                args.settings,
+                globals.network_settings,
+                globals.python_preference,
+                globals.python_downloads,
+                false, // installer_metadata
+                globals.concurrency,
+                cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
     }
 }
 

@@ -15,7 +15,7 @@ use uv_cli::{
     ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
+    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
     ToolUpgradeArgs,
     options::{flag, resolver_installer_options, resolver_options},
 };
@@ -1858,6 +1858,49 @@ impl ExportSettings {
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             install_mirrors,
+        }
+    }
+}
+
+/// The resolved settings to use for a `format` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct FormatSettings {
+    pub(crate) check: bool,
+    pub(crate) diff: bool,
+    pub(crate) files: Vec<PathBuf>,
+    pub(crate) args: Option<ExternalCommand>,
+    pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) settings: ResolverInstallerSettings,
+}
+
+impl FormatSettings {
+    /// Resolve the [`FormatSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: FormatArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let FormatArgs {
+            check,
+            diff,
+            files,
+            args,
+            python,
+        } = args;
+
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        Self {
+            check,
+            diff,
+            files,
+            args,
+            python: python.and_then(Maybe::into_option),
+            install_mirrors,
+            settings: ResolverInstallerSettings::combine(
+                ResolverInstallerOptions::default(),
+                filesystem,
+            ),
         }
     }
 }

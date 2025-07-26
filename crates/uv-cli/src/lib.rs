@@ -1004,6 +1004,21 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
+    /// Format Python source files using Ruff.
+    ///
+    /// Formats Python source files using the Ruff formatter. By default, all Python files
+    /// in the current directory and subdirectories are formatted.
+    ///
+    /// To check if files are formatted without modifying them, use `--check`.
+    /// To see a diff of formatting changes, use `--diff`.
+    ///
+    /// Additional arguments can be passed to Ruff after `--`. For example:
+    /// `uv format src/ -- --line-length 100`
+    #[command(
+        after_help = "Use `uv help format` for more details.",
+        after_long_help = ""
+    )]
+    Format(FormatArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -4250,6 +4265,48 @@ pub struct ExportArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+}
+
+#[derive(Args)]
+pub struct FormatArgs {
+    /// Check if files are formatted without applying changes.
+    #[arg(long)]
+    pub check: bool,
+
+    /// Show a diff of formatting changes without applying them.
+    ///
+    /// Implies `--check`.
+    #[arg(long)]
+    pub diff: bool,
+
+    /// Files or directories to format.
+    ///
+    /// If no files are specified, the current directory is formatted.
+    #[arg(value_name = "FILES")]
+    pub files: Vec<PathBuf>,
+
+    /// The Python interpreter to use for running Ruff.
+    ///
+    /// By default, the first Python interpreter found in the PATH or the project's virtual
+    /// environment will be used.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+    )]
+    pub python: Option<Maybe<String>>,
+
+    /// Additional arguments to pass to Ruff.
+    ///
+    /// Use `--` to separate these arguments from uv arguments.
+    /// For example: `uv format src/ -- --line-length 100`
+    #[command(subcommand)]
+    pub args: Option<ExternalCommand>,
 }
 
 #[derive(Args)]

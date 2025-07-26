@@ -26,6 +26,9 @@ mod edit;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod export;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod format;
+
 mod help;
 
 #[cfg(all(feature = "python", feature = "pypi", feature = "git"))]
