@@ -12,7 +12,7 @@ pub struct Options {
     pub prerelease_mode: PrereleaseMode,
     pub dependency_mode: DependencyMode,
     pub fork_strategy: ForkStrategy,
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: ExcludeNewer,
     pub index_strategy: IndexStrategy,
     pub required_environments: SupportedEnvironments,
     pub flexibility: Flexibility,
@@ -27,7 +27,7 @@ pub struct OptionsBuilder {
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     fork_strategy: ForkStrategy,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     index_strategy: IndexStrategy,
     required_environments: SupportedEnvironments,
     flexibility: Flexibility,
@@ -71,7 +71,7 @@ impl OptionsBuilder {
 
     /// Sets the exclusion date.
     #[must_use]
-    pub fn exclude_newer(mut self, exclude_newer: Option<ExcludeNewer>) -> Self {
+    pub fn exclude_newer(mut self, exclude_newer: ExcludeNewer) -> Self {
         self.exclude_newer = exclude_newer;
         self
     }

@@ -93,7 +93,7 @@ pub struct BuildDispatch<'a> {
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
     hasher: &'a HashStrategy,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: SourceStrategy,
@@ -119,7 +119,7 @@ impl<'a> BuildDispatch<'a> {
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
-        exclude_newer: Option<ExcludeNewer>,
+        exclude_newer: ExcludeNewer,
         sources: SourceStrategy,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
@@ -231,7 +231,7 @@ impl BuildContext for BuildDispatch<'_> {
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
             OptionsBuilder::new()
-                .exclude_newer(self.exclude_newer)
+                .exclude_newer(self.exclude_newer.clone())
                 .index_strategy(self.index_strategy)
                 .build_options(self.build_options.clone())
                 .flexibility(Flexibility::Fixed)

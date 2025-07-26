@@ -75,7 +75,7 @@ pub(crate) async fn venv(
     system_site_packages: bool,
     seed: bool,
     on_existing: OnExisting,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     concurrency: Concurrency,
     no_config: bool,
     no_project: bool,

@@ -99,7 +99,7 @@ pub(crate) async fn pip_compile(
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
@@ -485,7 +485,7 @@ pub(crate) async fn pip_compile(
         link_mode,
         &build_options,
         &build_hashes,
-        exclude_newer,
+        exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
         concurrency,
@@ -497,7 +497,7 @@ pub(crate) async fn pip_compile(
         .prerelease_mode(prerelease_mode)
         .fork_strategy(fork_strategy)
         .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
+        .exclude_newer(exclude_newer.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
