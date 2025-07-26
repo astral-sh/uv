@@ -1,15 +1,28 @@
 use std::{io::ErrorKind, path::PathBuf};
 
+use tempfile::tempdir_in;
 use uv_fs::Simplified as _;
 use uv_warnings::warn_user;
 
 use crate::managed::ManagedPythonInstallation;
 
 pub fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
+    // If `install_name_tool` fails, it seems to be capable of rendering the dylib unusable.
+    // So we'll create a copy, patch that, then, on success, replace the original
+    let tmp = tempdir_in(
+        dylib
+            .parent()
+            .expect("dylib should have a parent directory"),
+    )?;
+    let tmp_dylib = tmp
+        .path()
+        .join(dylib.file_name().expect("dylib should have a file name"));
+    fs_err::copy(&dylib, &tmp_dylib)?;
+
     let output = match std::process::Command::new("install_name_tool")
         .arg("-id")
         .arg(&dylib)
-        .arg(&dylib)
+        .arg(&tmp_dylib)
         .output()
     {
         Ok(output) => output,
@@ -27,6 +40,8 @@ pub fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         return Err(Error::RenameError { dylib, stderr });
     }
+
+    fs_err::rename(tmp_dylib, dylib)?;
 
     Ok(())
 }
