@@ -1,6 +1,6 @@
 //! Fetches CPU information.
 
-use anyhow::Error;
+use std::io::Error;
 
 #[cfg(target_os = "linux")]
 use procfs::{CpuInfo, Current};
@@ -14,7 +14,7 @@ use procfs::{CpuInfo, Current};
 /// More information on this can be found in the [Debian ARM Hard Float Port documentation](https://wiki.debian.org/ArmHardFloatPort#VFP).
 #[cfg(target_os = "linux")]
 pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
-    let cpu_info = CpuInfo::current()?;
+    let cpu_info = CpuInfo::current().map_err(Error::other)?;
     if let Some(features) = cpu_info.fields.get("Features") {
         if features.contains("vfp") {
             return Ok(true); // "vfp" found: hard-float (gnueabihf) detected

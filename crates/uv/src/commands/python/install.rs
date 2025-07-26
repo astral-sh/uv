@@ -16,6 +16,7 @@ use tracing::{debug, trace};
 
 use uv_configuration::{Preview, PreviewFeatures};
 use uv_fs::Simplified;
+use uv_platform::{Arch, Libc};
 use uv_python::downloads::{
     self, ArchRequest, DownloadResult, ManagedPythonDownload, PythonDownloadRequest,
 };
@@ -23,7 +24,6 @@ use uv_python::managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
     create_link_to_executable, python_executable_dir,
 };
-use uv_python::platform::{Arch, Libc};
 use uv_python::{
     PythonDownloads, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
     PythonVersionFile, VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
