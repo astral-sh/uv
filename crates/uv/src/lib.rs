@@ -24,9 +24,9 @@ use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
-    ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
-    ToolNamespace, TopLevelArgs, compat::CompatArgs,
+    BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands, CudaCommand, CudaNamespace,
+    PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, 
+    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, compat::CompatArgs,
 };
 use uv_configuration::min_stack_size;
 use uv_fs::{CWD, Simplified};
@@ -1535,6 +1535,61 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) => {
             commands::python_update_shell(printer).await?;
             Ok(ExitStatus::Success)
+        }
+        Commands::Cuda(CudaNamespace {
+            command: CudaCommand::List(args),
+        }) => {
+            commands::cuda_list(
+                args.version,
+                args.only_installed,
+                printer,
+            )
+            .await
+        }
+        Commands::Cuda(CudaNamespace {
+            command: CudaCommand::Install(args),
+        }) => {
+            commands::cuda_install(
+                args.versions,
+                args.force,
+                globals.network_settings,
+                printer,
+            )
+            .await
+        }
+        Commands::Cuda(CudaNamespace {
+            command: CudaCommand::Uninstall(args),
+        }) => {
+            commands::cuda_uninstall(
+                args.versions,
+                args.all,
+                printer,
+            )
+            .await
+        }
+        Commands::Cuda(CudaNamespace {
+            command: CudaCommand::Use(args),
+        }) => {
+            commands::cuda_use(
+                args.version,
+                printer,
+            )
+            .await
+        }
+        Commands::Cuda(CudaNamespace {
+            command: CudaCommand::Dir,
+        }) => {
+            commands::cuda_dir()?;
+            Ok(ExitStatus::Success)
+        }
+        Commands::Cuda(CudaNamespace {
+            command: CudaCommand::Env(args),
+        }) => {
+            commands::cuda_env(
+                args.version,
+                printer,
+            )
+            .await
         }
         Commands::Publish(args) => {
             show_settings!(args);

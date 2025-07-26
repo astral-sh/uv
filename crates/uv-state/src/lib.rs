@@ -103,6 +103,8 @@ impl StateStore {
 pub enum StateBucket {
     /// Managed Python installations
     ManagedPython,
+    /// Managed CUDA installations
+    Cuda,
     /// Installed tools.
     Tools,
 }
@@ -111,6 +113,7 @@ impl StateBucket {
     fn to_str(self) -> &'static str {
         match self {
             Self::ManagedPython => "python",
+            Self::Cuda => "cuda",
             Self::Tools => "tools",
         }
     }

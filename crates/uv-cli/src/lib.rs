@@ -430,6 +430,43 @@ pub enum Commands {
         after_long_help = ""
     )]
     Python(PythonNamespace),
+    /// Manage CUDA installations and toolkits
+    ///
+    /// uv can install and manage CUDA toolkits from NVIDIA directly. This allows
+    /// you to use specific CUDA versions for PyTorch, JAX, and other 
+    /// GPU-accelerated Python packages without needing system-wide CUDA installations.
+    /// This also contains the development headers and the cuda compiler, allowing you
+    /// to build CUDA extensions for your Python packages.
+    ///
+    /// CUDA toolkits are downloaded directly from NVIDIA and cached locally.
+    /// Multiple CUDA versions can be installed simultaneously, and you can
+    /// switch between them as needed.
+    ///
+    /// The following CUDA version request formats are supported:
+    ///
+    /// - `<version>` e.g. `12`, `12.8`, `12.8.1`
+    /// - `latest` for the newest available version
+    /// 
+    /// CUDA installations include:
+    /// - NVCC compiler
+    /// - CUDA runtime libraries 
+    /// - Development headers
+    /// - Documentation and samples
+    ///
+    /// When a CUDA version is active, the following environment variables are set:
+    /// - `CUDA_HOME` - Path to the CUDA installation
+    /// - `CUDA_ROOT` - Alias for CUDA_HOME  
+    /// - `CUDA_PATH` - Windows-style alias for CUDA_HOME
+    /// - `PATH` - Path to the CUDA bin directory
+    /// - `LD_LIBRARY_PATH` - Path to the CUDA lib directory
+    /// - `PKG_CONFIG_PATH` - Path to the CUDA pkg-config directory
+    /// - `XLA_FLAGS` - XLA flag that points to the CUDA installation
+    #[clap(verbatim_doc_comment)]
+    #[command(
+        after_help = "Use `uv help cuda` for more details.",
+        after_long_help = ""
+    )]
+    Cuda(CudaNamespace),
     /// Manage Python packages with a pip-compatible interface.
     #[command(
         after_help = "Use `uv help pip` for more details.",
@@ -4918,6 +4955,114 @@ pub enum PythonCommand {
     /// retrieved with `uv python dir --bin`.
     #[command(alias = "ensurepath")]
     UpdateShell,
+}
+
+#[derive(Args)]
+pub struct CudaNamespace {
+    #[command(subcommand)]
+    pub command: CudaCommand,
+}
+
+#[derive(Subcommand)]
+pub enum CudaCommand {
+    /// List available CUDA installations.
+    ///
+    /// By default, shows installed CUDA versions and available downloads.
+    ///
+    /// Use `--only-installed` to show only installed versions.
+    #[command(alias = "ls")]
+    List(CudaListArgs),
+
+    /// Download and install CUDA versions.
+    ///
+    /// Downloads CUDA toolkits directly from NVIDIA's official servers.
+    /// The CUDA toolkit includes the NVCC compiler, runtime libraries,
+    /// development headers, and documentation.
+    ///
+    /// CUDA versions are installed into the uv CUDA directory, which can 
+    /// be retrieved with `uv cuda dir`.
+    ///
+    /// Multiple CUDA versions may be requested.
+    Install(CudaInstallArgs),
+
+    /// Uninstall CUDA versions.
+    ///
+    /// Removes the specified CUDA installations from the uv CUDA directory.
+    Uninstall(CudaUninstallArgs),
+
+    /// Set the active CUDA version.
+    ///
+    /// Updates environment variables to point to the specified CUDA installation.
+    /// This affects CUDA_HOME, CUDA_ROOT, and CUDA_PATH environment variables.
+    Use(CudaUseArgs),
+
+    /// Show the uv CUDA installation directory.
+    ///
+    /// By default, CUDA installations are stored in the uv data directory at
+    /// `$XDG_DATA_HOME/uv/cuda` or `$HOME/.local/share/uv/cuda` on Unix and
+    /// `%APPDATA%\uv\data\cuda` on Windows.
+    ///
+    /// The CUDA installation directory may be overridden with `$UV_CUDA_INSTALL_DIR`.
+    Dir,
+
+    /// Show the environment file for a CUDA installation.
+    ///
+    /// Displays the environment file content that can be sourced to activate
+    /// the specified CUDA installation. The environment file contains all
+    /// necessary environment variables like CUDA_HOME, PATH, LD_LIBRARY_PATH, etc.
+    ///
+    /// Example:
+    ///   uv cuda env 12.9.1
+    ///   source $(uv cuda env 12.9.1)
+    Env(CudaEnvArgs),
+}
+
+#[derive(Args)]
+pub struct CudaListArgs {
+    /// A CUDA version to filter by.
+    pub version: Option<String>,
+
+    /// Only show installed CUDA versions.
+    ///
+    /// By default, both installed and available CUDA versions are shown.
+    #[arg(long)]
+    pub only_installed: bool,
+}
+
+#[derive(Args)]
+pub struct CudaInstallArgs {
+    /// The CUDA version(s) to install.
+    ///
+    /// Accepts version specifiers like `12.8`, `12.9.1`, or `latest`.
+    pub versions: Vec<String>,
+
+    /// Force reinstallation of CUDA versions.
+    ///
+    /// Will replace existing installations.
+    #[arg(long)]
+    pub force: bool,
+}
+
+#[derive(Args)]
+pub struct CudaUninstallArgs {
+    /// The CUDA version(s) to uninstall.
+    pub versions: Vec<String>,
+
+    /// Uninstall all CUDA versions.
+    #[arg(long)]
+    pub all: bool,
+}
+
+#[derive(Args)]
+pub struct CudaUseArgs {
+    /// The CUDA version to use.
+    pub version: String,
+}
+
+#[derive(Args)]
+pub struct CudaEnvArgs {
+    /// The CUDA version to show environment for.
+    pub version: String,
 }
 
 #[derive(Args)]
