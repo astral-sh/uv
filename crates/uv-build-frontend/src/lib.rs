@@ -29,7 +29,7 @@ use tracing::{Instrument, debug, info_span, instrument, warn};
 
 use uv_cache_key::cache_digest;
 use uv_configuration::Preview;
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, NoSources};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Requirement, Resolution};
 use uv_fs::LockedFile;
@@ -277,7 +277,7 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         version_id: Option<&str>,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        no_sources: NoSources,
         workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
@@ -304,7 +304,7 @@ impl SourceBuild {
             install_path,
             fallback_package_name,
             locations,
-            source_strategy,
+            &no_sources,
             workspace_cache,
             &default_backend,
         )
@@ -409,7 +409,7 @@ impl SourceBuild {
                 package_version.as_ref(),
                 version_id,
                 locations,
-                source_strategy,
+                no_sources,
                 workspace_cache,
                 build_stack,
                 build_kind,
@@ -505,7 +505,7 @@ impl SourceBuild {
         install_path: &Path,
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        no_sources: &NoSources,
         workspace_cache: &WorkspaceCache,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
@@ -518,41 +518,34 @@ impl SourceBuild {
 
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     // If necessary, lower the requirements.
-                    let requirements = match source_strategy {
-                        SourceStrategy::Enabled => {
-                            if let Some(name) = pyproject_toml
-                                .project
-                                .as_ref()
-                                .map(|project| &project.name)
-                                .or(package_name)
-                            {
-                                let build_requires = uv_pypi_types::BuildRequires {
-                                    name: Some(name.clone()),
-                                    requires_dist: build_system.requires,
-                                };
-                                let build_requires = BuildRequires::from_project_maybe_workspace(
-                                    build_requires,
-                                    install_path,
-                                    locations,
-                                    source_strategy,
-                                    workspace_cache,
-                                )
-                                .await
-                                .map_err(Error::Lowering)?;
-                                build_requires.requires_dist
-                            } else {
-                                build_system
-                                    .requires
-                                    .into_iter()
-                                    .map(Requirement::from)
-                                    .collect()
-                            }
-                        }
-                        SourceStrategy::Disabled => build_system
+                    let requirements = if let Some(name) = pyproject_toml
+                        .project
+                        .as_ref()
+                        .map(|project| &project.name)
+                        .or(package_name)
+                        // If sources are disabled, there's nothing to do here
+                        .filter(|_| !no_sources.no_sources())
+                    {
+                        let build_requires = uv_pypi_types::BuildRequires {
+                            name: Some(name.clone()),
+                            requires_dist: build_system.requires,
+                        };
+                        let build_requires = BuildRequires::from_project_maybe_workspace(
+                            build_requires,
+                            install_path,
+                            locations,
+                            no_sources,
+                            workspace_cache,
+                        )
+                        .await
+                        .map_err(Error::Lowering)?;
+                        build_requires.requires_dist
+                    } else {
+                        build_system
                             .requires
                             .into_iter()
                             .map(Requirement::from)
-                            .collect(),
+                            .collect()
                     };
 
                     Pep517Backend {
@@ -898,7 +891,7 @@ async fn create_pep517_build_environment(
     package_version: Option<&Version>,
     version_id: Option<&str>,
     locations: &IndexLocations,
-    source_strategy: SourceStrategy,
+    no_sources: NoSources,
     workspace_cache: &WorkspaceCache,
     build_stack: &BuildStack,
     build_kind: BuildKind,
@@ -989,24 +982,23 @@ async fn create_pep517_build_environment(
     };
 
     // If necessary, lower the requirements.
-    let extra_requires = match source_strategy {
-        SourceStrategy::Enabled => {
-            let build_requires = uv_pypi_types::BuildRequires {
-                name: package_name.cloned(),
-                requires_dist: extra_requires,
-            };
-            let build_requires = BuildRequires::from_project_maybe_workspace(
-                build_requires,
-                install_path,
-                locations,
-                source_strategy,
-                workspace_cache,
-            )
-            .await
-            .map_err(Error::Lowering)?;
-            build_requires.requires_dist
-        }
-        SourceStrategy::Disabled => extra_requires.into_iter().map(Requirement::from).collect(),
+    let extra_requires = if no_sources.no_sources() {
+        extra_requires.into_iter().map(Requirement::from).collect()
+    } else {
+        let build_requires = uv_pypi_types::BuildRequires {
+            name: package_name.cloned(),
+            requires_dist: extra_requires,
+        };
+        let build_requires = BuildRequires::from_project_maybe_workspace(
+            build_requires,
+            install_path,
+            locations,
+            &no_sources,
+            workspace_cache,
+        )
+        .await
+        .map_err(Error::Lowering)?;
+        build_requires.requires_dist
     };
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of

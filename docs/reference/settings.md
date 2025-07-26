@@ -1646,6 +1646,30 @@ sources.
 
 ---
 
+### [`no-sources-package`](#no-sources-package) {: #no-sources-package }
+
+Ignore `tool.uv.sources` for the specified packages.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    no-sources-package = ["ruff"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    no-sources-package = ["ruff"]
+    ```
+
+---
+
 ### [`offline`](#offline) {: #offline }
 
 Disable network access, relying only on locally cached data and locally available files.
@@ -3158,6 +3182,32 @@ sources.
     ```toml
     [pip]
     no-sources = true
+    ```
+
+---
+
+#### [`no-sources-package`](#pip_no-sources-package) {: #pip_no-sources-package }
+<span id="no-sources-package"></span>
+
+Ignore `tool.uv.sources` for the specified packages.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    no-sources-package = ["ruff"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    no-sources-package = ["ruff"]
     ```
 
 ---

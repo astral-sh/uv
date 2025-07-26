@@ -86,8 +86,8 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy,
-        PackageConfigSettings, Preview, SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, NoSources,
+        PackageConfigSettings, Preview,
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
@@ -160,7 +160,7 @@ mod resolver {
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
-        let sources = SourceStrategy::default();
+        let sources = NoSources::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
         let workspace_cache = WorkspaceCache::default();

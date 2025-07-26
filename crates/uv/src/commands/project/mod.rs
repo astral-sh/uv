@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
+    PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredRequirement};
@@ -1757,7 +1757,7 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         *exclude_newer,
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,
@@ -1965,7 +1965,7 @@ pub(crate) async fn resolve_environment(
         build_options,
         &build_hasher,
         *exclude_newer,
-        *sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -2327,7 +2327,7 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         *exclude_newer,
-        *sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -2548,28 +2548,30 @@ pub(crate) fn script_specification(
 
     // Collect any `tool.uv.index` from the script.
     let empty = Vec::default();
-    let script_indexes = match settings.sources {
-        SourceStrategy::Enabled => script
+    let script_indexes = if settings.sources.no_sources() {
+        &empty
+    } else {
+        script
             .metadata()
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.top_level.index.as_deref())
-            .unwrap_or(&empty),
-        SourceStrategy::Disabled => &empty,
+            .unwrap_or(&empty)
     };
 
     // Collect any `tool.uv.sources` from the script.
     let empty = BTreeMap::default();
-    let script_sources = match settings.sources {
-        SourceStrategy::Enabled => script
+    let script_sources = if settings.sources.no_sources() {
+        &empty
+    } else {
+        script
             .metadata()
             .tool
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.sources.as_ref())
-            .unwrap_or(&empty),
-        SourceStrategy::Disabled => &empty,
+            .unwrap_or(&empty)
     };
 
     let requirements = dependencies

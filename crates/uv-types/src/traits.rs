@@ -8,7 +8,7 @@ use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
 use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, ConfigSettings, PackageConfigSettings, SourceStrategy,
+    BuildKind, BuildOptions, BuildOutput, ConfigSettings, NoSources, PackageConfigSettings,
 };
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -93,7 +93,7 @@ pub trait BuildContext {
     fn config_settings_package(&self) -> &PackageConfigSettings;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
-    fn sources(&self) -> SourceStrategy;
+    fn sources(&self) -> NoSources;
 
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
@@ -131,7 +131,7 @@ pub trait BuildContext {
         install_path: &'a Path,
         version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
-        sources: SourceStrategy,
+        sources: &'a NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
         build_stack: BuildStack,

@@ -18,8 +18,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, Preview,
-    PreviewFeatures, SourceStrategy,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, NoSources,
+    Preview, PreviewFeatures,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -384,7 +384,7 @@ pub(crate) async fn add(
             let build_constraints = Constraints::default();
             let build_hasher = HashStrategy::default();
             let hasher = HashStrategy::default();
-            let sources = SourceStrategy::Enabled;
+            let sources = NoSources::None;
 
             settings.resolver.index_locations.cache_index_credentials();
 
@@ -1282,6 +1282,7 @@ impl PythonTarget {
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(super) enum AddTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script, Box<Interpreter>),
@@ -1382,6 +1383,7 @@ impl AddTarget {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 enum AddTargetSnapshot {
     Script(Pep723Script, Option<Vec<u8>>),
     Project(VirtualProject, Option<Vec<u8>>),

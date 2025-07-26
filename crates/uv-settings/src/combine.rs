@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use url::Url;
 
 use uv_configuration::{
-    ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, PackageConfigSettings,
-    RequiredVersion, TargetTriple, TrustedPublishing,
+    ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, NoSources,
+    PackageConfigSettings, RequiredVersion, TargetTriple, TrustedPublishing,
 };
 use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_install_wheel::LinkMode;
@@ -137,6 +137,16 @@ impl Combine for Option<PackageConfigSettings> {
     fn combine(self, other: Option<PackageConfigSettings>) -> Option<PackageConfigSettings> {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.merge(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<NoSources> {
+    /// Combine two source strategies by using the `combine` method if they're both `Some`.
+    fn combine(self, other: Option<NoSources>) -> Option<NoSources> {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
         }
     }

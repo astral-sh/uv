@@ -274,6 +274,11 @@ Disable use of uv-managed Python versions.
 Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
 example, spinners and progress bars.
 
+### `UV_NO_SOURCES_PACKAGE`
+
+Equivalent to the `--no-sources-package` command line argument. If set, uv will
+ignore the `tool.uv.sources` table for the given space-delimited list of packages.
+
 ### `UV_NO_SYNC`
 
 Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
