@@ -25,8 +25,9 @@ static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     ))))
 });
 
-static VARIANT_URL: LazyLock<DisplaySafeUrl> =
-    LazyLock::new(|| DisplaySafeUrl::parse("https://variants-index.wheelnext.dev").unwrap());
+static VARIANT_URL: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
+    DisplaySafeUrl::parse("https://download.pytorch.org/whl/test/variant").unwrap()
+});
 
 static VARIANT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_extra_index_url(IndexUrl::Url(Arc::new(VerbatimUrl::from_url(
@@ -347,13 +348,24 @@ impl<'a> IndexLocations {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
+            // Determine whether the user defined a default index.
+            let mut seen = FxHashSet::default();
+            let has_default = self
+                .indexes
+                .iter()
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                .any(|index| index.default);
+
             let mut seen = FxHashSet::default();
             Either::Right(
                 self.indexes
                     .iter()
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                     .filter(|index| !index.default && !index.explicit)
-                    .chain(std::iter::once(&*VARIANT_INDEX)),
+                    .chain(Some(&*VARIANT_INDEX).filter(move |_| {
+                        // If the user defined a default index, omit the variant index.
+                        !has_default
+                    })),
             )
         }
     }
@@ -383,8 +395,7 @@ impl<'a> IndexLocations {
             Either::Right(
                 self.indexes
                     .iter()
-                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                    .chain(std::iter::once(&*VARIANT_INDEX)),
+                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name))),
             )
         }
     }
@@ -426,7 +437,6 @@ impl<'a> IndexLocations {
                     .iter()
                     .chain(self.flat_index.iter())
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                    .chain(std::iter::once(&*VARIANT_INDEX))
             } {
                 if index.default {
                     if default {
@@ -437,6 +447,7 @@ impl<'a> IndexLocations {
                 indexes.push(index);
             }
             if !default {
+                indexes.push(&*VARIANT_INDEX);
                 indexes.push(&*DEFAULT_INDEX);
             }
 
@@ -561,13 +572,24 @@ impl<'a> IndexUrls {
         if self.no_index {
             Either::Left(std::iter::empty())
         } else {
+            // Determine whether the user defined a default index.
+            let mut seen = FxHashSet::default();
+            let has_default = self
+                .indexes
+                .iter()
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                .any(|index| index.default);
+
             let mut seen = FxHashSet::default();
             Either::Right(
                 self.indexes
                     .iter()
                     .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
                     .filter(|index| !index.default && !index.explicit)
-                    .chain(std::iter::once(&*VARIANT_INDEX)),
+                    .chain(Some(&*VARIANT_INDEX).filter(move |_| {
+                        // If the user defined a default index, omit the variant index.
+                        !has_default
+                    })),
             )
         }
     }
@@ -630,7 +652,7 @@ impl<'a> IndexUrls {
                 return index.status_code_strategy();
             }
         }
-        IndexStatusCodeStrategy::Default
+        IndexStatusCodeStrategy::from_index_url(url)
     }
 
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
