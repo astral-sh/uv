@@ -2121,6 +2121,34 @@ Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
 
 ---
 
+#### [`all-groups`](#pip_all-groups) {: #pip_all-groups }
+<span id="all-groups"></span>
+
+Include dependencies from all dependency groups.
+
+Only applies to `pylock.toml` sources and the `pyproject.toml` in the working directory.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    all-groups = true
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    all-groups = true
+    ```
+
+---
+
 #### [`allow-empty-requirements`](#pip_allow-empty-requirements) {: #pip_allow-empty-requirements }
 <span id="allow-empty-requirements"></span>
 

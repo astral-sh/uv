@@ -1181,6 +1181,17 @@ pub struct PipOptions {
         "#
     )]
     pub group: Option<Vec<PipGroupName>>,
+    /// Include dependencies from all dependency groups.
+    ///
+    /// Only applies to `pylock.toml` sources and the `pyproject.toml` in the working directory.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            all-groups = true
+        "#
+    )]
+    pub all_groups: Option<bool>,
     /// Allow `uv pip sync` with empty requirements, which will clear the environment of all
     /// packages.
     #[option(

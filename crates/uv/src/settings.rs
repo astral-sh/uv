@@ -2064,6 +2064,8 @@ impl PipSyncSettings {
             all_extras,
             no_all_extras,
             group,
+            all_groups,
+            no_all_groups,
             installer,
             refresh,
             require_hashes,
@@ -2131,6 +2133,7 @@ impl PipSyncSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras, "all-extras"),
                     group: Some(group),
+                    all_groups: flag(all_groups, no_all_groups, "all-groups"),
                     torch_backend,
                     ..PipOptions::from(installer)
                 },
@@ -2176,6 +2179,8 @@ impl PipInstallSettings {
             no_deps,
             deps,
             group,
+            all_groups,
+            no_all_groups,
             require_hashes,
             no_require_hashes,
             verify_hashes,
@@ -2288,6 +2293,7 @@ impl PipInstallSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras, "all-extras"),
                     group: Some(group),
+                    all_groups: flag(all_groups, no_all_groups, "all-groups"),
                     no_deps: flag(no_deps, deps, "deps"),
                     python_version,
                     python_platform,
@@ -2909,6 +2915,7 @@ pub(crate) struct PipSettings {
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: Vec<PipGroupName>,
+    pub(crate) all_groups: bool,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
     pub(crate) prefix: Option<Prefix>,
@@ -3024,6 +3031,7 @@ impl PipSettings {
             upgrade_package,
             reinstall,
             reinstall_package,
+            all_groups,
         } = pip.unwrap_or_default();
 
         let ResolverInstallerOptions {
@@ -3116,6 +3124,7 @@ impl PipSettings {
             ),
 
             groups: args.group.combine(group).unwrap_or_default(),
+            all_groups: args.all_groups.combine(all_groups).unwrap_or_default(),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct
             } else {
