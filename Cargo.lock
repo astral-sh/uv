@@ -4710,6 +4710,7 @@ dependencies = [
  "unicode-width 0.2.1",
  "url",
  "uv-auth",
+ "uv-bin-install",
  "uv-build-backend",
  "uv-build-frontend",
  "uv-cache",
@@ -4819,6 +4820,28 @@ dependencies = [
  "uv-resolver",
  "uv-types",
  "uv-workspace",
+]
+
+[[package]]
+name = "uv-bin-install"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "flate2",
+ "futures",
+ "reqwest",
+ "reqwest-middleware",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "url",
+ "uv-cache",
+ "uv-client",
+ "uv-extract",
+ "uv-platform",
 ]
 
 [[package]]

@@ -1,0 +1,36 @@
+[package]
+name = "uv-bin-install"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+description = "Binary download and installation utilities for uv"
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-cache = { workspace = true }
+uv-client = { workspace = true }
+uv-extract = { workspace = true }
+uv-platform = { workspace = true }
+
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+flate2 = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+tar = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }

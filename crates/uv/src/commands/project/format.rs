@@ -9,9 +9,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
-use uv_python::platform::{Arch, Libc, Os};
-
-use crate::commands::project::ruff_download::RuffDownload;
+use uv_bin_install::{BinaryDownloader, RuffDownloader};
+use uv_platform::{Arch, Libc, Os};
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
@@ -42,13 +41,7 @@ pub(crate) async fn format(
     debug!("Getting platform information");
     let os = Os::from_env();
     let arch = Arch::from_env();
-    let libc = if cfg!(target_env = "musl") {
-        Libc::Some(target_lexicon::Environment::Musl)
-    } else if cfg!(target_os = "linux") {
-        Libc::Some(target_lexicon::Environment::Gnu)
-    } else {
-        Libc::None
-    };
+    let libc = Libc::from_env()?;
     debug!("Platform: os={}, arch={}, libc={}", os, arch, libc);
 
     // Create HTTP client
@@ -62,8 +55,9 @@ pub(crate) async fn format(
     debug!("HTTP client created");
 
     // Download or retrieve Ruff binary from cache
-    debug!("Calling RuffDownload::download");
-    let ruff_path = RuffDownload::download(
+    debug!("Calling RuffDownloader::download");
+    let downloader = RuffDownloader;
+    let ruff_path = downloader.download(
         version.as_deref(),
         &os,
         &arch,
