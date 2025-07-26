@@ -1221,6 +1221,7 @@ impl SyncSettings {
             exact,
             no_install_project,
             no_install_workspace,
+            no_install_local,
             no_install_package,
             locked,
             frozen,
@@ -1286,6 +1287,7 @@ impl SyncSettings {
             install_options: InstallOptions::new(
                 no_install_project,
                 no_install_workspace,
+                no_install_local,
                 no_install_package,
             ),
             modifications: if flag(exact, inexact, "inexact").unwrap_or(true) {
@@ -1377,6 +1379,7 @@ pub(crate) struct AddSettings {
     pub(crate) workspace: Option<bool>,
     pub(crate) no_install_project: bool,
     pub(crate) no_install_workspace: bool,
+    pub(crate) no_install_local: bool,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
@@ -1418,6 +1421,7 @@ impl AddSettings {
             no_workspace,
             no_install_project,
             no_install_workspace,
+            no_install_local,
         } = args;
 
         let dependency_type = if let Some(extra) = optional {
@@ -1521,6 +1525,7 @@ impl AddSettings {
             workspace: flag(workspace, no_workspace, "workspace"),
             no_install_project,
             no_install_workspace,
+            no_install_local,
             editable: flag(editable, no_editable, "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
@@ -1820,6 +1825,7 @@ impl ExportSettings {
             no_emit_project,
             no_emit_workspace,
             no_emit_package,
+            no_emit_local,
             locked,
             frozen,
             resolver,
@@ -1862,6 +1868,7 @@ impl ExportSettings {
             install_options: InstallOptions::new(
                 no_emit_project,
                 no_emit_workspace,
+                no_emit_local,
                 no_emit_package,
             ),
             output_file,

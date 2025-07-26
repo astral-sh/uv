@@ -10,6 +10,8 @@ pub struct InstallOptions {
     pub no_install_project: bool,
     /// Omit all workspace members (including the project itself) from the resolution.
     pub no_install_workspace: bool,
+    /// Omit all local packages from the resolution.
+    pub no_install_local: bool,
     /// Omit the specified packages from the resolution.
     pub no_install_package: Vec<PackageName>,
 }
@@ -18,11 +20,13 @@ impl InstallOptions {
     pub fn new(
         no_install_project: bool,
         no_install_workspace: bool,
+        no_install_local: bool,
         no_install_package: Vec<PackageName>,
     ) -> Self {
         Self {
             no_install_project,
             no_install_workspace,
+            no_install_local,
             no_install_package,
         }
     }

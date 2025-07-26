@@ -3435,6 +3435,14 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_install_workspace: bool,
 
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long)]
+    pub no_install_local: bool,
+
     /// Do not install the given package(s).
     ///
     /// By default, all of the project's dependencies are installed into the environment. The
@@ -3503,6 +3511,7 @@ pub struct SyncArgs {
         conflicts_with = "package",
         conflicts_with = "no_install_project",
         conflicts_with = "no_install_workspace",
+        conflicts_with = "no_install_local",
         conflicts_with = "extra",
         conflicts_with = "all_extras",
         conflicts_with = "no_extra",
@@ -3847,6 +3856,14 @@ pub struct AddArgs {
     /// allows optimal layer caching.
     #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
     pub no_install_workspace: bool,
+
+    /// Do not install local path dependencies
+    ///
+    /// Skips the current project, workspace members, and any other local (path or editable)
+    /// packages. Only remote/indexed dependencies are installed. Useful in Docker builds to cache
+    /// heavy third-party dependencies first and layer local packages separately.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_local: bool,
 }
 
 #[derive(Args)]
@@ -4238,6 +4255,14 @@ pub struct ExportArgs {
     /// exclusion of all the workspace members while retaining their dependencies.
     #[arg(long, alias = "no-install-workspace")]
     pub no_emit_workspace: bool,
+
+    /// Do not include local path dependencies in the exported requirements.
+    ///
+    /// Omits the current project, workspace members, and any other local (path or editable)
+    /// packages from the export. Only remote/indexed dependencies are written. Useful for Docker
+    /// and CI flows that want to export and cache third-party dependencies first.
+    #[arg(long, alias = "no-install-local")]
+    pub no_emit_local: bool,
 
     /// Do not emit the given package(s).
     ///
