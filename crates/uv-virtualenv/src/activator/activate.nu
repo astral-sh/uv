@@ -46,7 +46,7 @@ export-env {
         if ($parsed | describe) == 'bool' {
           $parsed
         } else {
-          not ($env | get -i $name | is-empty)
+          not ($env | get -o $name | is-empty)
         }
       } else {
         false
