@@ -413,7 +413,7 @@ fn python_list_downloads_installed() {
         .with_filtered_python_keys()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
-        .with_managed_python_dirs();
+        .with_python_downloads_enabled();
 
     // We do not test showing all interpreters — as it differs per platform
     // Instead, we choose a Python version where our available distributions are stable
@@ -450,7 +450,7 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18-[PLATFORM]    managed/cpython-3.10.18-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.18-[PLATFORM]    [MANAGED_PYTHON_DIR]/cpython-3.10.18-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
