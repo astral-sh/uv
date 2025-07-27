@@ -218,7 +218,8 @@ pub trait Installable<'lock> {
         for dependency in self.lock().requirements() {
             if !dependency
                 .marker
-                .evaluate(marker_env, MarkerVariantsUniversal, &[])
+                // No package, evaluate markers to false.
+                .evaluate(marker_env, Vec::<(String, _, _)>::new().as_slice(), &[])
             {
                 continue;
             }
@@ -271,6 +272,7 @@ pub trait Installable<'lock> {
             })
             .flatten()
         {
+            // TODO(konsti): Evaluate markers for the current package
             if !dependency
                 .marker
                 .evaluate(marker_env, MarkerVariantsUniversal, &[])
