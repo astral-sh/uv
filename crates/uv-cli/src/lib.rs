@@ -2505,6 +2505,10 @@ pub struct BuildArgs {
     #[arg(long)]
     pub wheel: bool,
 
+    /// Build an editable ("wheel") from the given directory.
+    #[arg(long)]
+    pub editable: bool,
+
     /// When using the uv build backend, list the files that would be included when building.
     ///
     /// Skips building the actual distribution, except when the source distribution is needed to

@@ -963,6 +963,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.out_dir,
                 args.sdist,
                 args.wheel,
+                args.editable,
                 args.list,
                 args.build_logs,
                 args.force_pep517,

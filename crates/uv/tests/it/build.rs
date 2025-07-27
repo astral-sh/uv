@@ -231,10 +231,80 @@ fn build_wheel() -> Result<()> {
         .child("dist")
         .child("project-0.1.0.tar.gz")
         .assert(predicate::path::missing());
+
+    let wheel_path = project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl");
+    wheel_path.assert(predicate::path::is_file());
+
+    // Check for expected Python file to distinguish build results from editable wheel build
+    let mut archive = zip::ZipArchive::new(fs_err::File::open(wheel_path.to_str().unwrap())?)?;
+    assert!(
+        archive
+            .by_name("project/__init__.py")
+            .is_ok_and(|f| f.is_file())
+    );
+
+    Ok(())
+}
+
+#[test]
+fn build_editable() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    // Build the specified path.
+    uv_snapshot!(&filters, context.build().arg("--editable").current_dir(&project), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel...
+    Successfully built dist/project-0.1.0-py3-none-any.whl
+    "###);
+
     project
         .child("dist")
-        .child("project-0.1.0-py3-none-any.whl")
-        .assert(predicate::path::is_file());
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+
+    let wheel_path = project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl");
+    wheel_path.assert(predicate::path::is_file());
+
+    // Check for expected pth file to distinguish build results from normal wheel build
+    let mut archive = zip::ZipArchive::new(fs_err::File::open(wheel_path.to_str().unwrap())?)?;
+    assert!(archive.by_name("_project.pth").is_ok_and(|f| f.is_file()));
 
     Ok(())
 }

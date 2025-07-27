@@ -102,6 +102,7 @@ pub(crate) async fn build_frontend(
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
+    editable: bool,
     list: bool,
     build_logs: bool,
     force_pep517: bool,
@@ -127,6 +128,7 @@ pub(crate) async fn build_frontend(
         output_dir.as_deref(),
         sdist,
         wheel,
+        editable,
         list,
         build_logs,
         force_pep517,
@@ -170,6 +172,7 @@ async fn build_impl(
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
+    editable: bool,
     list: bool,
     build_logs: bool,
     force_pep517: bool,
@@ -354,6 +357,7 @@ async fn build_impl(
             build_options,
             sdist,
             wheel,
+            editable,
             list,
             dependency_metadata,
             *link_mode,
@@ -432,6 +436,7 @@ async fn build_package(
     build_options: &BuildOptions,
     sdist: bool,
     wheel: bool,
+    editable: bool,
     list: bool,
     dependency_metadata: &DependencyMetadata,
     link_mode: LinkMode,
@@ -586,7 +591,7 @@ async fn build_package(
     prepare_output_directory(&output_dir).await?;
 
     // Determine the build plan.
-    let plan = BuildPlan::determine(&source, sdist, wheel).map_err(Error::BuildPlan)?;
+    let plan = BuildPlan::determine(&source, sdist, wheel, editable).map_err(Error::BuildPlan)?;
 
     // Check if the build backend is matching uv version that allows calling in the uv build backend
     // directly.
@@ -685,6 +690,7 @@ async fn build_package(
                 &source,
                 printer,
                 "wheel from source distribution",
+                WheelBuildKind::Wheel,
                 &build_dispatch,
                 sources,
                 dist,
@@ -722,6 +728,27 @@ async fn build_package(
                 &source,
                 printer,
                 "wheel",
+                WheelBuildKind::Wheel,
+                &build_dispatch,
+                sources,
+                dist,
+                subdirectory,
+                version_id,
+                build_output,
+                None,
+            )
+            .await?;
+            build_results.push(wheel_build);
+        }
+        BuildPlan::Editable => {
+            let wheel_build = build_wheel(
+                source.path(),
+                &output_dir,
+                build_action,
+                &source,
+                printer,
+                "wheel",
+                WheelBuildKind::Editable,
                 &build_dispatch,
                 sources,
                 dist,
@@ -757,6 +784,7 @@ async fn build_package(
                 &source,
                 printer,
                 "wheel",
+                WheelBuildKind::Wheel,
                 &build_dispatch,
                 sources,
                 dist,
@@ -800,6 +828,7 @@ async fn build_package(
                 &source,
                 printer,
                 "wheel from source distribution",
+                WheelBuildKind::Wheel,
                 &build_dispatch,
                 sources,
                 dist,
@@ -824,6 +853,14 @@ enum BuildAction {
     DirectBuild,
     /// Build through the PEP 517 hooks.
     Pep517,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum WheelBuildKind {
+    /// Build a regular wheel.
+    Wheel,
+    /// Build an editable wheel.
+    Editable,
 }
 
 impl BuildAction {
@@ -950,6 +987,7 @@ async fn build_wheel(
     source: &AnnotatedSource<'_>,
     printer: Printer,
     build_kind_message: &str,
+    wheel_kind: WheelBuildKind,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
     sources: SourceStrategy,
@@ -988,13 +1026,19 @@ async fn build_wheel(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
-            let filename = tokio::task::spawn_blocking(move || {
-                uv_build_backend::build_wheel(
+            let filename = tokio::task::spawn_blocking(move || match wheel_kind {
+                WheelBuildKind::Wheel => uv_build_backend::build_wheel(
                     &source_tree,
                     &output_dir_,
                     None,
                     uv_version::version(),
-                )
+                ),
+                WheelBuildKind::Editable => uv_build_backend::build_editable(
+                    &source_tree,
+                    &output_dir_,
+                    None,
+                    uv_version::version(),
+                ),
             })
             .await??;
 
@@ -1016,6 +1060,10 @@ async fn build_wheel(
                 )
                 .bold()
             )?;
+            let build_kind = match wheel_kind {
+                WheelBuildKind::Wheel => BuildKind::Wheel,
+                WheelBuildKind::Editable => BuildKind::Editable,
+            };
             let builder = build_dispatch
                 .setup_build(
                     source_tree,
@@ -1024,7 +1072,7 @@ async fn build_wheel(
                     version_id,
                     dist,
                     sources,
-                    BuildKind::Wheel,
+                    build_kind,
                     build_output,
                     BuildStack::default(),
                 )
@@ -1243,6 +1291,9 @@ enum BuildPlan {
     /// Build a wheel from source.
     Wheel,
 
+    /// Build an editable wheel from source.
+    Editable,
+
     /// Build a source distribution and a wheel from source.
     SdistAndWheel,
 
@@ -1251,9 +1302,20 @@ enum BuildPlan {
 }
 
 impl BuildPlan {
-    fn determine(source: &AnnotatedSource, sdist: bool, wheel: bool) -> Result<Self> {
+    fn determine(
+        source: &AnnotatedSource,
+        sdist: bool,
+        wheel: bool,
+        editable: bool,
+    ) -> Result<Self> {
         Ok(match &source.source {
             Source::File(_) => {
+                if editable {
+                    return Err(anyhow::anyhow!(
+                        "Building a `--editable` from a source distribution is not supported"
+                    ));
+                }
+
                 // We're building from a file, which must be a source distribution.
                 match (sdist, wheel) {
                     (false, true) => Self::WheelFromSdist,
@@ -1271,11 +1333,22 @@ impl BuildPlan {
             }
             Source::Directory(_) => {
                 // We're building from a directory.
-                match (sdist, wheel) {
-                    (false, false) => Self::SdistToWheel,
-                    (false, true) => Self::Wheel,
-                    (true, false) => Self::Sdist,
-                    (true, true) => Self::SdistAndWheel,
+                match (sdist, wheel, editable) {
+                    (false, false, false) => Self::SdistToWheel,
+                    (false, true, false) => Self::Wheel,
+                    (true, false, false) => Self::Sdist,
+                    (true, true, false) => Self::SdistAndWheel,
+                    (false, false, true) => Self::Editable,
+                    (_, true, true) => {
+                        return Err(anyhow::anyhow!(
+                            "Building a `--wheel` and a `--editable` at the same time is not supported"
+                        ));
+                    }
+                    (true, false, true) => {
+                        return Err(anyhow::anyhow!(
+                            "Building an `--sdist` and a `--editable` at the same time is not supported"
+                        ));
+                    }
                 }
             }
         })

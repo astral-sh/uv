@@ -2562,6 +2562,7 @@ pub(crate) struct BuildSettings {
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
+    pub(crate) editable: bool,
     pub(crate) list: bool,
     pub(crate) build_logs: bool,
     pub(crate) force_pep517: bool,
@@ -2583,6 +2584,7 @@ impl BuildSettings {
             all_packages,
             sdist,
             wheel,
+            editable,
             list,
             force_pep517,
             build_constraints,
@@ -2610,6 +2612,7 @@ impl BuildSettings {
             out_dir,
             sdist,
             wheel,
+            editable,
             list,
             build_logs: flag(build_logs, no_build_logs, "build-logs").unwrap_or(true),
             build_constraints: build_constraints
