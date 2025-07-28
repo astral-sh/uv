@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    Reinstall, Upgrade,
+    BuildDependencyStrategy, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, Preview, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -440,6 +440,7 @@ async fn do_lock(
         upgrade,
         build_options,
         sources,
+        build_dependency_strategy,
     } = settings;
 
     // Collect the requirements, etc.
@@ -663,24 +664,25 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
+    // Extract preferences and git refs from the existing lockfile if available for build dispatch.
     // We extract preferences before validation because validation may need to build source
-    // distributions to get their metadata.
-    let preferences = existing_lock
-        .as_ref()
-        .map(|existing_lock| -> Result<Preferences, ProjectError> {
-            let locked = read_lock_requirements(existing_lock, target.install_path(), upgrade)?;
-            // Populate the Git resolver.
-            for ResolvedRepositoryReference { reference, sha } in &locked.git {
-                debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-                state.git().insert(reference.clone(), *sha);
-            }
-            Ok(Preferences::from_iter(
-                locked.preferences,
-                &ResolverEnvironment::universal(vec![]),
-            ))
-        })
-        .transpose()?
-        .unwrap_or_default();
+    // distributions to get their metadata, and those builds should use the lockfile's preferences
+    // for accuracy. While the lockfile hasn't been validated yet, using its preferences is still
+    // better than using defaults, as most lockfiles are valid and this gives more accurate results.
+    let preferences = match build_dependency_strategy {
+        BuildDependencyStrategy::PreferLocked => existing_lock
+            .as_ref()
+            .map(|existing_lock| -> Result<Preferences, ProjectError> {
+                Ok(Preferences::from_iter(
+                    read_lock_requirements(existing_lock, target.install_path(), upgrade)?
+                        .preferences,
+                    &ResolverEnvironment::universal(vec![]),
+                ))
+            })
+            .transpose()?
+            .unwrap_or_default(),
+        BuildDependencyStrategy::Latest => Preferences::default(),
+    };
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

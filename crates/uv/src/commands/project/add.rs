@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -17,9 +17,9 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, Preview,
-    PreviewFeatures, SourceStrategy,
+    BuildDependencyStrategy, Concurrency, Constraints, DependencyGroups,
+    DependencyGroupsWithDefaults, DevMode, DryRun, EditableMode, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, InstallOptions, Preview, PreviewFeatures, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -27,7 +27,7 @@ use uv_distribution_types::{
     Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, VersionId,
 };
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
@@ -427,31 +427,27 @@ pub(crate) async fn add(
                 FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
             };
 
-            // Load preferences from the existing lockfile if available.
-            let preferences = if let Ok(Some(lock)) = LockTarget::from(&target).read().await {
-                Preferences::from_iter(
-                    lock.packages()
-                        .iter()
-                        .filter_map(|package| {
-                            Preference::from_lock(
-                                package,
-                                match &target {
-                                    AddTarget::Script(_, _) => Path::new(".")
-                                        .canonicalize()
-                                        .unwrap_or_else(|_| PathBuf::from(".")),
-                                    AddTarget::Project(project, _) => {
-                                        project.workspace().install_path().clone()
-                                    }
-                                }
-                                .as_path(),
-                            )
-                            .transpose()
-                        })
-                        .collect::<Result<Vec<_>, _>>()?,
-                    &ResolverEnvironment::specific(target.interpreter().markers().clone().into()),
-                )
-            } else {
-                Preferences::default()
+            // Load preferences from the existing lockfile if available and if configured to do so.
+            let preferences = match settings.resolver.build_dependency_strategy {
+                BuildDependencyStrategy::PreferLocked => {
+                    if let Ok(Some(lock)) = LockTarget::from(&target).read().await {
+                        Preferences::from_iter(
+                            lock.packages()
+                                .iter()
+                                .filter_map(|package| {
+                                    Preference::from_lock(package, &target.install_path())
+                                        .transpose()
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
+                            &ResolverEnvironment::specific(
+                                target.interpreter().markers().clone().into(),
+                            ),
+                        )
+                    } else {
+                        Preferences::default()
+                    }
+                }
+                BuildDependencyStrategy::Latest => Preferences::default(),
             };
 
             // Create a build dispatch.
@@ -1342,6 +1338,14 @@ impl AddTarget {
         match self {
             Self::Script(_, interpreter) => interpreter,
             Self::Project(_, venv) => venv.interpreter(),
+        }
+    }
+
+    /// Return the parent path of the target.
+    pub(crate) fn install_path(&self) -> &Path {
+        match self {
+            Self::Script(script, _) => script.path.parent().unwrap_or(&*CWD),
+            Self::Project(project, _) => project.root(),
         }
     }
 

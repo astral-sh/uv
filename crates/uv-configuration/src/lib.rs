@@ -1,4 +1,5 @@
 pub use authentication::*;
+pub use build_dependency_strategy::*;
 pub use build_options::*;
 pub use concurrency::*;
 pub use config_settings::*;
@@ -24,6 +25,7 @@ pub use trusted_publishing::*;
 pub use vcs::*;
 
 mod authentication;
+mod build_dependency_strategy;
 mod build_options;
 mod concurrency;
 mod config_settings;

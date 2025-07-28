@@ -13655,6 +13655,9 @@ fn add_build_dependencies_respect_locked_versions() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.9"
         dependencies = ["anyio<4.1"]
+
+        [tool.uv]
+        build-dependency-strategy = "prefer-locked"
     "#})?;
 
     // Create a lockfile with anyio 4.0.0
@@ -13716,6 +13719,9 @@ fn add_build_dependencies_respect_locked_versions() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.9"
         dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv]
+        build-dependency-strategy = "prefer-locked"
 
         [tool.uv.sources]
         child = { workspace = true }

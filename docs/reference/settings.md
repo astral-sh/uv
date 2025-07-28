@@ -749,6 +749,40 @@ bypasses SSL verification and could expose you to MITM attacks.
 
 ---
 
+### [`build-dependency-strategy`](#build-dependency-strategy) {: #build-dependency-strategy }
+
+The strategy to use when resolving build dependencies for source distributions.
+
+- `latest`: Use the latest compatible version of each build dependency.
+- `prefer-locked`: Prefer the versions pinned in the lockfile, if available.
+
+When set to `prefer-locked`, uv will use the locked versions of packages specified in the
+lockfile as preferences when resolving build dependencies during source builds. This helps
+ensure that build environments are consistent with the project's resolved dependencies.
+
+**Default value**: `"latest"`
+
+**Possible values**:
+
+- `"latest"`: Use the latest compatible version of each build dependency
+- `"prefer-locked"`: Prefer the versions pinned in the lockfile, if available
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    build-dependency-strategy = "prefer-locked"
+    ```
+=== "uv.toml"
+
+    ```toml
+    build-dependency-strategy = "prefer-locked"
+    ```
+
+---
+
 ### [`cache-dir`](#cache-dir) {: #cache-dir }
 
 Path to the cache directory.

@@ -46,6 +46,17 @@
         "type": "string"
       }
     },
+    "build-dependency-strategy": {
+      "description": "The strategy to use when resolving build dependencies for source distributions.\n\n- `latest`: Use the latest compatible version of each build dependency.\n- `prefer-locked`: Prefer the versions pinned in the lockfile, if available.\n\nWhen set to `prefer-locked`, uv will use the locked versions of packages specified in the\nlockfile as preferences when resolving build dependencies during source builds. This helps\nensure that build environments are consistent with the project's resolved dependencies.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BuildDependencyStrategy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "cache-dir": {
       "description": "Path to the cache directory.\n\nDefaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and\n`%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
@@ -725,6 +736,20 @@
           }
         }
       }
+    },
+    "BuildDependencyStrategy": {
+      "oneOf": [
+        {
+          "description": "Use the latest compatible version of each build dependency.",
+          "type": "string",
+          "const": "latest"
+        },
+        {
+          "description": "Prefer the versions pinned in the lockfile, if available.",
+          "type": "string",
+          "const": "prefer-locked"
+        }
+      ]
     },
     "CacheKey": {
       "anyOf": [

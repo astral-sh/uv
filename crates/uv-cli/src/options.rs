@@ -354,6 +354,7 @@ pub fn resolver_options(
         no_binary: flag(no_binary, binary, "binary"),
         no_binary_package: Some(no_binary_package),
         no_sources: if no_sources { Some(true) } else { None },
+        build_dependency_strategy: None,
     }
 }
 
@@ -480,5 +481,6 @@ pub fn resolver_installer_options(
             Some(no_binary_package)
         },
         no_sources: if no_sources { Some(true) } else { None },
+        build_dependency_strategy: None,
     }
 }

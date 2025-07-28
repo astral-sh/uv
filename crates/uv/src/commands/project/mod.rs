@@ -1696,6 +1696,7 @@ pub(crate) async fn resolve_names(
                 resolution: _,
                 sources,
                 upgrade: _,
+                build_dependency_strategy: _,
             },
         compile_bytecode: _,
         reinstall: _,
@@ -1851,6 +1852,7 @@ pub(crate) async fn resolve_environment(
         upgrade: _,
         build_options,
         sources,
+        build_dependency_strategy: _,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -2201,6 +2203,7 @@ pub(crate) async fn update_environment(
                 resolution,
                 sources,
                 upgrade,
+                build_dependency_strategy: _,
             },
         compile_bytecode,
         reinstall,

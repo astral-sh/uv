@@ -329,6 +329,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_build_package,
                 no_binary,
                 no_binary_package,
+                build_dependency_strategy: _,
             },
         install_mirrors:
             PythonInstallMirrors {
