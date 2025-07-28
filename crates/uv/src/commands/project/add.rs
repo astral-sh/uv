@@ -104,6 +104,15 @@ pub(crate) async fn add(
         );
     }
 
+    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+        && !settings.resolver.extra_build_dependencies.is_empty()
+    {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+        );
+    }
+
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -457,6 +466,18 @@ pub(crate) async fn add(
             };
 
             // Create a build dispatch.
+            let extra_build_requires = if let AddTarget::Project(project, _) = &target {
+                uv_distribution::ExtraBuildRequires::from_workspace(
+                    settings.resolver.extra_build_dependencies.clone(),
+                    project.workspace(),
+                    &settings.resolver.index_locations,
+                    settings.resolver.sources,
+                )?
+            } else {
+                uv_distribution::ExtraBuildRequires::from_lowered(
+                    settings.resolver.extra_build_dependencies.clone(),
+                )
+            };
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
@@ -470,6 +491,7 @@ pub(crate) async fn add(
                 &settings.resolver.config_setting,
                 &settings.resolver.config_settings_package,
                 build_isolation,
+                &extra_build_requires,
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
                 &build_hasher,
@@ -1312,6 +1334,7 @@ impl PythonTarget {
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(super) enum AddTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script, Box<Interpreter>),
@@ -1420,6 +1443,7 @@ impl AddTarget {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 enum AddTargetSnapshot {
     Script(Pep723Script, Option<Vec<u8>>),
     Project(VirtualProject, Option<Vec<u8>>),

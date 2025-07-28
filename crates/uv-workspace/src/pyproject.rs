@@ -378,6 +378,21 @@ pub struct ToolUv {
     )]
     pub dependency_groups: Option<ToolUvDependencyGroups>,
 
+    /// Additional build dependencies for packages.
+    ///
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages, like,
+    /// `pip`, and do not declare them as build dependencies.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [tool.uv.extra-build-dependencies]
+            pytest = ["pip"]
+        "#
+    )]
+    pub extra_build_dependencies: Option<ToolUvExtraBuildDependencies>,
+
     /// The project's development dependencies.
     ///
     /// Development dependencies will be installed by default in `uv run` and `uv sync`, but will
@@ -747,6 +762,70 @@ pub struct DependencyGroupSettings {
     /// Version of python to require when installing this group
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
     pub requires_python: Option<VersionSpecifiers>,
+}
+
+pub type ExtraBuildDependencies =
+    BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>;
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ToolUvExtraBuildDependencies(ExtraBuildDependencies);
+
+impl ToolUvExtraBuildDependencies {
+    /// Returns the underlying `BTreeMap` of group names to settings.
+    pub fn inner(&self) -> &ExtraBuildDependencies {
+        &self.0
+    }
+
+    /// Convert the [`ToolUvExtraBuildDependencies`] into its inner `BTreeMap`.
+    #[must_use]
+    pub fn into_inner(self) -> ExtraBuildDependencies {
+        self.0
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for ToolUvExtraBuildDependencies {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct DependenciesVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for DependenciesVisitor {
+            type Value = ToolUvExtraBuildDependencies;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map with unique keys")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut groups = BTreeMap::new();
+                while let Some((key, value)) = access
+                    .next_entry::<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>()?
+                {
+                    match groups.entry(key) {
+                        std::collections::btree_map::Entry::Occupied(entry) => {
+                            return Err(serde::de::Error::custom(format!(
+                                "duplicate extra-build-dependencies for `{}`",
+                                entry.key()
+                            )));
+                        }
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(value);
+                        }
+                    }
+                }
+                Ok(ToolUvExtraBuildDependencies(groups))
+            }
+        }
+
+        deserializer.deserialize_map(DependenciesVisitor)
+    }
 }
 
 #[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]

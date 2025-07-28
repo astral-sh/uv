@@ -358,7 +358,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
+            if let Some(script_spec) = script_specification((&script).into(), &settings.resolver)? {
+                let spec = script_spec.requirements;
+                let script_extra_build_requires = script_spec.extra_build_requires;
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
@@ -407,6 +409,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     spec,
                     modifications,
                     build_constraints.unwrap_or_default(),
+                    script_extra_build_requires,
                     &settings,
                     &network_settings,
                     &sync_state,

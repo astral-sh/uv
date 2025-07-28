@@ -347,6 +347,7 @@ pub fn resolver_options(
         }),
         no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
         no_build_isolation_package: Some(no_build_isolation_package),
+        extra_build_dependencies: None,
         exclude_newer,
         link_mode,
         no_build: flag(no_build, build, "build"),
@@ -465,6 +466,7 @@ pub fn resolver_installer_options(
         } else {
             Some(no_build_isolation_package)
         },
+        extra_build_dependencies: None,
         exclude_newer,
         link_mode,
         compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),

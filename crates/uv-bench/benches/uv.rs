@@ -141,6 +141,9 @@ mod resolver {
         universal: bool,
     ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
+        let extra_build_requires = uv_distribution::ExtraBuildRequires {
+            extra_build_dependencies: uv_workspace::pyproject::ExtraBuildDependencies::default(),
+        };
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
@@ -187,6 +190,7 @@ mod resolver {
             &config_settings,
             &config_settings_package,
             build_isolation,
+            &extra_build_requires,
             LinkMode::default(),
             &build_options,
             &hashes,

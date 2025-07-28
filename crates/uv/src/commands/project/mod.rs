@@ -46,6 +46,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
@@ -1692,6 +1693,7 @@ pub(crate) async fn resolve_names(
                 link_mode,
                 no_build_isolation,
                 no_build_isolation_package,
+                extra_build_dependencies,
                 prerelease: _,
                 resolution: _,
                 sources,
@@ -1741,6 +1743,8 @@ pub(crate) async fn resolve_names(
     let build_hasher = HashStrategy::default();
 
     // Create a build dispatch.
+    let extra_build_requires =
+        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -1754,6 +1758,7 @@ pub(crate) async fn resolve_names(
         config_setting,
         config_settings_package,
         build_isolation,
+        &extra_build_requires,
         *link_mode,
         build_options,
         &build_hasher,
@@ -1847,6 +1852,7 @@ pub(crate) async fn resolve_environment(
         config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
+        extra_build_dependencies,
         exclude_newer,
         link_mode,
         upgrade: _,
@@ -1951,6 +1957,8 @@ pub(crate) async fn resolve_environment(
     let workspace_cache = WorkspaceCache::default();
 
     // Create a build dispatch.
+    let extra_build_requires =
+        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -1964,6 +1972,7 @@ pub(crate) async fn resolve_environment(
         config_setting,
         config_settings_package,
         build_isolation,
+        &extra_build_requires,
         *link_mode,
         build_options,
         &build_hasher,
@@ -2032,6 +2041,7 @@ pub(crate) async fn sync_environment(
         config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
+        extra_build_dependencies,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -2091,6 +2101,8 @@ pub(crate) async fn sync_environment(
     };
 
     // Create a build dispatch.
+    let extra_build_requires =
+        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -2104,6 +2116,7 @@ pub(crate) async fn sync_environment(
         config_setting,
         config_settings_package,
         build_isolation,
+        &extra_build_requires,
         link_mode,
         build_options,
         &build_hasher,
@@ -2148,6 +2161,15 @@ pub(crate) async fn sync_environment(
     Ok(venv)
 }
 
+/// A script specification that includes both requirements and extra build dependencies.
+#[derive(Debug)]
+pub(crate) struct ScriptSpecification {
+    /// The requirements specification for the script.
+    pub(crate) requirements: RequirementsSpecification,
+    /// The extra build dependencies for the script.
+    pub(crate) extra_build_requires: uv_distribution::ExtraBuildRequires,
+}
+
 /// The result of updating a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
 #[derive(Debug)]
 pub(crate) struct EnvironmentUpdate {
@@ -2170,6 +2192,7 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     modifications: Modifications,
     build_constraints: Constraints,
+    extra_build_requires: uv_distribution::ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     state: &SharedState,
@@ -2200,6 +2223,7 @@ pub(crate) async fn update_environment(
                 link_mode,
                 no_build_isolation,
                 no_build_isolation_package,
+                extra_build_dependencies: _,
                 prerelease,
                 resolution,
                 sources,
@@ -2330,6 +2354,7 @@ pub(crate) async fn update_environment(
         config_setting,
         config_settings_package,
         build_isolation,
+        &extra_build_requires,
         *link_mode,
         build_options,
         &build_hasher,
@@ -2535,12 +2560,12 @@ pub(crate) fn detect_conflicts(
     Ok(())
 }
 
-/// Determine the [`RequirementsSpecification`] for a script.
+/// Determine the [`ScriptSpecification`] for a script.
 #[allow(clippy::result_large_err)]
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
-) -> Result<Option<RequirementsSpecification>, ProjectError> {
+) -> Result<Option<ScriptSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
     };
@@ -2635,11 +2660,47 @@ pub(crate) fn script_specification(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(Some(RequirementsSpecification::from_overrides(
-        requirements,
-        constraints,
-        overrides,
-    )))
+    // Collect any `tool.uv.extra-build-dependencies` from the script.
+    let empty = BTreeMap::default();
+    let script_extra_build_dependencies = script
+        .metadata()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.extra_build_dependencies.as_ref())
+        .unwrap_or(&empty);
+
+    // Lower the extra build dependencies
+    let mut extra_build_dependencies = ExtraBuildDependencies::default();
+    for (name, requirements) in script_extra_build_dependencies {
+        let lowered_requirements: Vec<_> = requirements
+            .iter()
+            .cloned()
+            .flat_map(|requirement| {
+                LoweredRequirement::from_non_workspace_requirement(
+                    requirement,
+                    script_dir.as_ref(),
+                    script_sources,
+                    script_indexes,
+                    &settings.index_locations,
+                )
+                .map_ok(|req| req.into_inner().into())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        extra_build_dependencies.insert(name.clone(), lowered_requirements);
+    }
+
+    let extra_build_requires =
+        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies);
+
+    Ok(Some(ScriptSpecification {
+        requirements: RequirementsSpecification::from_overrides(
+            requirements,
+            constraints,
+            overrides,
+        ),
+        extra_build_requires,
+    }))
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.

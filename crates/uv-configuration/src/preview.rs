@@ -15,6 +15,7 @@ bitflags::bitflags! {
         const PYLOCK = 1 << 3;
         const ADD_BOUNDS = 1 << 4;
         const PREFER_LOCKED_BUILDS = 1 << 5;
+        const EXTRA_BUILD_DEPENDENCIES = 1 << 6;
     }
 }
 
@@ -30,6 +31,7 @@ impl PreviewFeatures {
             Self::PYLOCK => "pylock",
             Self::ADD_BOUNDS => "add-bounds",
             Self::PREFER_LOCKED_BUILDS => "prefer-locked-builds",
+            Self::EXTRA_BUILD_DEPENDENCIES => "extra-build-dependencies",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -73,6 +75,7 @@ impl FromStr for PreviewFeatures {
                 "pylock" => Self::PYLOCK,
                 "add-bounds" => Self::ADD_BOUNDS,
                 "prefer-locked-builds" => Self::PREFER_LOCKED_BUILDS,
+                "extra-build-dependencies" => Self::EXTRA_BUILD_DEPENDENCIES,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -238,6 +241,10 @@ mod tests {
         assert_eq!(
             PreviewFeatures::PREFER_LOCKED_BUILDS.flag_as_str(),
             "prefer-locked-builds"
+        );
+        assert_eq!(
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES.flag_as_str(),
+            "extra-build-dependencies"
         );
     }
 
