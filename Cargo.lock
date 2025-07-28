@@ -4696,6 +4696,7 @@ dependencies = [
  "serde_json",
  "similar",
  "tar",
+ "target-lexicon",
  "tempfile",
  "textwrap",
  "thiserror 2.0.12",

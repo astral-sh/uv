@@ -987,6 +987,8 @@ pub enum CacheBucket {
     Environments,
     /// Cached Python downloads
     Python,
+    /// Downloaded tool binaries (e.g., Ruff).
+    Binaries,
 }
 
 impl CacheBucket {
@@ -1010,6 +1012,7 @@ impl CacheBucket {
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
+            Self::Binaries => "binaries-v0",
         }
     }
 
@@ -1116,7 +1119,8 @@ impl CacheBucket {
             | Self::Archive
             | Self::Builds
             | Self::Environments
-            | Self::Python => {
+            | Self::Python
+            | Self::Binaries => {
                 // Nothing to do.
             }
         }
@@ -1135,6 +1139,7 @@ impl CacheBucket {
             Self::Archive,
             Self::Builds,
             Self::Environments,
+            Self::Binaries,
         ]
         .iter()
         .copied()

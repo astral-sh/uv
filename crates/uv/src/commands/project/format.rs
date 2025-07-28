@@ -1,6 +1,6 @@
-use std::io::Write;
+use std::fmt::Write;
+use std::io::Write as IoWrite;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use tokio::process::Command;
@@ -9,120 +9,75 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, Preview};
-use uv_distribution_types::{Requirement, RequirementSource};
-use uv_normalize::PackageName;
-use uv_pep440::VersionSpecifiers;
-use uv_pep508::MarkerTree;
-use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
-};
-use uv_requirements::RequirementsSpecification;
-use uv_settings::PythonInstallMirrors;
+use uv_python::platform::{Arch, Libc, Os};
 
-use crate::commands::project::environment::CachedEnvironment;
-use crate::commands::project::{EnvironmentSpecification, PlatformState};
+use crate::commands::project::ruff_download::RuffDownload;
 use crate::commands::ExitStatus;
-use crate::commands::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::NetworkSettings;
 
 /// Format Python source files using Ruff.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn format(
     check: bool,
     diff: bool,
     files: Vec<PathBuf>,
     args: Option<ExternalCommand>,
-    python: Option<String>,
-    install_mirrors: PythonInstallMirrors,
-    settings: ResolverInstallerSettings,
+    version: Option<String>,
     network_settings: NetworkSettings,
-    python_preference: PythonPreference,
-    python_downloads: PythonDownloads,
-    installer_metadata: bool,
-    concurrency: Concurrency,
     cache: Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
-    // Create a Ruff requirement.
-    let ruff_requirement = Requirement {
-        name: PackageName::from_str("ruff")?,
-        extras: Box::new([]),
-        groups: Box::new([]),
-        marker: MarkerTree::default(),
-        source: RequirementSource::Registry {
-            specifier: VersionSpecifiers::empty(),
-            index: None,
-            conflict: None,
-        },
-        origin: None,
-    };
+    debug!("format command called with check={}, diff={}, files={:?}, version={:?}", check, diff, files, version);
+    // Check if we're in offline mode
+    if network_settings.connectivity.is_offline() && version.is_none() {
+        // In offline mode without a specific version, we can't determine the latest version
+        writeln!(
+            printer.stderr(),
+            "Ruff formatting is not available in offline mode without a specific version"
+        )?;
+        return Ok(ExitStatus::Failure);
+    }
 
-    // Get or create the Python environment.
-    let client_builder = BaseClientBuilder::new()
+    // Get current platform information
+    debug!("Getting platform information");
+    let os = Os::from_env();
+    let arch = Arch::from_env();
+    let libc = if cfg!(target_env = "musl") {
+        Libc::Some(target_lexicon::Environment::Musl)
+    } else if cfg!(target_os = "linux") {
+        Libc::Some(target_lexicon::Environment::Gnu)
+    } else {
+        Libc::None
+    };
+    debug!("Platform: os={}, arch={}, libc={}", os, arch, libc);
+
+    // Create HTTP client
+    debug!("Creating HTTP client");
+    let client = BaseClientBuilder::new()
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .build();
+    debug!("HTTP client created");
 
-    let reporter = PythonDownloadReporter::single(printer);
-
-    let python_request = python.as_deref().map(PythonRequest::parse);
-
-    // Discover an interpreter.
-    let interpreter = PythonInstallation::find_or_download(
-        python_request.as_ref(),
-        EnvironmentPreference::Any,
-        python_preference,
-        python_downloads,
-        &client_builder,
+    // Download or retrieve Ruff binary from cache
+    debug!("Calling RuffDownload::download");
+    let ruff_path = RuffDownload::download(
+        version.as_deref(),
+        &os,
+        &arch,
+        &libc,
+        &client,
         &cache,
-        Some(&reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
-        install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
-    .await?
-    .into_interpreter();
-
-    // Initialize shared state.
-    let state = PlatformState::default();
-
-    // Create a requirements specification with Ruff.
-    let spec = EnvironmentSpecification::from(RequirementsSpecification {
-        requirements: vec![ruff_requirement.into()],
-        constraints: vec![],
-        overrides: vec![],
-        ..Default::default()
-    });
-
-    // Create or reuse a cached environment.
-    let environment = CachedEnvironment::from_spec(
-        spec,
-        Constraints::default(),
-        &interpreter,
-        &settings,
-        &network_settings,
-        &state,
-        Box::new(SummaryResolveLogger),
-        Box::new(SummaryInstallLogger),
-        installer_metadata,
-        concurrency,
-        &cache,
-        printer,
-        preview,
-    )
-    .await?;
-
-    let environment: PythonEnvironment = environment.into();
+    .await
+    .context("Failed to download Ruff")?;
+    debug!("Got ruff binary at: {}", ruff_path.display());
 
     // Construct the ruff format command.
-    let mut command = Command::new(environment.scripts().join("ruff"));
+    debug!("Constructing ruff command with binary: {}", ruff_path.display());
+    let mut command = Command::new(&ruff_path);
     command.arg("format");
 
     // Add check flag if requested.
@@ -152,10 +107,17 @@ pub(crate) async fn format(
         }
     }
 
-    debug!("Running ruff format command: {:?}", command);
+    debug!("Full ruff format command: {:?}", command);
+    debug!("About to execute command");
 
     // Run the ruff format command.
-    let output = command.output().await.context("Failed to run ruff format")?;
+    debug!("Executing command.output()");
+    let output = command.output().await
+        .map_err(|e| {
+            debug!("Command execution failed: {}", e);
+            anyhow::anyhow!("Failed to run ruff format at {}: {}", ruff_path.display(), e)
+        })?;
+    debug!("Command executed successfully, status: {}", output.status);
 
     // Stream stdout and stderr.
     if !output.stdout.is_empty() {
@@ -167,8 +129,10 @@ pub(crate) async fn format(
 
     // Return the exit status.
     if output.status.success() {
+        debug!("Ruff format completed successfully");
         Ok(ExitStatus::Success)
     } else {
+        debug!("Ruff format failed with non-zero exit code");
         Ok(ExitStatus::Failure)
     }
 }

@@ -68,6 +68,7 @@ mod install_target;
 pub(crate) mod lock;
 mod lock_target;
 pub(crate) mod remove;
+pub(crate) mod ruff_download;
 pub(crate) mod run;
 pub(crate) mod sync;
 pub(crate) mod tree;

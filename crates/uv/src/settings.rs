@@ -1869,38 +1869,26 @@ pub(crate) struct FormatSettings {
     pub(crate) diff: bool,
     pub(crate) files: Vec<PathBuf>,
     pub(crate) args: Option<ExternalCommand>,
-    pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: PythonInstallMirrors,
-    pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) version: Option<String>,
 }
 
 impl FormatSettings {
     /// Resolve the [`FormatSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: FormatArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: FormatArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let FormatArgs {
             check,
             diff,
             files,
             args,
-            python,
+            version,
         } = args;
-
-        let install_mirrors = filesystem
-            .clone()
-            .map(|fs| fs.install_mirrors.clone())
-            .unwrap_or_default();
 
         Self {
             check,
             diff,
             files,
             args,
-            python: python.and_then(Maybe::into_option),
-            install_mirrors,
-            settings: ResolverInstallerSettings::combine(
-                ResolverInstallerOptions::default(),
-                filesystem,
-            ),
+            version,
         }
     }
 }

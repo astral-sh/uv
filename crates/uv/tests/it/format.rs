@@ -46,7 +46,6 @@ fn format_project() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     ");
 
     // Check that the file was formatted
@@ -95,7 +94,6 @@ fn format_check() -> Result<()> {
     1 file would be reformatted
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     ");
 
     // Verify the file wasn't modified
@@ -143,7 +141,6 @@ fn format_diff() -> Result<()> {
 
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     1 file would be reformatted
     "#);
 
@@ -185,7 +182,6 @@ fn format_with_args() -> Result<()> {
     1 file left unchanged
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     ");
 
     // Check that the line wasn't wrapped (because we set a high line length)
@@ -232,7 +228,6 @@ fn format_multiple_files() -> Result<()> {
     2 files reformatted
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     ");
 
     // Check that both files were formatted
@@ -282,7 +277,6 @@ fn format_directory() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     ");
 
     // Check that the file in the directory was formatted
@@ -323,7 +317,6 @@ fn format_no_files() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     ");
 
     // Check that the file was formatted
@@ -363,7 +356,6 @@ fn format_cache_reuse() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     ");
 
     // Modify the file again
@@ -385,7 +377,7 @@ fn format_cache_reuse() -> Result<()> {
 }
 
 #[test]
-fn format_python_option() -> Result<()> {
+fn format_version_option() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -402,15 +394,14 @@ fn format_python_option() -> Result<()> {
         def   hello():  pass
     "#})?;
 
-    // Run format with specific Python version
-    uv_snapshot!(context.filters(), context.format().arg("--python").arg("3.11").arg("main.py"), @r"
+    // Run format with specific Ruff version
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg("0.8.2").arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     1 file reformatted
 
     ----- stderr -----
-    Installed 1 package in [TIME]
     ");
 
     Ok(())

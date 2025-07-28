@@ -4285,21 +4285,11 @@ pub struct FormatArgs {
     #[arg(value_name = "FILES")]
     pub files: Vec<PathBuf>,
 
-    /// The Python interpreter to use for running Ruff.
+    /// The version of Ruff to use for formatting.
     ///
-    /// By default, the first Python interpreter found in the PATH or the project's virtual
-    /// environment will be used.
-    ///
-    /// See `uv help python` for details on Python discovery and supported request formats.
-    #[arg(
-        long,
-        short,
-        env = EnvVars::UV_PYTHON,
-        verbatim_doc_comment,
-        help_heading = "Python options",
-        value_parser = parse_maybe_string,
-    )]
-    pub python: Option<Maybe<String>>,
+    /// By default, the latest version of Ruff will be used.
+    #[arg(long)]
+    pub version: Option<String>,
 
     /// Additional arguments to pass to Ruff.
     ///
