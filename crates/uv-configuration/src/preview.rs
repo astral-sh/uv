@@ -14,6 +14,7 @@ bitflags::bitflags! {
         const JSON_OUTPUT = 1 << 2;
         const PYLOCK = 1 << 3;
         const ADD_BOUNDS = 1 << 4;
+        const PREFER_LOCKED_BUILDS = 1 << 5;
     }
 }
 
@@ -28,6 +29,7 @@ impl PreviewFeatures {
             Self::JSON_OUTPUT => "json-output",
             Self::PYLOCK => "pylock",
             Self::ADD_BOUNDS => "add-bounds",
+            Self::PREFER_LOCKED_BUILDS => "prefer-locked-builds",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -70,6 +72,7 @@ impl FromStr for PreviewFeatures {
                 "json-output" => Self::JSON_OUTPUT,
                 "pylock" => Self::PYLOCK,
                 "add-bounds" => Self::ADD_BOUNDS,
+                "prefer-locked-builds" => Self::PREFER_LOCKED_BUILDS,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -232,6 +235,10 @@ mod tests {
         assert_eq!(PreviewFeatures::JSON_OUTPUT.flag_as_str(), "json-output");
         assert_eq!(PreviewFeatures::PYLOCK.flag_as_str(), "pylock");
         assert_eq!(PreviewFeatures::ADD_BOUNDS.flag_as_str(), "add-bounds");
+        assert_eq!(
+            PreviewFeatures::PREFER_LOCKED_BUILDS.flag_as_str(),
+            "prefer-locked-builds"
+        );
     }
 
     #[test]

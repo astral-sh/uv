@@ -430,12 +430,18 @@ pub(crate) async fn add(
             // Load preferences from the existing lockfile if available and if configured to do so.
             let preferences = match settings.resolver.build_dependency_strategy {
                 BuildDependencyStrategy::PreferLocked => {
+                    if !preview.is_enabled(PreviewFeatures::PREFER_LOCKED_BUILDS) {
+                        warn_user_once!(
+                            "The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                            PreviewFeatures::PREFER_LOCKED_BUILDS
+                        );
+                    }
                     if let Ok(Some(lock)) = LockTarget::from(&target).read().await {
                         Preferences::from_iter(
                             lock.packages()
                                 .iter()
                                 .filter_map(|package| {
-                                    Preference::from_lock(package, &target.install_path())
+                                    Preference::from_lock(package, target.install_path())
                                         .transpose()
                                 })
                                 .collect::<Result<Vec<_>, _>>()?,

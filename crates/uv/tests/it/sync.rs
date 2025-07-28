@@ -11457,7 +11457,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
     ");
 
-    // Now add the child dependency with build-dependency-strategy = "prefer-locked"
+    // Now add the child dependency with `build-dependency-strategy = "prefer-locked"`
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
@@ -11479,6 +11479,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -11498,6 +11499,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -11530,6 +11532,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -11537,6 +11540,90 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
      - anyio==4.0.0
      + anyio==3.7.1
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // With preview enabled, there's no warning
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features").arg("prefer-locked-builds")
+        .arg("--reinstall-package").arg("child")
+        .env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Now test with build-dependency-strategy = "latest" to show it uses latest anyio
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv]
+        build-dependency-strategy = "latest"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // With latest strategy, it should use the latest compatible anyio (4.3) for builds
+    // even though the project requires anyio<3.8
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child")
+        .env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Similarly, `prefer-locked` without a dependency on `anyio` should still use the latest
+    // anyio version
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv]
+        build-dependency-strategy = "prefer-locked"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child")
+        .env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - anyio==3.7.1
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     - idna==3.6
+     - sniffio==1.3.1
     ");
 
     Ok(())

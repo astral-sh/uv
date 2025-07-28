@@ -2714,6 +2714,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
     pub(crate) sources: SourceStrategy,
+    pub(crate) build_dependency_strategy: &'a BuildDependencyStrategy,
 }
 
 /// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
@@ -3286,6 +3287,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             reinstall: &settings.reinstall,
             build_options: &settings.resolver.build_options,
             sources: settings.resolver.sources,
+            build_dependency_strategy: &settings.resolver.build_dependency_strategy,
         }
     }
 }

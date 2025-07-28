@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildDependencyStrategy, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, Preview, Reinstall, Upgrade,
+    ExtrasSpecification, Preview, PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -442,6 +442,16 @@ async fn do_lock(
         sources,
         build_dependency_strategy,
     } = settings;
+
+    // Warn if using build-dependency-strategy without preview
+    if *build_dependency_strategy == BuildDependencyStrategy::PreferLocked
+        && !preview.is_enabled(PreviewFeatures::PREFER_LOCKED_BUILDS)
+    {
+        warn_user_once!(
+            "The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::PREFER_LOCKED_BUILDS
+        );
+    }
 
     // Collect the requirements, etc.
     let members = target.members();

@@ -13747,5 +13747,38 @@ fn add_build_dependencies_respect_locked_versions() -> Result<()> {
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
+    // Test with build-dependency-strategy = "latest" to show different behavior
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child", "typing-extensions"]
+
+        [tool.uv]
+        build-dependency-strategy = "latest"
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    // With latest strategy, when we sync it should use anyio 4.x for builds
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child")
+        .env("EXPECTED_ANYIO_VERSION", "4."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + typing-extensions==4.12.2
+    ");
+
     Ok(())
 }

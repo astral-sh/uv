@@ -2038,6 +2038,7 @@ pub(crate) async fn sync_environment(
         reinstall,
         build_options,
         sources,
+        build_dependency_strategy: _,
     } = settings;
 
     let client_builder = BaseClientBuilder::new()

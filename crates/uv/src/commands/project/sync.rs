@@ -12,9 +12,10 @@ use uv_cache::Cache;
 use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
-    Preview, PreviewFeatures, TargetTriple,
+    BuildDependencyStrategy, Concurrency, Constraints, DependencyGroups,
+    DependencyGroupsWithDefaults, DryRun, EditableMode, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions, Preview, PreviewFeatures,
+    TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
@@ -30,7 +31,7 @@ use uv_resolver::{FlatIndex, Installable, Lock, Preference, Preferences, Resolve
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -584,6 +585,7 @@ pub(super) async fn do_sync(
         reinstall,
         build_options,
         sources,
+        build_dependency_strategy,
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
@@ -700,16 +702,28 @@ pub(super) async fn do_sync(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
-    // Extract preferences from the lockfile.
-    let preferences = Preferences::from_iter(
-        target
-            .lock()
-            .packages()
-            .iter()
-            .filter_map(|package| Preference::from_lock(package, target.install_path()).transpose())
-            .collect::<Result<Vec<_>, _>>()?,
-        &ResolverEnvironment::specific(marker_env.clone()),
-    );
+    let preferences = match build_dependency_strategy {
+        BuildDependencyStrategy::PreferLocked => {
+            if !preview.is_enabled(PreviewFeatures::PREFER_LOCKED_BUILDS) {
+                warn_user_once!(
+                    "The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeatures::PREFER_LOCKED_BUILDS
+                );
+            }
+            Preferences::from_iter(
+                target
+                    .lock()
+                    .packages()
+                    .iter()
+                    .filter_map(|package| {
+                        Preference::from_lock(package, target.install_path()).transpose()
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                &ResolverEnvironment::specific(marker_env.clone()),
+            )
+        }
+        BuildDependencyStrategy::Latest => Preferences::default(),
+    };
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
