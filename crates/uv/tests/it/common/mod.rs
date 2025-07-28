@@ -13,7 +13,6 @@ use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
 use base64::{Engine, prelude::BASE64_STANDARD as base64};
-use etcetera::BaseStrategy;
 use futures::StreamExt;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -22,7 +21,7 @@ use regex::Regex;
 
 use tokio::io::AsyncWriteExt;
 use uv_cache::Cache;
-use uv_configuration::PreviewMode;
+use uv_configuration::Preview;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::{
@@ -67,7 +66,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"uv\.exe", "uv"),
     // uv version display
     (
-        r"uv(-.*)? \d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
+        r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
@@ -189,6 +188,18 @@ impl TestContext {
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
+            "virtual environments, search path, or registry".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "virtual environments, registry, or search path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
+            "virtual environments or search path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters.push((
             "managed installations or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
@@ -196,6 +207,12 @@ impl TestContext {
             "managed installations, search path, or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
+        self.filters.push((
+            "registry or search path".to_string(),
+            "[PYTHON SOURCES]".to_string(),
+        ));
+        self.filters
+            .push(("search path".to_string(), "[PYTHON SOURCES]".to_string()));
         self
     }
 
@@ -203,15 +220,30 @@ impl TestContext {
     /// and `.exe` suffixes.
     #[must_use]
     pub fn with_filtered_python_names(mut self) -> Self {
+        use env::consts::EXE_SUFFIX;
+        let exe_suffix = regex::escape(EXE_SUFFIX);
+
+        self.filters.push((
+            format!(r"python\d.\d\d{exe_suffix}"),
+            "[PYTHON]".to_string(),
+        ));
+        self.filters
+            .push((format!(r"python\d{exe_suffix}"), "[PYTHON]".to_string()));
+
         if cfg!(windows) {
+            // On Windows, we want to filter out all `python.exe` instances
             self.filters
-                .push(("python.exe".to_string(), "python".to_string()));
+                .push((format!(r"python{exe_suffix}"), "[PYTHON]".to_string()));
+            // Including ones where we'd already stripped the `.exe` in another filter
+            self.filters
+                .push((r"[\\/]python".to_string(), "/[PYTHON]".to_string()));
         } else {
+            // On Unix, it's a little trickier — we don't want to clobber use of `python` in the
+            // middle of something else, e.g., `cpython`. For this reason, we require a leading `/`.
             self.filters
-                .push((r"python\d.\d\d".to_string(), "python".to_string()));
-            self.filters
-                .push((r"python\d".to_string(), "python".to_string()));
+                .push((format!(r"/python{exe_suffix}"), "/[PYTHON]".to_string()));
         }
+
         self
     }
 
@@ -219,6 +251,13 @@ impl TestContext {
     /// `Scripts` on Windows and `bin` on Unix.
     #[must_use]
     pub fn with_filtered_virtualenv_bin(mut self) -> Self {
+        self.filters.push((
+            format!(
+                r"[\\/]{}[\\/]",
+                venv_bin_path(PathBuf::new()).to_string_lossy()
+            ),
+            "/[BIN]/".to_string(),
+        ));
         self.filters.push((
             format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
             "/[BIN]".to_string(),
@@ -255,7 +294,7 @@ impl TestContext {
         let added_filters = [
             (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
             (
-                r"uv = \d+\.\d+\.\d+".to_string(),
+                r"uv = \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?".to_string(),
                 "uv = [UV_VERSION]".to_string(),
             ),
             (
@@ -401,31 +440,35 @@ impl TestContext {
         self
     }
 
+    pub fn with_versions_as_managed(mut self, versions: &[&str]) -> Self {
+        self.extra_env.push((
+            EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED.into(),
+            versions.iter().join(" ").into(),
+        ));
+
+        self
+    }
+
     /// Clear filters on `TestContext`.
     pub fn clear_filters(mut self) -> Self {
         self.filters.clear();
         self
     }
 
-    /// Discover the path to the XDG state directory. We use this, rather than the OS-specific
-    /// temporary directory, because on macOS (and Windows on GitHub Actions), they involve
-    /// symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
-    /// `/private/var/...`.)
+    /// Default to the canonicalized path to the temp directory. We need to do this because on
+    /// macOS (and Windows on GitHub Actions) the standard temp dir is a symlink. (On macOS, the
+    /// temporary directory is, like `/var/...`, which resolves to `/private/var/...`.)
     ///
     /// It turns out that, at least on macOS, if we pass a symlink as `current_dir`, it gets
     /// _immediately_ resolved (such that if you call `current_dir` in the running `Command`, it
-    /// returns resolved symlink). This is problematic, as we _don't_ want to resolve symlinks
-    /// for user-provided paths.
+    /// returns resolved symlink). This breaks some snapshot tests, since we _don't_ want to
+    /// resolve symlinks for user-provided paths.
     pub fn test_bucket_dir() -> PathBuf {
-        env::var(EnvVars::UV_INTERNAL__TEST_DIR)
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                etcetera::base_strategy::choose_base_strategy()
-                    .expect("Failed to find base strategy")
-                    .data_dir()
-                    .join("uv")
-                    .join("tests")
-            })
+        std::env::temp_dir()
+            .simple_canonicalize()
+            .expect("failed to canonicalize temp dir")
+            .join("uv")
+            .join("tests")
     }
 
     /// Create a new test context with multiple Python versions.
@@ -523,6 +566,8 @@ impl TestContext {
         if cfg!(windows) {
             filters.push((" --link-mode <LINK_MODE>".to_string(), String::new()));
             filters.push((r#"link-mode = "copy"\n"#.to_string(), String::new()));
+            // Unix uses "exit status", Windows uses "exit code"
+            filters.push((r"exit code: ".to_string(), "exit status: ".to_string()));
         }
 
         filters.extend(
@@ -653,6 +698,19 @@ impl TestContext {
         ));
         // For wiremock tests
         filters.push((r"127\.0\.0\.1:\d*".to_string(), "[LOCALHOST]".to_string()));
+        // Avoid breaking the tests when bumping the uv version
+        filters.push((
+            format!(
+                r#"requires = \["uv_build>={},<[0-9.]+"\]"#,
+                uv_version::version()
+            ),
+            r#"requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]"#.to_string(),
+        ));
+        // Filter script environment hashes
+        filters.push((
+            r"environments-v(\d+)[\\/](\w+)-[a-z0-9]+".to_string(),
+            "environments-v$1/$2-[HASH]".to_string(),
+        ));
 
         Self {
             root: ChildPath::new(root.path()),
@@ -742,6 +800,9 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+            // When installations are allowed, we don't want to write to global state, like the
+            // Windows registry
+            .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
             .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
@@ -1396,6 +1457,7 @@ pub fn create_venv_from_executable<P: AsRef<Path>>(path: P, cache_dir: &ChildPat
     assert_cmd::Command::new(get_bin())
         .arg("venv")
         .arg(path.as_ref().as_os_str())
+        .arg("--clear")
         .arg("--cache-dir")
         .arg(cache_dir.path())
         .arg("--python")
@@ -1443,7 +1505,7 @@ pub fn python_installations_for_versions(
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
                 &cache,
-                PreviewMode::Disabled,
+                Preview::default(),
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {

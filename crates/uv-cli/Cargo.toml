@@ -42,7 +42,7 @@ serde = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.40.0", features = ["filters", "json"] }
+insta = { workspace = true }
 
 [features]
 default = []

@@ -15,7 +15,7 @@ fn build_basic() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -133,7 +133,7 @@ fn build_sdist() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -189,7 +189,7 @@ fn build_wheel() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -245,7 +245,7 @@ fn build_sdist_wheel() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -303,7 +303,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -412,7 +412,7 @@ fn build_fail() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -488,7 +488,6 @@ fn build_workspace() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member\]", "[PKG]"),
@@ -694,7 +693,6 @@ fn build_all_with_failure() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member-\w+\]", "[PKG]"),
@@ -840,7 +838,7 @@ fn build_constraints() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -901,7 +899,7 @@ fn build_sha() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -1187,7 +1185,7 @@ fn build_tool_uv_sources() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let build = context.temp_dir.child("backend");
@@ -1337,7 +1335,6 @@ fn build_non_package() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
-            (r"exit code: 1", "exit status: 1"),
             (r"\\\.", ""),
             (r"\[project\]", "[PKG]"),
             (r"\[member\]", "[PKG]"),
@@ -1442,7 +1439,6 @@ fn build_fast_path() -> Result<()> {
     let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1")), @r###"
@@ -1468,7 +1464,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1488,7 +1483,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
@@ -1508,7 +1502,6 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
@@ -1548,7 +1541,6 @@ fn build_list_files() -> Result<()> {
     // By default, we build the wheel from the source dist, which we need to do even for the list
     // task.
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
@@ -1604,7 +1596,6 @@ fn build_list_files() -> Result<()> {
         .assert(predicate::path::missing());
 
     uv_snapshot!(context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1673,7 +1664,6 @@ fn build_list_files_errors() -> Result<()> {
     // In CI, we run with link mode settings.
     filters.push(("--link-mode <LINK_MODE> ", ""));
     uv_snapshot!(filters, context.build()
-        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
@@ -1697,7 +1687,6 @@ fn build_list_files_errors() -> Result<()> {
     // Windows normalization
     filters.push(("/crates/uv/../../", "/"));
     uv_snapshot!(filters, context.build()
-        .arg("--preview")
         .arg(&anyio_local)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -1765,13 +1754,14 @@ fn build_with_symlink() -> Result<()> {
             build-backend = "hatchling.build"
     "#})?;
     fs_err::os::unix::fs::symlink(
-        context.temp_dir.child("pyproject.toml.real"),
+        "pyproject.toml.real",
         context.temp_dir.child("pyproject.toml"),
     )?;
     context
         .temp_dir
         .child("src/softlinked/__init__.py")
         .touch()?;
+    fs_err::remove_dir_all(&context.venv)?;
     uv_snapshot!(context.filters(), context.build(), @r###"
     success: true
     exit_code: 0
@@ -1810,6 +1800,7 @@ fn build_with_hardlink() -> Result<()> {
         .temp_dir
         .child("src/hardlinked/__init__.py")
         .touch()?;
+    fs_err::remove_dir_all(&context.venv)?;
     uv_snapshot!(context.filters(), context.build(), @r###"
     success: true
     exit_code: 0
@@ -1930,7 +1921,7 @@ fn build_with_nonnormalized_name() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .chain([(r"\\\.", "")])
         .collect::<Vec<_>>();
 
     let project = context.temp_dir.child("project");
@@ -1978,6 +1969,58 @@ fn build_with_nonnormalized_name() -> Result<()> {
         .child("dist")
         .child("my.PROJECT-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Check that `--force-pep517` is respected.
+///
+/// The error messages for a broken project are different for direct builds vs. PEP 517.
+#[test]
+fn force_pep517() -> Result<()> {
+    // We need to use a real `uv_build` package.
+    let context = TestContext::new("3.12").with_exclude_newer("2025-05-27T00:00:00Z");
+
+    context.init().assert().success();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+
+        [tool.uv.build-backend]
+        module-name = "does_not_exist"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().env("RUST_BACKTRACE", "0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
+    ");
+
+    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Error: Missing source directory at: `src`
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
 
     Ok(())
 }

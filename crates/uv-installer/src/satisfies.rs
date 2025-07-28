@@ -241,7 +241,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
 
-                if *requested_editable != installed_editable.unwrap_or_default() {
+                if requested_editable != installed_editable {
                     trace!(
                         "Editable mismatch: {:?} vs. {:?}",
                         *requested_editable,

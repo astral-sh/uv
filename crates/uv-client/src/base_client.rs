@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, io, iter};
 
+use anyhow::Context;
 use anyhow::anyhow;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
@@ -25,6 +26,7 @@ use tracing::{debug, trace};
 use url::ParseError;
 use url::Url;
 
+use uv_auth::Credentials;
 use uv_auth::{AuthMiddleware, Indexes};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
@@ -65,6 +67,7 @@ pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
+    built_in_root_certs: bool,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -125,6 +128,7 @@ impl BaseClientBuilder<'_> {
             keyring: KeyringProviderType::default(),
             allow_insecure_host: vec![],
             native_tls: false,
+            built_in_root_certs: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -165,9 +169,34 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    /// Read the retry count from [`EnvVars::UV_HTTP_RETRIES`] if set, otherwise, make no change.
+    ///
+    /// Errors when [`EnvVars::UV_HTTP_RETRIES`] is not a valid u32.
+    pub fn retries_from_env(self) -> anyhow::Result<Self> {
+        // TODO(zanieb): We should probably parse this in another layer, but there's not a natural
+        // fit for it right now
+        if let Some(value) = env::var_os(EnvVars::UV_HTTP_RETRIES) {
+            Ok(self.retries(
+                value
+                    .to_string_lossy()
+                    .as_ref()
+                    .parse::<u32>()
+                    .context("Failed to parse `UV_HTTP_RETRIES`")?,
+            ))
+        } else {
+            Ok(self)
+        }
+    }
+
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.native_tls = native_tls;
+        self
+    }
+
+    #[must_use]
+    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
+        self.built_in_root_certs = built_in_root_certs;
         self
     }
 
@@ -237,7 +266,11 @@ impl<'a> BaseClientBuilder<'a> {
 
     /// Create a [`RetryPolicy`] for the client.
     fn retry_policy(&self) -> ExponentialBackoff {
-        ExponentialBackoff::builder().build_with_max_retries(self.retries)
+        let mut builder = ExponentialBackoff::builder();
+        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
+        }
+        builder.build_with_max_retries(self.retries)
     }
 
     pub fn build(&self) -> BaseClient {
@@ -363,7 +396,7 @@ impl<'a> BaseClientBuilder<'a> {
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
             .read_timeout(timeout)
-            .tls_built_in_root_certs(false)
+            .tls_built_in_root_certs(self.built_in_root_certs)
             .redirect(redirect_policy.reqwest_policy());
 
         // If necessary, accept invalid certificates.
@@ -725,6 +758,16 @@ fn request_into_redirect(
         }
     }
 
+    // Check if there are credentials on the redirect location itself.
+    // If so, move them to Authorization header.
+    if !redirect_url.username().is_empty() {
+        if let Some(credentials) = Credentials::from_url(&redirect_url) {
+            let _ = redirect_url.set_username("");
+            let _ = redirect_url.set_password(None);
+            headers.insert(AUTHORIZATION, credentials.to_header_value());
+        }
+    }
+
     std::mem::swap(req.headers_mut(), &mut headers);
     *req.url_mut() = Url::from(redirect_url);
     debug!(
@@ -885,18 +928,34 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
     }
 
     // IO Errors may be nested through custom IO errors.
+    let mut has_io_error = false;
     for io_err in find_sources::<io::Error>(&err) {
-        if io_err.kind() == io::ErrorKind::ConnectionReset
-            || io_err.kind() == io::ErrorKind::UnexpectedEof
-            || io_err.kind() == io::ErrorKind::BrokenPipe
-        {
-            trace!("Retrying error: `ConnectionReset` or `UnexpectedEof`");
+        has_io_error = true;
+        let retryable_io_err_kinds = [
+            // https://github.com/astral-sh/uv/issues/12054
+            io::ErrorKind::BrokenPipe,
+            // From reqwest-middleware
+            io::ErrorKind::ConnectionAborted,
+            // https://github.com/astral-sh/uv/issues/3514
+            io::ErrorKind::ConnectionReset,
+            // https://github.com/astral-sh/uv/issues/14699
+            io::ErrorKind::InvalidData,
+            // https://github.com/astral-sh/uv/issues/9246
+            io::ErrorKind::UnexpectedEof,
+        ];
+        if retryable_io_err_kinds.contains(&io_err.kind()) {
+            trace!("Retrying error: `{}`", io_err.kind());
             return true;
         }
-        trace!("Cannot retry IO error: not one of `ConnectionReset` or `UnexpectedEof`");
+        trace!(
+            "Cannot retry IO error `{}`, not a retryable IO error kind",
+            io_err.kind()
+        );
     }
 
-    trace!("Cannot retry error: not an IO error");
+    if !has_io_error {
+        trace!("Cannot retry error: not an extended IO error");
+    }
     false
 }
 
@@ -966,6 +1025,45 @@ mod tests {
                 request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
                     .unwrap();
             assert!(redirect_request.headers().contains_key(AUTHORIZATION));
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_preserves_fragment() -> Result<()> {
+        for status in &[301, 302, 303, 307, 308] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .respond_with(
+                    ResponseTemplate::new(*status)
+                        .insert_header("location", format!("{}/redirect", server.uri())),
+                )
+                .mount(&server)
+                .await;
+
+            let request = Client::new()
+                .get(format!("{}#fragment", server.uri()))
+                .build()
+                .unwrap();
+
+            let response = Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap()
+                .execute(request.try_clone().unwrap())
+                .await
+                .unwrap();
+
+            let redirect_request =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .unwrap();
+            assert!(
+                redirect_request
+                    .url()
+                    .fragment()
+                    .is_some_and(|fragment| fragment == "fragment")
+            );
         }
 
         Ok(())

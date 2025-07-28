@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
-    ExtrasSpecification, Overrides, Reinstall, Upgrade,
+    ExtrasSpecification, Overrides, PackageConfigSettings, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -27,14 +27,14 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
-    LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
-    SourceTreeResolver,
+    GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
+    RequirementsSpecification, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -55,7 +55,7 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: BTreeMap<PathBuf, Vec<GroupName>>,
+    groups: Option<&GroupsSpecification>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -70,7 +70,7 @@ pub(crate) async fn read_requirements(
             "Use `package[extra]` syntax instead."
         };
         return Err(anyhow!(
-            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
+            "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
         )
         .into());
     }
@@ -91,15 +91,11 @@ pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(RequirementsSpecification::from_sources(
-        &[],
-        constraints,
-        &[],
-        BTreeMap::default(),
-        client_builder,
+    Ok(
+        RequirementsSpecification::from_sources(&[], constraints, &[], None, client_builder)
+            .await?
+            .constraints,
     )
-    .await?
-    .constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -445,6 +441,7 @@ pub(crate) async fn install(
     compile: bool,
     index_urls: &IndexLocations,
     config_settings: &ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -470,6 +467,7 @@ pub(crate) async fn install(
             hasher,
             index_urls,
             config_settings,
+            config_settings_package,
             cache,
             venv,
             tags,

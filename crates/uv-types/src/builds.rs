@@ -1,3 +1,9 @@
+use std::path::Path;
+use std::sync::Arc;
+
+use dashmap::DashMap;
+
+use uv_configuration::{BuildKind, SourceStrategy};
 use uv_pep508::PackageName;
 use uv_python::PythonEnvironment;
 
@@ -35,5 +41,44 @@ impl BuildIsolation<'_> {
                 }
             }
         }
+    }
+}
+
+/// A key for the build cache, which includes the interpreter, source root, subdirectory, source
+/// strategy, and build kind.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BuildKey {
+    pub base_python: Box<Path>,
+    pub source_root: Box<Path>,
+    pub subdirectory: Option<Box<Path>>,
+    pub source_strategy: SourceStrategy,
+    pub build_kind: BuildKind,
+}
+
+/// An arena of in-process builds.
+#[derive(Debug)]
+pub struct BuildArena<T>(Arc<DashMap<BuildKey, T>>);
+
+impl<T> Default for BuildArena<T> {
+    fn default() -> Self {
+        Self(Arc::new(DashMap::new()))
+    }
+}
+
+impl<T> Clone for BuildArena<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T> BuildArena<T> {
+    /// Insert a build entry into the arena.
+    pub fn insert(&self, key: BuildKey, value: T) {
+        self.0.insert(key, value);
+    }
+
+    /// Remove a build entry from the arena.
+    pub fn remove(&self, key: &BuildKey) -> Option<T> {
+        self.0.remove(key).map(|entry| entry.1)
     }
 }

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
@@ -56,10 +57,7 @@ impl File {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: match split_scheme(&file.url) {
-                Some(..) => FileLocation::AbsoluteUrl(UrlString::new(file.url)),
-                None => FileLocation::RelativeUrl(base.clone(), file.url),
-            },
+            url: FileLocation::new(file.url, base),
             yanked: file.yanked,
         })
     }
@@ -76,6 +74,17 @@ pub enum FileLocation {
 }
 
 impl FileLocation {
+    /// Parse a relative or absolute URL on a page with a base URL.
+    ///
+    /// This follows the HTML semantics where a link on a page is resolved relative to the URL of
+    /// that page.
+    pub fn new(url: SmallString, base: &SmallString) -> Self {
+        match split_scheme(&url) {
+            Some(..) => FileLocation::AbsoluteUrl(UrlString::new(url)),
+            None => FileLocation::RelativeUrl(base.clone(), url),
+        }
+    }
+
     /// Convert this location to a URL.
     ///
     /// A relative URL has its base joined to the path. An absolute URL is
@@ -160,16 +169,13 @@ impl UrlString {
             .unwrap_or(self.as_ref())
     }
 
-    /// Return the [`UrlString`] with any fragments removed.
+    /// Return the [`UrlString`] (as a [`Cow`]) with any fragments removed.
     #[must_use]
-    pub fn without_fragment(&self) -> Self {
-        Self(
-            self.as_ref()
-                .split_once('#')
-                .map(|(path, _)| path)
-                .map(SmallString::from)
-                .unwrap_or_else(|| self.0.clone()),
-        )
+    pub fn without_fragment(&self) -> Cow<'_, Self> {
+        self.as_ref()
+            .split_once('#')
+            .map(|(path, _)| Cow::Owned(UrlString(SmallString::from(path))))
+            .unwrap_or(Cow::Borrowed(self))
     }
 }
 
@@ -252,16 +258,17 @@ mod tests {
 
     #[test]
     fn without_fragment() {
+        // Borrows a URL without a fragment
+        let url = UrlString("https://example.com/path".into());
+        assert_eq!(&*url.without_fragment(), &url);
+        assert!(matches!(url.without_fragment(), Cow::Borrowed(_)));
+
+        // Removes the fragment if present on the URL
         let url = UrlString("https://example.com/path?query#fragment".into());
         assert_eq!(
-            url.without_fragment(),
-            UrlString("https://example.com/path?query".into())
+            &*url.without_fragment(),
+            &UrlString("https://example.com/path?query".into())
         );
-
-        let url = UrlString("https://example.com/path#fragment".into());
-        assert_eq!(url.base_str(), "https://example.com/path");
-
-        let url = UrlString("https://example.com/path".into());
-        assert_eq!(url.base_str(), "https://example.com/path");
+        assert!(matches!(url.without_fragment(), Cow::Owned(_)));
     }
 }

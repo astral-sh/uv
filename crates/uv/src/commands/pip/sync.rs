@@ -1,16 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    HashCheckingMode, IndexStrategy, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
+    SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -18,13 +18,14 @@ use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, Origin, R
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::SitePackages;
+use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,
 };
-use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
     PythonRequirement, ResolutionMode, ResolverEnvironment,
@@ -48,6 +49,8 @@ pub(crate) async fn pip_sync(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
+    extras: &ExtrasSpecification,
+    groups: &GroupsSpecification,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -61,6 +64,7 @@ pub(crate) async fn pip_sync(
     allow_empty_requirements: bool,
     installer_metadata: bool,
     config_settings: &ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     build_options: BuildOptions,
@@ -79,9 +83,10 @@ pub(crate) async fn pip_sync(
     cache: Cache,
     dry_run: DryRun,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
@@ -89,8 +94,6 @@ pub(crate) async fn pip_sync(
 
     // Initialize a few defaults.
     let overrides = &[];
-    let extras = ExtrasSpecification::default();
-    let groups = BTreeMap::default();
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -116,16 +119,17 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        &extras,
-        groups,
+        extras,
+        Some(groups),
         &client_builder,
     )
     .await?;
 
     if pylock.is_some() {
-        if preview.is_disabled() {
+        if !preview.is_enabled(PreviewFeatures::PYLOCK) {
             warn_user!(
-                "The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+                "The `--pylock` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeatures::PYLOCK
             );
         }
     }
@@ -212,7 +216,13 @@ pub(crate) async fn pip_sync(
         }
     }
 
-    let _lock = environment.lock().await?;
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     let interpreter = environment.interpreter();
 
@@ -267,16 +277,7 @@ pub(crate) async fn pip_sync(
         no_index,
     );
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
@@ -358,6 +359,7 @@ pub(crate) async fn pip_sync(
         state.clone(),
         index_strategy,
         config_settings,
+        config_settings_package,
         build_isolation,
         link_mode,
         &build_options,
@@ -377,11 +379,46 @@ pub(crate) async fn pip_sync(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content)
-            .with_context(|| format!("Not a valid pylock.toml file: {}", pylock.user_display()))?;
+        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
+            format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
+        })?;
 
-        let resolution =
-            lock.to_resolution(install_path, marker_env.markers(), &tags, &build_options)?;
+        // Verify that the Python version is compatible with the lock file.
+        if let Some(requires_python) = lock.requires_python.as_ref() {
+            if !requires_python.contains(interpreter.python_version()) {
+                return Err(anyhow::anyhow!(
+                    "The requested interpreter resolved to Python {}, which is incompatible with the `pylock.toml`'s Python requirement: `{}`",
+                    interpreter.python_version(),
+                    requires_python,
+                ));
+            }
+        }
+
+        // Convert the extras and groups specifications into a concrete form.
+        let extras = extras.with_defaults(DefaultExtras::default());
+        let extras = extras
+            .extra_names(lock.extras.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let groups = groups
+            .get(&pylock)
+            .cloned()
+            .unwrap_or_default()
+            .with_defaults(DefaultGroups::List(lock.default_groups.clone()));
+        let groups = groups
+            .group_names(lock.dependency_groups.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let resolution = lock.to_resolution(
+            install_path,
+            marker_env.markers(),
+            &extras,
+            &groups,
+            &tags,
+            &build_options,
+        )?;
         let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         (resolution, hasher)
@@ -406,7 +443,7 @@ pub(crate) async fn pip_sync(
             source_trees,
             project,
             BTreeSet::default(),
-            &extras,
+            extras,
             &groups,
             preferences,
             site_packages.clone(),
@@ -451,6 +488,7 @@ pub(crate) async fn pip_sync(
         compile,
         &index_locations,
         config_settings,
+        config_settings_package,
         &hasher,
         &tags,
         &client,

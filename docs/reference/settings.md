@@ -396,10 +396,6 @@ pydantic = { path = "/path/to/pydantic", editable = true }
 
 Settings for the uv build backend (`uv_build`).
 
-!!! note
-
-    The uv build backend is currently in preview and may change in any future release.
-
 Note that those settings only apply when using the `uv_build` backend, other build backends
 (such as hatchling) have their own configuration.
 
@@ -429,7 +425,7 @@ data files are included by placing them in the Python module instead of using da
   with this package as build requirement use the include directory to find additional header
   files.
 - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended
-  to uses these two options.
+  to use these two options.
 
 **Default value**: `{}`
 
@@ -439,7 +435,7 @@ data files are included by placing them in the Python module instead of using da
 
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
-data = { "headers": "include/headers", "scripts": "bin" }
+data = { headers = "include/headers", scripts = "bin" }
 ```
 
 ---
@@ -478,13 +474,17 @@ being the module name, and which contain a `__init__.pyi` file.
 For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
 `foo-stubs.bar`.
 
+For namespace packages with multiple modules, the path can be a list, e.g.,
+`["foo", "bar"]`. We recommend using a single module per package, splitting multiple
+packages into a workspace.
+
 Note that using this option runs the risk of creating two packages with different names but
 the same module names. Installing such packages together leads to unspecified behavior,
 often with corrupted files or directory trees.
 
 **Default value**: `None`
 
-**Type**: `str`
+**Type**: `str | list[str]`
 
 **Example usage**:
 
@@ -1002,6 +1002,33 @@ specified as `KEY=VALUE` pairs.
 
     ```toml
     config-settings = { editable_mode = "compat" }
+    ```
+
+---
+
+### [`config-settings-package`](#config-settings-package) {: #config-settings-package }
+
+Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+specified as `KEY=VALUE` pairs.
+
+Accepts a map from package names to string key-value pairs.
+
+**Default value**: `{}`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+=== "uv.toml"
+
+    ```toml
+    config-settings-package = { numpy = { editable_mode = "compat" } }
     ```
 
 ---
@@ -2240,6 +2267,33 @@ specified as `KEY=VALUE` pairs.
     ```toml
     [pip]
     config-settings = { editable_mode = "compat" }
+    ```
+
+---
+
+#### [`config-settings-package`](#pip_config-settings-package) {: #pip_config-settings-package }
+<span id="config-settings-package"></span>
+
+Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+specified as `KEY=VALUE` pairs.
+
+**Default value**: `{}`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
     ```
 
 ---

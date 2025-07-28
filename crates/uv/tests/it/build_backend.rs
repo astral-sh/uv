@@ -222,9 +222,7 @@ fn preserve_executable_bit() -> Result<()> {
     let project_dir = context.temp_dir.path().join("preserve_executable_bit");
     context
         .init()
-        .arg("--build-backend")
-        .arg("uv")
-        .arg("--preview")
+        .arg("--lib")
         .arg(&project_dir)
         .assert()
         .success();
@@ -297,7 +295,7 @@ fn rename_module() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
@@ -316,8 +314,7 @@ fn rename_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -379,7 +376,7 @@ fn rename_module_editable_build() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
@@ -391,8 +388,7 @@ fn rename_module_editable_build() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-editable")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -439,7 +435,7 @@ fn build_module_name_normalization() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
 
         [tool.uv.build-backend]
@@ -551,7 +547,7 @@ fn build_sdist_with_long_path() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.7,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
     context
@@ -568,8 +564,7 @@ fn build_sdist_with_long_path() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r###"
+        .arg(temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -595,15 +590,14 @@ fn sdist_error_without_module() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.7,<0.8"]
+        requires = ["uv_build>=0.7,<10000"]
         build-backend = "uv_build"
     "#})?;
 
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r"
+        .arg(temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -617,8 +611,7 @@ fn sdist_error_without_module() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-sdist")
-        .arg(temp_dir.path())
-        .env("UV_PREVIEW", "1"), @r"
+        .arg(temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -667,7 +660,7 @@ fn complex_namespace_packages() -> Result<()> {
             module-name = "{project_name_dist_info}.{part_name}"
 
             [build-system]
-            requires = ["uv_build>=0.5.15,<10000"]
+            requires = ["uv_build>=0.7,<10000"]
             build-backend = "uv_build"
             "#
         };
@@ -682,7 +675,6 @@ fn complex_namespace_packages() -> Result<()> {
 
         context
             .build()
-            .arg("--preview")
             .arg(project.path())
             .arg("--out-dir")
             .arg(dist.path())
@@ -731,7 +723,6 @@ fn complex_namespace_packages() -> Result<()> {
         context.filters(),
         context
             .pip_install()
-            .arg("--preview")
             .arg("-e")
             .arg("complex-project-part_a")
             .arg("-e")
@@ -766,5 +757,130 @@ fn complex_namespace_packages() -> Result<()> {
     ----- stderr -----
     "
     );
+    Ok(())
+}
+
+/// Test that a symlinked file (here: license) gets included.
+#[test]
+#[cfg(unix)]
+fn symlinked_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+    context
+        .init()
+        .arg("--lib")
+        .arg(project.path())
+        .assert()
+        .success();
+
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        license-files = ["LICENSE"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#
+    })?;
+
+    let license_file = context.temp_dir.child("LICENSE");
+    let license_symlink = project.child("LICENSE");
+
+    let license_text = "Project license";
+    license_file.write_str(license_text)?;
+    fs_err::os::unix::fs::symlink(license_file.path(), license_symlink.path())?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project-1.0.0.tar.gz
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path())
+        .current_dir(project.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project-1.0.0-py3-none-any.whl
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("project-1.0.0-py3-none-any.whl"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==1.0.0 (from file://[TEMP_DIR]/project-1.0.0-py3-none-any.whl)
+    ");
+
+    // Check that we included the actual license text and not a broken symlink.
+    let installed_license = context
+        .site_packages()
+        .join("project-1.0.0.dist-info")
+        .join("licenses")
+        .join("LICENSE");
+    assert!(
+        fs_err::symlink_metadata(&installed_license)?
+            .file_type()
+            .is_file()
+    );
+    let license = fs_err::read_to_string(&installed_license)?;
+    assert_eq!(license, license_text);
+
+    Ok(())
+}
+
+/// Ignore invalid build backend settings when not building.
+///
+/// They may be from another `uv_build` version that has a different schema.
+#[test]
+fn invalid_build_backend_settings_are_ignored() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "built-by-uv"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        # Error: `source-include` must be a list
+        source-include = "data/build-script.py"
+
+        [build-system]
+        requires = ["uv_build>=10000,<10001"]
+        build-backend = "uv_build"
+    "#})?;
+
+    // Since we are not building, this must pass without complaining about the error in
+    // `tool.uv.build-backend`.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
     Ok(())
 }

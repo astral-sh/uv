@@ -176,7 +176,7 @@ fn uninstall_editable_by_name() -> Result<()> {
         "-e {}",
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
+            .join("scripts/packages/flit_editable")
             .as_os_str()
             .to_str()
             .expect("Path is valid unicode")
@@ -187,22 +187,22 @@ fn uninstall_editable_by_name() -> Result<()> {
         .assert()
         .success();
 
-    context.assert_command("import poetry_editable").success();
+    context.assert_command("import flit_editable").success();
 
     // Uninstall the editable by name.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("poetry-editable"), @r###"
+        .arg("flit-editable"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     - flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
     "###
     );
 
-    context.assert_command("import poetry_editable").failure();
+    context.assert_command("import flit_editable").failure();
 
     Ok(())
 }
@@ -216,7 +216,7 @@ fn uninstall_by_path() -> Result<()> {
     requirements_txt.write_str(
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
+            .join("scripts/packages/flit_editable")
             .as_os_str()
             .to_str()
             .expect("Path is valid unicode"),
@@ -228,22 +228,22 @@ fn uninstall_by_path() -> Result<()> {
         .assert()
         .success();
 
-    context.assert_command("import poetry_editable").success();
+    context.assert_command("import flit_editable").success();
 
     // Uninstall the editable by path.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     - flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
     "###
     );
 
-    context.assert_command("import poetry_editable").failure();
+    context.assert_command("import flit_editable").failure();
 
     Ok(())
 }
@@ -257,7 +257,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     requirements_txt.write_str(
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
+            .join("scripts/packages/flit_editable")
             .as_os_str()
             .to_str()
             .expect("Path is valid unicode"),
@@ -269,23 +269,23 @@ fn uninstall_duplicate_by_path() -> Result<()> {
         .assert()
         .success();
 
-    context.assert_command("import poetry_editable").success();
+    context.assert_command("import flit_editable").success();
 
     // Uninstall the editable by both path and name.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("poetry-editable")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg("flit-editable")
+        .arg(context.workspace_root.join("scripts/packages/flit_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     - flit-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/flit_editable)
     "###
     );
 
-    context.assert_command("import poetry_editable").failure();
+    context.assert_command("import flit_editable").failure();
 
     Ok(())
 }

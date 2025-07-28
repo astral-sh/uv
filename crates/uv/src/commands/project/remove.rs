@@ -5,12 +5,12 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_configuration::{
     Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Preview,
 };
 use uv_fs::Simplified;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
@@ -60,7 +60,7 @@ pub(crate) async fn remove(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -281,7 +281,13 @@ pub(crate) async fn remove(
         }
     };
 
-    let _lock = target.acquire_lock().await?;
+    let _lock = target
+        .acquire_lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Determine the lock mode.
     let mode = if locked {
@@ -302,6 +308,7 @@ pub(crate) async fn remove(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -350,6 +357,7 @@ pub(crate) async fn remove(
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Exact,
+        None,
         (&settings).into(),
         &network_settings,
         &state,
@@ -357,6 +365,7 @@ pub(crate) async fn remove(
         installer_metadata,
         concurrency,
         cache,
+        WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,

@@ -22,14 +22,12 @@ jobs:
       id-token: write
     steps:
       - name: "Install uv"
-        uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+        uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: wheels_uv-*
           path: wheels_uv
           merge-multiple: true
-      - name: Remove wheels unsupported by PyPI
-        run: rm wheels_uv/*riscv*
       - name: Publish to PyPI
         run: uv publish -v wheels_uv/*
 
@@ -43,13 +41,11 @@ jobs:
       id-token: write
     steps:
       - name: "Install uv"
-        uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
+        uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: wheels_uv_build-*
           path: wheels_uv_build
           merge-multiple: true
-      - name: Remove wheels unsupported by PyPI
-        run: rm wheels_uv_build/*riscv*
       - name: Publish to PyPI
         run: uv publish -v wheels_uv_build/*

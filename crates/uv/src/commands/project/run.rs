@@ -9,8 +9,9 @@ use anyhow::{Context, anyhow, bail};
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use thiserror::Error;
 use tokio::process::Command;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use url::Url;
 
 use uv_cache::Cache;
@@ -18,11 +19,11 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, PreviewMode,
+    InstallOptions, Preview,
 };
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
-use uv_fs::{PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{
@@ -40,22 +41,22 @@ use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
 
+use crate::child::run_to_completion;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::project::environment::{CachedEnvironment, EphemeralEnvironment};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceSource, ProjectEnvironment, ProjectError,
+    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
     ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_specification, update_environment,
     validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::run::run_to_completion;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
@@ -93,7 +94,7 @@ pub(crate) async fn run(
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
-    preview: PreviewMode,
+    preview: Preview,
     max_recursion_depth: u32,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
@@ -240,7 +241,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .await?
             .into_environment()?;
 
-            let _lock = environment.lock().await?;
+            let _lock = environment
+                .lock()
+                .await
+                .inspect_err(|err| {
+                    warn!("Failed to acquire environment lock: {err}");
+                })
+                .ok();
 
             // Determine the lock mode.
             let mode = if frozen {
@@ -264,6 +271,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 concurrency,
                 cache,
+                &workspace_cache,
                 printer,
                 preview,
             )
@@ -298,6 +306,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 editable,
                 install_options,
                 modifications,
+                None,
                 (&settings).into(),
                 &network_settings,
                 &sync_state,
@@ -309,6 +318,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 installer_metadata,
                 concurrency,
                 cache,
+                workspace_cache.clone(),
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -384,7 +394,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         )
                     });
 
-                let _lock = environment.lock().await?;
+                let _lock = environment
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
 
                 match update_environment(
                     environment,
@@ -407,7 +423,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     concurrency,
                     cache,
-                    workspace_cache,
+                    workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -450,7 +466,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     false,
@@ -465,7 +481,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     };
 
     // Discover and sync the base environment.
-    let workspace_cache = WorkspaceCache::default();
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -604,6 +619,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
                 let client_builder = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -655,7 +671,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     false,
@@ -698,7 +714,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
-                let _lock = venv.lock().await?;
+                let _lock = venv
+                    .lock()
+                    .await
+                    .inspect_err(|err| {
+                        warn!("Failed to acquire environment lock: {err}");
+                    })
+                    .ok();
 
                 // Determine the lock mode.
                 let mode = if frozen {
@@ -721,6 +743,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     concurrency,
                     cache,
+                    &workspace_cache,
                     printer,
                     preview,
                 )
@@ -796,6 +819,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     editable,
                     install_options,
                     modifications,
+                    None,
                     (&settings).into(),
                     &network_settings,
                     &sync_state,
@@ -807,6 +831,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     concurrency,
                     cache,
+                    workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -836,6 +861,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -882,7 +908,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    false,
+                    uv_virtualenv::OnExisting::Remove,
                     false,
                     false,
                     false,
@@ -906,6 +932,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         None
     } else {
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -918,7 +945,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     // If necessary, create an environment for the ephemeral requirements or command.
     let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;
-    let ephemeral_env = match spec {
+    let requirements_env = match spec {
         None => None,
         Some(spec)
             if can_skip_ephemeral(&spec, &base_interpreter, &base_site_packages, &settings) =>
@@ -926,7 +953,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             None
         }
         Some(spec) => {
-            debug!("Syncing ephemeral requirements");
+            debug!("Syncing `--with` requirements to cached environment");
 
             // Read the build constraints from the lock file.
             let build_constraints = base_lock
@@ -937,10 +964,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let spec = EnvironmentSpecification::from(spec).with_preferences(
                 if let Some((lock, install_path)) = base_lock.as_ref() {
                     // If we have a lockfile, use the locked versions as preferences.
-                    PreferenceSource::Lock { lock, install_path }
+                    PreferenceLocation::Lock { lock, install_path }
                 } else {
                     // Otherwise, extract preferences from the base environment.
-                    PreferenceSource::Entries(
+                    PreferenceLocation::Entries(
                         base_site_packages
                             .iter()
                             .filter_map(Preference::from_installed)
@@ -987,54 +1014,153 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 Err(err) => return Err(err.into()),
             };
 
-            Some(environment)
+            Some(PythonEnvironment::from(environment))
         }
     };
 
-    // If we're running in an ephemeral environment, add a path file to enable loading of
-    // the base environment's site packages. Setting `PYTHONPATH` is insufficient, as it doesn't
-    // resolve `.pth` files in the base environment.
+    // If we're layering requirements atop the project environment, run the command in an ephemeral,
+    // isolated environment. Otherwise, modifications to the "active virtual environment" would
+    // poison the cache.
+    let ephemeral_dir = requirements_env
+        .as_ref()
+        .map(|_| cache.venv_dir())
+        .transpose()?;
+
+    let ephemeral_env = ephemeral_dir
+        .as_ref()
+        .map(|dir| {
+            debug!(
+                "Creating ephemeral environment at: `{}`",
+                dir.path().simplified_display()
+            );
+
+            uv_virtualenv::create_venv(
+                dir.path(),
+                base_interpreter.clone(),
+                uv_virtualenv::Prompt::None,
+                false,
+                uv_virtualenv::OnExisting::Remove,
+                false,
+                false,
+                false,
+                preview,
+            )
+        })
+        .transpose()?
+        .map(EphemeralEnvironment::from);
+
+    // If we're running in an ephemeral environment, add a path file to enable loading from the
+    // `--with` requirements environment and the project environment site packages.
     //
-    // `sitecustomize.py` would be an alternative, but it can be shadowed by an existing such
-    // module in the python installation.
+    // Setting `PYTHONPATH` is insufficient, as it doesn't resolve `.pth` files in the base
+    // environment. Adding `sitecustomize.py` would be an alternative, but it can be shadowed by an
+    // existing such module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
-        let site_packages = base_interpreter
-            .site_packages()
-            .next()
-            .ok_or_else(|| ProjectError::NoSitePackages)?;
-        ephemeral_env.set_overlay(format!(
-            "import site; site.addsitedir(\"{}\")",
-            site_packages.escape_for_python()
-        ))?;
+        if let Some(requirements_env) = requirements_env.as_ref() {
+            let requirements_site_packages =
+                requirements_env.site_packages().next().ok_or_else(|| {
+                    anyhow!("Requirements environment has no site packages directory")
+                })?;
+            let base_site_packages = base_interpreter
+                .site_packages()
+                .next()
+                .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
 
-        // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
-        // file. This helps out static-analysis tools such as ty (see docs on
-        // `CachedEnvironment::set_parent_environment`).
-        //
-        // Note that we do this even if the parent environment is not a virtual environment.
-        // For ephemeral environments created by `uv run --with`, the parent environment's
-        // `site-packages` directory is added to `sys.path` even if the parent environment is not
-        // a virtual environment and even if `--system-site-packages` was not explicitly selected.
-        ephemeral_env.set_parent_environment(base_interpreter.sys_prefix())?;
+            ephemeral_env.set_overlay(format!(
+                "import site; site.addsitedir(\"{}\"); site.addsitedir(\"{}\");",
+                requirements_site_packages.escape_for_python(),
+                base_site_packages.escape_for_python(),
+            ))?;
 
-        // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
-        // environment.
-        if base_interpreter.is_virtualenv()
-            && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
-                .is_ok_and(|cfg| cfg.include_system_site_packages())
-        {
-            ephemeral_env.set_system_site_packages()?;
-        } else {
-            ephemeral_env.clear_system_site_packages()?;
+            // N.B. The order here matters — earlier interpreters take precedence over the
+            // later ones.
+            for interpreter in [requirements_env.interpreter(), &base_interpreter] {
+                // Copy each entrypoint from the base environments to the ephemeral environment,
+                // updating the Python executable target to ensure they run in the ephemeral
+                // environment.
+                for entry in fs_err::read_dir(interpreter.scripts())? {
+                    let entry = entry?;
+                    if !entry.file_type()?.is_file() {
+                        continue;
+                    }
+                    match copy_entrypoint(
+                        &entry.path(),
+                        &ephemeral_env.scripts().join(entry.file_name()),
+                        interpreter.sys_executable(),
+                        ephemeral_env.sys_executable(),
+                    ) {
+                        Ok(()) => {}
+                        // If the entrypoint already exists, skip it.
+                        Err(CopyEntrypointError::Io(err))
+                            if err.kind() == std::io::ErrorKind::AlreadyExists =>
+                        {
+                            trace!(
+                                "Skipping copy of entrypoint `{}`: already exists",
+                                &entry.path().display()
+                            );
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+
+                // Link data directories from the base environment to the ephemeral environment.
+                //
+                // This is critical for Jupyter Lab, which cannot operate without the files it
+                // writes to `<prefix>/share/jupyter`.
+                //
+                // See https://github.com/jupyterlab/jupyterlab/issues/17716
+                for dir in &["etc/jupyter", "share/jupyter"] {
+                    let source = interpreter.sys_prefix().join(dir);
+                    if !matches!(source.try_exists(), Ok(true)) {
+                        continue;
+                    }
+                    if !source.is_dir() {
+                        continue;
+                    }
+                    let target = ephemeral_env.sys_prefix().join(dir);
+                    if let Some(parent) = target.parent() {
+                        fs_err::create_dir_all(parent)?;
+                    }
+                    match create_symlink(&source, &target) {
+                        Ok(()) => trace!(
+                            "Created link for {} -> {}",
+                            target.user_display(),
+                            source.user_display()
+                        ),
+                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+            }
+
+            // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
+            // file. This helps out static-analysis tools such as ty (see docs on
+            // `CachedEnvironment::set_parent_environment`).
+            //
+            // Note that we do this even if the parent environment is not a virtual environment.
+            // For ephemeral environments created by `uv run --with`, the parent environment's
+            // `site-packages` directory is added to `sys.path` even if the parent environment is not
+            // a virtual environment and even if `--system-site-packages` was not explicitly selected.
+            ephemeral_env.set_parent_environment(base_interpreter.sys_prefix())?;
+
+            // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
+            // environment.
+            if base_interpreter.is_virtualenv()
+                && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
+                    .is_ok_and(|cfg| cfg.include_system_site_packages())
+            {
+                ephemeral_env.set_system_site_packages()?;
+            }
         }
     }
 
-    // Cast from `CachedEnvironment` to `PythonEnvironment`.
+    // Cast to `PythonEnvironment`.
     let ephemeral_env = ephemeral_env.map(PythonEnvironment::from);
 
     // Determine the Python interpreter to use for the command, if necessary.
     let interpreter = ephemeral_env
         .as_ref()
+        .or(requirements_env.as_ref())
         .map_or_else(|| &base_interpreter, |env| env.interpreter());
 
     // Check if any run command is given.
@@ -1117,6 +1243,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .as_ref()
             .map(PythonEnvironment::scripts)
             .into_iter()
+            .chain(
+                requirements_env
+                    .as_ref()
+                    .map(PythonEnvironment::scripts)
+                    .into_iter(),
+            )
             .chain(std::iter::once(base_interpreter.scripts()))
             .chain(
                 // On Windows, non-virtual Python distributions put `python.exe` in the top-level
@@ -1503,6 +1635,7 @@ impl RunCommand {
                     .tempfile()?;
 
                 let client = BaseClientBuilder::new()
+                    .retries_from_env()?
                     .connectivity(network_settings.connectivity)
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone())
@@ -1597,4 +1730,127 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
     envvar
         .parse::<u32>()
         .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+}
+
+#[derive(Error, Debug)]
+enum CopyEntrypointError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[cfg(windows)]
+    #[error(transparent)]
+    Trampoline(#[from] uv_trampoline_builder::Error),
+}
+
+/// Create a copy of the entrypoint at `source` at `target`, if it has a Python shebang, replacing
+/// the previous Python executable with a new one.
+///
+/// This is a no-op if the target already exists.
+///
+/// Note on Windows, the entrypoints do not use shebangs and require a rewrite of the trampoline.
+#[cfg(unix)]
+fn copy_entrypoint(
+    source: &Path,
+    target: &Path,
+    previous_executable: &Path,
+    python_executable: &Path,
+) -> Result<(), CopyEntrypointError> {
+    use std::io::{Seek, Write};
+    use std::os::unix::fs::PermissionsExt;
+
+    use fs_err::os::unix::fs::OpenOptionsExt;
+
+    let mut file = fs_err::File::open(source)?;
+    let mut buffer = [0u8; 2];
+    if file.read_exact(&mut buffer).is_err() {
+        // File is too small to have a shebang
+        trace!(
+            "Skipping copy of entrypoint `{}`: file is too small to contain a shebang",
+            source.user_display()
+        );
+        return Ok(());
+    }
+
+    // Check if it starts with `#!` to avoid reading binary files and such into memory
+    if &buffer != b"#!" {
+        trace!(
+            "Skipping copy of entrypoint `{}`: does not start with #!",
+            source.user_display()
+        );
+        return Ok(());
+    }
+
+    let mut contents = String::new();
+    file.seek(std::io::SeekFrom::Start(0))?;
+    match file.read_to_string(&mut contents) {
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::InvalidData => {
+            // If the file is not valid UTF-8, we skip it in case it was a binary file with `#!` at
+            // the start (which seems pretty niche, but being defensive here seems safe)
+            trace!(
+                "Skipping copy of entrypoint `{}`: is not valid UTF-8",
+                source.user_display()
+            );
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    }
+
+    let Some(contents) = contents
+        // Check for a relative path or relocatable shebang
+        .strip_prefix(
+            r#"#!/bin/sh
+'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
+' '''
+"#,
+        )
+        // Or an absolute path shebang
+        .or_else(|| contents.strip_prefix(&format!("#!{}\n", previous_executable.display())))
+    else {
+        // If it's not a Python shebang, we'll skip it
+        trace!(
+            "Skipping copy of entrypoint `{}`: does not start with expected shebang",
+            source.user_display()
+        );
+        return Ok(());
+    };
+
+    let contents = format!("#!{}\n{}", python_executable.display(), contents);
+    let mode = fs_err::metadata(source)?.permissions().mode();
+    let mut file = fs_err::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(mode)
+        .open(target)?;
+    file.write_all(contents.as_bytes())?;
+
+    trace!("Updated entrypoint at {}", target.user_display());
+
+    Ok(())
+}
+
+/// Create a copy of the entrypoint at `source` at `target`, if it's a Python script launcher,
+/// replacing the target Python executable with a new one.
+#[cfg(windows)]
+fn copy_entrypoint(
+    source: &Path,
+    target: &Path,
+    _previous_executable: &Path,
+    python_executable: &Path,
+) -> Result<(), CopyEntrypointError> {
+    use uv_trampoline_builder::Launcher;
+
+    let Some(launcher) = Launcher::try_from_path(source)? else {
+        return Ok(());
+    };
+
+    let launcher = launcher.with_python_path(python_executable.to_path_buf());
+    let mut file = fs_err::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(target)?;
+    launcher.write_to_file(&mut file)?;
+
+    trace!("Updated entrypoint at {}", target.user_display());
+
+    Ok(())
 }

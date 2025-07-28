@@ -180,7 +180,7 @@ fn tool_list_bad_environment() -> Result<()> {
             .tool_list()
             .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
             .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()),
-        @r###"
+        @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -188,8 +188,8 @@ fn tool_list_bad_environment() -> Result<()> {
     - ruff
 
     ----- stderr -----
-    warning: Invalid environment at `tools/black`: missing Python executable at `tools/black/[BIN]/python` (run `uv tool install black --reinstall` to reinstall)
-    "###
+    warning: Invalid environment at `tools/black`: missing Python executable at `tools/black/[BIN]/[PYTHON]` (run `uv tool install black --reinstall` to reinstall)
+    "
     );
 
     Ok(())

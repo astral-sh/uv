@@ -7,7 +7,7 @@ use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{Concurrency, DependencyGroups, PreviewMode, TargetTriple};
+use uv_configuration::{Concurrency, DependencyGroups, Preview, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
 use uv_normalize::DefaultGroups;
 use uv_pep508::PackageName;
@@ -57,7 +57,7 @@ pub(crate) async fn tree(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Find the project requirements.
     let workspace_cache = WorkspaceCache::default();
@@ -146,6 +146,7 @@ pub(crate) async fn tree(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -199,6 +200,7 @@ pub(crate) async fn tree(
                 fork_strategy: _,
                 dependency_metadata: _,
                 config_setting: _,
+                config_settings_package: _,
                 no_build_isolation: _,
                 no_build_isolation_package: _,
                 exclude_newer: _,
@@ -214,6 +216,7 @@ pub(crate) async fn tree(
             let client = RegistryClientBuilder::new(
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
+            .retries_from_env()?
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())

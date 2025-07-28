@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -9,7 +8,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, PreviewMode, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, DryRun, Preview, Reinstall, Upgrade};
 use uv_distribution_types::{
     NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
@@ -63,9 +62,10 @@ pub(crate) async fn install(
     concurrency: Concurrency,
     cache: Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -97,6 +97,7 @@ pub(crate) async fn install(
     let workspace_cache = WorkspaceCache::default();
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -259,7 +260,7 @@ pub(crate) async fn install(
         with,
         constraints,
         overrides,
-        BTreeMap::default(),
+        None,
         &client_builder,
     )
     .await?;
@@ -477,6 +478,7 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings.resolver,
             &network_settings,
             &state,
@@ -530,6 +532,7 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
+                        Constraints::from_requirements(build_constraints.iter().cloned()),
                         &settings.resolver,
                         &network_settings,
                         &state,

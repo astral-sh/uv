@@ -11,13 +11,14 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
+
 use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PreviewMode, Reinstall,
-    SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PackageConfigSettings,
+    Preview, Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -35,8 +36,8 @@ use uv_resolver::{
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
-    InFlight,
+    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
+    HashStrategy, InFlight,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -90,6 +91,7 @@ pub struct BuildDispatch<'a> {
     link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
+    config_settings_package: &'a PackageConfigSettings,
     hasher: &'a HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
@@ -97,7 +99,7 @@ pub struct BuildDispatch<'a> {
     sources: SourceStrategy,
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
-    preview: PreviewMode,
+    preview: Preview,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -112,6 +114,7 @@ impl<'a> BuildDispatch<'a> {
         shared_state: SharedState,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
+        config_settings_package: &'a PackageConfigSettings,
         build_isolation: BuildIsolation<'a>,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
@@ -120,7 +123,7 @@ impl<'a> BuildDispatch<'a> {
         sources: SourceStrategy,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Self {
         Self {
             client,
@@ -133,6 +136,7 @@ impl<'a> BuildDispatch<'a> {
             dependency_metadata,
             index_strategy,
             config_settings,
+            config_settings_package,
             build_isolation,
             link_mode,
             build_options,
@@ -179,6 +183,10 @@ impl BuildContext for BuildDispatch<'_> {
         &self.shared_state.git
     }
 
+    fn build_arena(&self) -> &BuildArena<SourceBuild> {
+        &self.shared_state.build_arena
+    }
+
     fn capabilities(&self) -> &IndexCapabilities {
         &self.shared_state.capabilities
     }
@@ -193,6 +201,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn config_settings(&self) -> &ConfigSettings {
         self.config_settings
+    }
+
+    fn config_settings_package(&self) -> &PackageConfigSettings {
+        self.config_settings_package
     }
 
     fn sources(&self) -> SourceStrategy {
@@ -290,6 +302,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.hasher,
             self.index_locations,
             self.config_settings,
+            self.config_settings_package,
             self.cache(),
             venv,
             tags,
@@ -413,6 +426,17 @@ impl BuildContext for BuildDispatch<'_> {
             build_stack.insert(dist.distribution_id());
         }
 
+        // Get package-specific config settings if available; otherwise, use global settings.
+        let config_settings = if let Some(name) = dist_name {
+            if let Some(package_settings) = self.config_settings_package.get(name) {
+                package_settings.clone().merge(self.config_settings.clone())
+            } else {
+                self.config_settings.clone()
+            }
+        } else {
+            self.config_settings.clone()
+        };
+
         let builder = SourceBuild::setup(
             source,
             subdirectory,
@@ -426,7 +450,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.index_locations,
             sources,
             self.workspace_cache(),
-            self.config_settings.clone(),
+            config_settings,
             self.build_isolation,
             &build_stack,
             build_kind,
@@ -448,12 +472,6 @@ impl BuildContext for BuildDispatch<'_> {
         build_kind: BuildKind,
         version_id: Option<&'data str>,
     ) -> Result<Option<DistFilename>, BuildDispatchError> {
-        // Direct builds are a preview feature with the uv build backend.
-        if self.preview.is_disabled() {
-            trace!("Preview is disabled, not checking for direct build");
-            return Ok(None);
-        }
-
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
         } else {
@@ -521,6 +539,8 @@ pub struct SharedState {
     index: InMemoryIndex,
     /// The downloaded distributions.
     in_flight: InFlight,
+    /// Build directories for any PEP 517 builds executed during resolution or installation.
+    build_arena: BuildArena<SourceBuild>,
 }
 
 impl SharedState {
@@ -533,6 +553,7 @@ impl SharedState {
         Self {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
+            build_arena: self.build_arena.clone(),
             ..Default::default()
         }
     }
@@ -555,5 +576,10 @@ impl SharedState {
     /// Return the [`IndexCapabilities`] used by the [`SharedState`].
     pub fn capabilities(&self) -> &IndexCapabilities {
         &self.capabilities
+    }
+
+    /// Return the [`BuildArena`] used by the [`SharedState`].
+    pub fn build_arena(&self) -> &BuildArena<SourceBuild> {
+        &self.build_arena
     }
 }

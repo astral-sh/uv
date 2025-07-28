@@ -18,7 +18,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::error::ErrorTree;
+use crate::error::{ErrorTree, PrefixMatch};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
@@ -944,17 +944,30 @@ impl PubGrubReportFormatter<'_> {
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let any_prerelease = set.iter().any(|(start, end)| {
+            // Ignore, e.g., `>=2.4.dev0,<2.5.dev0`, which is the desugared form of `==2.4.*`.
+            if PrefixMatch::from_range(start, end).is_some() {
+                return false;
+            }
+
             let is_pre1 = match start {
                 Bound::Included(version) => version.any_prerelease(),
                 Bound::Excluded(version) => version.any_prerelease(),
                 Bound::Unbounded => false,
             };
+            if is_pre1 {
+                return true;
+            }
+
             let is_pre2 = match end {
                 Bound::Included(version) => version.any_prerelease(),
                 Bound::Excluded(version) => version.any_prerelease(),
                 Bound::Unbounded => false,
             };
-            is_pre1 || is_pre2
+            if is_pre2 {
+                return true;
+            }
+
+            false
         });
 
         if any_prerelease {
@@ -1928,11 +1941,11 @@ impl std::fmt::Display for PackageRange<'_> {
                 PackageRangeKind::Available => write!(f, "are available:")?,
             }
         }
-        for segment in &segments {
+        for (lower, upper) in &segments {
             if segments.len() > 1 {
                 write!(f, "\n    ")?;
             }
-            match segment {
+            match (lower, upper) {
                 (Bound::Unbounded, Bound::Unbounded) => match self.kind {
                     PackageRangeKind::Dependency => write!(f, "{package}")?,
                     PackageRangeKind::Compatibility => write!(f, "all versions of {package}")?,
@@ -1948,7 +1961,13 @@ impl std::fmt::Display for PackageRange<'_> {
                         write!(f, "{package}>={v},<={b}")?;
                     }
                 }
-                (Bound::Included(v), Bound::Excluded(b)) => write!(f, "{package}>={v},<{b}")?,
+                (Bound::Included(v), Bound::Excluded(b)) => {
+                    if let Some(prefix) = PrefixMatch::from_range(lower, upper) {
+                        write!(f, "{package}{prefix}")?;
+                    } else {
+                        write!(f, "{package}>={v},<{b}")?;
+                    }
+                }
                 (Bound::Excluded(v), Bound::Unbounded) => write!(f, "{package}>{v}")?,
                 (Bound::Excluded(v), Bound::Included(b)) => write!(f, "{package}>{v},<={b}")?,
                 (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, "{package}>{v},<{b}")?,

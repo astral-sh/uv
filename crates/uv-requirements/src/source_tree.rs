@@ -154,7 +154,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         let source = SourceUrl::Directory(DirectorySourceUrl {
             url: &url,
             install_path: Cow::Borrowed(source_tree),
-            editable: false,
+            editable: None,
         });
 
         // Determine the hash policy. Since we don't have a package name, we perform a

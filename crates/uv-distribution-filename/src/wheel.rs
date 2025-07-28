@@ -5,7 +5,6 @@ use std::str::FromStr;
 use memchr::memchr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
-use url::Url;
 
 use uv_cache_key::cache_digest;
 use uv_normalize::{InvalidNameError, PackageName};
@@ -297,29 +296,6 @@ impl WheelFilename {
             version,
             tags,
         })
-    }
-}
-
-impl TryFrom<&Url> for WheelFilename {
-    type Error = WheelFilenameError;
-
-    fn try_from(url: &Url) -> Result<Self, Self::Error> {
-        let filename = url
-            .path_segments()
-            .ok_or_else(|| {
-                WheelFilenameError::InvalidWheelFileName(
-                    url.to_string(),
-                    "URL must have a path".to_string(),
-                )
-            })?
-            .next_back()
-            .ok_or_else(|| {
-                WheelFilenameError::InvalidWheelFileName(
-                    url.to_string(),
-                    "URL must contain a filename".to_string(),
-                )
-            })?;
-        Self::from_str(filename)
     }
 }
 

@@ -1,5 +1,6 @@
 use ref_cast::RefCast;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
@@ -98,6 +99,24 @@ impl DisplaySafeUrl {
         let _ = self.0.set_password(None);
     }
 
+    /// Returns the URL with any credentials removed.
+    pub fn without_credentials(&self) -> Cow<'_, Url> {
+        if self.0.password().is_none() && self.0.username() == "" {
+            return Cow::Borrowed(&self.0);
+        }
+
+        // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
+        // username.
+        if is_ssh_git_username(&self.0) {
+            return Cow::Borrowed(&self.0);
+        }
+
+        let mut url = self.0.clone();
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+        Cow::Owned(url)
+    }
+
     /// Returns [`Display`] implementation that doesn't mask credentials.
     #[inline]
     pub fn displayable_with_credentials(&self) -> impl Display {
@@ -177,7 +196,9 @@ impl FromStr for DisplaySafeUrl {
 }
 
 fn is_ssh_git_username(url: &Url) -> bool {
-    matches!(url.scheme(), "ssh" | "git+ssh") && url.username() == "git" && url.password().is_none()
+    matches!(url.scheme(), "ssh" | "git+ssh" | "git+https")
+        && url.username() == "git"
+        && url.password().is_none()
 }
 
 fn display_with_redacted_credentials(
