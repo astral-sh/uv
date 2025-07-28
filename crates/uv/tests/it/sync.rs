@@ -4768,6 +4768,187 @@ fn sync_custom_environment_path() -> Result<()> {
 }
 
 #[test]
+fn sync_custom_environment_path_templated() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "test-project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-{project_name}"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features template-project-environment` to disable this warning
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-test-project
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child(".venv-test-project")
+        .assert(predicate::path::is_dir());
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-py{python_version_minor}"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features template-project-environment` to disable this warning
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-py3.12
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child(".venv-py3.12")
+        .assert(predicate::path::is_dir());
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-{python_version_full}"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features template-project-environment` to disable this warning
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-3.12.[X]
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-{python_implementation}"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features template-project-environment` to disable this warning
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-cpython
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child(".venv-cpython")
+        .assert(predicate::path::is_dir());
+
+    let filters: Vec<(&str, &str)> = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\.venv-[a-f0-9]{16}", ".venv-[HASH]")])
+        .collect();
+    uv_snapshot!(filters, context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-{project_path_hash}"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features template-project-environment` to disable this warning
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-[HASH]
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // Use multiple template variables together
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-{project_name}-{python_version_minor}"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features template-project-environment` to disable this warning
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-test-project-3.12
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child(".venv-test-project-3.12")
+        .assert(predicate::path::is_dir());
+
+    // Use an unknown variable
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-{foo}"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-{foo}
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child(".venv-{foo}")
+        .assert(predicate::path::is_dir());
+
+    // Request a different Python version
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-{python_version_minor}").arg("-p").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features template-project-environment` to disable this warning
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv-3.11
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    context
+        .temp_dir
+        .child(".venv-3.11")
+        .assert(predicate::path::is_dir());
+
+    // Check that `--preview-features template-project-environment` disables the warning
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, ".venv-{project_name}").arg("--preview-features").arg("template-project-environment"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_active_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
