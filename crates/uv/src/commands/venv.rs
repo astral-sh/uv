@@ -23,7 +23,7 @@ use uv_normalize::DefaultGroups;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_resolver::{ExcludeNewer, FlatIndex, Preferences};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
@@ -289,6 +289,7 @@ pub(crate) async fn venv(
             workspace_cache,
             concurrency,
             preview,
+            Preferences::default(),
         );
 
         // Resolve the seed packages.

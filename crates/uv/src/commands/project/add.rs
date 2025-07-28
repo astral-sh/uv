@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -36,7 +36,7 @@ use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::FlatIndex;
+use uv_resolver::{FlatIndex, Preference, Preferences, ResolverEnvironment};
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
@@ -427,6 +427,33 @@ pub(crate) async fn add(
                 FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
             };
 
+            // Load preferences from the existing lockfile if available.
+            let preferences = if let Ok(Some(lock)) = LockTarget::from(&target).read().await {
+                Preferences::from_iter(
+                    lock.packages()
+                        .iter()
+                        .filter_map(|package| {
+                            Preference::from_lock(
+                                package,
+                                match &target {
+                                    AddTarget::Script(_, _) => Path::new(".")
+                                        .canonicalize()
+                                        .unwrap_or_else(|_| PathBuf::from(".")),
+                                    AddTarget::Project(project, _) => {
+                                        project.workspace().install_path().clone()
+                                    }
+                                }
+                                .as_path(),
+                            )
+                            .transpose()
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                    &ResolverEnvironment::specific(target.interpreter().markers().clone().into()),
+                )
+            } else {
+                Preferences::default()
+            };
+
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
                 &client,
@@ -450,6 +477,7 @@ pub(crate) async fn add(
                 WorkspaceCache::default(),
                 concurrency,
                 preview,
+                preferences,
             );
 
             requirements.extend(

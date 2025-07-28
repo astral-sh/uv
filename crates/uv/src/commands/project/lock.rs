@@ -29,7 +29,7 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_requirements::ExtrasResolver;
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement,
+    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Preferences, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
 use uv_scripts::{Pep723ItemRef, Pep723Script};
@@ -663,6 +663,25 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
+    // We extract preferences before validation because validation may need to build source
+    // distributions to get their metadata.
+    let preferences = existing_lock
+        .as_ref()
+        .map(|existing_lock| -> Result<Preferences, ProjectError> {
+            let locked = read_lock_requirements(existing_lock, target.install_path(), upgrade)?;
+            // Populate the Git resolver.
+            for ResolvedRepositoryReference { reference, sha } in &locked.git {
+                debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
+                state.git().insert(reference.clone(), *sha);
+            }
+            Ok(Preferences::from_iter(
+                locked.preferences,
+                &ResolverEnvironment::universal(vec![]),
+            ))
+        })
+        .transpose()?
+        .unwrap_or_default();
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -685,6 +704,7 @@ async fn do_lock(
         workspace_cache.clone(),
         concurrency,
         preview,
+        preferences,
     );
 
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);

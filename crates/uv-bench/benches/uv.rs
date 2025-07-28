@@ -99,8 +99,8 @@ mod resolver {
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{
-        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
-        ResolverEnvironment, ResolverOutput,
+        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Preferences, PythonRequirement,
+        Resolver, ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
     use uv_workspace::WorkspaceCache;
@@ -195,6 +195,7 @@ mod resolver {
             workspace_cache,
             concurrency,
             Preview::default(),
+            Preferences::default(),
         );
 
         let markers = if universal {

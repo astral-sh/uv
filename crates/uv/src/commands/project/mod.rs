@@ -36,8 +36,8 @@ use uv_python::{
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
-    ResolverOutput,
+    FlatIndex, Lock, OptionsBuilder, Preference, Preferences, PythonRequirement,
+    ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -1761,6 +1761,7 @@ pub(crate) async fn resolve_names(
         workspace_cache.clone(),
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Resolve the unnamed requirements.
@@ -1969,6 +1970,7 @@ pub(crate) async fn resolve_environment(
         workspace_cache,
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Resolve the requirements.
@@ -2107,6 +2109,7 @@ pub(crate) async fn sync_environment(
         workspace_cache,
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Sync the environment.
@@ -2331,6 +2334,7 @@ pub(crate) async fn update_environment(
         workspace_cache,
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Resolve the requirements.

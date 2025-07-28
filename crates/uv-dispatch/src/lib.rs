@@ -32,7 +32,7 @@ use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
+    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder, Preferences,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
@@ -100,6 +100,7 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
+    preferences: Preferences,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -124,6 +125,7 @@ impl<'a> BuildDispatch<'a> {
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: Preview,
+        preferences: Preferences,
     ) -> Self {
         Self {
             client,
@@ -148,6 +150,7 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+            preferences,
         }
     }
 
@@ -229,7 +232,9 @@ impl BuildContext for BuildDispatch<'_> {
         let tags = self.interpreter.tags()?;
 
         let resolver = Resolver::new(
-            Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
+            Manifest::simple(requirements.to_vec())
+                .with_constraints(self.constraints.clone())
+                .with_preferences(self.preferences.clone()),
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer)
                 .index_strategy(self.index_strategy)

@@ -26,7 +26,7 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, Installable, Lock};
+use uv_resolver::{FlatIndex, Installable, Lock, Preference, Preferences, ResolverEnvironment};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
@@ -700,6 +700,17 @@ pub(super) async fn do_sync(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
+    // Extract preferences from the lockfile.
+    let preferences = Preferences::from_iter(
+        target
+            .lock()
+            .packages()
+            .iter()
+            .filter_map(|package| Preference::from_lock(package, target.install_path()).transpose())
+            .collect::<Result<Vec<_>, _>>()?,
+        &ResolverEnvironment::specific(marker_env.clone()),
+    );
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -722,6 +733,7 @@ pub(super) async fn do_sync(
         workspace_cache.clone(),
         concurrency,
         preview,
+        preferences,
     );
 
     let site_packages = SitePackages::from_environment(venv)?;
