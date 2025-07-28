@@ -7,7 +7,9 @@ use uv_bin_install::{Binary, bin_install};
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
+use uv_configuration::{Preview, PreviewFeatures};
 use uv_pep440::Version;
+use uv_warnings::warn_user;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
@@ -24,7 +26,15 @@ pub(crate) async fn format(
     network_settings: NetworkSettings,
     cache: Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
+    // Check if the format feature is in preview
+    if !preview.is_enabled(PreviewFeatures::FORMAT) {
+        warn_user!(
+            "`uv format` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::FORMAT
+        );
+    }
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
 

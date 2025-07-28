@@ -35,6 +35,7 @@ fn format_project() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     ");
 
     // Check that the file was formatted
@@ -82,6 +83,7 @@ fn format_check() -> Result<()> {
     1 file would be reformatted
 
     ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     ");
 
     // Verify the file wasn't modified
@@ -128,6 +130,7 @@ fn format_diff() -> Result<()> {
 
 
     ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     1 file would be reformatted
     "#);
 
@@ -169,6 +172,7 @@ fn format_with_ruff_args() -> Result<()> {
     1 file left unchanged
 
     ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     ");
 
     // Check that the line wasn't wrapped (since we set a long line length)
@@ -214,6 +218,7 @@ fn format_specific_files() -> Result<()> {
     1 file reformatted
 
     ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     ");
 
     let main_content = fs_err::read_to_string(&main_py)?;
@@ -255,18 +260,13 @@ fn format_version_option() -> Result<()> {
     // the version we're using to stderr? Alas there's not a way to get the Ruff version from the
     // format command :)
     uv_snapshot!(context.filters(), context.format().arg("--version").arg("0.8.2"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    1 file reformatted
 
     ----- stderr -----
-    error: unexpected argument '--output-format' found
-
-      tip: to pass '--output-format' as a value, use '-- --output-format'
-
-    Usage: ruff format [OPTIONS] [FILES]...
-
-    For more information, try '--help'.
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     ");
 
     Ok(())
