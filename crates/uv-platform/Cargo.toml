@@ -1,0 +1,34 @@
+[package]
+name = "uv-platform"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-static = { workspace = true }
+uv-fs = { workspace = true }
+uv-platform-tags = { workspace = true }
+
+fs-err = { workspace = true }
+goblin = { workspace = true }
+regex = { workspace = true }
+target-lexicon = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = { workspace = true }
+
+[dev-dependencies]
+indoc = { workspace = true }

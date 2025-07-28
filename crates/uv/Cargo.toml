@@ -38,6 +38,7 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
+uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }

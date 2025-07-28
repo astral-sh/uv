@@ -21,13 +21,13 @@ use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
+use uv_platform::{Arch, Libc, Os};
 use uv_platform_tags::Platform;
 use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
-use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
     Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
