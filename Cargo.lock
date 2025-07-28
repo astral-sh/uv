@@ -4827,20 +4827,22 @@ name = "uv-bin-install"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "async-trait",
- "flate2",
  "futures",
  "reqwest",
  "reqwest-middleware",
- "tar",
+ "target-lexicon",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-util",
  "tracing",
  "url",
  "uv-cache",
  "uv-client",
+ "uv-distribution-filename",
  "uv-extract",
+ "uv-fs",
+ "uv-pep440",
  "uv-platform",
 ]
 

@@ -32,6 +32,8 @@ use crate::python_version::PythonVersion;
 use crate::{
     PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
 };
+use uv_platform::Error as PlatformError;
+use uv_platform::{Arch, Libc, LibcDetectionError, Os};
 
 #[derive(Error, Debug)]
 pub enum Error {

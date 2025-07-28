@@ -15,8 +15,8 @@ use uv_cli::{
     ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
-    ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
+    ResolverInstallerArgs, ToolUpgradeArgs,
     options::{flag, resolver_installer_options, resolver_options},
 };
 use uv_client::Connectivity;

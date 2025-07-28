@@ -22,6 +22,7 @@ use crate::{
     Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference, PythonSource,
     PythonVariant, PythonVersion, downloads,
 };
+use uv_platform::{Arch, Libc, Os};
 
 /// A Python interpreter and accompanying tools.
 #[derive(Clone, Debug)]

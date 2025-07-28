@@ -215,10 +215,10 @@ fn format_multiple_files() -> Result<()> {
     "#})?;
 
     let utils_py = context.temp_dir.child("utils.py");
-    utils_py.write_str(indoc! {r#"
+    utils_py.write_str(indoc! {r"
         def   util():
             return   42
-    "#})?;
+    "})?;
 
     // Run format on both files
     uv_snapshot!(context.filters(), context.format().arg("main.py").arg("utils.py"), @r"
@@ -264,10 +264,10 @@ fn format_directory() -> Result<()> {
     src_dir.create_dir_all()?;
 
     let module_py = src_dir.child("module.py");
-    module_py.write_str(indoc! {r#"
+    module_py.write_str(indoc! {r"
         def   func():
             pass
-    "#})?;
+    "})?;
 
     // Run format on directory
     uv_snapshot!(context.filters(), context.format().arg("src/"), @r"
@@ -344,9 +344,9 @@ fn format_cache_reuse() -> Result<()> {
 
     // Create Python file
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
+    main_py.write_str(indoc! {r"
         def   hello():  pass
-    "#})?;
+    "})?;
 
     // First run - installs Ruff
     uv_snapshot!(context.filters(), context.format().arg("main.py"), @r"
@@ -359,9 +359,9 @@ fn format_cache_reuse() -> Result<()> {
     ");
 
     // Modify the file again
-    main_py.write_str(indoc! {r#"
+    main_py.write_str(indoc! {r"
         def   goodbye():  pass
-    "#})?;
+    "})?;
 
     // Second run - should reuse cached Ruff
     uv_snapshot!(context.filters(), context.format().arg("main.py"), @r"
@@ -390,9 +390,9 @@ fn format_version_option() -> Result<()> {
     "#})?;
 
     let main_py = context.temp_dir.child("main.py");
-    main_py.write_str(indoc! {r#"
+    main_py.write_str(indoc! {r"
         def   hello():  pass
-    "#})?;
+    "})?;
 
     // Run format with specific Ruff version
     uv_snapshot!(context.filters(), context.format().arg("--version").arg("0.8.2").arg("main.py"), @r"

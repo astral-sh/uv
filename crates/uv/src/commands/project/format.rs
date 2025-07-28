@@ -1,16 +1,17 @@
 use std::fmt::Write;
 use std::io::Write as IoWrite;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use tokio::process::Command;
-use tracing::debug;
 
+use uv_bin_install::{Binary, install};
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
-use uv_bin_install::{BinaryDownloader, RuffDownloader};
-use uv_platform::{Arch, Libc, Os};
+use uv_pep440::Version;
+
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
@@ -26,7 +27,6 @@ pub(crate) async fn format(
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    debug!("format command called with check={}, diff={}, files={:?}, version={:?}", check, diff, files, version);
     // Check if we're in offline mode
     if network_settings.connectivity.is_offline() && version.is_none() {
         // In offline mode without a specific version, we can't determine the latest version
@@ -37,40 +37,27 @@ pub(crate) async fn format(
         return Ok(ExitStatus::Failure);
     }
 
-    // Get current platform information
-    debug!("Getting platform information");
-    let os = Os::from_env();
-    let arch = Arch::from_env();
-    let libc = Libc::from_env()?;
-    debug!("Platform: os={}, arch={}, libc={}", os, arch, libc);
+    // Parse version if provided
+    let version = version
+        .as_deref()
+        .map(Version::from_str)
+        .transpose()
+        .context("Invalid version format")?;
 
     // Create HTTP client
-    debug!("Creating HTTP client");
     let client = BaseClientBuilder::new()
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .build();
-    debug!("HTTP client created");
 
     // Download or retrieve Ruff binary from cache
-    debug!("Calling RuffDownloader::download");
-    let downloader = RuffDownloader;
-    let ruff_path = downloader.download(
-        version.as_deref(),
-        &os,
-        &arch,
-        &libc,
-        &client,
-        &cache,
-    )
-    .await
-    .context("Failed to download Ruff")?;
-    debug!("Got ruff binary at: {}", ruff_path.display());
+    let ruff_path = install(Binary::Ruff, version.as_ref(), &client, &cache)
+        .await
+        .context("Failed to install Ruff")?;
 
     // Construct the ruff format command.
-    debug!("Constructing ruff command with binary: {}", ruff_path.display());
     let mut command = Command::new(&ruff_path);
     command.arg("format");
 
@@ -101,17 +88,11 @@ pub(crate) async fn format(
         }
     }
 
-    debug!("Full ruff format command: {:?}", command);
-    debug!("About to execute command");
-
     // Run the ruff format command.
-    debug!("Executing command.output()");
-    let output = command.output().await
-        .map_err(|e| {
-            debug!("Command execution failed: {}", e);
-            anyhow::anyhow!("Failed to run ruff format at {}: {}", ruff_path.display(), e)
-        })?;
-    debug!("Command executed successfully, status: {}", output.status);
+    let output = command
+        .output()
+        .await
+        .context("Failed to run ruff format")?;
 
     // Stream stdout and stderr.
     if !output.stdout.is_empty() {
@@ -123,10 +104,8 @@ pub(crate) async fn format(
 
     // Return the exit status.
     if output.status.success() {
-        debug!("Ruff format completed successfully");
         Ok(ExitStatus::Success)
     } else {
-        debug!("Ruff format failed with non-zero exit code");
         Ok(ExitStatus::Failure)
     }
 }
