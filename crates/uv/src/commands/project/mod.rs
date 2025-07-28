@@ -47,7 +47,9 @@ use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
-use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
+use uv_workspace::{
+    CustomProjectEnvironmentPath, RequiresPythonSources, Workspace, WorkspaceCache,
+};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -903,8 +905,50 @@ impl ProjectInterpreter {
         )
         .await?;
 
+        let client_builder = BaseClientBuilder::default()
+            .retries_from_env()?
+            .connectivity(network_settings.connectivity)
+            .native_tls(network_settings.native_tls)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
+        let reporter = PythonDownloadReporter::single(printer);
+
+        // Locate the Python interpreter to use in the environment.
+        let find_python = || {
+            PythonInstallation::find_or_download(
+                python_request.as_ref(),
+                EnvironmentPreference::OnlySystem,
+                python_preference,
+                python_downloads,
+                &client_builder,
+                cache,
+                Some(&reporter),
+                install_mirrors.python_install_mirror.as_deref(),
+                install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.python_downloads_json_url.as_deref(),
+                preview,
+            )
+        };
+
+        // If we need an interpreter to determine the environment path, discover it _first_.
+        // Otherwise, we defer this case because we may be be able to skip searching for an
+        // interpreter.
+        let python = if CustomProjectEnvironmentPath::from_env()
+            .as_ref()
+            .is_some_and(CustomProjectEnvironmentPath::contains_python_template)
+        {
+            // Locate the Python interpreter to use in the environment.
+            Some(find_python().await?)
+        } else {
+            None
+        };
+
         // Read from the virtual environment first.
-        let root = workspace.venv(active, preview);
+        let root = workspace.venv(
+            active,
+            python.as_ref().map(PythonInstallation::interpreter),
+            preview,
+        );
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
                 match environment_is_usable(
@@ -972,29 +1016,12 @@ impl ProjectInterpreter {
             Err(err) => return Err(err.into()),
         }
 
-        let client_builder = BaseClientBuilder::default()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
-        let reporter = PythonDownloadReporter::single(printer);
-
         // Locate the Python interpreter to use in the environment.
-        let python = PythonInstallation::find_or_download(
-            python_request.as_ref(),
-            EnvironmentPreference::OnlySystem,
-            python_preference,
-            python_downloads,
-            &client_builder,
-            cache,
-            Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
-            install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
-        )
-        .await?;
+        let python = if let Some(python) = python {
+            python
+        } else {
+            find_python().await?
+        };
 
         let managed = python.source().is_managed();
         let implementation = python.implementation();
@@ -1307,7 +1334,7 @@ impl ProjectEnvironment {
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let root = workspace.venv(active, preview);
+                let root = workspace.venv(active, Some(&interpreter), preview);
 
                 // Avoid removing things that are not virtual environments
                 let replace = match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {

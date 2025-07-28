@@ -110,20 +110,6 @@ pub(crate) async fn venv(
         }
     };
 
-    // Determine the default path; either the virtual environment for the project or `.venv`
-    let path = path.unwrap_or(
-        project
-            .as_ref()
-            .and_then(|project| {
-                // Only use the project environment path if we're invoked from the root
-                // This isn't strictly necessary and we may want to change it later, but this
-                // avoids a breaking change when adding project environment support to `uv venv`.
-                (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv(Some(false), preview))
-            })
-            .unwrap_or(PathBuf::from(".venv")),
-    );
-
     // TODO(zanieb): We don't use [`BaseClientBuilder::retries_from_env`] here because it's a pain
     // to map into a miette diagnostic. We should just remove miette diagnostics here, we're not
     // using them elsewhere.
@@ -173,6 +159,23 @@ pub(crate) async fn venv(
         report_interpreter(&python, false, printer)?;
         python.into_interpreter()
     };
+
+    // Determine the default path; either the virtual environment for the project or `.venv`
+    let path = path.unwrap_or(
+        project
+            .as_ref()
+            .and_then(|project| {
+                // Only use the project environment path if we're invoked from the root
+                // This isn't strictly necessary and we may want to change it later, but this
+                // avoids a breaking change when adding project environment support to `uv venv`.
+                (project.workspace().install_path() == project_dir).then(|| {
+                    project
+                        .workspace()
+                        .venv(Some(false), Some(&interpreter), preview)
+                })
+            })
+            .unwrap_or(PathBuf::from(".venv")),
+    );
 
     index_locations.cache_index_credentials();
 
