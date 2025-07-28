@@ -204,11 +204,11 @@ environments = ["sys_platform == 'darwin'"]
 
 ### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
 
-Additional build dependencies for dependencies.
+Additional build dependencies for packages.
 
-This is intended for enabling more packages to be built with
-build-isolation, by adding dependencies that they ambiently
-assume to exist (`setuptools` and `pip` being common).
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages, like,
+`pip`, and do not declare them as build dependencies.
 
 **Default value**: `[]`
 
@@ -1125,11 +1125,11 @@ behave consistently across timezones.
 
 ### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
 
-Additional build dependencies for dependencies.
+Additional build dependencies for packages.
 
-This is intended for enabling more packages to be built with
-build-isolation, by adding dependencies that they ambiently
-assume to exist (`setuptools` and `pip` being common).
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages, like,
+`pip`, and do not declare them as build dependencies.
 
 **Default value**: `[]`
 
@@ -2617,11 +2617,11 @@ Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
 #### [`extra-build-dependencies`](#pip_extra-build-dependencies) {: #pip_extra-build-dependencies }
 <span id="extra-build-dependencies"></span>
 
-Additional build dependencies for dependencies.
+Additional build dependencies for packages.
 
-This is intended for enabling more packages to be built with
-build-isolation, by adding dependencies that they ambiently
-assume to exist (`setuptools` and `pip` being common).
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages, like,
+`pip`, and do not declare them as build dependencies.
 
 **Default value**: `[]`
 

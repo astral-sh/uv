@@ -625,11 +625,11 @@ pub struct ResolverInstallerOptions {
     "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
-    /// Additional build dependencies for dependencies.
+    /// Additional build dependencies for packages.
     ///
-    /// This is intended for enabling more packages to be built with
-    /// build-isolation, by adding dependencies that they ambiently
-    /// assume to exist (`setuptools` and `pip` being common).
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages, like,
+    /// `pip`, and do not declare them as build dependencies.
     #[option(
         default = "[]",
         value_type = "dict",
@@ -1135,11 +1135,11 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
-    /// Additional build dependencies for dependencies.
+    /// Additional build dependencies for packages.
     ///
-    /// This is intended for enabling more packages to be built with
-    /// build-isolation, by adding dependencies that they ambiently
-    /// assume to exist (`setuptools` and `pip` being common).
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages, like,
+    /// `pip`, and do not declare them as build dependencies.
     #[option(
         default = "[]",
         value_type = "dict",
