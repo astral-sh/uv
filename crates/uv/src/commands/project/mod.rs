@@ -904,7 +904,7 @@ impl ProjectInterpreter {
         .await?;
 
         // Read from the virtual environment first.
-        let root = workspace.venv(active);
+        let root = workspace.venv(active, preview);
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
                 match environment_is_usable(
@@ -1307,7 +1307,7 @@ impl ProjectEnvironment {
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let root = workspace.venv(active);
+                let root = workspace.venv(active, preview);
 
                 // Avoid removing things that are not virtual environments
                 let replace = match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {

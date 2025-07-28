@@ -119,7 +119,7 @@ pub(crate) async fn venv(
                 // This isn't strictly necessary and we may want to change it later, but this
                 // avoids a breaking change when adding project environment support to `uv venv`.
                 (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv(Some(false)))
+                    .then(|| project.workspace().venv(Some(false), preview))
             })
             .unwrap_or(PathBuf::from(".venv")),
     );

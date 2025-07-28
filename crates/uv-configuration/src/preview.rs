@@ -14,6 +14,7 @@ bitflags::bitflags! {
         const JSON_OUTPUT = 1 << 2;
         const PYLOCK = 1 << 3;
         const ADD_BOUNDS = 1 << 4;
+        const TEMPLATE_PROJECT_ENVIRONMENT = 1 << 5;
     }
 }
 

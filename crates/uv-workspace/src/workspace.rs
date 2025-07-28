@@ -8,7 +8,8 @@ use glob::{GlobError, PatternError, glob};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
-use uv_configuration::DependencyGroupsWithDefaults;
+use uv_cache_key::cache_digest;
+use uv_configuration::{DependencyGroupsWithDefaults, Preview, PreviewFeatures};
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
@@ -631,16 +632,46 @@ impl Workspace {
     /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
     /// warnings about mismatch between the active environment and the project environment will be
     /// silenced.
-    pub fn venv(&self, active: Option<bool>) -> PathBuf {
+    pub fn venv(&self, active: Option<bool>, preview: Preview) -> PathBuf {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
-        fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
+        fn from_project_environment_variable(
+            workspace: &Workspace,
+            preview: Preview,
+        ) -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
 
             if value.is_empty() {
                 return None;
             }
 
-            let path = PathBuf::from(value);
+            let templated = value
+                .to_string_lossy()
+                .replace(
+                    "{project_path_hash}",
+                    &cache_digest(&workspace.install_path),
+                )
+                .replace(
+                    "{project_name}",
+                    &workspace
+                        .pyproject_toml
+                        .project
+                        .as_ref()
+                        .map(|project| project.name.to_string())
+                        .unwrap_or("none".to_string()),
+                );
+
+            let path = if templated != value.to_string_lossy() {
+                if !preview.is_enabled(PreviewFeatures::TEMPLATE_PROJECT_ENVIRONMENT) {
+                    warn_user_once!(
+                        "Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features {}` to disable this warning",
+                        PreviewFeatures::TEMPLATE_PROJECT_ENVIRONMENT
+                    );
+                }
+                PathBuf::from(templated)
+            } else {
+                PathBuf::from(value)
+            };
+
             if path.is_absolute() {
                 return Some(path);
             }
@@ -668,7 +699,7 @@ impl Workspace {
         }
 
         // Determine the default value
-        let project_env = from_project_environment_variable(self)
+        let project_env = from_project_environment_variable(self, preview)
             .unwrap_or_else(|| self.install_path.join(".venv"));
 
         // Warn if it conflicts with `VIRTUAL_ENV`
