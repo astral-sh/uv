@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::io::Write as IoWrite;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -20,7 +19,6 @@ use crate::settings::NetworkSettings;
 pub(crate) async fn format(
     check: bool,
     diff: bool,
-    files: Vec<PathBuf>,
     args: Option<ExternalCommand>,
     version: Option<String>,
     network_settings: NetworkSettings,
@@ -71,15 +69,9 @@ pub(crate) async fn format(
         command.arg("--diff");
     }
 
-    // Add files or directories to format.
-    if files.is_empty() {
-        // If no files specified, format the current directory.
-        command.arg(".");
-    } else {
-        for file in &files {
-            command.arg(file);
-        }
-    }
+    // Ruff format defaults to the current directory when no files are specified.
+    // If the user wants to format specific files, they can pass them after --
+    // e.g., uv format -- src/main.py
 
     // Add any additional arguments passed after --.
     if let Some(args) = args {

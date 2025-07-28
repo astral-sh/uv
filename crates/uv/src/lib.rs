@@ -2224,7 +2224,6 @@ async fn run_project(
             Box::pin(commands::format(
                 args.check,
                 args.diff,
-                args.files,
                 args.args,
                 args.version,
                 globals.network_settings,

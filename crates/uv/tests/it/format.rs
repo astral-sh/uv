@@ -29,7 +29,7 @@ fn format_project() -> Result<()> {
     "#})?;
 
     // Snapshot the original content
-    let original_content = std::fs::read_to_string(&main_py)?;
+    let original_content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(original_content, @r#"
     import sys
     def   hello():
@@ -38,8 +38,8 @@ fn format_project() -> Result<()> {
         hello(   )
     "#);
 
-    // Run format
-    uv_snapshot!(context.filters(), context.format().arg("main.py"), @r"
+    // Run format (formats current directory by default)
+    uv_snapshot!(context.filters(), context.format(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -49,7 +49,7 @@ fn format_project() -> Result<()> {
     ");
 
     // Check that the file was formatted
-    let formatted_content = std::fs::read_to_string(&main_py)?;
+    let formatted_content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(formatted_content, @r#"
     import sys
 
@@ -86,7 +86,7 @@ fn format_check() -> Result<()> {
     "#})?;
 
     // Run format with --check
-    uv_snapshot!(context.filters(), context.format().arg("--check").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.format().arg("--check"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -97,7 +97,7 @@ fn format_check() -> Result<()> {
     ");
 
     // Verify the file wasn't modified
-    let content = std::fs::read_to_string(&main_py)?;
+    let content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(content, @r#"
     def   hello():
         print(  "Hello, World!"  )
@@ -127,7 +127,7 @@ fn format_diff() -> Result<()> {
     "#})?;
 
     // Run format with --diff
-    uv_snapshot!(context.filters(), context.format().arg("--diff").arg("main.py"), @r#"
+    uv_snapshot!(context.filters(), context.format().arg("--diff"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -145,7 +145,7 @@ fn format_diff() -> Result<()> {
     "#);
 
     // Verify the file wasn't modified
-    let content = std::fs::read_to_string(&main_py)?;
+    let content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(content, @r#"
     def   hello():
         print(  "Hello, World!"  )
@@ -155,7 +155,7 @@ fn format_diff() -> Result<()> {
 }
 
 #[test]
-fn format_with_args() -> Result<()> {
+fn format_with_ruff_args() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -175,7 +175,7 @@ fn format_with_args() -> Result<()> {
     "#})?;
 
     // Run format with custom line length
-    uv_snapshot!(context.filters(), context.format().arg("main.py").arg("--").arg("--line-length").arg("200"), @r"
+    uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py").arg("--line-length").arg("200"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -185,7 +185,7 @@ fn format_with_args() -> Result<()> {
     ");
 
     // Check that the line wasn't wrapped (because we set a high line length)
-    let formatted_content = std::fs::read_to_string(&main_py)?;
+    let formatted_content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(formatted_content, @r#"
     def hello():
         print("This is a very long line that should normally be wrapped by the formatter but we will configure it to have a longer line length")
@@ -195,7 +195,7 @@ fn format_with_args() -> Result<()> {
 }
 
 #[test]
-fn format_multiple_files() -> Result<()> {
+fn format_specific_files() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -220,8 +220,8 @@ fn format_multiple_files() -> Result<()> {
             return   42
     "})?;
 
-    // Run format on both files
-    uv_snapshot!(context.filters(), context.format().arg("main.py").arg("utils.py"), @r"
+    // Run format on specific files using --
+    uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py").arg("utils.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -231,13 +231,13 @@ fn format_multiple_files() -> Result<()> {
     ");
 
     // Check that both files were formatted
-    let main_content = std::fs::read_to_string(&main_py)?;
+    let main_content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(main_content, @r#"
     def main():
         print("Main")
     "#);
 
-    let utils_content = std::fs::read_to_string(&utils_py)?;
+    let utils_content = fs_err::read_to_string(&utils_py)?;
     assert_snapshot!(utils_content, @r#"
     def util():
         return 42
@@ -247,7 +247,7 @@ fn format_multiple_files() -> Result<()> {
 }
 
 #[test]
-fn format_directory() -> Result<()> {
+fn format_specific_directory() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -269,8 +269,8 @@ fn format_directory() -> Result<()> {
             pass
     "})?;
 
-    // Run format on directory
-    uv_snapshot!(context.filters(), context.format().arg("src/"), @r"
+    // Run format on specific directory using --
+    uv_snapshot!(context.filters(), context.format().arg("--").arg("src/"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -280,7 +280,7 @@ fn format_directory() -> Result<()> {
     ");
 
     // Check that the file in the directory was formatted
-    let module_content = std::fs::read_to_string(&module_py)?;
+    let module_content = fs_err::read_to_string(&module_py)?;
     assert_snapshot!(module_content, @r#"
     def func():
         pass
@@ -320,7 +320,7 @@ fn format_no_files() -> Result<()> {
     ");
 
     // Check that the file was formatted
-    let content = std::fs::read_to_string(&main_py)?;
+    let content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(content, @r#"
     def hello():
         print("Hello")
@@ -349,7 +349,7 @@ fn format_cache_reuse() -> Result<()> {
     "})?;
 
     // First run - installs Ruff
-    uv_snapshot!(context.filters(), context.format().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.format(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -364,7 +364,7 @@ fn format_cache_reuse() -> Result<()> {
     "})?;
 
     // Second run - should reuse cached Ruff
-    uv_snapshot!(context.filters(), context.format().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.format(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -395,7 +395,7 @@ fn format_version_option() -> Result<()> {
     "})?;
 
     // Run format with specific Ruff version
-    uv_snapshot!(context.filters(), context.format().arg("--version").arg("0.8.2").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg("0.8.2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

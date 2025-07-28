@@ -1867,7 +1867,6 @@ impl ExportSettings {
 pub(crate) struct FormatSettings {
     pub(crate) check: bool,
     pub(crate) diff: bool,
-    pub(crate) files: Vec<PathBuf>,
     pub(crate) args: Option<ExternalCommand>,
     pub(crate) version: Option<String>,
 }
@@ -1878,7 +1877,6 @@ impl FormatSettings {
         let FormatArgs {
             check,
             diff,
-            files,
             args,
             version,
         } = args;
@@ -1886,7 +1884,6 @@ impl FormatSettings {
         Self {
             check,
             diff,
-            files,
             args,
             version,
         }

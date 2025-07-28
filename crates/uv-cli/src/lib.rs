@@ -4279,11 +4279,6 @@ pub struct FormatArgs {
     #[arg(long)]
     pub diff: bool,
 
-    /// Files or directories to format.
-    ///
-    /// If no files are specified, the current directory is formatted.
-    #[arg(value_name = "FILES")]
-    pub files: Vec<PathBuf>,
 
     /// The version of Ruff to use for formatting.
     ///
@@ -4291,10 +4286,10 @@ pub struct FormatArgs {
     #[arg(long)]
     pub version: Option<String>,
 
-    /// Additional arguments to pass to Ruff.
+    /// Additional arguments to pass to Ruff, including specific files or directories.
     ///
     /// Use `--` to separate these arguments from uv arguments.
-    /// For example: `uv format src/ -- --line-length 100`
+    /// For example: `uv format -- --line-length 100` or `uv format -- src/`
     #[command(subcommand)]
     pub args: Option<ExternalCommand>,
 }
