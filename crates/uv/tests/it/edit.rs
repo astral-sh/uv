@@ -13667,6 +13667,7 @@ fn add_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
     Resolved [N] packages in [TIME]
     ");
 
@@ -13677,6 +13678,7 @@ fn add_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
     Added `child` to workspace members
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
@@ -13697,6 +13699,7 @@ fn add_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
     Added `child` to workspace members
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -13738,6 +13741,7 @@ fn add_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -13776,8 +13780,10 @@ fn add_build_dependencies_respect_locked_versions() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + typing-extensions==4.12.2
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     + typing-extensions==4.10.0
     ");
 
     Ok(())
