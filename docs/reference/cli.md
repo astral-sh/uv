@@ -304,6 +304,7 @@ uv init [OPTIONS] [PATH]
 <p>Implicitly sets <code>--package</code>.</p>
 <p>May also be set with the <code>UV_INIT_BUILD_BACKEND</code> environment variable.</p><p>Possible values:</p>
 <ul>
+<li><code>uv</code>:  Use uv as the project build backend</li>
 <li><code>hatch</code>:  Use <a href="https://pypi.org/project/hatchling">hatchling</a> as the project build backend</li>
 <li><code>flit</code>:  Use <a href="https://pypi.org/project/flit-core">flit-core</a> as the project build backend</li>
 <li><code>pdm</code>:  Use <a href="https://pypi.org/project/pdm-backend">pdm-backend</a> as the project build backend</li>
