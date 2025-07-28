@@ -10498,6 +10498,7 @@ fn no_sources_workspace_discovery() -> Result<()> {
 
 /// Test `--no-sources-package` with pip install to selectively disable sources.
 #[test]
+#[cfg(feature = "git")]
 fn pip_install_no_sources_package() -> Result<()> {
     let context = TestContext::new("3.12");
     context.temp_dir.child("pyproject.toml").write_str(indoc! {

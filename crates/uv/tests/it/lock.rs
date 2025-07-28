@@ -11713,6 +11713,7 @@ fn lock_mismatched_versions() -> Result<()> {
 
 /// Test that `--no-sources-package` allows selectively disabling sources for specific packages.
 #[test]
+#[cfg(feature = "git")]
 fn lock_no_sources_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -11817,6 +11818,7 @@ fn lock_no_sources_package() -> Result<()> {
 
 /// Test that `--no-sources-package` works with multiple packages.
 #[test]
+#[cfg(feature = "git")]
 fn lock_no_sources_package_multiple() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -11934,6 +11936,7 @@ fn lock_no_sources_package_multiple() -> Result<()> {
 
 /// Test that `--no-sources` takes precedence over `--no-sources-package`.
 #[test]
+#[cfg(feature = "git")]
 fn lock_no_sources_with_no_sources_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -12043,6 +12046,7 @@ fn lock_no_sources_with_no_sources_package() -> Result<()> {
 
 /// Test that `UV_NO_SOURCES_PACKAGE` environment variable works.
 #[test]
+#[cfg(feature = "git")]
 fn lock_no_sources_package_env_var() -> Result<()> {
     let context = TestContext::new("3.12");
 

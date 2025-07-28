@@ -6955,6 +6955,7 @@ fn sync_no_sources_missing_member() -> Result<()> {
 
 /// Test `--no-sources-package` with sync to selectively disable sources.
 #[test]
+#[cfg(feature = "git")]
 fn sync_no_sources_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
