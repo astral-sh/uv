@@ -621,8 +621,8 @@ impl ZipDirectoryWriter {
         path: &str,
         executable_bit: bool,
     ) -> Result<Box<dyn Write + 'slf>, Error> {
-        // 644 is the default of the zip crate.
-        let permissions = if executable_bit { 775 } else { 664 };
+        // Set file permissions: 644 (rw-r--r--) for regular files, 755 (rwxr-xr-x) for executables
+        let permissions = if executable_bit { 0o755 } else { 0o644 };
         let options = zip::write::SimpleFileOptions::default()
             .unix_permissions(permissions)
             .compression_method(self.compression);
@@ -634,7 +634,10 @@ impl ZipDirectoryWriter {
 impl DirectoryWriter for ZipDirectoryWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
-        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
+        // Set appropriate permissions for metadata files (644 = rw-r--r--)
+        let options = zip::write::SimpleFileOptions::default()
+            .unix_permissions(0o644)
+            .compression_method(self.compression);
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
 
