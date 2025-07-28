@@ -5113,6 +5113,7 @@ dependencies = [
  "uv-python",
  "uv-settings",
  "uv-static",
+ "uv-warnings",
  "uv-workspace",
  "walkdir",
 ]

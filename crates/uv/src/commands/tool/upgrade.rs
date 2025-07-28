@@ -1,6 +1,6 @@
 use anyhow::Result;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
+use owo_colors::{AnsiColors, OwoColorize};
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use tracing::debug;
@@ -18,6 +18,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
+use uv_warnings::write_error_chain;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -155,20 +156,13 @@ pub(crate) async fn upgrade(
             .into_iter()
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
-            writeln!(
+            write_error_chain(
+                err.context(format!("Failed to upgrade {}", name.green()))
+                    .as_ref(),
                 printer.stderr(),
-                "{}: Failed to upgrade {}",
-                "error".red().bold(),
-                name.green()
+                "error",
+                AnsiColors::Red,
             )?;
-            for err in err.chain() {
-                writeln!(
-                    printer.stderr(),
-                    "  {}: {}",
-                    "Caused by".red().bold(),
-                    err.to_string().trim()
-                )?;
-            }
         }
         return Ok(ExitStatus::Failure);
     }
