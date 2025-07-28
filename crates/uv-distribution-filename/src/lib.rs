@@ -101,7 +101,6 @@ mod tests {
 
     #[test]
     fn wheel_filename_size() {
-        // TODO(konsti): Move the variant to the tag so this type remains small
-        assert_eq!(size_of::<WheelFilename>(), 72);
+        assert_eq!(size_of::<WheelFilename>(), 48);
     }
 }

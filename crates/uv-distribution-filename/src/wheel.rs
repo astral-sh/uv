@@ -6,9 +6,6 @@ use memchr::memchr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 
-use crate::splitter::MemchrSplitter;
-use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
-use crate::{BuildTag, BuildTagError};
 use uv_cache_key::cache_digest;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
@@ -16,6 +13,11 @@ use uv_platform_tags::{
     AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, ParsePlatformTagError,
     PlatformTag, TagCompatibility, Tags,
 };
+use uv_small_str::SmallString;
+
+use crate::splitter::MemchrSplitter;
+use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
+use crate::{BuildTag, BuildTagError};
 
 #[derive(
     Debug,
@@ -34,7 +36,6 @@ pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
     tags: WheelTag,
-    variant: Option<String>,
 }
 
 impl FromStr for WheelFilename {
@@ -75,7 +76,6 @@ impl WheelFilename {
         Self {
             name,
             version,
-            variant: None,
             tags: WheelTag::Small {
                 small: WheelTagSmall {
                     python_tag,
@@ -98,22 +98,12 @@ impl WheelFilename {
 
     /// The wheel filename without the extension.
     pub fn stem(&self) -> String {
-        if let Some(variant) = &self.variant {
-            format!(
-                "{}-{}-{}-{}",
-                self.name.as_dist_info_name(),
-                self.version,
-                self.tags,
-                variant
-            )
-        } else {
-            format!(
-                "{}-{}-{}",
-                self.name.as_dist_info_name(),
-                self.version,
-                self.tags
-            )
-        }
+        format!(
+            "{}-{}-{}",
+            self.name.as_dist_info_name(),
+            self.version,
+            self.tags
+        )
     }
 
     /// Returns a consistent cache key with a maximum length of 64 characters.
@@ -123,12 +113,7 @@ impl WheelFilename {
     pub fn cache_key(&self) -> String {
         const CACHE_KEY_MAX_LEN: usize = 64;
 
-        // Include variant in the cache key if it exists
-        let full = if let Some(variant) = &self.variant {
-            format!("{}-{}-{}", self.version, self.tags, variant)
-        } else {
-            format!("{}-{}", self.version, self.tags)
-        };
+        let full = format!("{}-{}", self.version, self.tags);
 
         if full.len() <= CACHE_KEY_MAX_LEN {
             return full;
@@ -136,11 +121,7 @@ impl WheelFilename {
 
         // Create a digest of the tag string (and variant if it exists) to retain
         // compatibility across platforms, Rust versions, etc.
-        let digest = if let Some(variant) = &self.variant {
-            cache_digest(&format!("{}-{}", self.tags, variant))
-        } else {
-            cache_digest(&format!("{}", self.tags))
-        };
+        let digest = cache_digest(&format!("{}", self.tags));
 
         // Truncate the version, but avoid trailing dots, plus signs, etc. to avoid ambiguity.
         let version_width = CACHE_KEY_MAX_LEN - 1 /* dash */ - 16 /* digest */;
@@ -155,7 +136,10 @@ impl WheelFilename {
 
     /// Return the wheel's variant tag, if present.
     pub fn variant(&self) -> Option<&str> {
-        self.variant.as_deref()
+        match &self.tags {
+            WheelTag::Small { .. } => None,
+            WheelTag::Large { large } => large.variant.as_deref(),
+        }
     }
 
     /// Return the wheel's Python tags.
@@ -244,7 +228,7 @@ impl WheelFilename {
                 // Extract variant from filenames with the format, e.g., `ml_project-0.0.1-py3-none-any-cu128.whl`.
                 // TODO(charlie): Integrate this into the filename parsing; it's just easier to do it upfront
                 // for now.
-                // 7 components: We have both a build tag and a variant_tag
+                // 7 components: We have both a build tag and a variant tag.
                 if let Some(variant_tag) = splitter.next() {
                     if splitter.next().is_some() {
                         return Err(WheelFilenameError::InvalidWheelFileName(
@@ -264,7 +248,7 @@ impl WheelFilename {
                         false,
                     )
                 } else {
-                    // 6 components: Check whether we have a build tag or variant tag
+                    // 6 components: Determine whether we have a build tag or a variant tag.
                     if LanguageTag::from_str(
                         &stem[build_tag_or_python_tag + 1..python_tag_or_abi_tag],
                     )
@@ -278,7 +262,7 @@ impl WheelFilename {
                             &stem[python_tag_or_abi_tag + 1..abi_tag_or_platform_tag],
                             &stem[abi_tag_or_platform_tag + 1..platform_tag],
                             Some(&stem[platform_tag + 1..]),
-                            // Always take the slow path if a build tag is present.
+                            // Always take the slow path if a variant tag is present.
                             false,
                         )
                     } else {
@@ -351,6 +335,7 @@ impl WheelFilename {
                         .map(PlatformTag::from_str)
                         .filter_map(Result::ok)
                         .collect(),
+                    variant: variant.map(SmallString::from),
                     repr: repr.into(),
                 }),
             }
@@ -360,7 +345,6 @@ impl WheelFilename {
             name,
             version,
             tags,
-            variant: variant.map(ToString::to_string),
         })
     }
 }
@@ -563,6 +547,6 @@ mod tests {
         // Variant tags should be included in the cache key.
         let filename =
             WheelFilename::from_str("dummy_project-0.0.1-py3-none-any-36266d4d.whl").unwrap();
-        insta::assert_snapshot!(filename.cache_key(), @"0.0.1-py3-none-any-36266d4d-36266d4d");
+        insta::assert_snapshot!(filename.cache_key(), @"0.0.1-py3-none-any-36266d4d");
     }
 }

@@ -1,7 +1,6 @@
 ---
 source: crates/uv-distribution-filename/src/wheel.rs
 expression: "WheelFilename::from_str(\"dummy_project-0.0.1-1234-py3-none-any-36266d4d.whl\")"
-snapshot_kind: text
 ---
 Ok(
     WheelFilename {
@@ -29,11 +28,11 @@ Ok(
                 platform_tag: [
                     Any,
                 ],
+                variant: Some(
+                    "36266d4d",
+                ),
                 repr: "1234-py3-none-any-36266d4d",
             },
         },
-        variant: Some(
-            "36266d4d",
-        ),
     },
 )
