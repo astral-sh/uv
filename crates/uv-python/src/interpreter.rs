@@ -33,7 +33,6 @@ use crate::{
     Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
     VirtualEnvironment,
 };
-use uv_platform::{Arch, Libc, Os};
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE};

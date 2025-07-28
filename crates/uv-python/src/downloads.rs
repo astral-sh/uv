@@ -37,7 +37,6 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
-use uv_platform::{self as platform, Arch, Libc, Os};
 
 #[derive(Error, Debug)]
 pub enum Error {

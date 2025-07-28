@@ -4279,7 +4279,6 @@ pub struct FormatArgs {
     #[arg(long)]
     pub diff: bool,
 
-
     /// The version of Ruff to use for formatting.
     ///
     /// By default, the latest version of Ruff will be used.

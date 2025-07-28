@@ -91,7 +91,6 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tar = { workspace = true }
-target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
