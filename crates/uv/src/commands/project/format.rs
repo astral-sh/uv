@@ -11,6 +11,7 @@ use uv_pep440::Version;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
+use crate::commands::reporters::BinaryDownloadReporter;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -22,7 +23,7 @@ pub(crate) async fn format(
     version: Option<String>,
     network_settings: NetworkSettings,
     cache: Cache,
-    _printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
@@ -35,9 +36,16 @@ pub(crate) async fn format(
         .build();
 
     // Get the path to Ruff, downloading it if necessary
-    let ruff_path = bin_install(Binary::Ruff, version.as_ref(), &client, &cache)
-        .await
-        .context("Failed to install Ruff")?;
+    let reporter = BinaryDownloadReporter::single(printer);
+    let ruff_path = bin_install(
+        Binary::Ruff,
+        version.as_ref(),
+        &client,
+        &cache,
+        Some(&reporter),
+    )
+    .await
+    .context("Failed to install Ruff")?;
 
     let mut command = Command::new(&ruff_path);
     command.arg("format");

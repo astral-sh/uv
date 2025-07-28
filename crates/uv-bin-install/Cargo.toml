@@ -27,6 +27,7 @@ uv-platform = { workspace = true }
 
 anyhow = { workspace = true }
 futures = { workspace = true }
+reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }

@@ -1,13 +1,16 @@
 //! Binary download and installation utilities for uv.
 //!
-//! This crate provides functionality for downloading and caching binary tools
-//! from various sources (GitHub releases, etc.) for use by uv.
+//! These utilities are specifically for consuming distributions that are _not_ Python packages,
+//! e.g., `ruff` (which does have a Python package, but also has standalone binaries on GitHub).
 
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::{Context, Poll};
 
 use futures::TryStreamExt;
 use thiserror::Error;
+use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use url::Url;
 
@@ -106,12 +109,65 @@ pub enum Error {
     Platform(#[from] uv_platform::Error),
 }
 
+/// Progress reporter for binary downloads.
+pub trait Reporter: Send + Sync {
+    /// Called when a download starts.
+    fn on_download_start(&self, name: &str, version: &Version, size: Option<u64>) -> usize;
+    /// Called when download progress is made.
+    fn on_download_progress(&self, id: usize, inc: u64);
+    /// Called when a download completes.
+    fn on_download_complete(&self, id: usize);
+}
+
+/// An asynchronous reader that reports progress as bytes are read.
+struct ProgressReader<'a, R> {
+    reader: R,
+    index: usize,
+    reporter: &'a dyn Reporter,
+}
+
+impl<'a, R> ProgressReader<'a, R> {
+    /// Create a new [`ProgressReader`] that wraps another reader.
+    fn new(reader: R, index: usize, reporter: &'a dyn Reporter) -> Self {
+        Self {
+            reader,
+            index,
+            reporter,
+        }
+    }
+}
+
+impl<R> AsyncRead for ProgressReader<'_, R>
+where
+    R: AsyncRead + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let before = buf.filled().len();
+        match Pin::new(&mut self.reader).poll_read(cx, buf) {
+            Poll::Ready(Ok(())) => {
+                let after = buf.filled().len();
+                let bytes = after - before;
+                if bytes > 0 {
+                    self.reporter.on_download_progress(self.index, bytes as u64);
+                }
+                Poll::Ready(Ok(()))
+            }
+            poll => poll,
+        }
+    }
+}
+
 /// Install a binary for the given tool.
 pub async fn bin_install(
     binary: Binary,
     version: Option<&Version>,
     client: &BaseClient,
     cache: &Cache,
+    reporter: Option<&dyn Reporter>,
 ) -> Result<PathBuf, Error> {
     let os = Os::from_env();
     let arch = Arch::from_env();
@@ -166,6 +222,13 @@ pub async fn bin_install(
         source: reqwest_middleware::Error::Reqwest(err),
     })?;
 
+    // Get the download size from headers if available
+    let size = response
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|val| val.to_str().ok())
+        .and_then(|val| val.parse::<u64>().ok());
+
     // Stream download directly to extraction
     let mut reader = response
         .bytes_stream()
@@ -173,12 +236,24 @@ pub async fn bin_install(
         .into_async_read()
         .compat();
 
-    stream::archive(&mut reader, ext, temp_dir.path())
-        .await
-        .map_err(|e| Error::Extract {
-            tool: binary.name().to_string(),
-            source: e.into(),
-        })?;
+    if let Some(reporter) = reporter {
+        let id = reporter.on_download_start(binary.name(), &version, size);
+        let mut progress_reader = ProgressReader::new(reader, id, reporter);
+        stream::archive(&mut progress_reader, ext, temp_dir.path())
+            .await
+            .map_err(|e| Error::Extract {
+                tool: binary.name().to_string(),
+                source: e.into(),
+            })?;
+        reporter.on_download_complete(id);
+    } else {
+        stream::archive(&mut reader, ext, temp_dir.path())
+            .await
+            .map_err(|e| Error::Extract {
+                tool: binary.name().to_string(),
+                source: e.into(),
+            })?;
+    }
 
     // Find the binary in the extracted files
     // The archive contains a directory with the platform name
