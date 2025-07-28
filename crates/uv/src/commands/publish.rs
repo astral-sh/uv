@@ -276,7 +276,7 @@ async fn gather_credentials(
 
             write_error_chain(
                 anyhow::Error::from(err)
-                    .context("Trusted publishing error")
+                    .context("Trusted publishing failed")
                     .as_ref(),
                 printer.stderr(),
                 "error",

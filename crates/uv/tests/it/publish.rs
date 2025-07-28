@@ -126,7 +126,7 @@ fn no_credentials() {
         // Emulate CI
         .env(EnvVars::GITHUB_ACTIONS, "true")
         // Just to make sure
-        .env_remove(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN), @r###"
+        .env_remove(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -134,12 +134,13 @@ fn no_credentials() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     Note: Neither credentials nor keyring are configured, and there was an error fetching the trusted publishing token. If you don't want to use trusted publishing, you can ignore this error, but you need to provide credentials.
-    Trusted publishing error: Environment variable ACTIONS_ID_TOKEN_REQUEST_TOKEN not set, is the `id-token: write` permission missing?
+    error: Trusted publishing failed
+      Caused by: Environment variable ACTIONS_ID_TOKEN_REQUEST_TOKEN not set, is the `id-token: write` permission missing?
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Failed to send POST request
       Caused by: Missing credentials for https://test.pypi.org/legacy/
-    "###
+    "
     );
 }
 
