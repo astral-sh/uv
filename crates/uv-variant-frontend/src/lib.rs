@@ -19,7 +19,7 @@ use tokio::sync::Semaphore;
 use tracing::{Instrument, debug, info_span};
 
 pub use crate::error::Error;
-use uv_configuration::{BuildOutput, PreviewMode};
+use uv_configuration::{BuildOutput, Preview};
 use uv_distribution_types::Requirement;
 use uv_fs::{PythonExt, Simplified};
 use uv_python::{Interpreter, PythonEnvironment};
@@ -67,6 +67,7 @@ impl VariantBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        preview: Preview,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
 
@@ -81,7 +82,7 @@ impl VariantBuild {
             false,
             false,
             false,
-            PreviewMode::Disabled, // TODO(konsti)
+            preview,
         )?;
 
         // Resolve and install the provider requirements.

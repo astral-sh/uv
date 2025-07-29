@@ -434,6 +434,7 @@ pub(crate) async fn pip_sync(
             .index_strategy(index_strategy)
             .torch_backend(torch_backend)
             .build_options(build_options.clone())
+            .preview(preview)
             .build();
 
         let resolution = match operations::resolve(

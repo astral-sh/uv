@@ -1,4 +1,4 @@
-use uv_configuration::{BuildOptions, IndexStrategy};
+use uv_configuration::{BuildOptions, IndexStrategy, Preview};
 use uv_pypi_types::SupportedEnvironments;
 use uv_torch::TorchStrategy;
 
@@ -18,6 +18,7 @@ pub struct Options {
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
+    pub preview: Preview,
 }
 
 /// Builder for [`Options`].
@@ -33,6 +34,7 @@ pub struct OptionsBuilder {
     flexibility: Flexibility,
     build_options: BuildOptions,
     torch_backend: Option<TorchStrategy>,
+    preview: Preview,
 }
 
 impl OptionsBuilder {
@@ -111,6 +113,13 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the [`Preview`].
+    #[must_use]
+    pub fn preview(mut self, preview: Preview) -> Self {
+        self.preview = preview;
+        self
+    }
+
     /// Builds the options.
     pub fn build(self) -> Options {
         Options {
@@ -124,6 +133,7 @@ impl OptionsBuilder {
             flexibility: self.flexibility,
             build_options: self.build_options,
             torch_backend: self.torch_backend,
+            preview: self.preview,
         }
     }
 }

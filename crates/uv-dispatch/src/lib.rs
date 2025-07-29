@@ -238,6 +238,7 @@ impl BuildContext for BuildDispatch<'_> {
                 .index_strategy(self.index_strategy)
                 .build_options(self.build_options.clone())
                 .flexibility(Flexibility::Fixed)
+                .preview(self.preview)
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
@@ -542,6 +543,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.build_extra_env_vars.clone(),
             build_output,
             self.concurrency.builds,
+            self.preview,
         )
         .boxed_local()
         .await?;

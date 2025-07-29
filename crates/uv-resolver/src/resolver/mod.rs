@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, Overrides, PreviewFeatures};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
@@ -1277,13 +1277,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // TODO(konsti): Can we make this an option so we don't pay any allocations?
         let mut variant_prioritized_dist_binding = PrioritizedDist::default();
-        let candidate = self.variant_candidate(
-            candidate,
-            index,
-            env,
-            request_sink,
-            &mut variant_prioritized_dist_binding,
-        )?;
+        let candidate = if self.options.preview.is_enabled(PreviewFeatures::VARIANTS) {
+            self.variant_candidate(
+                candidate,
+                index,
+                env,
+                request_sink,
+                &mut variant_prioritized_dist_binding,
+            )?
+        } else {
+            candidate
+        };
 
         let dist = match candidate.dist() {
             CandidateDist::Compatible(dist) => dist,

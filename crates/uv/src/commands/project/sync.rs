@@ -722,6 +722,7 @@ pub(super) async fn do_sync(
             &install_options,
             distribution_database,
             variants_cache.clone(),
+            preview,
         )
         .await?;
 
@@ -774,7 +775,11 @@ pub(super) async fn do_sync(
     // TODO(konsti): Pass this into operations::install
     let distribution_database =
         DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
-    let resolution = resolve_variants(resolution, distribution_database, variants_cache).await?;
+    let resolution = if preview.is_enabled(PreviewFeatures::VARIANTS) {
+        resolve_variants(resolution, distribution_database, variants_cache).await?
+    } else {
+        resolution
+    };
 
     let site_packages = SitePackages::from_environment(venv)?;
 
