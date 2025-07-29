@@ -501,6 +501,7 @@ pub(crate) async fn pip_compile(
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
+        .preview(preview)
         .build();
 
     // Resolve the requirements.

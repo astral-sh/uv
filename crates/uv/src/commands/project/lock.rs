@@ -645,6 +645,7 @@ async fn do_lock(
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .required_environments(required_environments.cloned().unwrap_or_default())
+        .preview(preview)
         .build();
     let hasher = HashStrategy::Generate(HashGeneration::Url);
 

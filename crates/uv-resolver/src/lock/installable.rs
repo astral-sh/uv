@@ -10,7 +10,9 @@ use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::ExtrasSpecificationWithDefaults;
-use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
+use uv_configuration::{
+    BuildOptions, DependencyGroupsWithDefaults, InstallOptions, Preview, PreviewFeatures,
+};
 use uv_distribution::{DistributionDatabase, VariantProviderCache};
 use uv_distribution_types::{Edge, Identifier, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -49,6 +51,7 @@ pub trait Installable<'lock> {
         install_options: &InstallOptions,
         distribution_database: DistributionDatabase<'_, Context>,
         variants_cache: Arc<VariantProviderCache>,
+        preview: Preview,
     ) -> Result<Resolution, LockError> {
         let size_guess = self.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
@@ -473,13 +476,17 @@ pub trait Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
 
-            let variant_properties = determine_properties(
-                package,
-                self.install_path(),
-                &distribution_database,
-                &variants_cache,
-            )
-            .await?;
+            let variant_properties = if preview.is_enabled(PreviewFeatures::VARIANTS) {
+                determine_properties(
+                    package,
+                    self.install_path(),
+                    &distribution_database,
+                    &variants_cache,
+                )
+                .await?
+            } else {
+                Variant::default()
+            };
 
             for dep in deps {
                 if !dep.complexified_marker.evaluate(
