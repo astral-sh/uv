@@ -3066,8 +3066,8 @@ mod tests {
         discovery::{PythonRequest, VersionRequest},
         downloads::{ArchRequest, PythonDownloadRequest},
         implementation::ImplementationName,
-        platform::{Arch, Libc, Os},
     };
+    use uv_platform::{Arch, Libc, Os};
 
     use super::{Error, PythonVariant};
 
@@ -3154,11 +3154,11 @@ mod tests {
                     PythonVariant::Default
                 )),
                 implementation: Some(ImplementationName::CPython),
-                arch: Some(ArchRequest::Explicit(Arch {
-                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
-                    variant: None
-                })),
-                os: Some(Os(target_lexicon::OperatingSystem::Darwin(None))),
+                arch: Some(ArchRequest::Explicit(Arch::new(
+                    Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    None
+                ))),
+                os: Some(Os::new(target_lexicon::OperatingSystem::Darwin(None))),
                 libc: Some(Libc::None),
                 prereleases: None
             })
@@ -3189,10 +3189,10 @@ mod tests {
                     PythonVariant::Default
                 )),
                 implementation: None,
-                arch: Some(ArchRequest::Explicit(Arch {
-                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
-                    variant: None
-                })),
+                arch: Some(ArchRequest::Explicit(Arch::new(
+                    Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    None
+                ))),
                 os: None,
                 libc: None,
                 prereleases: None

@@ -17,6 +17,8 @@ use uv_configuration::{Preview, PreviewFeatures};
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
+use uv_platform::Error as PlatformError;
+use uv_platform::{Arch, Libc, LibcDetectionError, Os};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, windows_python_launcher};
@@ -26,9 +28,6 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::{self, PythonInstallationKey};
-use crate::libc::LibcDetectionError;
-use crate::platform::Error as PlatformError;
-use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::{
     PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
@@ -271,7 +270,7 @@ impl ManagedPythonInstallations {
                     && (arch.supports(installation.key.arch)
                         // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
                         // implement this yet. See https://github.com/astral-sh/uv/pull/9788
-                        || arch.family == installation.key.arch.family)
+                        || arch.family() == installation.key.arch.family())
                     && installation.key.libc == libc
             });
 
@@ -545,7 +544,7 @@ impl ManagedPythonInstallation {
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
         // Construct the path to the `stdlib` directory.
-        let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
+        let stdlib = if self.key.os.is_windows() {
             self.python_dir().join("Lib")
         } else {
             let lib_suffix = self.key.variant.suffix();

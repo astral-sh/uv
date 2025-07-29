@@ -1123,6 +1123,32 @@ behave consistently across timezones.
 
 ---
 
+### [`exclude-newer-package`](#exclude-newer-package) {: #exclude-newer-package }
+
+Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+
+Accepts package-date pairs in a dictionary format.
+
+**Default value**: `None`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    exclude-newer-package = { numpy = "2023-04-01T00:00:00Z", scipy = "2023-04-02T00:00:00Z" }
+    ```
+=== "uv.toml"
+
+    ```toml
+    exclude-newer-package = { numpy = "2023-04-01T00:00:00Z", scipy = "2023-04-02T00:00:00Z" }
+    ```
+
+---
+
 ### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
 
 Additional build dependencies for packages.
@@ -1140,8 +1166,7 @@ additional packages. This is useful for packages that assume the presence of pac
 === "pyproject.toml"
 
     ```toml
-    [tool.uv]
-    [extra-build-dependencies] 
+    [tool.uv.extra-build-dependencies] 
     pytest = ["setuptools"]
     ```
 === "uv.toml"
@@ -2582,6 +2607,34 @@ behave consistently across timezones.
     ```toml
     [pip]
     exclude-newer = "2006-12-02T02:07:43Z"
+    ```
+
+---
+
+#### [`exclude-newer-package`](#pip_exclude-newer-package) {: #pip_exclude-newer-package }
+<span id="exclude-newer-package"></span>
+
+Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+
+Accepts package-date pairs in a dictionary format.
+
+**Default value**: `None`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
     ```
 
 ---

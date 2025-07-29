@@ -2,7 +2,7 @@ use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 
-use uv_python::platform::{Arch, Os};
+use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
 use crate::common::{TestContext, uv_snapshot, venv_bin_path};

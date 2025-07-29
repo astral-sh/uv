@@ -2086,7 +2086,7 @@ fn sync_relative_wheel() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -3641,7 +3641,7 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -3752,7 +3752,7 @@ fn sync_group_self() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4943,7 +4943,7 @@ fn convert_to_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -5003,7 +5003,7 @@ fn convert_to_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -5072,7 +5072,7 @@ fn convert_to_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -5137,7 +5137,7 @@ fn convert_to_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -7032,7 +7032,7 @@ fn sync_dynamic_extra() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -8455,7 +8455,7 @@ fn sync_stale_egg_info() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8562,7 +8562,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8656,7 +8656,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8774,7 +8774,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8956,7 +8956,7 @@ fn sync_git_path_dependency() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -9064,7 +9064,7 @@ fn sync_build_tag() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -9732,7 +9732,7 @@ fn sync_locked_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.11"
 
         [options]
@@ -9837,7 +9837,7 @@ fn sync_locked_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.11"
 
         [options]
@@ -10603,7 +10603,7 @@ fn locked_version_coherence() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -10707,7 +10707,7 @@ fn sync_build_constraints() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -11211,6 +11211,157 @@ fn sync_url_with_query_parameters() -> Result<()> {
     Ok(())
 }
 
+/// Test uv sync with --exclude-newer-package
+#[test]
+fn sync_exclude_newer_package() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+"#,
+    )?;
+
+    // First sync with only the global exclude-newer to show the baseline
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + certifi==2021.10.8
+     + charset-normalizer==2.0.12
+     + idna==3.3
+     + requests==2.27.1
+     + tqdm==4.64.0
+     + urllib3==1.26.9
+    "
+    );
+
+    // Now sync with --exclude-newer-package to allow tqdm to use a newer version
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=2022-09-04T00:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in timestamp cutoff: `global: 2022-04-04T12:00:00Z` vs. `global: 2022-04-04T12:00:00Z, tqdm: 2022-09-04T00:00:00Z`
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - tqdm==4.64.0
+     + tqdm==4.64.1
+    "
+    );
+
+    Ok(())
+}
+
+/// Test exclude-newer-package in pyproject.toml configuration
+#[test]
+fn sync_exclude_newer_package_config() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+
+[tool.uv]
+exclude-newer = "2022-04-04T12:00:00Z"
+"#,
+    )?;
+
+    // First sync with only the global exclude-newer from the config
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + certifi==2021.10.8
+     + charset-normalizer==2.0.12
+     + idna==3.3
+     + requests==2.27.1
+     + tqdm==4.64.0
+     + urllib3==1.26.9
+    "
+    );
+
+    // Now add the package-specific exclude-newer to the config
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+
+[tool.uv]
+exclude-newer = "2022-04-04T12:00:00Z"
+exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
+"#,
+    )?;
+
+    // Sync again with the package-specific override
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in timestamp cutoff: `global: 2022-04-04T12:00:00Z` vs. `global: 2022-04-04T12:00:00Z, tqdm: 2022-09-04T00:00:00Z`
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - tqdm==4.64.0
+     + tqdm==4.64.1
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg(unix)]
 fn read_only() -> Result<()> {
@@ -11379,7 +11530,7 @@ fn conflicting_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -11545,7 +11696,7 @@ fn undeclared_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },

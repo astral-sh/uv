@@ -182,7 +182,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             python_requirement.target(),
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
-            options.exclude_newer,
+            options.exclude_newer.clone(),
             build_context.build_options(),
             build_context.capabilities(),
         );
@@ -366,7 +366,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_indexes,
                                     state.env,
                                     self.current_environment.clone(),
-                                    self.options.exclude_newer,
+                                    Some(&self.options.exclude_newer),
                                     &visited,
                                 ));
                             }
@@ -2537,7 +2537,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
-        exclude_newer: Option<ExcludeNewer>,
+        exclude_newer: Option<&ExcludeNewer>,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2596,7 +2596,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
                             // Don't show versions removed by excluded-newer in hints.
-                            if let Some(exclude_newer) = exclude_newer {
+                            if let Some(exclude_newer) =
+                                exclude_newer.and_then(|en| en.exclude_newer_package(name))
+                            {
                                 let Some(prioritized_dist) = dists.prioritized_dist() else {
                                     continue;
                                 };

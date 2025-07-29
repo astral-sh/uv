@@ -319,6 +319,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_build_isolation_package,
                 extra_build_dependencies,
                 exclude_newer,
+                exclude_newer_package,
                 link_mode,
                 compile_bytecode,
                 no_sources,
@@ -450,6 +451,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if exclude_newer.is_some() {
         masked_fields.push("exclude-newer");
+    }
+    if exclude_newer_package.is_some() {
+        masked_fields.push("exclude-newer-package");
     }
     if link_mode.is_some() {
         masked_fields.push("link-mode");

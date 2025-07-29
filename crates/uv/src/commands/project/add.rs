@@ -466,7 +466,7 @@ pub(crate) async fn add(
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
                 &build_hasher,
-                settings.resolver.exclude_newer,
+                settings.resolver.exclude_newer.clone(),
                 sources,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
