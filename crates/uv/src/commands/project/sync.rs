@@ -26,13 +26,12 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_requirements::RequirementsSpecification;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::pyproject::{ExtraBuildDependencies, Source};
+use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -44,7 +43,7 @@ use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
-    default_dependency_groups, detect_conflicts, script_specification, script_extra_build_requires,
+    default_dependency_groups, detect_conflicts, script_extra_build_requires, script_specification,
     update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
@@ -228,7 +227,7 @@ pub(crate) async fn sync(
             // Parse the requirements from the script.
             let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
                 .unwrap_or_default();
-            let script_extra_build_requires = 
+            let script_extra_build_requires =
                 script_extra_build_requires(Pep723ItemRef::Script(script), &settings.resolver)?;
 
             // Parse the build constraints from the script.

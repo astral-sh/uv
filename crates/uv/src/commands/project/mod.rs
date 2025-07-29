@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
+    PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredRequirement};
@@ -2155,7 +2155,6 @@ pub(crate) async fn sync_environment(
     Ok(venv)
 }
 
-
 /// The result of updating a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
 #[derive(Debug)]
 pub(crate) struct EnvironmentUpdate {
@@ -2554,40 +2553,9 @@ pub(crate) fn script_specification(
         return Ok(None);
     };
 
-    // Determine the working directory for the script.
-    let script_dir = match &script {
-        Pep723ItemRef::Script(script) => std::path::absolute(&script.path)?
-            .parent()
-            .expect("script path has no parent")
-            .to_owned(),
-        Pep723ItemRef::Stdin(..) | Pep723ItemRef::Remote(..) => std::env::current_dir()?,
-    };
-
-    // Collect any `tool.uv.index` from the script.
-    let empty = Vec::default();
-    let script_indexes = match settings.sources {
-        SourceStrategy::Enabled => script
-            .metadata()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.top_level.index.as_deref())
-            .unwrap_or(&empty),
-        SourceStrategy::Disabled => &empty,
-    };
-
-    // Collect any `tool.uv.sources` from the script.
-    let empty = BTreeMap::default();
-    let script_sources = match settings.sources {
-        SourceStrategy::Enabled => script
-            .metadata()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .unwrap_or(&empty),
-        SourceStrategy::Disabled => &empty,
-    };
+    let script_dir = script.directory()?;
+    let script_indexes = script.indexes(settings.sources);
+    let script_sources = script.sources(settings.sources);
 
     let requirements = dependencies
         .iter()
@@ -2657,41 +2625,9 @@ pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
 ) -> Result<uv_distribution::ExtraBuildRequires, ProjectError> {
-
-    // Determine the working directory for the script.
-    let script_dir = match &script {
-        Pep723ItemRef::Script(script) => std::path::absolute(&script.path)?
-            .parent()
-            .expect("script path has no parent")
-            .to_owned(),
-        Pep723ItemRef::Stdin(..) | Pep723ItemRef::Remote(..) => std::env::current_dir()?,
-    };
-
-    // Collect any `tool.uv.index` from the script.
-    let empty = Vec::default();
-    let script_indexes = match settings.sources {
-        SourceStrategy::Enabled => script
-            .metadata()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.top_level.index.as_deref())
-            .unwrap_or(&empty),
-        SourceStrategy::Disabled => &empty,
-    };
-
-    // Collect any `tool.uv.sources` from the script.
-    let empty = BTreeMap::default();
-    let script_sources = match settings.sources {
-        SourceStrategy::Enabled => script
-            .metadata()
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.sources.as_ref())
-            .unwrap_or(&empty),
-        SourceStrategy::Disabled => &empty,
-    };
+    let script_dir = script.directory()?;
+    let script_indexes = script.indexes(settings.sources);
+    let script_sources = script.sources(settings.sources);
 
     // Collect any `tool.uv.extra-build-dependencies` from the script.
     let empty = BTreeMap::default();

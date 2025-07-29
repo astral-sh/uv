@@ -5865,6 +5865,8 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "url",
+ "uv-configuration",
+ "uv-distribution-types",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
