@@ -2155,14 +2155,6 @@ pub(crate) async fn sync_environment(
     Ok(venv)
 }
 
-/// A script specification that includes both requirements and extra build dependencies.
-#[derive(Debug)]
-pub(crate) struct ScriptSpecification {
-    /// The requirements specification for the script.
-    pub(crate) requirements: RequirementsSpecification,
-    /// The extra build dependencies for the script.
-    pub(crate) extra_build_requires: uv_distribution::ExtraBuildRequires,
-}
 
 /// The result of updating a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
 #[derive(Debug)]
@@ -2552,12 +2544,12 @@ pub(crate) fn detect_conflicts(
     Ok(())
 }
 
-/// Determine the [`ScriptSpecification`] for a script.
+/// Determine the [`RequirementsSpecification`] for a script.
 #[allow(clippy::result_large_err)]
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
-) -> Result<Option<ScriptSpecification>, ProjectError> {
+) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
     };
@@ -2652,6 +2644,55 @@ pub(crate) fn script_specification(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    Ok(Some(RequirementsSpecification::from_overrides(
+        requirements,
+        constraints,
+        overrides,
+    )))
+}
+
+/// Determine the extra build requires for a script.
+#[allow(clippy::result_large_err)]
+pub(crate) fn script_extra_build_requires(
+    script: Pep723ItemRef<'_>,
+    settings: &ResolverSettings,
+) -> Result<uv_distribution::ExtraBuildRequires, ProjectError> {
+
+    // Determine the working directory for the script.
+    let script_dir = match &script {
+        Pep723ItemRef::Script(script) => std::path::absolute(&script.path)?
+            .parent()
+            .expect("script path has no parent")
+            .to_owned(),
+        Pep723ItemRef::Stdin(..) | Pep723ItemRef::Remote(..) => std::env::current_dir()?,
+    };
+
+    // Collect any `tool.uv.index` from the script.
+    let empty = Vec::default();
+    let script_indexes = match settings.sources {
+        SourceStrategy::Enabled => script
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.top_level.index.as_deref())
+            .unwrap_or(&empty),
+        SourceStrategy::Disabled => &empty,
+    };
+
+    // Collect any `tool.uv.sources` from the script.
+    let empty = BTreeMap::default();
+    let script_sources = match settings.sources {
+        SourceStrategy::Enabled => script
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .unwrap_or(&empty),
+        SourceStrategy::Disabled => &empty,
+    };
+
     // Collect any `tool.uv.extra-build-dependencies` from the script.
     let empty = BTreeMap::default();
     let script_extra_build_dependencies = script
@@ -2682,17 +2723,9 @@ pub(crate) fn script_specification(
         extra_build_dependencies.insert(name.clone(), lowered_requirements);
     }
 
-    let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies);
-
-    Ok(Some(ScriptSpecification {
-        requirements: RequirementsSpecification::from_overrides(
-            requirements,
-            constraints,
-            overrides,
-        ),
-        extra_build_requires,
-    }))
+    Ok(uv_distribution::ExtraBuildRequires::from_lowered(
+        extra_build_dependencies,
+    ))
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.

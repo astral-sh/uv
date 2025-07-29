@@ -42,7 +42,7 @@ use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, Summary
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    init_script_python_requirement, script_specification,
+    init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
@@ -683,13 +683,7 @@ async fn do_lock(
         )?,
         LockTarget::Script(script) => {
             // Try to get extra build dependencies from the script metadata
-            script_specification(Pep723ItemRef::Script(script), settings)?
-                .map(|spec| spec.extra_build_requires)
-                .unwrap_or_else(|| {
-                    uv_distribution::ExtraBuildRequires::from_lowered(
-                        extra_build_dependencies.clone(),
-                    )
-                })
+            script_extra_build_requires(Pep723ItemRef::Script(script), settings)?
         }
     };
     let build_dispatch = BuildDispatch::new(

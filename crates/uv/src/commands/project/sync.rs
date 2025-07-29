@@ -44,7 +44,8 @@ use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
-    default_dependency_groups, detect_conflicts, script_specification, update_environment,
+    default_dependency_groups, detect_conflicts, script_specification, script_extra_build_requires,
+    update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -225,18 +226,10 @@ pub(crate) async fn sync(
             }
 
             // Parse the requirements from the script.
-            let script_spec =
-                script_specification(Pep723ItemRef::Script(script), &settings.resolver)?;
-            let (spec, script_extra_build_requires) = if let Some(script_spec) = script_spec {
-                (script_spec.requirements, script_spec.extra_build_requires)
-            } else {
-                (
-                    RequirementsSpecification::default(),
-                    uv_distribution::ExtraBuildRequires::from_lowered(
-                        ExtraBuildDependencies::default(),
-                    ),
-                )
-            };
+            let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
+                .unwrap_or_default();
+            let script_extra_build_requires = 
+                script_extra_build_requires(Pep723ItemRef::Script(script), &settings.resolver)?;
 
             // Parse the build constraints from the script.
             let build_constraints = script
@@ -644,11 +637,7 @@ pub(super) async fn do_sync(
                 sources,
                 upgrade: Upgrade::default(),
             };
-            script_specification(Pep723ItemRef::Script(script), &resolver_settings)?
-                .map(|spec| spec.extra_build_requires)
-                .unwrap_or_else(|| uv_distribution::ExtraBuildRequires {
-                    extra_build_dependencies: ExtraBuildDependencies::default(),
-                })
+            script_extra_build_requires(Pep723ItemRef::Script(script), &resolver_settings)?
         }
     };
 
