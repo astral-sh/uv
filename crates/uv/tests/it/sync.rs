@@ -11626,5 +11626,52 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
      - sniffio==1.3.1
     ");
 
+    // Now, we'll set a constraint in the parent project
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv]
+        build-dependency-strategy = "prefer-locked"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // And an incompatible constraint in the child project
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio>3.8,<4.2"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // This should succeed, and use a version within the child constraints
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==3.7.1
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
     Ok(())
 }
