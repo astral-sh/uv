@@ -8,11 +8,11 @@ unset VIRTUAL_ENV
 export RUST_LOG=uv_distribution_types=debug,uv_distribution::distribution_database=debug
 
 # 1. Single platform
-${uv} venv --clear -q -p 3.13 &&  echo "torch" | ${uv} pip compile - --index https://variants-index.wheelnext.dev --no-progress --no-annotate --refresh
+${uv} venv --clear -q -p 3.13 &&  echo "torch" | ${uv} pip compile - --index https://download.pytorch.org/whl/test/variant --no-progress --no-annotate --refresh
 
 export NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION=12.8
 export NV_VARIANT_PROVIDER_FORCE_SM_ARCH=9.0
-${uv} venv --clear -q -p 3.13 && echo "torch" | ${uv} pip compile - --index https://variants-index.wheelnext.dev --no-annotate
+${uv} venv --clear -q -p 3.13 && echo "torch" | ${uv} pip compile - --index https://download.pytorch.org/whl/test/variant --no-annotate
 unset NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION
 unset NV_VARIANT_PROVIDER_FORCE_SM_ARCH
 
