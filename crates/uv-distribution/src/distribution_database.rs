@@ -1370,7 +1370,6 @@ pub async fn resolve_variants<Context: BuildContext>(
             continue;
         };
         let resolved_variants = &dist_resolved_variants[&dist.distribution_id()];
-        dist.distribution_id();
 
         // Select best wheel
         let mut highest_priority_variant_wheel: Option<(usize, Vec<usize>)> = None;

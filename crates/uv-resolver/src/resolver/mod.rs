@@ -1440,7 +1440,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             *variant_prioritized_dist_binding = variant_prioritized_dist;
             candidate.prioritize_best_variant_wheel(variant_prioritized_dist_binding)
         } else {
-            // In universal mode, a variant wheel with an otherwise compatible tag is acceptable .
+            // In universal mode, a variant wheel with an otherwise compatible tag is acceptable.
             candidate.allow_variant_wheels()
         };
         Ok(candidate)

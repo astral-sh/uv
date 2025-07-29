@@ -482,6 +482,13 @@ pub trait Installable<'lock> {
             .await?;
 
             for dep in deps {
+                // TODO(konsti): This is horrible plz no.
+                if seen.iter().any(|(package, _)| {
+                    package.name == dep.package_id.name && *package != &dep.package_id
+                }) {
+                    continue;
+                }
+
                 if !dep.complexified_marker.evaluate(
                     marker_env,
                     &variant_properties,
