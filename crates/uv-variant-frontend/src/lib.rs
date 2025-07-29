@@ -19,7 +19,7 @@ use tokio::sync::Semaphore;
 use tracing::{Instrument, debug, info_span};
 
 pub use crate::error::Error;
-use uv_configuration::{BuildOutput, PreviewMode};
+use uv_configuration::{BuildOutput, Preview};
 use uv_distribution_types::Requirement;
 use uv_fs::{PythonExt, Simplified};
 use uv_python::{Interpreter, PythonEnvironment};
@@ -81,7 +81,7 @@ impl VariantBuild {
             false,
             false,
             false,
-            PreviewMode::Disabled, // TODO(konsti)
+            Preview::default(), // TODO(konsti)
         )?;
 
         // Resolve and install the provider requirements.
