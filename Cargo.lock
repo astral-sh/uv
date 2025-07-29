@@ -6033,7 +6033,7 @@ version = "0.1.0"
 dependencies = [
  "anstream",
  "anyhow",
- "fs-err 3.1.1",
+ "fs-err",
  "indoc",
  "owo-colors",
  "rustc-hash",
