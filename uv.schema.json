@@ -47,7 +47,7 @@
       }
     },
     "build-dependency-strategy": {
-      "description": "The strategy to use when resolving build dependencies for source distributions.\n\n- `latest`: Use the latest compatible version of each build dependency.\n- `prefer-locked`: Prefer the versions pinned in the lockfile, if available.\n\nWhen set to `prefer-locked`, uv will use the locked versions of packages specified in the\nlockfile as preferences when resolving build dependencies during source builds. This helps\nensure that build environments are consistent with the project's resolved dependencies.",
+      "description": "The strategy to use when resolving build dependencies for source distributions.\n\n- `latest`: Use the latest compatible version of each build dependency.\n- `prefer-locked`: Prefer the versions pinned in the lockfile, if available.\n\nWhen set to `prefer-locked`, uv will use the locked versions of packages specified in the\nlockfile as preferences when resolving build dependencies during source builds, such that\nthe locked version of a package will be used as long as it doesn't conflict with version\nconstraints declared by the package being built. This helps ensure that build environments\nare consistent with the project's resolved dependencies.",
       "anyOf": [
         {
           "$ref": "#/definitions/BuildDependencyStrategy"

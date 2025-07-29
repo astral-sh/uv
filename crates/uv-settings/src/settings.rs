@@ -517,8 +517,10 @@ pub struct ResolverInstallerOptions {
     /// - `prefer-locked`: Prefer the versions pinned in the lockfile, if available.
     ///
     /// When set to `prefer-locked`, uv will use the locked versions of packages specified in the
-    /// lockfile as preferences when resolving build dependencies during source builds. This helps
-    /// ensure that build environments are consistent with the project's resolved dependencies.
+    /// lockfile as preferences when resolving build dependencies during source builds, such that
+    /// the locked version of a package will be used as long as it doesn't conflict with version
+    /// constraints declared by the package being built. This helps ensure that build environments
+    /// are consistent with the project's resolved dependencies.
     #[option(
         default = "\"latest\"",
         value_type = "str",
