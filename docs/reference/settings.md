@@ -1139,12 +1139,12 @@ Accepts package-date pairs in a dictionary format.
 
     ```toml
     [tool.uv]
-    exclude-newer-package = { numpy = "2023-04-01T00:00:00Z", scipy = "2023-04-02T00:00:00Z" }
+    exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
     ```
 === "uv.toml"
 
     ```toml
-    exclude-newer-package = { numpy = "2023-04-01T00:00:00Z", scipy = "2023-04-02T00:00:00Z" }
+    exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
     ```
 
 ---
@@ -1166,7 +1166,8 @@ additional packages. This is useful for packages that assume the presence of pac
 === "pyproject.toml"
 
     ```toml
-    [tool.uv.extra-build-dependencies] 
+    [tool.uv]
+    [extra-build-dependencies] 
     pytest = ["setuptools"]
     ```
 === "uv.toml"
