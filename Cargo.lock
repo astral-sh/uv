@@ -4732,6 +4732,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-performance-memory-allocator",
+ "uv-platform",
  "uv-platform-tags",
  "uv-publish",
  "uv-pypi-types",
@@ -5554,6 +5555,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-platform"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "goblin",
+ "indoc",
+ "procfs",
+ "regex",
+ "target-lexicon",
+ "thiserror 2.0.12",
+ "tracing",
+ "uv-fs",
+ "uv-platform-tags",
+ "uv-static",
+]
+
+[[package]]
 name = "uv-platform-tags"
 version = "0.0.1"
 dependencies = [
@@ -5646,14 +5664,12 @@ dependencies = [
  "dunce",
  "fs-err",
  "futures",
- "goblin",
  "indexmap",
  "indoc",
  "insta",
  "itertools 0.14.0",
  "once_cell",
  "owo-colors",
- "procfs",
  "ref-cast",
  "regex",
  "reqwest",
@@ -5687,6 +5703,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform",
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-redacted",

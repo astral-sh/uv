@@ -213,7 +213,12 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -402,7 +407,12 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -592,7 +602,12 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -814,7 +829,12 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -971,7 +991,12 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1174,7 +1199,12 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 X8664UnknownLinuxGnu,
             ),
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1421,7 +1451,12 @@ fn resolve_index_url() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1680,7 +1715,12 @@ fn resolve_index_url() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1894,7 +1934,12 @@ fn resolve_find_links() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2073,7 +2118,12 @@ fn resolve_top_level() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2312,7 +2362,12 @@ fn resolve_top_level() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2534,7 +2589,12 @@ fn resolve_top_level() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2712,7 +2772,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2874,7 +2939,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3036,7 +3106,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3200,7 +3275,12 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3329,6 +3409,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             no_build_isolation: None,
             no_build_isolation_package: None,
             exclude_newer: None,
+            exclude_newer_package: None,
             link_mode: Some(
                 Clone,
             ),
@@ -3358,7 +3439,12 @@ fn resolve_tool() -> anyhow::Result<()> {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
-                exclude_newer: None,
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
@@ -3558,7 +3644,12 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3788,7 +3879,12 @@ fn resolve_both() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4022,7 +4118,12 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4335,7 +4436,12 @@ fn resolve_config_file() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4386,7 +4492,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `build-dependency-strategy`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `build-dependency-strategy`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4590,7 +4696,12 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4755,7 +4866,12 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4939,7 +5055,12 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5184,7 +5305,12 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5408,7 +5534,12 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5638,7 +5769,12 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5863,7 +5999,12 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -6095,7 +6236,12 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -6320,7 +6466,12 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -6489,7 +6640,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -6644,7 +6800,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -6797,7 +6958,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -6952,7 +7118,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -7105,7 +7276,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -7259,7 +7435,12 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: None,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -7376,7 +7557,12 @@ fn preview_features() {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
-                exclude_newer: None,
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
@@ -7479,7 +7665,12 @@ fn preview_features() {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
-                exclude_newer: None,
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
@@ -7582,7 +7773,12 @@ fn preview_features() {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
-                exclude_newer: None,
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
@@ -7685,7 +7881,12 @@ fn preview_features() {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
-                exclude_newer: None,
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
@@ -7788,7 +7989,12 @@ fn preview_features() {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
-                exclude_newer: None,
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],
@@ -7893,7 +8099,12 @@ fn preview_features() {
                 dependency_metadata: DependencyMetadata(
                     {},
                 ),
-                exclude_newer: None,
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
                 fork_strategy: RequiresPython,
                 index_locations: IndexLocations {
                     indexes: [],

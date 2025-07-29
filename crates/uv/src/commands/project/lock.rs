@@ -652,7 +652,7 @@ async fn do_lock(
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
         .fork_strategy(*fork_strategy)
-        .exclude_newer(*exclude_newer)
+        .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .required_environments(required_environments.cloned().unwrap_or_default())
@@ -711,7 +711,7 @@ async fn do_lock(
         *link_mode,
         build_options,
         &build_hasher,
-        *exclude_newer,
+        exclude_newer.clone(),
         *sources,
         workspace_cache.clone(),
         concurrency,
@@ -990,31 +990,37 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
-        match (lock.exclude_newer(), options.exclude_newer) {
-            (None, None) => (),
-            (Some(existing), Some(provided)) if existing == provided => (),
-            (Some(existing), Some(provided)) => {
+        let lock_exclude_newer = lock.exclude_newer();
+        let options_exclude_newer = &options.exclude_newer;
+
+        match (
+            lock_exclude_newer.is_empty(),
+            options_exclude_newer.is_empty(),
+        ) {
+            (true, true) => (),
+            (false, false) if lock_exclude_newer == *options_exclude_newer => (),
+            (false, false) => {
                 let _ = writeln!(
                     printer.stderr(),
                     "Ignoring existing lockfile due to change in timestamp cutoff: `{}` vs. `{}`",
-                    existing.cyan(),
-                    provided.cyan()
+                    lock_exclude_newer.cyan(),
+                    options_exclude_newer.cyan()
                 );
                 return Ok(Self::Unusable(lock));
             }
-            (Some(existing), None) => {
+            (false, true) => {
                 let _ = writeln!(
                     printer.stderr(),
                     "Ignoring existing lockfile due to removal of timestamp cutoff: `{}`",
-                    existing.cyan(),
+                    lock_exclude_newer.cyan(),
                 );
                 return Ok(Self::Unusable(lock));
             }
-            (None, Some(provided)) => {
+            (true, false) => {
                 let _ = writeln!(
                     printer.stderr(),
                     "Ignoring existing lockfile due to addition of timestamp cutoff: `{}`",
-                    provided.cyan()
+                    options_exclude_newer.cyan()
                 );
                 return Ok(Self::Unusable(lock));
             }

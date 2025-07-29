@@ -99,8 +99,8 @@ mod resolver {
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{
-        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Preferences, PythonRequirement,
-        Resolver, ResolverEnvironment, ResolverOutput,
+        ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, Preferences,
+        PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
     use uv_workspace::WorkspaceCache;
@@ -145,7 +145,7 @@ mod resolver {
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
-        let exclude_newer = Some(
+        let exclude_newer = ExcludeNewer::global(
             jiff::civil::date(2024, 9, 1)
                 .to_zoned(jiff::tz::TimeZone::UTC)
                 .unwrap()
@@ -159,7 +159,9 @@ mod resolver {
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
-        let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
+        let options = OptionsBuilder::new()
+            .exclude_newer(exclude_newer.clone())
+            .build();
         let sources = SourceStrategy::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
