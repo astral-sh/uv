@@ -700,7 +700,7 @@ pub(super) async fn do_sync(
         link_mode,
         build_options,
         &build_hasher,
-        exclude_newer,
+        exclude_newer.clone(),
         sources,
         workspace_cache.clone(),
         concurrency,
