@@ -171,7 +171,7 @@ impl<'a> BuildDispatch<'a> {
 impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
 
-    fn interpreter(&self) -> &Interpreter {
+    async fn interpreter(&self) -> &Interpreter {
         self.interpreter
     }
 

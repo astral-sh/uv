@@ -62,8 +62,10 @@ use crate::BuildArena;
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
 
+    // Note: this fuction is async deliberately, because downstream code may need to
+    // run async code to get the interpreter, to resolve the Python version.
     /// Return a reference to the interpreter.
-    fn interpreter(&self) -> &Interpreter;
+    fn interpreter<'a>(&'a self) -> impl Future<Output = &'a Interpreter> + 'a;
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;

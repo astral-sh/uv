@@ -2364,11 +2364,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             let base_python = if cfg!(unix) {
                 self.build_context
                     .interpreter()
+                    .await
                     .find_base_python()
                     .map_err(Error::BaseInterpreter)?
             } else {
                 self.build_context
                     .interpreter()
+                    .await
                     .to_base_python()
                     .map_err(Error::BaseInterpreter)?
             };
@@ -2463,7 +2465,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Ensure that the _installed_ Python version is compatible with the `requires-python`
         // specifier.
         if let Some(requires_python) = source.requires_python() {
-            let installed = self.build_context.interpreter().python_version();
+            let installed = self.build_context.interpreter().await.python_version();
             let target = release_specifiers_to_ranges(requires_python.clone())
                 .bounding_range()
                 .map(|bounding_range| bounding_range.0.cloned())
@@ -2485,11 +2487,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let base_python = if cfg!(unix) {
             self.build_context
                 .interpreter()
+                .await
                 .find_base_python()
                 .map_err(Error::BaseInterpreter)?
         } else {
             self.build_context
                 .interpreter()
+                .await
                 .to_base_python()
                 .map_err(Error::BaseInterpreter)?
         };
