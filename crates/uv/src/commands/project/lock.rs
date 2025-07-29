@@ -32,7 +32,7 @@ use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -162,7 +162,7 @@ pub(crate) async fn lock(
             .await?
             .into_interpreter(),
             LockTarget::Script(script) => ScriptInterpreter::discover(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -683,7 +683,7 @@ async fn do_lock(
         )?,
         LockTarget::Script(script) => {
             // Try to get extra build dependencies from the script metadata
-            script_extra_build_requires(Pep723ItemRef::Script(script), settings)?
+            script_extra_build_requires((*script).into(), settings)?
         }
     };
     let build_dispatch = BuildDispatch::new(

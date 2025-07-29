@@ -27,7 +27,7 @@ use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -167,7 +167,7 @@ pub(crate) async fn sync(
         ),
         SyncTarget::Script(script) => SyncEnvironment::Script(
             ScriptEnvironment::get_or_init(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -225,10 +225,9 @@ pub(crate) async fn sync(
             }
 
             // Parse the requirements from the script.
-            let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
-                .unwrap_or_default();
+            let spec = script_specification(script.into(), &settings.resolver)?.unwrap_or_default();
             let script_extra_build_requires =
-                script_extra_build_requires(Pep723ItemRef::Script(script), &settings.resolver)?;
+                script_extra_build_requires(script.into(), &settings.resolver)?;
 
             // Parse the build constraints from the script.
             let build_constraints = script
@@ -636,7 +635,7 @@ pub(super) async fn do_sync(
                 sources,
                 upgrade: Upgrade::default(),
             };
-            script_extra_build_requires(Pep723ItemRef::Script(script), &resolver_settings)?
+            script_extra_build_requires((*script).into(), &resolver_settings)?
         }
     };
 

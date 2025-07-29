@@ -37,7 +37,7 @@ use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -1500,7 +1500,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if let Some(Pep723Item::Script(script)) = script {
                 commands::python_find_script(
-                    Pep723ItemRef::Script(&script),
+                    (&script).into(),
                     args.show_version,
                     &globals.network_settings,
                     globals.python_preference,

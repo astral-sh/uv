@@ -37,7 +37,7 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
-use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -221,7 +221,7 @@ pub(crate) async fn add(
 
         // Discover the interpreter.
         let interpreter = ScriptInterpreter::discover(
-            Pep723ItemRef::Script(&script),
+            (&script).into(),
             python.as_deref().map(PythonRequest::parse),
             &network_settings,
             python_preference,

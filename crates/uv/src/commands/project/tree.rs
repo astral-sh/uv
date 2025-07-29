@@ -13,7 +13,7 @@ use uv_normalize::DefaultGroups;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -86,7 +86,7 @@ pub(crate) async fn tree(
     } else {
         Some(match target {
             LockTarget::Script(script) => ScriptInterpreter::discover(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 network_settings,
                 python_preference,

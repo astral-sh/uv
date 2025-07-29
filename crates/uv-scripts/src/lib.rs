@@ -149,6 +149,12 @@ impl<'item> From<&'item Pep723Item> for Pep723ItemRef<'item> {
     }
 }
 
+impl<'item> From<&'item Pep723Script> for Pep723ItemRef<'item> {
+    fn from(script: &'item Pep723Script) -> Self {
+        Self::Script(script)
+    }
+}
+
 /// A PEP 723 script, including its [`Pep723Metadata`].
 #[derive(Debug, Clone)]
 pub struct Pep723Script {
