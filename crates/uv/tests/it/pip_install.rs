@@ -9693,6 +9693,25 @@ fn dependency_group() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
+    // all groups at once
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--all-groups"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    ");
+
     Ok(())
 }
 
@@ -11332,11 +11351,12 @@ fn pep_751_multiple_sources() -> Result<()> {
 
 #[test]
 fn pep_751_groups() -> Result<()> {
-    let context = TestContext::new("3.13");
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.13");
 
-    let pylock_toml = context.temp_dir.child("pylock.toml");
-    pylock_toml.write_str(
-        r#"
+        let pylock_toml = context.temp_dir.child("pylock.toml");
+        pylock_toml.write_str(
+            r#"
 lock-version = "1.0"
 requires-python = "==3.13.*"
 environments = [
@@ -11435,9 +11455,13 @@ hashes = {sha256 = "51795362d337720c28bd6c3a26eb33751f2b69590261f599ffb4172ee2c4
 [[tool.pdm.targets]]
 requires_python = "==3.13.*"
         "#,
-    )?;
+        )?;
+
+        Ok(context)
+    }
 
     // By default, only `iniconfig` should be installed, since it's in the default group.
+    let context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")
@@ -11453,7 +11477,8 @@ requires_python = "==3.13.*"
     "
     );
 
-    // With `--extra async`, `anyio` should be installed.
+    // With `--extra async`, `anyio` should be installed along with `iniconfig` (default group).
+    let context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")
@@ -11465,15 +11490,17 @@ requires_python = "==3.13.*"
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.9.0
      + idna==3.10
+     + iniconfig==2.1.0
      + sniffio==1.3.1
     "
     );
 
-    // With `--group test`, `pygments` should be installed.
+    // With `--group test`, only `pygments` should be installed.
+    let context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")
@@ -11491,7 +11518,8 @@ requires_python = "==3.13.*"
     "
     );
 
-    // With `--all-extras`, `blinker` should be installed.
+    // With `--all-extras`, `blinker` and `anyio` should be installed, along with `iniconfig` (default group).
+    let context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")
@@ -11502,13 +11530,38 @@ requires_python = "==3.13.*"
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.9.0
      + blinker==1.9.0
+     + idna==3.10
+     + iniconfig==2.1.0
+     + sniffio==1.3.1
     "
     );
 
-    // `--group pylock.toml:test` should be rejeceted.
+    // With `--all-groups`, both `iniconfig` (default group) and `pygments` (test group) should be
+    // installed.
+    let context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml")
+        .arg("--all-groups"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.1.0
+     + pygments==2.19.2
+    "
+    );
+
+    // `--group pylock.toml:test` should be rejected.
+    let context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")

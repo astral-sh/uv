@@ -473,7 +473,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .collect::<Result<Vec<_>, _>>()?;
             let groups = GroupsSpecification {
                 root: project_dir.to_path_buf(),
-                groups: args.settings.groups,
+                groups: args.settings.groups.clone(),
+                all_groups: args.settings.all_groups,
             };
 
             commands::pip_compile(
@@ -568,7 +569,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .collect::<Result<Vec<_>, _>>()?;
             let groups = GroupsSpecification {
                 root: project_dir.to_path_buf(),
-                groups: args.settings.groups,
+                groups: args.settings.groups.clone(),
+                all_groups: args.settings.all_groups,
             };
 
             commands::pip_sync(
@@ -654,7 +656,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .collect::<Result<Vec<_>, _>>()?;
             let groups = GroupsSpecification {
                 root: project_dir.to_path_buf(),
-                groups: args.settings.groups,
+                groups: args.settings.groups.clone(),
+                all_groups: args.settings.all_groups,
             };
 
             // Special-case: any source trees specified on the command-line are automatically
