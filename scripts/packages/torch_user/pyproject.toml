@@ -6,7 +6,7 @@ dependencies = ["torch"]
 
 [[tool.uv.index]]
 name = "torch-variants"
-url = "https://variants-index.wheelnext.dev/"
+url = "https://download.pytorch.org/whl/test/variant"
 default = true
 
 [build-system]
