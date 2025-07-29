@@ -5197,6 +5197,90 @@ fn no_install_workspace() -> Result<()> {
     Ok(())
 }
 
+/// Avoid syncing local packages when `--no-install-local` is provided.
+#[test]
+fn no_install_local() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "local", "local-editable", "workspace-member"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        local = { path = "./local" }
+        local-editable = { path = "./local-editable", editable = true }
+        workspace-member = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["workspace-member"]
+        "#,
+    )?;
+
+    // Add a local package, local editable package, and then a workspace member
+    // as a dependency.
+    let local = context.temp_dir.child("local");
+    local.create_dir_all()?;
+    let local_pyproject = local.child("pyproject.toml");
+    local_pyproject.write_str(
+        r#"
+        [project]
+        name = "local"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let local_editable = context.temp_dir.child("local-editable");
+    local_editable.create_dir_all()?;
+    let local_editable_pyproject = local_editable.child("pyproject.toml");
+    local_editable_pyproject.write_str(
+        r#"
+        [project]
+        name = "local-editable"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let workspace_member = context.temp_dir.child("workspace-member");
+    workspace_member.create_dir_all()?;
+    let member_pyproject = workspace_member.child("pyproject.toml");
+    member_pyproject.write_str(
+        r#"
+        [project]
+        name = "workspace-member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-local"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 /// Avoid syncing the target package when `--no-install-package` is provided.
 #[test]
 fn no_install_package() -> Result<()> {
