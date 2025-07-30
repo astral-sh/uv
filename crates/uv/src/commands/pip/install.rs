@@ -31,8 +31,8 @@ use uv_python::{
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
-    PythonRequirement, ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, Preferences, PrereleaseMode,
+    PylockToml, PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
@@ -434,6 +434,7 @@ pub(crate) async fn pip_install(
         WorkspaceCache::default(),
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     let (resolution, hasher) = if let Some(pylock) = pylock {

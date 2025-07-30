@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    Reinstall, Upgrade,
+    BuildDependencyStrategy, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, Preview, PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -29,7 +29,7 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_requirements::ExtrasResolver;
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement,
+    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Preferences, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
 use uv_scripts::{Pep723ItemRef, Pep723Script};
@@ -440,7 +440,18 @@ async fn do_lock(
         upgrade,
         build_options,
         sources,
+        build_dependency_strategy,
     } = settings;
+
+    // Warn if using build-dependency-strategy without preview
+    if *build_dependency_strategy == BuildDependencyStrategy::PreferLocked
+        && !preview.is_enabled(PreviewFeatures::PREFER_LOCKED_BUILDS)
+    {
+        warn_user_once!(
+            "The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::PREFER_LOCKED_BUILDS
+        );
+    }
 
     // Collect the requirements, etc.
     let members = target.members();
@@ -663,6 +674,26 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
+    // Extract preferences and git refs from the existing lockfile if available for build dispatch.
+    // We extract preferences before validation because validation may need to build source
+    // distributions to get their metadata, and those builds should use the lockfile's preferences
+    // for accuracy. While the lockfile hasn't been validated yet, using its preferences is still
+    // better than using defaults, as most lockfiles are valid and this gives more accurate results.
+    let preferences = match build_dependency_strategy {
+        BuildDependencyStrategy::PreferLocked => existing_lock
+            .as_ref()
+            .map(|existing_lock| -> Result<Preferences, ProjectError> {
+                Ok(Preferences::from_iter(
+                    read_lock_requirements(existing_lock, target.install_path(), upgrade)?
+                        .preferences,
+                    &ResolverEnvironment::universal(vec![]),
+                ))
+            })
+            .transpose()?
+            .unwrap_or_default(),
+        BuildDependencyStrategy::Latest => Preferences::default(),
+    };
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -685,6 +716,7 @@ async fn do_lock(
         workspace_cache.clone(),
         concurrency,
         preview,
+        preferences,
     );
 
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);

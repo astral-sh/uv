@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageConfigSettings,
-    PackageNameSpecifier, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing,
+    BuildDependencyStrategy, ConfigSettings, IndexStrategy, KeyringProviderType,
+    PackageConfigSettings, PackageNameSpecifier, RequiredVersion, TargetTriple, TrustedHost,
+    TrustedPublishing,
 };
 use uv_distribution_types::{
     Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
@@ -377,6 +378,7 @@ pub struct ResolverOptions {
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
     pub no_sources: Option<bool>,
+    pub build_dependency_strategy: Option<BuildDependencyStrategy>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -513,6 +515,25 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
+    /// The strategy to use when resolving build dependencies for source distributions.
+    ///
+    /// - `latest`: Use the latest compatible version of each build dependency.
+    /// - `prefer-locked`: Prefer the versions pinned in the lockfile, if available.
+    ///
+    /// When set to `prefer-locked`, uv will use the locked versions of packages specified in the
+    /// lockfile as preferences when resolving build dependencies during source builds, such that
+    /// the locked version of a package will be used as long as it doesn't conflict with version
+    /// constraints declared by the package being built. This helps ensure that build environments
+    /// are consistent with the project's resolved dependencies.
+    #[option(
+        default = "\"latest\"",
+        value_type = "str",
+        example = r#"
+            build-dependency-strategy = "prefer-locked"
+        "#,
+        possible_values = true
+    )]
+    pub build_dependency_strategy: Option<BuildDependencyStrategy>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -1720,6 +1741,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             no_sources: value.no_sources,
+            build_dependency_strategy: value.build_dependency_strategy,
         }
     }
 }
@@ -1857,6 +1879,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
+            build_dependency_strategy: None,
         }
     }
 }
@@ -1911,6 +1934,7 @@ pub struct OptionsWire {
     no_build_package: Option<Vec<PackageName>>,
     no_binary: Option<bool>,
     no_binary_package: Option<Vec<PackageName>>,
+    build_dependency_strategy: Option<BuildDependencyStrategy>,
 
     // #[serde(flatten)]
     // install_mirror: PythonInstallMirrors,
@@ -2002,6 +2026,7 @@ impl From<OptionsWire> for Options {
             no_build_package,
             no_binary,
             no_binary_package,
+            build_dependency_strategy,
             pip,
             cache_keys,
             override_dependencies,
@@ -2049,6 +2074,7 @@ impl From<OptionsWire> for Options {
                 find_links,
                 index_strategy,
                 keyring_provider,
+                build_dependency_strategy,
                 resolution,
                 prerelease,
                 fork_strategy,

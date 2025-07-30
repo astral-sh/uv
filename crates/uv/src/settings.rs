@@ -21,11 +21,11 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
-    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, ProjectBuildBackend,
-    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
-    Upgrade, VersionControlSystem,
+    BuildDependencyStrategy, BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun,
+    EditableMode, ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy,
+    InstallOptions, KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview,
+    ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl, Requirement};
 use uv_install_wheel::LinkMode;
@@ -2720,6 +2720,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
     pub(crate) sources: SourceStrategy,
+    pub(crate) build_dependency_strategy: &'a BuildDependencyStrategy,
 }
 
 /// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
@@ -2744,6 +2745,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: SourceStrategy,
     pub(crate) upgrade: Upgrade,
+    pub(crate) build_dependency_strategy: BuildDependencyStrategy,
 }
 
 impl ResolverSettings {
@@ -2808,6 +2810,7 @@ impl From<ResolverOptions> for ResolverSettings {
                 NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
                 NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
             ),
+            build_dependency_strategy: value.build_dependency_strategy.unwrap_or_default(),
         }
     }
 }
@@ -2901,6 +2904,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                         .map(Requirement::from)
                         .collect(),
                 ),
+                build_dependency_strategy: value.build_dependency_strategy.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
             reinstall: Reinstall::from_args(
@@ -3069,6 +3073,7 @@ impl PipSettings {
             no_build_package: top_level_no_build_package,
             no_binary: top_level_no_binary,
             no_binary_package: top_level_no_binary_package,
+            build_dependency_strategy: _,
             exclude_newer_package: top_level_exclude_newer_package,
         } = top_level;
 
@@ -3309,6 +3314,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             reinstall: &settings.reinstall,
             build_options: &settings.resolver.build_options,
             sources: settings.resolver.sources,
+            build_dependency_strategy: &settings.resolver.build_dependency_strategy,
         }
     }
 }

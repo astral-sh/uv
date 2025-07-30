@@ -36,8 +36,8 @@ use uv_python::{
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
-    ResolverOutput,
+    FlatIndex, Lock, OptionsBuilder, Preference, Preferences, PythonRequirement,
+    ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -1696,6 +1696,7 @@ pub(crate) async fn resolve_names(
                 resolution: _,
                 sources,
                 upgrade: _,
+                build_dependency_strategy: _,
             },
         compile_bytecode: _,
         reinstall: _,
@@ -1761,6 +1762,7 @@ pub(crate) async fn resolve_names(
         workspace_cache.clone(),
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Resolve the unnamed requirements.
@@ -1850,6 +1852,7 @@ pub(crate) async fn resolve_environment(
         upgrade: _,
         build_options,
         sources,
+        build_dependency_strategy: _,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -1969,6 +1972,7 @@ pub(crate) async fn resolve_environment(
         workspace_cache,
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Resolve the requirements.
@@ -2034,6 +2038,7 @@ pub(crate) async fn sync_environment(
         reinstall,
         build_options,
         sources,
+        build_dependency_strategy: _,
     } = settings;
 
     let client_builder = BaseClientBuilder::new()
@@ -2107,6 +2112,7 @@ pub(crate) async fn sync_environment(
         workspace_cache,
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Sync the environment.
@@ -2198,6 +2204,7 @@ pub(crate) async fn update_environment(
                 resolution,
                 sources,
                 upgrade,
+                build_dependency_strategy: _,
             },
         compile_bytecode,
         reinstall,
@@ -2331,6 +2338,7 @@ pub(crate) async fn update_environment(
         workspace_cache,
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Resolve the requirements.

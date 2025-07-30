@@ -208,6 +208,7 @@ pub(crate) async fn tree(
                 upgrade: _,
                 build_options: _,
                 sources: _,
+                build_dependency_strategy: _,
             } = &settings;
 
             let capabilities = IndexCapabilities::default();

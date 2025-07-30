@@ -35,7 +35,7 @@ use uv_python::{
     VersionRequest,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{ExcludeNewer, FlatIndex};
+use uv_resolver::{ExcludeNewer, FlatIndex, Preferences};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
@@ -205,6 +205,7 @@ async fn build_impl(
         upgrade: _,
         build_options,
         sources,
+        build_dependency_strategy: _,
     } = settings;
 
     let client_builder = BaseClientBuilder::default()
@@ -581,6 +582,7 @@ async fn build_package(
         workspace_cache,
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     prepare_output_directory(&output_dir).await?;

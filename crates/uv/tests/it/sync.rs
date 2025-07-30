@@ -11537,3 +11537,292 @@ fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that build dependencies respect locked versions from the lockfile.
+#[test]
+fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // Create a build backend that checks for a specific version of anyio
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        if not expected_version:
+            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Create a project that will resolve to a non-latest version of `anyio`
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    // Now add the child dependency with `build-dependency-strategy = "prefer-locked"`
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv]
+        build-dependency-strategy = "prefer-locked"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Ensure our build backend is checking the version correctly
+    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 3.0 but got 4.0.0
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // The child should be built with anyio 4.0
+    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.0.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Change the constraints on anyio
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv]
+        build-dependency-strategy = "prefer-locked"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // The child should be rebuilt with anyio 3.7 on reinstall
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // With preview enabled, there's no warning
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features").arg("prefer-locked-builds")
+        .arg("--reinstall-package").arg("child")
+        .env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Now test with build-dependency-strategy = "latest" to show it uses latest anyio
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv]
+        build-dependency-strategy = "latest"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // With latest strategy, it should use the latest compatible anyio (4.3) for builds
+    // even though the project requires anyio<3.8
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child")
+        .env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Similarly, `prefer-locked` without a dependency on `anyio` should still use the latest
+    // anyio version
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv]
+        build-dependency-strategy = "prefer-locked"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child")
+        .env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - anyio==3.7.1
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     - idna==3.6
+     - sniffio==1.3.1
+    ");
+
+    // Now, we'll set a constraint in the parent project
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv]
+        build-dependency-strategy = "prefer-locked"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // And an incompatible constraint in the child project
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio>3.8,<4.2"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // This should succeed, and use a version within the child constraints
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features prefer-locked-builds` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==3.7.1
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}

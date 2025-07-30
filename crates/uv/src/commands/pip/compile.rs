@@ -39,8 +39,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
-    ResolverEnvironment,
+    InMemoryIndex, OptionsBuilder, Preferences, PrereleaseMode, PylockToml, PythonRequirement,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
@@ -490,6 +490,7 @@ pub(crate) async fn pip_compile(
         WorkspaceCache::default(),
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     let options = OptionsBuilder::new()

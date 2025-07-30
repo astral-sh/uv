@@ -27,8 +27,8 @@ use uv_python::{
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
-    PythonRequirement, ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, Preferences, PrereleaseMode,
+    PylockToml, PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
@@ -369,6 +369,7 @@ pub(crate) async fn pip_sync(
         WorkspaceCache::default(),
         concurrency,
         preview,
+        Preferences::default(),
     );
 
     // Determine the set of installed packages.

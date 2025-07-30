@@ -17,9 +17,9 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, Preview,
-    PreviewFeatures, SourceStrategy,
+    BuildDependencyStrategy, Concurrency, Constraints, DependencyGroups,
+    DependencyGroupsWithDefaults, DevMode, DryRun, EditableMode, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, InstallOptions, Preview, PreviewFeatures, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -27,7 +27,7 @@ use uv_distribution_types::{
     Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, VersionId,
 };
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
@@ -36,7 +36,7 @@ use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
-use uv_resolver::FlatIndex;
+use uv_resolver::{FlatIndex, Preference, Preferences, ResolverEnvironment};
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
@@ -427,6 +427,35 @@ pub(crate) async fn add(
                 FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
             };
 
+            // Load preferences from the existing lockfile if available and if configured to do so.
+            let preferences = match settings.resolver.build_dependency_strategy {
+                BuildDependencyStrategy::PreferLocked => {
+                    if !preview.is_enabled(PreviewFeatures::PREFER_LOCKED_BUILDS) {
+                        warn_user_once!(
+                            "The `build-dependency-strategy` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                            PreviewFeatures::PREFER_LOCKED_BUILDS
+                        );
+                    }
+                    if let Ok(Some(lock)) = LockTarget::from(&target).read().await {
+                        Preferences::from_iter(
+                            lock.packages()
+                                .iter()
+                                .filter_map(|package| {
+                                    Preference::from_lock(package, target.install_path())
+                                        .transpose()
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
+                            &ResolverEnvironment::specific(
+                                target.interpreter().markers().clone().into(),
+                            ),
+                        )
+                    } else {
+                        Preferences::default()
+                    }
+                }
+                BuildDependencyStrategy::Latest => Preferences::default(),
+            };
+
             // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
                 &client,
@@ -450,6 +479,7 @@ pub(crate) async fn add(
                 WorkspaceCache::default(),
                 concurrency,
                 preview,
+                preferences,
             );
 
             requirements.extend(
@@ -1315,6 +1345,14 @@ impl AddTarget {
         match self {
             Self::Script(_, interpreter) => interpreter,
             Self::Project(_, venv) => venv.interpreter(),
+        }
+    }
+
+    /// Return the parent path of the target.
+    pub(crate) fn install_path(&self) -> &Path {
+        match self {
+            Self::Script(script, _) => script.path.parent().unwrap_or(&*CWD),
+            Self::Project(project, _) => project.root(),
         }
     }
 
