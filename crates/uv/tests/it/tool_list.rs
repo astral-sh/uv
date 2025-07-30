@@ -89,8 +89,8 @@ fn tool_list_paths_windows() {
     exit_code: 0
     ----- stdout -----
     black v24.2.0 ([TEMP_DIR]\tools\black)
-    - black.exe ([TEMP_DIR]\bin\black.exe)
-    - blackd.exe ([TEMP_DIR]\bin\blackd.exe)
+    - black ([TEMP_DIR]\bin\black.exe)
+    - blackd ([TEMP_DIR]\bin\blackd.exe)
 
     ----- stderr -----
     "###);
