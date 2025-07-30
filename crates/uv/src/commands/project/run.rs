@@ -1803,8 +1803,15 @@ fn copy_entrypoint(
 ' '''
 "#,
         )
-        // Or an absolute path shebang
+        // Or, an absolute path shebang
         .or_else(|| contents.strip_prefix(&format!("#!{}\n", previous_executable.display())))
+        // If the previous executable ends with `python3`, check for a shebang with `python` too
+        .or_else(|| {
+            previous_executable
+                .to_str()
+                .and_then(|path| path.strip_suffix("3"))
+                .and_then(|path| contents.strip_prefix(&format!("#!{path}\n")))
+        })
     else {
         // If it's not a Python shebang, we'll skip it
         trace!(
