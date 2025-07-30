@@ -1,12 +1,14 @@
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
-use crate::resolver::provider::{MetadataResponse, VersionsResponse};
 use rustc_hash::FxHasher;
-use uv_distribution_types::{GlobalVersionId, IndexUrl, VersionId};
+
+use uv_distribution::VariantProviderCache;
+use uv_distribution_types::{IndexUrl, VersionId};
 use uv_normalize::PackageName;
 use uv_once_map::OnceMap;
-use uv_variants::resolved_variants::ResolvedVariants;
+
+use crate::resolver::provider::{MetadataResponse, VersionsResponse};
 
 /// In-memory index of package metadata.
 #[derive(Default, Clone)]
@@ -24,7 +26,7 @@ struct SharedInMemoryIndex {
     distributions: FxOnceMap<VersionId, Arc<MetadataResponse>>,
 
     /// The resolved variant priorities for a package version.
-    variant_priorities: FxOnceMap<GlobalVersionId, Arc<ResolvedVariants>>,
+    variant_priorities: VariantProviderCache,
 }
 
 pub(crate) type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -46,7 +48,7 @@ impl InMemoryIndex {
     }
 
     /// Returns a reference to the variant priorities map.
-    pub fn variant_priorities(&self) -> &FxOnceMap<GlobalVersionId, Arc<ResolvedVariants>> {
+    pub fn variant_priorities(&self) -> &VariantProviderCache {
         &self.0.variant_priorities
     }
 }

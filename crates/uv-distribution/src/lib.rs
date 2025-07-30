@@ -1,7 +1,4 @@
-pub use distribution_database::{
-    DistributionDatabase, HttpArchivePointer, LocalArchivePointer, VariantProviderCache,
-    resolve_variants,
-};
+pub use distribution_database::{DistributionDatabase, HttpArchivePointer, LocalArchivePointer};
 pub use download::LocalWheel;
 pub use error::Error;
 pub use index::{BuiltWheelIndex, RegistryWheelIndex};
@@ -11,6 +8,7 @@ pub use metadata::{
 };
 pub use reporter::Reporter;
 pub use source::prune;
+pub use variants::{VariantProviderCache, resolve_variants};
 
 mod archive;
 mod distribution_database;
@@ -20,3 +18,4 @@ mod index;
 mod metadata;
 mod reporter;
 mod source;
+mod variants;

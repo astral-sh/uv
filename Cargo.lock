@@ -5213,6 +5213,7 @@ dependencies = [
  "uv-git-types",
  "uv-metadata",
  "uv-normalize",
+ "uv-once-map",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",

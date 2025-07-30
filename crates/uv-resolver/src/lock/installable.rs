@@ -12,7 +12,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::ExtrasSpecificationWithDefaults;
 use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
 use uv_distribution::{DistributionDatabase, VariantProviderCache};
-use uv_distribution_types::{Edge, Identifier, Node, Resolution, ResolvedDist};
+use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerVariantsUniversal;
 use uv_platform_tags::Tags;
@@ -48,7 +48,7 @@ pub trait Installable<'lock> {
         build_options: &BuildOptions,
         install_options: &InstallOptions,
         distribution_database: DistributionDatabase<'_, Context>,
-        variants_cache: Arc<VariantProviderCache>,
+        variants_cache: &VariantProviderCache,
     ) -> Result<Resolution, LockError> {
         let size_guess = self.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
@@ -477,7 +477,7 @@ pub trait Installable<'lock> {
                 package,
                 self.install_path(),
                 &distribution_database,
-                &variants_cache,
+                variants_cache,
             )
             .await?;
 
@@ -621,21 +621,20 @@ async fn determine_properties<Context: BuildContext>(
         // When selecting a non-variant wheel, all variant markers evaluate to false.
         return Ok(Variant::default());
     };
-    let resolved_variants = if let Some(resolved_variants) =
-        variants_cache.get_resolved_variants(&variants_json.resource_id())
-    {
-        resolved_variants.clone()
-    } else {
-        // Fetch variants_json and run providers
+    let resolved_variants = if variants_cache.register(variants_json.version_id()) {
         let resolved_variants = distribution_database
             .fetch_and_query_variants(&variants_json)
             .await
             .expect("TODO(konsti)");
 
-        variants_cache
-            .insert_resolved_variants(variants_json.resource_id(), resolved_variants.clone());
-
+        let resolved_variants = Arc::new(resolved_variants);
+        variants_cache.done(variants_json.version_id(), resolved_variants.clone());
         resolved_variants
+    } else {
+        variants_cache
+            .wait(&variants_json.version_id())
+            .await
+            .expect("missing value for registered task")
     };
 
     // Select best wheel

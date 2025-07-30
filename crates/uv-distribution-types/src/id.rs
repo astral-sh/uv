@@ -2,12 +2,12 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
-
-use crate::IndexUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::HashDigest;
 use uv_redacted::DisplaySafeUrl;
+
+use crate::IndexUrl;
 
 /// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
 /// or a URL (e.g., `git+https://github.com/psf/black`).

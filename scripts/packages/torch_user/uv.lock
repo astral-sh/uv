@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = "==3.13.*"
 resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: cuda_version_lower_bound :: 12.6' in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.8' not in variant_properties and 'nvidia :: cuda_version_lower_bound :: 12.9' not in variant_properties",

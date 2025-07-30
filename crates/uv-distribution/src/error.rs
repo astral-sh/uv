@@ -74,6 +74,10 @@ pub enum Error {
         filename: Version,
         metadata: Version,
     },
+    #[error(
+        "Package {name} has no matching wheel for the current platform, but has the following variants: {variants}"
+    )]
+    WheelVariantMismatch { name: PackageName, variants: String },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
     #[error("Failed to read metadata: `{}`", _0.user_display())]
