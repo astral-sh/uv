@@ -13,8 +13,8 @@ use uv_variants::resolved_variants::ResolvedVariants;
 use uv_variants::{VariantPriority, score_variant};
 
 use crate::{
-    File, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RegistryVariantsJson, ResolvedDistRef,
+    File, IndexUrl, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RegistryVariantsJson, ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -95,6 +95,16 @@ impl CompatibleDist<'_> {
             CompatibleDist::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
             CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
             CompatibleDist::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
+        }
+    }
+
+    /// Return the index URL for the distribution, if any.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. } => Some(&sdist.index),
+            CompatibleDist::CompatibleWheel { wheel, .. } => Some(&wheel.index),
+            CompatibleDist::IncompatibleWheel { sdist, .. } => Some(&sdist.index),
         }
     }
 
@@ -461,8 +471,18 @@ impl PrioritizedDist {
         self.0.variants_json = Some(variant_json);
     }
 
+    /// Return the variants JSON for the distribution, if any.
     pub fn variants_json(&self) -> Option<&RegistryVariantsJson> {
         self.0.variants_json.as_ref()
+    }
+
+    /// Return the index URL for the distribution, if any.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        self.0
+            .source
+            .as_ref()
+            .map(|(sdist, _)| &sdist.index)
+            .or_else(|| self.0.wheels.first().map(|(wheel, _)| &wheel.index))
     }
 
     /// Return the highest-priority distribution for the package version, if any.

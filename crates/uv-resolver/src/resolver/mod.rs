@@ -24,10 +24,10 @@ use uv_configuration::{Constraints, Overrides};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
-    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PrioritizedDist, PythonRequirementKind,
-    RegistryVariantsJson, RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist,
-    VersionId, VersionOrUrlRef,
+    GlobalVersionId, IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities,
+    IndexLocations, IndexMetadata, IndexUrl, InstalledDist, Name, PrioritizedDist,
+    PythonRequirementKind, RegistryVariantsJson, RemoteSource, Requirement, ResolvedDist,
+    ResolvedDistRef, SourceDist, VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -618,7 +618,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     next_id,
                     next_package,
                     &version,
-                    index.map(IndexMetadata::url),
                     &state.pins,
                     &state.fork_urls,
                     &state.env,
@@ -1279,7 +1278,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut variant_prioritized_dist_binding = PrioritizedDist::default();
         let candidate = self.variant_candidate(
             candidate,
-            index,
             env,
             request_sink,
             &mut variant_prioritized_dist_binding,
@@ -1389,7 +1387,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn variant_candidate<'prioritized>(
         &self,
         candidate: Candidate<'prioritized>,
-        index: Option<&IndexUrl>,
         env: &ResolverEnvironment,
         request_sink: &Sender<Request>,
         variant_prioritized_dist_binding: &'prioritized mut PrioritizedDist,
@@ -1403,30 +1400,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 return Ok(candidate);
             };
 
-            // No variants.json, no variants
+            // No `variants.json`, no variants.
             // TODO(konsti): Be more lenient, e.g. parse the wheel itself?
             let Some(variants_json) = prioritized_dist.variants_json() else {
                 return Ok(candidate);
             };
 
+            // If the distribution is not indexed, we can't resolve variants.
+            let Some(index) = prioritized_dist.index() else {
+                return Ok(candidate);
+            };
+
             // Query the host for the applicable features and properties.
-            let version_id =
-                VersionId::NameVersion(candidate.name().clone(), candidate.version().clone());
-            if self
-                .index
-                .variant_priorities()
-                .register((version_id.clone(), index.cloned()))
-            {
-                request_sink.blocking_send(Request::Variants(
-                    version_id.clone(),
-                    index.cloned(),
-                    variants_json.clone(),
-                ))?;
+            let version_id = GlobalVersionId::new(
+                VersionId::NameVersion(candidate.name().clone(), candidate.version().clone()),
+                index.clone(),
+            );
+            if self.index.variant_priorities().register(version_id.clone()) {
+                request_sink
+                    .blocking_send(Request::Variants(version_id.clone(), variants_json.clone()))?;
             }
-            let resolved_variants = self
-                .index
-                .variant_priorities()
-                .wait_blocking(&(version_id, index.cloned()));
+
+            let resolved_variants = self.index.variant_priorities().wait_blocking(&version_id);
             let Some(resolved_variants) = &resolved_variants else {
                 panic!("We have variants, why didn't they resolve?");
             };
@@ -1762,7 +1757,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
-        index_url: Option<&IndexUrl>,
         pins: &FilePins,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
@@ -1774,7 +1768,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             id,
             package,
             version,
-            index_url,
             pins,
             fork_urls,
             env,
@@ -1801,7 +1794,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
-        index_url: Option<&IndexUrl>,
         pins: &FilePins,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
@@ -1856,15 +1848,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If we're resolving for a specific environment, use the host variants, otherwise resolve
                 // for all variants.
-                let variant = Self::variant_properties(
-                    name,
-                    version,
-                    &version_id,
-                    index_url,
-                    pins,
-                    env,
-                    in_memory_index,
-                );
+                let variant = Self::variant_properties(name, version, pins, env, in_memory_index);
 
                 // If the package does not exist in the registry or locally, we cannot fetch its dependencies
                 if self.dependency_mode.is_transitive()
@@ -2043,8 +2027,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn variant_properties(
         name: &PackageName,
         version: &Version,
-        version_id: &VersionId,
-        index_url: Option<&IndexUrl>,
         pins: &FilePins,
         env: &ResolverEnvironment,
         in_memory_index: &InMemoryIndex,
@@ -2054,23 +2036,30 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if env.marker_environment().is_none() {
             return Variant::default();
         }
-        let Some(resolved_variants) = in_memory_index
-            .variant_priorities()
-            .get(&(version_id.clone(), index_url.cloned()))
-        else {
-            return Variant::default();
-        };
 
-        let filename = pins
-            .get(name, version)
-            .expect("Selected dist has pin")
-            .wheel_filename();
-        let Some(filename) = filename else {
+        // Grab the pinned distribution for the given name and version.
+        let dist = pins.get(name, version).expect("Selected dist has pin");
+
+        let Some(filename) = dist.wheel_filename() else {
             // TODO(konsti): Handle installed dists too
             return Variant::default();
         };
+
         let Some(variant_label) = filename.variant() else {
-            warn!("Wheel variant has no associated variants: {filename}");
+            return Variant::default();
+        };
+
+        let Some(index) = dist.index() else {
+            warn!("Wheel variant has no index: {filename}");
+            return Variant::default();
+        };
+
+        let version_id = GlobalVersionId::new(
+            VersionId::NameVersion(name.clone(), version.clone()),
+            index.clone(),
+        );
+
+        let Some(resolved_variants) = in_memory_index.variant_priorities().get(&version_id) else {
             return Variant::default();
         };
 
@@ -2485,13 +2474,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
                 Some(Response::Variants {
                     version_id,
-                    index_url,
                     resolved_variants,
                 }) => {
                     trace!("Received variant metadata for: {version_id}");
                     self.index
                         .variant_priorities()
-                        .done((version_id, index_url), Arc::new(resolved_variants));
+                        .done(version_id, Arc::new(resolved_variants));
                 }
                 None => {}
             }
@@ -2696,13 +2684,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     Ok(None)
                 }
             }
-            Request::Variants(version_id, index_url, variants_json) => self
+            Request::Variants(version_id, variants_json) => self
                 .fetch_and_query_variants(variants_json, provider)
                 .await
                 .map(|resolved_variants| {
                     Some(Response::Variants {
                         version_id,
-                        index_url,
                         resolved_variants,
                     })
                 }),
@@ -3518,7 +3505,7 @@ pub(crate) enum Request {
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
     /// Resolve the variants for a package
-    Variants(VersionId, Option<IndexUrl>, RegistryVariantsJson),
+    Variants(GlobalVersionId, RegistryVariantsJson),
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {
@@ -3573,12 +3560,8 @@ impl Display for Request {
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
-            Self::Variants(version_id, index_url, _) => {
-                if let Some(index_url) = index_url {
-                    write!(f, "Variants {version_id} {index_url}")
-                } else {
-                    write!(f, "Variants {version_id}")
-                }
+            Self::Variants(version_id, _) => {
+                write!(f, "Variants {version_id}")
             }
         }
     }
@@ -3601,8 +3584,7 @@ enum Response {
     },
     /// The returned variant compatibility.
     Variants {
-        version_id: VersionId,
-        index_url: Option<IndexUrl>,
+        version_id: GlobalVersionId,
         resolved_variants: ResolvedVariants,
     },
 }
