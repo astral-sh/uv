@@ -20,7 +20,6 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
@@ -48,10 +47,10 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
-    with_executables_from: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
+    entrypoints: &[PackageName],
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
@@ -605,30 +604,10 @@ pub(crate) async fn install(
         }
     };
 
-    let entrypoints = with_executables_from
-        .iter()
-        .map(|source| match source {
-            RequirementsSource::Package(name) => {
-                if let RequirementsTxtRequirement::Named(requirement) = name {
-                    Ok(requirement.name.clone())
-                } else {
-                    bail!(
-                        "Expected a named requirement, but got: {}",
-                        source.to_string().cyan()
-                    )
-                }
-            }
-            _ => bail!(
-                "Expected a package requirement, but got: {}",
-                source.to_string().cyan()
-            ),
-        })
-        .collect::<Result<Vec<_>>>()?;
-
     finalize_tool_install(
         &environment,
         package_name,
-        &entrypoints,
+        entrypoints,
         &installed_tools,
         &options,
         force || invalid_tool_receipt,

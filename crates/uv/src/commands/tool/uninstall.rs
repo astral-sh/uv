@@ -1,4 +1,3 @@
-use std::env::consts::EXE_SUFFIX;
 use std::fmt::Write;
 
 use anyhow::{Result, bail};
@@ -149,11 +148,7 @@ async fn do_uninstall(
         }
         entrypoints
     };
-    entrypoints.sort_unstable_by(|a, b| {
-        let a_trimmed = a.name.trim_end_matches(EXE_SUFFIX);
-        let b_trimmed = b.name.trim_end_matches(EXE_SUFFIX);
-        a_trimmed.cmp(b_trimmed)
-    });
+    entrypoints.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
     if entrypoints.is_empty() {
         // If we removed at least one dangling environment, there's no need to summarize.

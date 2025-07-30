@@ -3880,9 +3880,6 @@ fn tool_install_with_executables_from() {
     Installed 1 executable: ansible-community
     ");
 
-    // NOTE(lucab): on Windows `name` values contain an `.exe` suffix,
-    // which is hidden in the snapshot but results in a different sorting.
-    #[cfg(not(target_family = "windows"))]
     insta::with_settings!({
         filters => context.filters(),
     }, {

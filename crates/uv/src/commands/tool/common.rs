@@ -3,10 +3,8 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::{
     collections::{BTreeSet, Bound},
-    env::consts::EXE_SUFFIX,
     ffi::OsString,
     fmt::Write,
-    iter,
     path::Path,
 };
 use tracing::{debug, warn};
@@ -202,7 +200,7 @@ pub(crate) fn finalize_tool_install(
         .collect::<BTreeSet<_>>()
         // Then install the root package last
         .into_iter()
-        .chain(iter::once(name));
+        .chain(std::iter::once(name));
 
     for package in ordered_packages {
         if package == name {
@@ -312,8 +310,8 @@ pub(crate) fn finalize_tool_install(
                 fs_err::copy(src, &target).context("Failed to install entrypoint")?;
             }
 
-            names.insert(name.trim_end_matches(EXE_SUFFIX).to_string());
-            let tool_entry = ToolEntrypoint::new(name, target, package.to_string());
+            let tool_entry = ToolEntrypoint::new(&name, target, package.to_string());
+            names.insert(tool_entry.name.clone());
             installed_entrypoints.push(tool_entry);
         }
 

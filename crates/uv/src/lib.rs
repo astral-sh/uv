@@ -1225,22 +1225,34 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
-            let with_executables_from = args
-                .with_executables_from
-                .iter()
-                .map(|pkg| RequirementsSource::from_package(pkg))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let mut requirements = Vec::new();
+            let mut entrypoints = Vec::with_capacity(args.with_executables_from.len());
+            let mut requirements = Vec::with_capacity(
+                args.with.len()
+                    + args.with_editable.len()
+                    + args.with_requirements.len()
+                    + args.with_executables_from.len(),
+            );
             for pkg in args.with {
                 requirements.push(RequirementsSource::from_with_package_argument(&pkg)?);
             }
-            requirements.extend_from_slice(&with_executables_from);
             for pkg in args.with_editable {
                 requirements.push(RequirementsSource::from_editable(&pkg)?);
             }
             for path in args.with_requirements {
                 requirements.push(RequirementsSource::from_requirements_file(path)?);
+            }
+            for pkg in &args.with_executables_from {
+                let source = RequirementsSource::from_with_package_argument(pkg)?;
+                let RequirementsSource::Package(RequirementsTxtRequirement::Named(requirement)) =
+                    &source
+                else {
+                    bail!(
+                        "Expected a named package for `--with-executables-from`, but got: {}",
+                        source.to_string().cyan()
+                    )
+                };
+                entrypoints.push(requirement.name.clone());
+                requirements.push(source);
             }
 
             let constraints = args
@@ -1264,10 +1276,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 args.from,
                 &requirements,
-                &with_executables_from,
                 &constraints,
                 &overrides,
                 &build_constraints,
+                &entrypoints,
                 args.python,
                 args.install_mirrors,
                 args.force,

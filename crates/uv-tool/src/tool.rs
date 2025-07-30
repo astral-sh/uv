@@ -346,7 +346,10 @@ impl Tool {
 
 impl ToolEntrypoint {
     /// Create a new [`ToolEntrypoint`].
-    pub fn new(name: String, install_path: PathBuf, from: String) -> Self {
+    pub fn new(name: &str, install_path: PathBuf, from: String) -> Self {
+        let name = name
+            .trim_end_matches(std::env::consts::EXE_SUFFIX)
+            .to_string();
         Self {
             name,
             install_path,
