@@ -210,9 +210,6 @@ pub(crate) async fn export(
         Err(err) => return Err(err.into()),
     };
 
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&lock, &extras, &groups)?;
-
     // Identify the installation target.
     let target = match &target {
         ExportTarget::Project(VirtualProject::Project(project)) => {
@@ -261,6 +258,9 @@ pub(crate) async fn export(
             lock: &lock,
         },
     };
+
+    // Validate that the set of requested extras and development groups are compatible.
+    detect_conflicts(&target, &extras, &groups)?;
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;

@@ -42,7 +42,7 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictPackage, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
+    ConflictKind, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitUrl,
 };
 use uv_redacted::DisplaySafeUrl;
@@ -865,11 +865,12 @@ impl Lock {
                 list.push(each_element_on_its_line_array(set.iter().map(|item| {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(item.package().to_string()));
-                    match item.conflict() {
-                        ConflictPackage::Extra(extra) => {
+                    match item.kind() {
+                        ConflictKind::Project => {}
+                        ConflictKind::Extra(extra) => {
                             table.insert("extra", Value::from(extra.to_string()));
                         }
-                        ConflictPackage::Group(group) => {
+                        ConflictKind::Group(group) => {
                             table.insert("group", Value::from(group.to_string()));
                         }
                     }
@@ -2946,6 +2947,21 @@ impl Package {
     pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
         &self.metadata.dependency_groups
     }
+
+    /// Returns the dependencies of the package.
+    pub fn dependencies(&self) -> &[Dependency] {
+        &self.dependencies
+    }
+
+    /// Returns the optional dependencies of the package.
+    pub fn optional_dependencies(&self) -> &BTreeMap<ExtraName, Vec<Dependency>> {
+        &self.optional_dependencies
+    }
+
+    /// Returns the resolved PEP 735 dependency groups of the package.
+    pub fn resolved_dependency_groups(&self) -> &BTreeMap<GroupName, Vec<Dependency>> {
+        &self.dependency_groups
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
@@ -4528,7 +4544,7 @@ impl TryFrom<WheelWire> for Wheel {
 
 /// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-struct Dependency {
+pub struct Dependency {
     package_id: PackageId,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
@@ -4612,6 +4628,16 @@ impl Dependency {
         }
 
         table
+    }
+
+    /// Returns the package name of this dependency.
+    pub fn package_name(&self) -> &PackageName {
+        &self.package_id.name
+    }
+
+    /// Returns the extras specified on this dependency.
+    pub fn extra(&self) -> &BTreeSet<ExtraName> {
+        &self.extra
     }
 }
 
