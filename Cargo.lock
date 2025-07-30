@@ -5646,6 +5646,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "url",
+ "uv-cache-key",
  "uv-distribution-filename",
  "uv-git-types",
  "uv-normalize",
