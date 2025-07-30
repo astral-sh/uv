@@ -106,6 +106,51 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static LINUX_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static LINUX_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static LINUX_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static WINDOWS_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static WINDOWS_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static WINDOWS_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static MAC_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static MAC_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static MAC_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -336,14 +381,61 @@ impl Lock {
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
             let platform_tags = wheel.filename.platform_tags();
+
+            if platform_tags.iter().all(PlatformTag::is_any) {
+                return true;
+            }
+
             if platform_tags.iter().all(PlatformTag::is_linux) {
-                if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
                     return false;
                 }
             }
 
             if platform_tags.iter().all(PlatformTag::is_windows) {
-                if graph.graph[node_index]
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)
                 {
@@ -352,7 +444,28 @@ impl Lock {
             }
 
             if platform_tags.iter().all(PlatformTag::is_macos) {
-                if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
                     return false;
                 }
             }
