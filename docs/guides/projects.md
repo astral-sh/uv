@@ -43,6 +43,17 @@ $ uv run main.py
 Hello from hello-world!
 ```
 
+## Working on an existing project
+
+If you start working on a project that is already managed by uv, run `uv sync`. A virtual
+environment will be created (if one does not already exist) and the
+[default](../concepts/projects/dependencies.md#default-groups) dependencies from the `uv.lock` file
+will be installed.
+
+Due to the automatic locking and synchronisation in uv, this also applies to other commands such as
+`uv run` or `uv lock`. See the [locking and syncing documentation](../concepts/projects/sync.md) for
+details.
+
 ## Project structure
 
 A project consists of a few important parts that work together and allow uv to manage your project.
