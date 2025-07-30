@@ -109,15 +109,21 @@ pub(crate) fn create(
                 }
                 OnExisting::Remove => {
                     debug!("Removing existing {name} due to `--clear`");
-                    remove_virtualenv(location)?;
-                    fs::create_dir_all(location)?;
+                    let location = location
+                        .canonicalize()
+                        .unwrap_or_else(|_| location.to_path_buf());
+                    remove_virtualenv(&location)?;
+                    fs::create_dir_all(&location)?;
                 }
                 OnExisting::Fail => {
                     match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
-                            remove_virtualenv(location)?;
-                            fs::create_dir_all(location)?;
+                            let location = location
+                                .canonicalize()
+                                .unwrap_or_else(|_| location.to_path_buf());
+                            remove_virtualenv(&location)?;
+                            fs::create_dir_all(&location)?;
                         }
                         Some(false) => {
                             let hint = format!(
