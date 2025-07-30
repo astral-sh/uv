@@ -4804,7 +4804,7 @@ fn lock_requires_python_wheels() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.12.*'` vs `python_full_version == '3.11.*'`
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.12.*'` vs `python_full_version == '3.11.*'`
     Resolved 2 packages in [TIME]
     ");
 
@@ -16338,7 +16338,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Using request timeout of [TIME]
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
     DEBUG No workspace root found, using project root
-    DEBUG Ignoring existing lockfile due to mismatched requirements for: `project==0.1.0`
+    DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
       Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None }), format: Simple }), conflict: None }, origin: None }}
     DEBUG Solving with installed Python version: 3.12.[X]
@@ -28365,16 +28365,16 @@ fn lock_invalid_fork_markers() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: Ignoring existing lockfile due to fork markers not covering the supported environments: `(python_full_version >= '3.8' and python_full_version < '3.10') or (python_full_version >= '3.8' and platform_python_implementation == 'CPython')` vs `python_full_version >= '3.8'`
+    warning: Resolving despite existing lockfile due to fork markers not covering the supported environments: `(python_full_version >= '3.8' and python_full_version < '3.10') or (python_full_version >= '3.8' and platform_python_implementation == 'CPython')` vs `python_full_version >= '3.8'`
     Resolved 2 packages in [TIME]
     Updated idna v3.10 -> v3.6
-    "###);
+    ");
 
     // Check that the lockfile got updated and we don't show the warning anymore.
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -28671,7 +28671,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.13.2 interpreter at: [PYTHON-3.13.2]
-    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.2'`
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version == '3.13.0'` vs `python_full_version == '3.13.2'`
     Resolved 3 packages in [TIME]
     ");
 
