@@ -87,6 +87,8 @@ version_files = [
   "docs/guides/integration/github.md",
   "docs/guides/integration/aws-lambda.md",
   "docs/concepts/build-backend.md",
+  "docs/concepts/projects/init.md",
+  "docs/concepts/projects/workspaces.md",
 ]
 
 [tool.mypy]
