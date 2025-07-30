@@ -30042,6 +30042,103 @@ fn lock_circular_path_dependency_explicit_index() -> Result<()> {
 }
 
 #[test]
+fn lock_android() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-06-01T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "deltachat-rpc-server",
+        ]
+
+        [tool.uv]
+        environments = ["sys_platform == 'android'"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'android'",
+        ]
+        supported-markers = [
+            "sys_platform == 'android'",
+        ]
+
+        [options]
+        exclude-newer = "2025-06-01T00:00:00Z"
+
+        [[package]]
+        name = "deltachat-rpc-server"
+        version = "1.159.5"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/c4/59/fd0dee6b1c950ba5c93e02ed6692990bffd6e843710f0c1b547de661534b/deltachat_rpc_server-1.159.5.tar.gz", hash = "sha256:7e015f9f8a8400133648971049032851c560729c6e9807f865a3f026b74b13a0", size = 1471, upload-time = "2025-05-14T17:35:33.428Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c0/47/97e67319025afedb8cc5fc4e8e3779ef407836dbe2c111eeb403a7a83e8c/deltachat_rpc_server-1.159.5-py3-none-android_21_arm64_v8a.whl", hash = "sha256:3fb08568e12984cb2fc85409d6bc5bfa5b965b834c5d45fecd2f63ad3893396c", size = 10495646, upload-time = "2025-05-14T17:35:07.189Z" },
+            { url = "https://files.pythonhosted.org/packages/1d/93/d470afef50ddd4b101d78401f8aaf5adbaa7c27a984a151017bc3c449171/deltachat_rpc_server-1.159.5-py3-none-android_21_armeabi_v7a.whl", hash = "sha256:560178de3f61dc9ef1c69b7d9bd238b45b07b98331d85d074d8652babac9de49", size = 8821626, upload-time = "2025-05-14T17:35:09.645Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "deltachat-rpc-server", marker = "sys_platform == 'android'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "deltachat-rpc-server" }]
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn lock_required_intersection() -> Result<()> {
     let context = TestContext::new("3.12");
 

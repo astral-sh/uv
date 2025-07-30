@@ -87,6 +87,10 @@ static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static ANDROID_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("sys_platform == 'android'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 =
         MarkerTree::from_str("platform_machine == 'aarch64' or platform_machine == 'arm64' or platform_machine == 'ARM64'")
@@ -148,6 +152,21 @@ static MAC_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 });
 static MAC_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *MAC_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static ANDROID_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static ANDROID_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
     marker.and(*X86_MARKERS);
     marker
 });
@@ -466,6 +485,36 @@ impl Lock {
                         return false;
                     }
                 } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_android) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ANDROID_MARKERS)
+                {
                     return false;
                 }
             }

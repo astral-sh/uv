@@ -139,6 +139,11 @@ impl PlatformTag {
         matches!(self, Self::Macos { .. })
     }
 
+    /// Returns `true` if the platform is Android-only.
+    pub fn is_android(&self) -> bool {
+        matches!(self, Self::Android { .. })
+    }
+
     /// Returns `true` if the platform is Windows-only.
     pub fn is_windows(&self) -> bool {
         matches!(
