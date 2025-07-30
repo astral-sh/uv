@@ -14,6 +14,7 @@ bitflags::bitflags! {
         const JSON_OUTPUT = 1 << 2;
         const PYLOCK = 1 << 3;
         const ADD_BOUNDS = 1 << 4;
+        const TEMPLATE_PROJECT_ENVIRONMENT = 1 << 5;
     }
 }
 
@@ -28,7 +29,15 @@ impl PreviewFeatures {
             Self::JSON_OUTPUT => "json-output",
             Self::PYLOCK => "pylock",
             Self::ADD_BOUNDS => "add-bounds",
-            _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
+            Self::TEMPLATE_PROJECT_ENVIRONMENT => "template-project-environment",
+            _ => {
+                let split: Vec<PreviewFeatures> = self.iter().collect();
+                if split.len() > 1 {
+                    panic!("`flag_as_str` can only be used for exactly one feature flag");
+                } else {
+                    panic!("Unhandled preview feature flag in `flag_as_str`: {self:?}");
+                }
+            }
         }
     }
 }
@@ -70,6 +79,7 @@ impl FromStr for PreviewFeatures {
                 "json-output" => Self::JSON_OUTPUT,
                 "pylock" => Self::PYLOCK,
                 "add-bounds" => Self::ADD_BOUNDS,
+                "template-project-environment" => Self::TEMPLATE_PROJECT_ENVIRONMENT,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -232,6 +242,10 @@ mod tests {
         assert_eq!(PreviewFeatures::JSON_OUTPUT.flag_as_str(), "json-output");
         assert_eq!(PreviewFeatures::PYLOCK.flag_as_str(), "pylock");
         assert_eq!(PreviewFeatures::ADD_BOUNDS.flag_as_str(), "add-bounds");
+        assert_eq!(
+            PreviewFeatures::TEMPLATE_PROJECT_ENVIRONMENT.flag_as_str(),
+            "template-project-environment"
+        );
     }
 
     #[test]

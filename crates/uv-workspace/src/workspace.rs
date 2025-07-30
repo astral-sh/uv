@@ -1,6 +1,7 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -8,13 +9,15 @@ use glob::{GlobError, PatternError, glob};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
-use uv_configuration::DependencyGroupsWithDefaults;
+use uv_cache_key::cache_digest;
+use uv_configuration::{DependencyGroupsWithDefaults, Preview, PreviewFeatures};
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
+use uv_python::Interpreter;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -631,16 +634,66 @@ impl Workspace {
     /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
     /// warnings about mismatch between the active environment and the project environment will be
     /// silenced.
-    pub fn venv(&self, active: Option<bool>) -> PathBuf {
+    pub fn venv(
+        &self,
+        active: Option<bool>,
+        python: Option<&Interpreter>,
+        preview: Preview,
+    ) -> PathBuf {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
-        fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
-            let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
+        fn from_project_environment_variable(
+            workspace: &Workspace,
+            python: Option<&Interpreter>,
+            preview: Preview,
+        ) -> Option<PathBuf> {
+            let value = CustomProjectEnvironmentPath::from_env()?.into_os_string();
 
-            if value.is_empty() {
-                return None;
-            }
+            let templated = value
+                .to_string_lossy()
+                .replace(
+                    "{project_path_hash}",
+                    &cache_digest(&workspace.install_path),
+                )
+                .replace(
+                    "{project_name}",
+                    &workspace
+                        .pyproject_toml
+                        .project
+                        .as_ref()
+                        .map(|project| project.name.to_string())
+                        .unwrap_or("none".to_string()),
+                )
+                .replace(
+                    "{python_version_minor}",
+                    &python
+                        .map(|python| python.python_minor_version().to_string())
+                        .unwrap_or("none".to_string()),
+                )
+                .replace(
+                    "{python_implementation}",
+                    &python
+                        .map(|python| python.implementation_name().to_lowercase().to_string())
+                        .unwrap_or("none".to_string()),
+                )
+                .replace(
+                    "{python_version_full}",
+                    &python
+                        .map(|python| python.python_full_version().to_string())
+                        .unwrap_or("none".to_string()),
+                );
 
-            let path = PathBuf::from(value);
+            let path = if templated != value.to_string_lossy() {
+                if !preview.is_enabled(PreviewFeatures::TEMPLATE_PROJECT_ENVIRONMENT) {
+                    warn_user_once!(
+                        "Templating the `UV_PROJECT_ENVIRONMENT` setting is in preview and may change without warning; use `--preview-features {}` to disable this warning",
+                        PreviewFeatures::TEMPLATE_PROJECT_ENVIRONMENT
+                    );
+                }
+                PathBuf::from(templated)
+            } else {
+                PathBuf::from(value)
+            };
+
             if path.is_absolute() {
                 return Some(path);
             }
@@ -668,7 +721,7 @@ impl Workspace {
         }
 
         // Determine the default value
-        let project_env = from_project_environment_variable(self)
+        let project_env = from_project_environment_variable(self, python, preview)
             .unwrap_or_else(|| self.install_path.join(".venv"));
 
         // Warn if it conflicts with `VIRTUAL_ENV`
@@ -1053,6 +1106,37 @@ impl WorkspaceMember {
     /// The `pyproject.toml` of the project, found at `<root>/pyproject.toml`.
     pub fn pyproject_toml(&self) -> &PyProjectToml {
         &self.pyproject_toml
+    }
+}
+
+pub struct CustomProjectEnvironmentPath(std::ffi::OsString);
+
+impl CustomProjectEnvironmentPath {
+    /// Returns the value of the `UV_PROJECT_ENVIRONMENT` environment variable, if set.
+    pub fn from_env() -> Option<Self> {
+        std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)
+            .filter(|value| !value.is_empty())
+            .map(Self)
+    }
+
+    pub fn into_os_string(self) -> std::ffi::OsString {
+        self.0
+    }
+
+    /// Whether this path contains any Python interpreter template variables.
+    pub fn contains_python_template(&self) -> bool {
+        let as_str = self.0.to_string_lossy();
+        as_str.contains("{python_version_minor}")
+            || as_str.contains("{python_version_full}")
+            || as_str.contains("{python_implementation}")
+    }
+}
+
+impl Deref for CustomProjectEnvironmentPath {
+    type Target = std::ffi::OsStr;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_os_str()
     }
 }
 
