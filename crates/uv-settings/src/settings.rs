@@ -632,7 +632,7 @@ pub struct ResolverInstallerOptions {
     /// Additional build dependencies for packages.
     ///
     /// This allows extending the PEP 517 build environment for the project's dependencies with
-    /// additional packages. This is useful for packages that assume the presence of packages, like,
+    /// additional packages. This is useful for packages that assume the presence of packages like
     /// `pip`, and do not declare them as build dependencies.
     #[option(
         default = "[]",
@@ -1153,7 +1153,7 @@ pub struct PipOptions {
     /// Additional build dependencies for packages.
     ///
     /// This allows extending the PEP 517 build environment for the project's dependencies with
-    /// additional packages. This is useful for packages that assume the presence of packages, like,
+    /// additional packages. This is useful for packages that assume the presence of packages like
     /// `pip`, and do not declare them as build dependencies.
     #[option(
         default = "[]",

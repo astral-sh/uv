@@ -5516,6 +5516,7 @@ dependencies = [
  "tracing",
  "unicode-width 0.2.1",
  "unscanny",
+ "uv-cache-key",
  "version-ranges",
 ]
 

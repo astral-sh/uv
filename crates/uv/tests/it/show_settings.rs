@@ -184,7 +184,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -379,7 +381,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -575,7 +579,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -803,7 +809,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -966,7 +974,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1173,7 +1183,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1428,7 +1440,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1693,7 +1707,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1913,7 +1929,9 @@ fn resolve_find_links() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2098,7 +2116,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2343,7 +2363,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2571,7 +2593,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2755,7 +2779,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2923,7 +2949,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3091,7 +3119,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3261,7 +3291,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3472,7 +3504,9 @@ fn resolve_tool() -> anyhow::Result<()> {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
-                extra_build_dependencies: {},
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: LowestDirect,
                 sources: Enabled,
@@ -3631,7 +3665,9 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3867,7 +3903,9 @@ fn resolve_both() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4107,7 +4145,9 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4426,7 +4466,9 @@ fn resolve_config_file() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4687,7 +4729,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4858,7 +4902,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5048,7 +5094,9 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5299,7 +5347,9 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5529,7 +5579,9 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5765,7 +5817,9 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5996,7 +6050,9 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6234,7 +6290,9 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6465,7 +6523,9 @@ fn index_priority() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6640,7 +6700,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6801,7 +6863,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6960,7 +7024,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7121,7 +7187,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7280,7 +7348,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7440,7 +7510,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
-            extra_build_dependencies: {},
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7609,7 +7681,9 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
-                extra_build_dependencies: {},
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7717,7 +7791,9 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
-                extra_build_dependencies: {},
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7825,7 +7901,9 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
-                extra_build_dependencies: {},
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7933,7 +8011,9 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
-                extra_build_dependencies: {},
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -8041,7 +8121,9 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
-                extra_build_dependencies: {},
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -8151,7 +8233,9 @@ fn preview_features() {
                 link_mode: Clone,
                 no_build_isolation: false,
                 no_build_isolation_package: [],
-                extra_build_dependencies: {},
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,

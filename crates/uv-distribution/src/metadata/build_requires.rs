@@ -206,7 +206,7 @@ impl BuildRequires {
 }
 
 /// Lowered extra build dependencies with source resolution applied.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ExtraBuildRequires {
     pub extra_build_dependencies: ExtraBuildDependencies,
 }

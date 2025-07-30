@@ -324,7 +324,7 @@ impl SourceBuild {
             .or(fallback_package_version)
             .cloned();
 
-        let extra_build_dependencies = package_name
+        let extra_build_dependencies: Vec<Requirement> = package_name
             .as_ref()
             .and_then(|name| extra_build_dependencies.get(name).cloned())
             .unwrap_or_default()
@@ -354,6 +354,12 @@ impl SourceBuild {
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
+            let dependency_sources = if extra_build_dependencies.is_empty() {
+                "`build-system.requires`"
+            } else {
+                "`build-system.requires` and `extra-build-dependencies`"
+            };
+
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
@@ -364,12 +370,10 @@ impl SourceBuild {
             )
             .await?;
 
-            // TODO(zanieb): We'll report `build-system.requires` here but it may include
-            // `extra-build-dependencies`
             build_context
                 .install(&resolved_requirements, &venv, build_stack)
                 .await
-                .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err.into()))?;
+                .map_err(|err| Error::RequirementsInstall(dependency_sources, err.into()))?;
         } else {
             debug!("Proceeding without build isolation");
         }
@@ -505,25 +509,25 @@ impl SourceBuild {
                     resolved_requirements
                 }
             } else {
-                // TODO(zanieb): It's unclear if we actually want to solve these together. We might
-                // want to perform a separate solve to allow conflicts?
-                let requirements = if extra_build_dependencies.is_empty() {
-                    Cow::Borrowed(&pep517_backend.requirements)
+                let (requirements, dependency_sources) = if extra_build_dependencies.is_empty() {
+                    (
+                        Cow::Borrowed(&pep517_backend.requirements),
+                        "`build-system.requires`",
+                    )
                 } else {
                     // If there are extra build dependencies, we need to resolve them together with
                     // the backend requirements.
                     let mut requirements = pep517_backend.requirements.clone();
                     requirements.extend(extra_build_dependencies);
-                    Cow::Owned(requirements)
+                    (
+                        Cow::Owned(requirements),
+                        "`build-system.requires` and `extra-build-dependencies`",
+                    )
                 };
-                // TODO(zanieb): We'll report `build-system.requires` here but it may include
-                // `extra-build-dependencies`
                 build_context
                     .resolve(&requirements, build_stack)
                     .await
-                    .map_err(|err| {
-                        Error::RequirementsResolve("`build-system.requires`", err.into())
-                    })?
+                    .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
         )
     }

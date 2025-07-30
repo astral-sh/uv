@@ -275,7 +275,7 @@ where
                     spec.len().cache_key(state);
                     for specifier in spec.iter() {
                         specifier.operator().as_str().cache_key(state);
-                        specifier.version().to_string().cache_key(state);
+                        specifier.version().cache_key(state);
                     }
                 }
                 VersionOrUrl::Url(url) => {

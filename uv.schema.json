@@ -229,7 +229,7 @@
       "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages, like,\n`pip`, and do not declare them as build dependencies.",
       "anyOf": [
         {
-          "$ref": "#/definitions/ToolUvExtraBuildDependencies"
+          "$ref": "#/definitions/ExtraBuildDependencies"
         },
         {
           "type": "null"
@@ -884,6 +884,15 @@
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2}))?$"
     },
+    "ExtraBuildDependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/Requirement"
+        }
+      }
+    },
     "ExtraName": {
       "description": "The normalized name of an extra dependency.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee:\n- <https://peps.python.org/pep-0685/#specification/>\n- <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
@@ -1327,17 +1336,15 @@
           }
         },
         "extra-build-dependencies": {
-          "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages, like,\n`pip`, and do not declare them as build dependencies.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "$ref": "#/definitions/Requirement"
+          "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages like\n`pip`, and do not declare them as build dependencies.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExtraBuildDependencies"
+            },
+            {
+              "type": "null"
             }
-          }
+          ]
         },
         "extra-index-url": {
           "description": "Extra URLs of package indexes to use, in addition to `--index-url`.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)\n(the simple repository API), or a local directory laid out in the same format.\n\nAll indexes provided via this flag take priority over the index specified by\n[`index_url`](#index-url). When multiple indexes are provided, earlier values take priority.\n\nTo control uv's resolution strategy when multiple indexes are present, see\n[`index_strategy`](#index-strategy).",
@@ -2366,15 +2373,6 @@
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/DependencyGroupSettings"
-      }
-    },
-    "ToolUvExtraBuildDependencies": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "array",
-        "items": {
-          "$ref": "#/definitions/Requirement"
-        }
       }
     },
     "ToolUvSources": {

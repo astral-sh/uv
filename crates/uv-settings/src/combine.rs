@@ -17,6 +17,7 @@ use uv_resolver::{
     PrereleaseMode, ResolutionMode,
 };
 use uv_torch::TorchMode;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{FilesystemOptions, Options, PipOptions};
@@ -205,5 +206,32 @@ impl Combine for ExcludeNewer {
         }
 
         self
+    }
+}
+
+impl Combine for ExtraBuildDependencies {
+    fn combine(mut self, other: Self) -> Self {
+        for (key, value) in other {
+            match self.entry(key) {
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    // Combine the vecs, with self taking precedence
+                    let existing = entry.get_mut();
+                    existing.extend(value);
+                }
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(value);
+                }
+            }
+        }
+        self
+    }
+}
+
+impl Combine for Option<ExtraBuildDependencies> {
+    fn combine(self, other: Option<ExtraBuildDependencies>) -> Option<ExtraBuildDependencies> {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
     }
 }
