@@ -10,6 +10,7 @@ use arcstr::ArcStr;
 use regex::Regex;
 use thiserror::Error;
 use url::{ParseError, Url};
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
@@ -34,6 +35,12 @@ pub struct VerbatimUrl {
 impl Hash for VerbatimUrl {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.url.hash(state);
+    }
+}
+
+impl CacheKey for VerbatimUrl {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.url.as_str().cache_key(state);
     }
 }
 

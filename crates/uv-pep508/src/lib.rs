@@ -252,10 +252,7 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
-impl<T: Pep508Url> CacheKey for Requirement<T>
-where
-    T: Display,
-{
+impl<T: Pep508Url> CacheKey for Requirement<T> {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         self.name.as_str().cache_key(state);
 
@@ -280,7 +277,7 @@ where
                 }
                 VersionOrUrl::Url(url) => {
                     1u8.cache_key(state);
-                    url.to_string().cache_key(state);
+                    url.cache_key(state);
                 }
             }
         } else {
@@ -330,7 +327,7 @@ impl<T: Pep508Url> Requirement<T> {
 }
 
 /// Type to parse URLs from `name @ <url>` into. Defaults to [`Url`].
-pub trait Pep508Url: Display + Debug + Sized {
+pub trait Pep508Url: Display + Debug + Sized + CacheKey {
     /// String to URL parsing error
     type Err: Error + Debug;
 

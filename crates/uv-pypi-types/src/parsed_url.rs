@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 use url::{ParseError, Url};
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 use uv_distribution_filename::{DistExtension, ExtensionError};
 use uv_git_types::{GitUrl, GitUrlParseError};
@@ -43,6 +44,12 @@ pub enum ParsedUrlError {
 pub struct VerbatimParsedUrl {
     pub parsed_url: ParsedUrl,
     pub verbatim: VerbatimUrl,
+}
+
+impl CacheKey for VerbatimParsedUrl {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.verbatim.cache_key(state);
+    }
 }
 
 impl VerbatimParsedUrl {
