@@ -11,7 +11,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::ExtrasSpecificationWithDefaults;
 use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
-use uv_distribution::{DistributionDatabase, VariantProviderCache};
+use uv_distribution::{DistributionDatabase, PackageVariantCache};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerVariantsUniversal;
@@ -48,7 +48,7 @@ pub trait Installable<'lock> {
         build_options: &BuildOptions,
         install_options: &InstallOptions,
         distribution_database: DistributionDatabase<'_, Context>,
-        variants_cache: &VariantProviderCache,
+        variants_cache: &PackageVariantCache,
     ) -> Result<Resolution, LockError> {
         let size_guess = self.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
@@ -615,7 +615,7 @@ async fn determine_properties<Context: BuildContext>(
     package: &Package,
     workspace_root: &Path,
     distribution_database: &DistributionDatabase<'_, Context>,
-    variants_cache: &VariantProviderCache,
+    variants_cache: &PackageVariantCache,
 ) -> Result<Variant, LockError> {
     let Some(variants_json) = package.to_registry_variants_json(workspace_root)? else {
         // When selecting a non-variant wheel, all variant markers evaluate to false.

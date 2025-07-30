@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures::{FutureExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
 use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
@@ -32,6 +32,7 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack, VariantsTrait};
+use uv_variants::VariantProviderOutput;
 use uv_variants::resolved_variants::ResolvedVariants;
 use uv_variants::variants_json::{VariantPropertyType, VariantsJsonContent};
 
@@ -572,46 +573,64 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             for (namespace, features) in &**variant {
                 for (feature, value) in features {
                     for value in value {
+                        // TODO(charlie): At minimum, we can probably avoid these clones.
                         known_properties.insert(VariantPropertyType {
                             namespace: namespace.clone(),
                             feature: feature.clone(),
-                            // TODO(konsti): Be consistent on value vs. property
+                            // TODO(konsti): Be consistent on value vs. property.
                             value: value.clone(),
                         });
                     }
                 }
             }
         }
-        let known_properties: Vec<VariantPropertyType> = known_properties.into_iter().collect();
+        let known_properties: Arc<Vec<VariantPropertyType>> =
+            Arc::new(known_properties.into_iter().collect());
 
         // Compute the set of available variants.
-        // TODO(charlie): Cache (to disk) by provider.
-        let mut resolved_priorities = FxHashMap::default();
-        for (name, provider) in &variants_json.providers {
-            debug!("Querying provider {name}");
-            let config = {
-                async {
-                    // TODO(konsti): That's not spec compliant
-                    let backend_name = provider.plugin_api.clone().unwrap_or(name.clone());
-                    let builder = self
-                        .build_context
-                        .setup_variants(backend_name, provider, BuildOutput::Debug)
-                        .await?;
-                    Ok::<_, Error>(builder.query(&known_properties).await?)
-                }
-                .instrument(info_span!("query_variant_provider"))
-                .await?
-            };
-            trace!(
-                "Found namespace {} with configs {:?}",
-                config.namespace, config
-            );
-            resolved_priorities.insert(config.namespace.clone(), config);
-        }
+        let provider_outputs: FxHashMap<String, Arc<VariantProviderOutput>> =
+            futures::stream::iter(variants_json.providers.iter())
+                .map(|(name, provider)| {
+                    let known_properties = Arc::clone(&known_properties);
+                    async move {
+                        let config = if self.build_context.variants().register(provider.clone()) {
+                            debug!("Querying provider `{name}` for variants");
+
+                            // TODO(konsti): That's not spec compliant
+                            let backend_name = provider.plugin_api.clone().unwrap_or(name.clone());
+                            let builder = self
+                                .build_context
+                                .setup_variants(backend_name, provider, BuildOutput::Debug)
+                                .await?;
+                            let config = builder.query(&known_properties).await?;
+                            trace!(
+                                "Found namespace {} with configs {:?}",
+                                config.namespace, config
+                            );
+
+                            let config = Arc::new(config);
+                            self.build_context
+                                .variants()
+                                .done(provider.clone(), config.clone());
+                            config
+                        } else {
+                            debug!("Reading provider `{name}` from in-memory cache");
+                            self.build_context
+                                .variants()
+                                .wait(provider)
+                                .await
+                                .expect("missing value for registered task")
+                        };
+                        Ok::<_, Error>((config.namespace.clone(), config))
+                    }
+                })
+                .buffered(8)
+                .try_collect()
+                .await?;
 
         Ok(ResolvedVariants {
             variants_json,
-            target_variants: resolved_priorities,
+            target_variants: provider_outputs,
         })
     }
 

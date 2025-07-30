@@ -6080,6 +6080,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uv-once-map",
  "uv-pep508",
  "uv-pypi-types",
 ]

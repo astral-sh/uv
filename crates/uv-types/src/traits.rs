@@ -19,6 +19,7 @@ use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_variants::VariantProviderOutput;
+use uv_variants::cache::VariantProviderCache;
 use uv_variants::variants_json::VariantPropertyType;
 use uv_workspace::WorkspaceCache;
 
@@ -73,6 +74,9 @@ pub trait BuildContext {
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return a reference to the variant cache.
+    fn variants(&self) -> &VariantProviderCache;
 
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
@@ -155,6 +159,7 @@ pub trait BuildContext {
         version_id: Option<&'a str>,
     ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;
 
+    /// Set up the variants for the given provider.
     fn setup_variants<'a>(
         &'a self,
         backend_name: String,
@@ -193,7 +198,7 @@ pub trait VariantsTrait {
     fn query(
         &self,
         known_properties: &[VariantPropertyType],
-    ) -> impl Future<Output = anyhow::Result<VariantProviderOutput>>;
+    ) -> impl Future<Output = Result<VariantProviderOutput>>;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]

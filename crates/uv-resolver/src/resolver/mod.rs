@@ -2038,7 +2038,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         // Grab the pinned distribution for the given name and version.
-        let dist = pins.get(name, version).expect("Selected dist has pin");
+        let Some(dist) = pins.get(name, version) else {
+            return Variant::default();
+        };
 
         let Some(filename) = dist.wheel_filename() else {
             // TODO(konsti): Handle installed dists too

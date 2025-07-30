@@ -20,13 +20,11 @@ use crate::{DistributionDatabase, Error};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
-/// A cache for variants.
-// TODO(konsti): Cache by provider provider plugin and `requires` compatibility
-// TODO(konsti): Cache to disk
+/// An in-memory cache from package to resolved variants.
 #[derive(Default)]
-pub struct VariantProviderCache(FxOnceMap<GlobalVersionId, Arc<ResolvedVariants>>);
+pub struct PackageVariantCache(FxOnceMap<GlobalVersionId, Arc<ResolvedVariants>>);
 
-impl std::ops::Deref for VariantProviderCache {
+impl std::ops::Deref for PackageVariantCache {
     type Target = FxOnceMap<GlobalVersionId, Arc<ResolvedVariants>>;
 
     fn deref(&self) -> &Self::Target {
@@ -38,7 +36,7 @@ impl std::ops::Deref for VariantProviderCache {
 pub async fn resolve_variants<Context: BuildContext>(
     resolution: Resolution,
     distribution_database: DistributionDatabase<'_, Context>,
-    cache: &VariantProviderCache,
+    cache: &PackageVariantCache,
 ) -> Result<Resolution, Error> {
     // Fetch variants.json and then query providers, running in parallel for all distributions.
     let dist_resolved_variants: FxHashMap<GlobalVersionId, Arc<ResolvedVariants>> =
