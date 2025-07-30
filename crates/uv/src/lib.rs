@@ -1258,21 +1258,35 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
+            let mut entrypoints = Vec::with_capacity(args.with_executables_from.len());
             let mut requirements = Vec::with_capacity(
-                args.with.len() + args.with_editable.len() + args.with_requirements.len(),
+                args.with.len()
+                    + args.with_editable.len()
+                    + args.with_requirements.len()
+                    + args.with_executables_from.len(),
             );
-            for package in args.with {
-                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
+            for pkg in args.with {
+                requirements.push(RequirementsSource::from_with_package_argument(&pkg)?);
             }
-            for package in args.with_editable {
-                requirements.push(RequirementsSource::from_editable(&package)?);
+            for pkg in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&pkg)?);
             }
-            requirements.extend(
-                args.with_requirements
-                    .into_iter()
-                    .map(RequirementsSource::from_requirements_file)
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
+            for path in args.with_requirements {
+                requirements.push(RequirementsSource::from_requirements_file(path)?);
+            }
+            for pkg in &args.with_executables_from {
+                let source = RequirementsSource::from_with_package_argument(pkg)?;
+                let RequirementsSource::Package(RequirementsTxtRequirement::Named(requirement)) =
+                    &source
+                else {
+                    bail!(
+                        "Expected a named package for `--with-executables-from`, but got: {}",
+                        source.to_string().cyan()
+                    )
+                };
+                entrypoints.push(requirement.name.clone());
+                requirements.push(source);
+            }
 
             let constraints = args
                 .constraints
@@ -1298,6 +1312,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &constraints,
                 &overrides,
                 &build_constraints,
+                &entrypoints,
                 args.python,
                 args.install_mirrors,
                 args.force,
