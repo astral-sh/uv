@@ -53,8 +53,8 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
     ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, script_specification, update_environment,
-    validate_project_requires_python,
+    default_dependency_groups, script_extra_build_requires, script_specification,
+    update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
@@ -359,6 +359,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
+                let script_extra_build_requires =
+                    script_extra_build_requires((&script).into(), &settings.resolver)?;
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
@@ -407,6 +409,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     spec,
                     modifications,
                     build_constraints.unwrap_or_default(),
+                    script_extra_build_requires,
                     &settings,
                     &network_settings,
                     &sync_state,

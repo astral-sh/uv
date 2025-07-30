@@ -26,6 +26,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 use cursor::Cursor;
 pub use marker::{
@@ -248,6 +249,52 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
         S: Serializer,
     {
         serializer.collect_str(self)
+    }
+}
+
+impl<T: Pep508Url> CacheKey for Requirement<T>
+where
+    T: Display,
+{
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.name.as_str().cache_key(state);
+
+        self.extras.len().cache_key(state);
+        for extra in &self.extras {
+            extra.as_str().cache_key(state);
+        }
+
+        // TODO(zanieb): We inline cache key handling for the child types here, but we could
+        // move the implementations to the children. The intent here was to limit the scope of
+        // types exposing the `CacheKey` trait for now.
+        if let Some(version_or_url) = &self.version_or_url {
+            1u8.cache_key(state);
+            match version_or_url {
+                VersionOrUrl::VersionSpecifier(spec) => {
+                    0u8.cache_key(state);
+                    spec.len().cache_key(state);
+                    for specifier in spec.iter() {
+                        specifier.operator().as_str().cache_key(state);
+                        specifier.version().cache_key(state);
+                    }
+                }
+                VersionOrUrl::Url(url) => {
+                    1u8.cache_key(state);
+                    url.to_string().cache_key(state);
+                }
+            }
+        } else {
+            0u8.cache_key(state);
+        }
+
+        if let Some(marker) = self.marker.contents() {
+            1u8.cache_key(state);
+            marker.to_string().cache_key(state);
+        } else {
+            0u8.cache_key(state);
+        }
+
+        // `origin` is intentionally omitted
     }
 }
 

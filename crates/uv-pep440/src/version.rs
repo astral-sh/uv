@@ -10,6 +10,7 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 /// One of `~=` `==` `!=` `<=` `>=` `<` `>` `===`
 #[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Hash, Clone, Copy)]
@@ -114,6 +115,24 @@ impl Operator {
     pub fn is_star(self) -> bool {
         matches!(self, Self::EqualStar | Self::NotEqualStar)
     }
+
+    /// Returns the string representation of this operator.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Equal => "==",
+            // Beware, this doesn't print the star
+            Self::EqualStar => "==",
+            #[allow(deprecated)]
+            Self::ExactEqual => "===",
+            Self::NotEqual => "!=",
+            Self::NotEqualStar => "!=",
+            Self::TildeEqual => "~=",
+            Self::LessThan => "<",
+            Self::LessThanEqual => "<=",
+            Self::GreaterThan => ">",
+            Self::GreaterThanEqual => ">=",
+        }
+    }
 }
 
 impl FromStr for Operator {
@@ -150,21 +169,7 @@ impl FromStr for Operator {
 impl std::fmt::Display for Operator {
     /// Note the `EqualStar` is also `==`.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let operator = match self {
-            Self::Equal => "==",
-            // Beware, this doesn't print the star
-            Self::EqualStar => "==",
-            #[allow(deprecated)]
-            Self::ExactEqual => "===",
-            Self::NotEqual => "!=",
-            Self::NotEqualStar => "!=",
-            Self::TildeEqual => "~=",
-            Self::LessThan => "<",
-            Self::LessThanEqual => "<=",
-            Self::GreaterThan => ">",
-            Self::GreaterThanEqual => ">=",
-        };
-
+        let operator = self.as_str();
         write!(f, "{operator}")
     }
 }
@@ -927,6 +932,46 @@ impl Hash for Version {
         self.dev().hash(state);
         self.post().hash(state);
         self.local().hash(state);
+    }
+}
+
+impl CacheKey for Version {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.epoch().cache_key(state);
+
+        let release = self.release();
+        release.len().cache_key(state);
+        for segment in release.iter() {
+            segment.cache_key(state);
+        }
+
+        if let Some(pre) = self.pre() {
+            1u8.cache_key(state);
+            match pre.kind {
+                PrereleaseKind::Alpha => 0u8.cache_key(state),
+                PrereleaseKind::Beta => 1u8.cache_key(state),
+                PrereleaseKind::Rc => 2u8.cache_key(state),
+            }
+            pre.number.cache_key(state);
+        } else {
+            0u8.cache_key(state);
+        }
+
+        if let Some(post) = self.post() {
+            1u8.cache_key(state);
+            post.cache_key(state);
+        } else {
+            0u8.cache_key(state);
+        }
+
+        if let Some(dev) = self.dev() {
+            1u8.cache_key(state);
+            dev.cache_key(state);
+        } else {
+            0u8.cache_key(state);
+        }
+
+        self.local().cache_key(state);
     }
 }
 
@@ -1711,6 +1756,23 @@ impl std::fmt::Display for LocalVersionSlice<'_> {
     }
 }
 
+impl CacheKey for LocalVersionSlice<'_> {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        match self {
+            LocalVersionSlice::Segments(segments) => {
+                0u8.cache_key(state);
+                segments.len().cache_key(state);
+                for segment in *segments {
+                    segment.cache_key(state);
+                }
+            }
+            LocalVersionSlice::Max => {
+                1u8.cache_key(state);
+            }
+        }
+    }
+}
+
 impl PartialOrd for LocalVersionSlice<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -1773,6 +1835,21 @@ impl std::fmt::Display for LocalSegment {
         match self {
             Self::String(string) => write!(f, "{string}"),
             Self::Number(number) => write!(f, "{number}"),
+        }
+    }
+}
+
+impl CacheKey for LocalSegment {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        match self {
+            Self::String(string) => {
+                0u8.cache_key(state);
+                string.cache_key(state);
+            }
+            Self::Number(number) => {
+                1u8.cache_key(state);
+                number.cache_key(state);
+            }
         }
     }
 }

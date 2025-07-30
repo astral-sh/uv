@@ -24,7 +24,7 @@ use uv_resolver::{
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
-use uv_workspace::pyproject_mut::AddBoundsKind;
+use uv_workspace::{pyproject::ExtraBuildDependencies, pyproject_mut::AddBoundsKind};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -376,6 +376,7 @@ pub struct ResolverOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub no_sources: Option<bool>,
 }
 
@@ -628,6 +629,20 @@ pub struct ResolverInstallerOptions {
     "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    /// Additional build dependencies for packages.
+    ///
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages like
+    /// `pip`, and do not declare them as build dependencies.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+        [extra-build-dependencies] 
+        pytest = ["setuptools"]
+    "#
+    )]
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Limit candidate packages to those that were uploaded prior to a given point in time.
     ///
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
@@ -1135,6 +1150,20 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    /// Additional build dependencies for packages.
+    ///
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages like
+    /// `pip`, and do not declare them as build dependencies.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [extra-build-dependencies]
+            pytest = ["setuptools"]
+        "#
+    )]
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[option(
@@ -1719,6 +1748,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             no_binary_package: value.no_binary_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             no_sources: value.no_sources,
         }
     }
@@ -1784,6 +1814,7 @@ pub struct ToolOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub exclude_newer: Option<ExcludeNewerTimestamp>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
@@ -1813,6 +1844,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             config_settings_package: value.config_settings_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
@@ -1844,6 +1876,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             config_settings_package: value.config_settings_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
@@ -1898,6 +1931,7 @@ pub struct OptionsWire {
     config_settings_package: Option<PackageConfigSettings>,
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
+    extra_build_dependencies: Option<ExtraBuildDependencies>,
     exclude_newer: Option<ExcludeNewerTimestamp>,
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
@@ -2017,6 +2051,7 @@ impl From<OptionsWire> for Options {
             sources,
             default_groups,
             dependency_groups,
+            extra_build_dependencies,
             dev_dependencies,
             managed,
             package,
@@ -2057,6 +2092,7 @@ impl From<OptionsWire> for Options {
                 config_settings_package,
                 no_build_isolation,
                 no_build_isolation_package,
+                extra_build_dependencies,
                 exclude_newer,
                 exclude_newer_package,
                 link_mode,

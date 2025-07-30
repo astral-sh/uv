@@ -4,6 +4,7 @@
 
 mod error;
 
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Formatter;
 use std::fmt::Write;
@@ -42,6 +43,7 @@ use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -281,6 +283,7 @@ impl SourceBuild {
         workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
+        extra_build_dependencies: &ExtraBuildDependencies,
         build_stack: &BuildStack,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
@@ -297,7 +300,6 @@ impl SourceBuild {
         };
 
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
-
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
@@ -322,6 +324,14 @@ impl SourceBuild {
             .or(fallback_package_version)
             .cloned();
 
+        let extra_build_dependencies: Vec<Requirement> = package_name
+            .as_ref()
+            .and_then(|name| extra_build_dependencies.get(name).cloned())
+            .unwrap_or_default()
+            .into_iter()
+            .map(Requirement::from)
+            .collect();
+
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
             venv.clone()
@@ -344,11 +354,18 @@ impl SourceBuild {
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
+            let dependency_sources = if extra_build_dependencies.is_empty() {
+                "`build-system.requires`"
+            } else {
+                "`build-system.requires` and `extra-build-dependencies`"
+            };
+
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
                 &default_backend,
                 &pep517_backend,
+                extra_build_dependencies,
                 build_stack,
             )
             .await?;
@@ -356,7 +373,7 @@ impl SourceBuild {
             build_context
                 .install(&resolved_requirements, &venv, build_stack)
                 .await
-                .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err.into()))?;
+                .map_err(|err| Error::RequirementsInstall(dependency_sources, err.into()))?;
         } else {
             debug!("Proceeding without build isolation");
         }
@@ -471,10 +488,13 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         default_backend: &Pep517Backend,
         pep517_backend: &Pep517Backend,
+        extra_build_dependencies: Vec<Requirement>,
         build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
-            if pep517_backend.requirements == default_backend.requirements {
+            if pep517_backend.requirements == default_backend.requirements
+                && extra_build_dependencies.is_empty()
+            {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {
                     resolved_requirements.clone()
@@ -489,12 +509,25 @@ impl SourceBuild {
                     resolved_requirements
                 }
             } else {
+                let (requirements, dependency_sources) = if extra_build_dependencies.is_empty() {
+                    (
+                        Cow::Borrowed(&pep517_backend.requirements),
+                        "`build-system.requires`",
+                    )
+                } else {
+                    // If there are extra build dependencies, we need to resolve them together with
+                    // the backend requirements.
+                    let mut requirements = pep517_backend.requirements.clone();
+                    requirements.extend(extra_build_dependencies);
+                    (
+                        Cow::Owned(requirements),
+                        "`build-system.requires` and `extra-build-dependencies`",
+                    )
+                };
                 build_context
-                    .resolve(&pep517_backend.requirements, build_stack)
+                    .resolve(&requirements, build_stack)
                     .await
-                    .map_err(|err| {
-                        Error::RequirementsResolve("`build-system.requires`", err.into())
-                    })?
+                    .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
         )
     }
@@ -604,6 +637,7 @@ impl SourceBuild {
                             );
                         }
                     }
+
                     default_backend.clone()
                 };
                 Ok((backend, pyproject_toml.project))

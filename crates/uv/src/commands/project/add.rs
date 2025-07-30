@@ -37,7 +37,7 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
-use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -101,6 +101,15 @@ pub(crate) async fn add(
         warn_user_once!(
             "The `bounds` option is in preview and may change in any future release. Pass `--preview-features {}` to disable this warning.",
             PreviewFeatures::ADD_BOUNDS
+        );
+    }
+
+    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+        && !settings.resolver.extra_build_dependencies.is_empty()
+    {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
         );
     }
 
@@ -212,7 +221,7 @@ pub(crate) async fn add(
 
         // Discover the interpreter.
         let interpreter = ScriptInterpreter::discover(
-            Pep723ItemRef::Script(&script),
+            (&script).into(),
             python.as_deref().map(PythonRequest::parse),
             &network_settings,
             python_preference,
@@ -428,6 +437,18 @@ pub(crate) async fn add(
             };
 
             // Create a build dispatch.
+            let extra_build_requires = if let AddTarget::Project(project, _) = &target {
+                uv_distribution::ExtraBuildRequires::from_workspace(
+                    settings.resolver.extra_build_dependencies.clone(),
+                    project.workspace(),
+                    &settings.resolver.index_locations,
+                    settings.resolver.sources,
+                )?
+            } else {
+                uv_distribution::ExtraBuildRequires::from_lowered(
+                    settings.resolver.extra_build_dependencies.clone(),
+                )
+            };
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
@@ -441,6 +462,7 @@ pub(crate) async fn add(
                 &settings.resolver.config_setting,
                 &settings.resolver.config_settings_package,
                 build_isolation,
+                &extra_build_requires,
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
                 &build_hasher,

@@ -317,6 +317,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 config_settings_package,
                 no_build_isolation,
                 no_build_isolation_package,
+                extra_build_dependencies,
                 exclude_newer,
                 exclude_newer_package,
                 link_mode,
@@ -444,6 +445,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if no_build_isolation_package.is_some() {
         masked_fields.push("no-build-isolation-package");
+    }
+    if extra_build_dependencies.is_some() {
+        masked_fields.push("extra-build-dependencies");
     }
     if exclude_newer.is_some() {
         masked_fields.push("exclude-newer");

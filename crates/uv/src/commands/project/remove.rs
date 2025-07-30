@@ -16,7 +16,7 @@ use uv_fs::Simplified;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
@@ -261,7 +261,7 @@ pub(crate) async fn remove(
         }
         RemoveTarget::Script(script) => {
             let interpreter = ScriptInterpreter::discover(
-                Pep723ItemRef::Script(&script),
+                (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,

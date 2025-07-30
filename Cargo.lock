@@ -5516,6 +5516,7 @@ dependencies = [
  "tracing",
  "unicode-width 0.2.1",
  "unscanny",
+ "uv-cache-key",
  "version-ranges",
 ]
 
@@ -5539,6 +5540,7 @@ dependencies = [
  "tracing-test",
  "unicode-width 0.2.1",
  "url",
+ "uv-cache-key",
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
@@ -5864,6 +5866,8 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "url",
+ "uv-configuration",
+ "uv-distribution-types",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",

@@ -3920,16 +3920,17 @@ fn config_settings_registry() {
         .arg("iniconfig")
         .arg("--no-binary")
         .arg("iniconfig")
-        .arg("-C=global-option=build_ext"), @r###"
+        .arg("-C=global-option=build_ext"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###
+    "
     );
 
     // Uninstall the package.

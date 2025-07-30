@@ -1,5 +1,5 @@
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::{collections::BTreeMap, num::NonZeroUsize};
 
 use url::Url;
 
@@ -17,6 +17,7 @@ use uv_resolver::{
     PrereleaseMode, ResolutionMode,
 };
 use uv_torch::TorchMode;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{FilesystemOptions, Options, PipOptions};
@@ -124,6 +125,21 @@ impl<T> Combine for Option<Vec<T>> {
     }
 }
 
+impl<K: Ord, T> Combine for Option<BTreeMap<K, Vec<T>>> {
+    /// Combine two maps of vecs by combining their vecs
+    fn combine(self, other: Option<BTreeMap<K, Vec<T>>>) -> Option<BTreeMap<K, Vec<T>>> {
+        match (self, other) {
+            (Some(mut a), Some(b)) => {
+                for (key, value) in b {
+                    a.entry(key).or_default().extend(value);
+                }
+                Some(a)
+            }
+            (a, b) => a.or(b),
+        }
+    }
+}
+
 impl Combine for Option<ExcludeNewerPackage> {
     /// Combine two [`ExcludeNewerPackage`] instances by merging them, with the values in `self` taking precedence.
     fn combine(self, other: Option<ExcludeNewerPackage>) -> Option<ExcludeNewerPackage> {
@@ -190,5 +206,32 @@ impl Combine for ExcludeNewer {
         }
 
         self
+    }
+}
+
+impl Combine for ExtraBuildDependencies {
+    fn combine(mut self, other: Self) -> Self {
+        for (key, value) in other {
+            match self.entry(key) {
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    // Combine the vecs, with self taking precedence
+                    let existing = entry.get_mut();
+                    existing.extend(value);
+                }
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(value);
+                }
+            }
+        }
+        self
+    }
+}
+
+impl Combine for Option<ExtraBuildDependencies> {
+    fn combine(self, other: Option<ExtraBuildDependencies>) -> Option<ExtraBuildDependencies> {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
     }
 }

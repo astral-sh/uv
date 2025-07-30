@@ -202,6 +202,28 @@ environments = ["sys_platform == 'darwin'"]
 
 ---
 
+### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
+
+Additional build dependencies for packages.
+
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages, like,
+`pip`, and do not declare them as build dependencies.
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.extra-build-dependencies]
+pytest = ["pip"]
+```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The indexes to use when resolving dependencies.
@@ -1123,6 +1145,36 @@ Accepts package-date pairs in a dictionary format.
 
     ```toml
     exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+    ```
+
+---
+
+### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
+
+Additional build dependencies for packages.
+
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages like
+`pip`, and do not declare them as build dependencies.
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    [extra-build-dependencies] 
+    pytest = ["setuptools"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [extra-build-dependencies] 
+    pytest = ["setuptools"]
     ```
 
 ---
@@ -2612,6 +2664,38 @@ Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     ```toml
     [pip]
     extra = ["dev", "docs"]
+    ```
+
+---
+
+#### [`extra-build-dependencies`](#pip_extra-build-dependencies) {: #pip_extra-build-dependencies }
+<span id="extra-build-dependencies"></span>
+
+Additional build dependencies for packages.
+
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages like
+`pip`, and do not declare them as build dependencies.
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    [extra-build-dependencies]
+    pytest = ["setuptools"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    [extra-build-dependencies]
+    pytest = ["setuptools"]
     ```
 
 ---

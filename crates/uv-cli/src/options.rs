@@ -354,6 +354,7 @@ pub fn resolver_options(
         }),
         no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
         no_build_isolation_package: Some(no_build_isolation_package),
+        extra_build_dependencies: None,
         exclude_newer: ExcludeNewer::from_args(
             exclude_newer,
             exclude_newer_package.unwrap_or_default(),
@@ -475,6 +476,7 @@ pub fn resolver_installer_options(
         } else {
             Some(no_build_isolation_package)
         },
+        extra_build_dependencies: None,
         exclude_newer,
         exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,

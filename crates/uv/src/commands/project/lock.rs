@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    Reinstall, Upgrade,
+    PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -32,7 +32,7 @@ use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
 };
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -42,7 +42,7 @@ use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, Summary
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    init_script_python_requirement,
+    init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
@@ -162,7 +162,7 @@ pub(crate) async fn lock(
             .await?
             .into_interpreter(),
             LockTarget::Script(script) => ScriptInterpreter::discover(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -435,12 +435,22 @@ async fn do_lock(
         config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
+        extra_build_dependencies,
         exclude_newer,
         link_mode,
         upgrade,
         build_options,
         sources,
     } = settings;
+
+    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+        && !extra_build_dependencies.is_empty()
+    {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+        );
+    }
 
     // Collect the requirements, etc.
     let members = target.members();
@@ -664,6 +674,18 @@ async fn do_lock(
     };
 
     // Create a build dispatch.
+    let extra_build_requires = match &target {
+        LockTarget::Workspace(workspace) => uv_distribution::ExtraBuildRequires::from_workspace(
+            extra_build_dependencies.clone(),
+            workspace,
+            index_locations,
+            *sources,
+        )?,
+        LockTarget::Script(script) => {
+            // Try to get extra build dependencies from the script metadata
+            script_extra_build_requires((*script).into(), settings)?
+        }
+    };
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -677,6 +699,7 @@ async fn do_lock(
         config_setting,
         config_settings_package,
         build_isolation,
+        &extra_build_requires,
         *link_mode,
         build_options,
         &build_hasher,

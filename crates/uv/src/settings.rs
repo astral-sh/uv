@@ -45,7 +45,7 @@ use uv_settings::{
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::DependencyType;
+use uv_workspace::pyproject::{DependencyType, ExtraBuildDependencies};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::commands::ToolRunCommand;
@@ -2714,6 +2714,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) config_settings_package: &'a PackageConfigSettings,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
+    pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) exclude_newer: ExcludeNewer,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -2740,6 +2741,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) link_mode: LinkMode,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
+    pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: SourceStrategy,
@@ -2792,6 +2794,7 @@ impl From<ResolverOptions> for ResolverSettings {
             config_settings_package: value.config_settings_package.unwrap_or_default(),
             no_build_isolation: value.no_build_isolation.unwrap_or_default(),
             no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
+            extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
             sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
@@ -2889,6 +2892,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 link_mode: value.link_mode.unwrap_or_default(),
                 no_build_isolation: value.no_build_isolation.unwrap_or_default(),
                 no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
+                extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 prerelease: value.prerelease.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
@@ -2931,6 +2935,7 @@ pub(crate) struct PipSettings {
     pub(crate) torch_backend: Option<TorchMode>,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
+    pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) build_options: BuildOptions,
     pub(crate) allow_empty_requirements: bool,
     pub(crate) strict: bool,
@@ -2998,6 +3003,7 @@ impl PipSettings {
             only_binary,
             no_build_isolation,
             no_build_isolation_package,
+            extra_build_dependencies,
             strict,
             extra,
             all_extras,
@@ -3057,6 +3063,7 @@ impl PipSettings {
             config_settings_package: top_level_config_settings_package,
             no_build_isolation: top_level_no_build_isolation,
             no_build_isolation_package: top_level_no_build_isolation_package,
+            extra_build_dependencies: top_level_extra_build_dependencies,
             exclude_newer: top_level_exclude_newer,
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
@@ -3093,6 +3100,8 @@ impl PipSettings {
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
         let no_build_isolation_package =
             no_build_isolation_package.combine(top_level_no_build_isolation_package);
+        let extra_build_dependencies =
+            extra_build_dependencies.combine(top_level_extra_build_dependencies);
         let exclude_newer = args
             .exclude_newer
             .combine(exclude_newer)
@@ -3195,6 +3204,10 @@ impl PipSettings {
             no_build_isolation_package: args
                 .no_build_isolation_package
                 .combine(no_build_isolation_package)
+                .unwrap_or_default(),
+            extra_build_dependencies: args
+                .extra_build_dependencies
+                .combine(extra_build_dependencies)
                 .unwrap_or_default(),
             config_setting: args
                 .config_settings
@@ -3303,6 +3316,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             config_settings_package: &settings.resolver.config_settings_package,
             no_build_isolation: settings.resolver.no_build_isolation,
             no_build_isolation_package: &settings.resolver.no_build_isolation_package,
+            extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             exclude_newer: settings.resolver.exclude_newer.clone(),
             link_mode: settings.resolver.link_mode,
             compile_bytecode: settings.compile_bytecode,
