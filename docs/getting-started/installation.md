@@ -151,7 +151,7 @@ $ uv self update
 !!! tip
 
     Updating uv will re-run the installer and can modify your shell profiles. To disable this
-    behavior, set `INSTALLER_NO_MODIFY_PATH=1`.
+    behavior, set `UV_NO_MODIFY_PATH=1`.
 
 When another installation method is used, self-updates are disabled. Use the package manager's
 upgrade method instead. For example, with `pip`:

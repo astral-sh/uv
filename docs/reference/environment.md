@@ -68,6 +68,12 @@ script, to include the name of the wrapper script in the output file.
 Equivalent to the `--default-index` command-line argument. If set, uv will use
 this URL as the default index when searching for packages.
 
+### `UV_DOWNLOAD_URL`
+
+The URL from which to download uv using the standalone installer. By default, installs from
+uv's GitHub Releases. `INSTALLER_DOWNLOAD_URL` is also supported as an alias, for backwards
+compatibility.
+
 ### `UV_ENV_FILE`
 
 `.env` files from which to load environment variables when executing `uv run` commands.
@@ -268,6 +274,12 @@ Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and 
 ### `UV_NO_MANAGED_PYTHON`
 
 Disable use of uv-managed Python versions.
+
+### `UV_NO_MODIFY_PATH`
+
+Avoid modifying the `PATH` environment variable when installing uv using the standalone
+installer and `self update` feature. `INSTALLER_NO_MODIFY_PATH` is also supported as an
+alias, for backwards compatibility.
 
 ### `UV_NO_PROGRESS`
 
@@ -561,11 +573,6 @@ Proxy for HTTP requests.
 ### `HTTP_TIMEOUT`
 
 Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
-
-### `INSTALLER_NO_MODIFY_PATH`
-
-Avoid modifying the `PATH` environment variable when installing uv using the standalone
-installer and `self update` feature.
 
 ### `JPY_SESSION_NAME`
 
