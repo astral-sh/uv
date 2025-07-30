@@ -1481,6 +1481,16 @@ pub struct RegistryVariantsJson {
     pub index: IndexUrl,
 }
 
+impl RegistryVariantsJson {
+    /// Return the [`GlobalVersionId`] for this registry variants JSON.
+    pub fn version_id(&self) -> GlobalVersionId {
+        GlobalVersionId::new(
+            VersionId::NameVersion(self.filename.name.clone(), self.filename.version.clone()),
+            self.index.clone(),
+        )
+    }
+}
+
 impl Identifier for RegistryVariantsJson {
     fn distribution_id(&self) -> DistributionId {
         self.file.distribution_id()

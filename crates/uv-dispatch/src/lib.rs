@@ -41,6 +41,7 @@ use uv_types::{
     HashStrategy, InFlight,
 };
 use uv_variant_frontend::VariantBuild;
+use uv_variants::cache::VariantProviderCache;
 use uv_variants::variants_json::Provider;
 use uv_workspace::WorkspaceCache;
 
@@ -188,6 +189,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn git(&self) -> &GitResolver {
         &self.shared_state.git
+    }
+
+    fn variants(&self) -> &VariantProviderCache {
+        self.shared_state.index.variant_providers()
     }
 
     fn build_arena(&self) -> &BuildArena<SourceBuild> {

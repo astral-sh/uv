@@ -93,7 +93,7 @@ pub struct VariantPropertyType {
 }
 
 /// Provider information
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Provider {
     /// Object reference to plugin class

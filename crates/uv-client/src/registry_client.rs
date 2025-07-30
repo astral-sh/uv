@@ -711,7 +711,6 @@ impl RegistryClient {
                 .map_err(|err| ErrorKind::VariantsJsonFormat(url, err))?
         } else {
             let cache_entry = self.cache.entry(
-                // TODO(konsti): Get our own bucket?
                 CacheBucket::Wheels,
                 WheelCache::Index(&variants_json.index)
                     .wheel_dir(variants_json.filename.name.as_ref()),

@@ -1,7 +1,9 @@
+pub mod cache;
 pub mod resolved_variants;
 pub mod variants_json;
 
 use crate::variants_json::{DefaultPriorities, Variant, VariantNamespace};
+use std::sync::Arc;
 
 use indexmap::IndexMap;
 use rustc_hash::FxHashMap;
@@ -36,7 +38,7 @@ pub enum VariantPriority {
 /// Return a priority score for the variant (higher is better) or `None` if it isn't compatible.
 pub fn score_variant(
     default_priorities: &DefaultPriorities,
-    target_namespaces: &FxHashMap<VariantNamespace, VariantProviderOutput>,
+    target_namespaces: &FxHashMap<VariantNamespace, Arc<VariantProviderOutput>>,
     variants_properties: &Variant,
 ) -> Option<Vec<usize>> {
     for (namespace, features) in &**variants_properties {
@@ -113,6 +115,7 @@ mod tests {
         variants_json::{DefaultPriorities, Variant, VariantNamespace},
     };
     use itertools::Itertools;
+    use std::sync::Arc;
 
     use super::score_variant;
 
@@ -120,7 +123,7 @@ mod tests {
     use rustc_hash::FxHashMap;
     use serde_json::json;
 
-    fn host() -> FxHashMap<VariantNamespace, VariantProviderOutput> {
+    fn host() -> FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> {
         serde_json::from_value(json!({
             "gpu": {
                 "namespace": "gpu",

@@ -95,13 +95,13 @@ impl VariantBuild {
             .resolve(&requirements, &BuildStack::empty())
             .await
             .map_err(|err| {
-                Error::RequirementsResolve("`variant.providers.TODO(konsti).requires`", err.into())
+                Error::RequirementsResolve("`variant.providers.requires`", err.into())
             })?;
         build_context
             .install(&resolved_requirements, &venv, &BuildStack::empty())
             .await
             .map_err(|err| {
-                Error::RequirementsInstall("`variant.providers.TODO(konsti).requires`", err.into())
+                Error::RequirementsInstall("`variant.providers.requires`", err.into())
             })?;
 
         // Figure out what the modified path should be, and remove the PATH variable from the
@@ -181,7 +181,7 @@ impl VariantBuild {
                 with open("{in_file}") as fp:
                     known_properties = json.load(fp)
 
-                # Filter to the namespace of the plugin
+                # Filter to the namespace of the plugin.
                 filtered_properties = []
                 for known_property in known_properties:
                     # We don't know the namespace ahead of time, so the frontend passes all properties.
