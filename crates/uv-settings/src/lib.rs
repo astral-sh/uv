@@ -567,11 +567,11 @@ pub struct EnvironmentOptions {
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub no_github_fast_path: Option<bool>,
+    pub log_context: Option<bool>,
     // boolean
     // x UV_NO_GITHUB_FAST_PATH
     // UV_GIT_LFS
-    // UV_LOG_CONTEXT
-    // TRACING_DURATIONS_FILE
+    // x UV_LOG_CONTEXT
 
     // int
     // UV_HTTP_RETRIES
@@ -592,17 +592,21 @@ pub struct EnvironmentOptions {
     // UV_GITHUB_FAST_PATH_URL
     // UV_CUDA_DRIVER_VERSION
     // UV_AMD_GPU_ARCHITECTURE
+    // TRACING_DURATIONS_FILE
 }
 
 impl EnvironmentOptions {
     /// Create a new [`EnvironmentOptions`] from environment variables.
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
+            log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
-            no_github_fast_path: parse_boolish_environment_variable(EnvVars::UV_NO_GITHUB_FAST_PATH)?,
+            no_github_fast_path: parse_boolish_environment_variable(
+                EnvVars::UV_NO_GITHUB_FAST_PATH,
+            )?,
         })
     }
 }

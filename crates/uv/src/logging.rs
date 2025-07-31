@@ -20,7 +20,7 @@ use tracing_tree::HierarchicalLayer;
 use tracing_tree::time::Uptime;
 
 use uv_cli::ColorChoice;
-use uv_static::EnvVars;
+use uv_settings::EnvironmentOptions;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
@@ -168,7 +168,7 @@ pub(crate) fn setup_logging(
         };
     let writer = std::sync::Mutex::new(anstream::AutoStream::new(std::io::stderr(), color_choice));
 
-    let detailed_logging = std::env::var(EnvVars::UV_LOG_CONTEXT).is_ok();
+    let detailed_logging = EnvironmentOptions::new()?.log_context.unwrap_or(false);
     if detailed_logging {
         // Regardless of the tracing level, include the uptime and target for each message.
         tracing_subscriber::registry()
