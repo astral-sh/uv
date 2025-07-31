@@ -24,6 +24,7 @@
 
 [data-md-color-scheme="astral-light"] {
   --md-default-bg-color--dark: var(--black);
+  --md-default-fg-color--lightest: rgba(0, 0, 0, 0.14);
   --md-primary-fg-color: var(--galaxy);
   --md-typeset-a-color: var(--flare);
   --md-accent-fg-color: var(--cosmic);
@@ -34,6 +35,7 @@
   --md-default-fg-color: var(--white);
   --md-default-fg-color--light: var(--white);
   --md-default-fg-color--lighter: var(--white);
+  --md-default-fg-color--lightest: rgba(255, 255, 255, 0.5);
   --md-primary-fg-color: var(--space);
   --md-primary-bg-color: var(--white);
   --md-accent-fg-color: var(--cosmic);
