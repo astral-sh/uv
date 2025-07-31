@@ -1802,6 +1802,205 @@ fn sync_extra_build_dependencies() -> Result<()> {
 }
 
 #[test]
+fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that uses legacy setuptools (no pyproject.toml) and requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+
+    // Create a setup.py that checks for anyio during build
+    let setup_py = child.child("setup.py");
+    setup_py.write_str(indoc! {r#"
+        import sys
+        from setuptools import setup, find_packages
+
+        try:
+            import anyio
+            print("anyio is available!", file=sys.stderr)
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        setup(
+            name="child",
+            version="0.1.0",
+            packages=find_packages(),
+        )
+    "#})?;
+    child.child("child").create_dir_all()?;
+    child.child("child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_setuptools() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that uses setuptools with pyproject.toml and requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+
+    // Create a pyproject.toml that uses setuptools
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // Create a setup.py that checks for anyio during build
+    let setup_py = child.child("setup.py");
+    setup_py.write_str(indoc! {r#"
+        import sys
+        from setuptools import setup, find_packages
+
+        try:
+            import anyio
+            print("anyio is available!", file=sys.stderr)
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        setup(
+            name="child",
+            version="0.1.0",
+            packages=find_packages(),
+        )
+    "#})?;
+    child.child("child").create_dir_all()?;
+    child.child("child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_extra_build_dependencies_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
