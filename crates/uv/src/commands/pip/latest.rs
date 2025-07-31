@@ -45,11 +45,11 @@ impl LatestClient<'_> {
         {
             Ok(archives) => archives,
             Err(err) => {
-                return match err.into_kind() {
+                return match err.kind() {
                     uv_client::ErrorKind::PackageNotFound(_) => Ok(None),
                     uv_client::ErrorKind::NoIndex(_) => Ok(None),
                     uv_client::ErrorKind::Offline(_) => Ok(None),
-                    kind => Err(kind.into()),
+                    _ => Err(err),
                 };
             }
         };

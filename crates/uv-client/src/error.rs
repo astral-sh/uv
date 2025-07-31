@@ -20,12 +20,12 @@ pub struct Error {
 impl Error {
     /// Convert this error into its [`ErrorKind`] variant.
     pub fn into_kind(self) -> ErrorKind {
-        *self.kind
+        self.kind.into_base()
     }
 
-    /// Get a reference to the [`ErrorKind`] variant of this error.
+    /// Return the [`ErrorKind`] of this error.
     pub fn kind(&self) -> &ErrorKind {
-        &self.kind
+        self.kind.base()
     }
 
     /// Create a new error from a JSON parsing error.
@@ -40,12 +40,12 @@ impl Error {
 
     /// Returns `true` if this error corresponds to an offline error.
     pub(crate) fn is_offline(&self) -> bool {
-        matches!(&*self.kind, ErrorKind::Offline(_))
+        matches!(self.kind.base(), ErrorKind::Offline(_))
     }
 
     /// Returns `true` if this error corresponds to an I/O "not found" error.
     pub(crate) fn is_file_not_exists(&self) -> bool {
-        let ErrorKind::Io(err) = &*self.kind else {
+        let ErrorKind::Io(err) = self.kind.base() else {
             return false;
         };
         matches!(err.kind(), std::io::ErrorKind::NotFound)
@@ -53,12 +53,12 @@ impl Error {
 
     /// Returns `true` if the error is due to an SSL error.
     pub fn is_ssl(&self) -> bool {
-        matches!(&*self.kind, ErrorKind::WrappedReqwestError(.., err) if err.is_ssl())
+        matches!(self.kind.base(), ErrorKind::WrappedReqwestError(.., err) if err.is_ssl())
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
     pub fn is_http_range_requests_unsupported(&self) -> bool {
-        match &*self.kind {
+        match self.kind.base() {
             // The server doesn't support range requests (as reported by the `HEAD` check).
             ErrorKind::AsyncHttpRangeReader(
                 _,
@@ -78,7 +78,7 @@ impl Error {
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            ErrorKind::WrappedReqwestError(_url, err) => {
+            ErrorKind::WrappedReqwestError(_, err) => {
                 if let Some(status) = err.status() {
                     // If the server doesn't support HEAD requests, we can't check for range
                     // requests.
@@ -133,7 +133,7 @@ impl Error {
     /// streaming, like data descriptors.
     pub fn is_http_streaming_unsupported(&self) -> bool {
         matches!(
-            &*self.kind,
+            self.kind.base(),
             ErrorKind::Zip(_, ZipError::FeatureNotSupported(_))
         )
     }
@@ -265,10 +265,28 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
+    /// Return the [`ErrorKind`] without the retry wrapper, if it exists.
+    fn base(&self) -> &Self {
+        match self {
+            ErrorKind::RequestWithRetries { source, .. } => source,
+            _ => self,
+        }
+    }
+
+    /// Return the [`ErrorKind`] without the retry wrapper, if it exists.
+    fn into_base(self) -> Self {
+        match self {
+            ErrorKind::RequestWithRetries { source, .. } => *source,
+            _ => self,
+        }
+    }
+
+    /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
         Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
     }
 
+    /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`].
     pub(crate) fn from_reqwest_middleware(
         url: DisplaySafeUrl,
         err: reqwest_middleware::Error,

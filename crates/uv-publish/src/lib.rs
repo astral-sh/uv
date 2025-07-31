@@ -501,7 +501,7 @@ pub async fn check_url(
     {
         Ok(response) => response,
         Err(err) => {
-            return match err.into_kind() {
+            return match err.kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
                     // The package doesn't exist, so we can't have uploaded it.
                     warn!(
@@ -509,7 +509,7 @@ pub async fn check_url(
                     );
                     Ok(false)
                 }
-                kind => Err(PublishError::CheckUrlIndex(kind.into())),
+                _ => Err(PublishError::CheckUrlIndex(err)),
             };
         }
     };

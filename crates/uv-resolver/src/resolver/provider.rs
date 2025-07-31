@@ -199,7 +199,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     })
                     .collect(),
             )),
-            Err(err) => match err.into_kind() {
+            Err(err) => match err.kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
                     if let Some(flat_index) = flat_index
                         .and_then(|flat_index| flat_index.get(package_name))
@@ -232,7 +232,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         Ok(VersionsResponse::Offline)
                     }
                 }
-                kind => Err(kind.into()),
+                _ => Err(err),
             },
         }
     }
