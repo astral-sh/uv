@@ -96,8 +96,8 @@ const STYLES: Styles = Styles::styled()
     .placeholder(AnsiColor::Cyan.on_default());
 
 #[derive(Parser)]
-#[command(name = "uv", author, long_version = crate::version::uv_self_version())]
-#[command(about = "An extremely fast Python package manager.")]
+#[command(name = "uv-wheelnext", author, long_version = crate::version::uv_self_version())]
+#[command(about = "A variant-enabled build of uv, an extremely fast Python package manager.")]
 #[command(
     after_help = "Use `uv help` for more details.",
     after_long_help = "",

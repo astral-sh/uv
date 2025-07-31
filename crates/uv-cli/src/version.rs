@@ -94,7 +94,7 @@ pub fn uv_self_version() -> VersionInfo {
     });
 
     VersionInfo {
-        package_name: Some("uv".to_owned()),
+        package_name: Some("uv-wheelnext".to_owned()),
         version,
         commit_info,
     }
