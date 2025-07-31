@@ -48,14 +48,10 @@ impl NoSources {
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
         match (self, other) {
-            // If both are `None`, the result is `None`.
             (Self::None, Self::None) => Self::None,
-            // If either is `All`, the result is `All`.
             (Self::All, _) | (_, Self::All) => Self::All,
-            // If one is `None`, the result is the other.
             (Self::Packages(a), Self::None) => Self::Packages(a),
             (Self::None, Self::Packages(b)) => Self::Packages(b),
-            // If both are `Packages`, the result is the union of the two.
             (Self::Packages(mut a), Self::Packages(b)) => {
                 a.extend(b);
                 Self::Packages(a)
@@ -66,21 +62,12 @@ impl NoSources {
     /// Extend a [`SourceStrategy`] value with another.
     pub fn extend(&mut self, other: Self) {
         match (&mut *self, other) {
-            // If either is `All`, the result is `All`.
             (Self::All, _) | (_, Self::All) => *self = Self::All,
-            // If both are `None`, the result is `None`.
-            (Self::None, Self::None) => {
-                // Nothing to do.
-            }
-            // If one is `None`, the result is the other.
-            (Self::Packages(_), Self::None) => {
-                // Nothing to do.
-            }
+            (Self::None, Self::None) => {}
+            (Self::Packages(_), Self::None) => {}
             (Self::None, Self::Packages(b)) => {
-                // Take ownership of `b`.
                 *self = Self::Packages(b);
             }
-            // If both are `Packages`, the result is the union of the two.
             (Self::Packages(a), Self::Packages(b)) => {
                 a.extend(b);
             }
