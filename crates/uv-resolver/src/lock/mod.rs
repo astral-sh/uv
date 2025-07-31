@@ -4396,27 +4396,12 @@ impl Wheel {
     }
 
     fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
-        let filename = wheel.filename.clone();
-        match &wheel.index {
+        let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&wheel.file.url)
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
-                let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-                let size = wheel.file.size;
-                let upload_time = wheel
-                    .file
-                    .upload_time_utc_ms
-                    .map(Timestamp::from_millisecond)
-                    .transpose()
-                    .map_err(LockErrorKind::InvalidTimestamp)?;
-                Ok(Wheel {
-                    url: WheelWireSource::Url { url },
-                    hash,
-                    size,
-                    filename,
-                    upload_time,
-                })
+                WheelWireSource::Url { url }
             }
             IndexUrl::Path(path) => {
                 let index_path = path
@@ -4432,35 +4417,31 @@ impl Wheel {
                         .or_else(|_| std::path::absolute(&wheel_path))
                         .map_err(LockErrorKind::DistributionRelativePath)?
                         .into_boxed_path();
-                    Ok(Wheel {
-                        url: WheelWireSource::Path { path },
-                        hash: None,
-                        size: None,
-                        upload_time: None,
-                        filename,
-                    })
+                    WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
-                    let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-                    let size = wheel.file.size;
-                    let upload_time = wheel
-                        .file
-                        .upload_time_utc_ms
-                        .map(Timestamp::from_millisecond)
-                        .transpose()
-                        .map_err(LockErrorKind::InvalidTimestamp)?;
-                    Ok(Wheel {
-                        url: WheelWireSource::Url { url },
-                        hash,
-                        size,
-                        filename,
-                        upload_time,
-                    })
+                    WheelWireSource::Url { url }
                 }
             }
-        }
+        };
+        let filename = wheel.filename.clone();
+        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+        let size = wheel.file.size;
+        let upload_time = wheel
+            .file
+            .upload_time_utc_ms
+            .map(Timestamp::from_millisecond)
+            .transpose()
+            .map_err(LockErrorKind::InvalidTimestamp)?;
+        Ok(Wheel {
+            url,
+            hash,
+            size,
+            upload_time,
+            filename,
+        })
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
