@@ -9,6 +9,9 @@ use tracing::{Event, Subscriber};
 use tracing_durations_export::{
     DurationsLayer, DurationsLayerBuilder, DurationsLayerDropGuard, plot::PlotConfig,
 };
+#[cfg(feature = "tracing-durations-export")]
+use uv_static::EnvVars;
+
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::fmt::format::Writer;
 use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
