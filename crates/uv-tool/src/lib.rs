@@ -189,16 +189,6 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        // On Windows, if the current executable is in the directory, guard against self-deletion.
-        #[cfg(windows)]
-        if let Ok(itself) = std::env::current_exe() {
-            let target = std::path::absolute(&environment_path)?;
-            if itself.starts_with(&target) {
-                debug!("Detected self-delete of executable: {}", itself.display());
-                self_replace::self_delete_outside_path(&environment_path)?;
-            }
-        }
-
         remove_virtualenv(environment_path.as_path())?;
 
         Ok(())
