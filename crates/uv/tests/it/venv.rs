@@ -6,6 +6,9 @@ use predicates::prelude::*;
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 
+#[cfg(unix)]
+use fs_err::os::unix::fs::symlink;
+
 use crate::common::{TestContext, uv_snapshot};
 
 #[test]
@@ -1392,8 +1395,6 @@ fn venv_python_preference() {
 #[test]
 #[cfg(unix)]
 fn create_venv_symlink_clear_preservation() -> Result<()> {
-    use fs_err::os::unix::fs::symlink;
-
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a target directory
@@ -1452,8 +1453,6 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn create_venv_symlink_recreate_preservation() -> Result<()> {
-    use fs_err::os::unix::fs::symlink;
-
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a target directory
@@ -1512,8 +1511,6 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn create_venv_nested_symlink_preservation() -> Result<()> {
-    use fs_err::os::unix::fs::symlink;
-
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a target directory
