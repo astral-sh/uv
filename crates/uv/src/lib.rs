@@ -28,7 +28,7 @@ use uv_cli::{
     ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
     ToolNamespace, TopLevelArgs, compat::CompatArgs,
 };
-use uv_configuration::min_stack_size;
+use uv_configuration::{PreviewFeatures, min_stack_size};
 use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
@@ -37,7 +37,7 @@ use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, EnvironmentOptions, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -443,6 +443,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCompileSettings::resolve(args, filesystem);
             show_settings!(args);
+            if !args.settings.extra_build_dependencies.is_empty()
+                && !globals
+                    .preview
+                    .is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+            {
+                warn_user_once!(
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+                );
+            }
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
@@ -516,6 +526,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.config_settings_package,
                 args.settings.no_build_isolation,
                 args.settings.no_build_isolation_package,
+                &args.settings.extra_build_dependencies,
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
@@ -543,6 +554,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, filesystem);
             show_settings!(args);
+            if !args.settings.extra_build_dependencies.is_empty()
+                && !globals
+                    .preview
+                    .is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+            {
+                warn_user_once!(
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+                );
+            }
 
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(
@@ -593,6 +614,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.settings.config_settings_package,
                 args.settings.no_build_isolation,
                 args.settings.no_build_isolation_package,
+                &args.settings.extra_build_dependencies,
                 args.settings.build_options,
                 args.settings.python_version,
                 args.settings.python_platform,
@@ -621,6 +643,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let mut args = PipInstallSettings::resolve(args, filesystem);
             show_settings!(args);
+            if !args.settings.extra_build_dependencies.is_empty()
+                && !globals
+                    .preview
+                    .is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+            {
+                warn_user_once!(
+                    "The `extra-build-dependencies` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+                );
+            }
 
             let mut requirements = Vec::with_capacity(
                 args.package.len() + args.editables.len() + args.requirements.len(),
@@ -735,6 +767,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.settings.config_settings_package,
                 args.settings.no_build_isolation,
                 args.settings.no_build_isolation_package,
+                &args.settings.extra_build_dependencies,
                 args.settings.build_options,
                 args.modifications,
                 args.settings.python_version,
@@ -1225,21 +1258,35 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
+            let mut entrypoints = Vec::with_capacity(args.with_executables_from.len());
             let mut requirements = Vec::with_capacity(
-                args.with.len() + args.with_editable.len() + args.with_requirements.len(),
+                args.with.len()
+                    + args.with_editable.len()
+                    + args.with_requirements.len()
+                    + args.with_executables_from.len(),
             );
-            for package in args.with {
-                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
+            for pkg in args.with {
+                requirements.push(RequirementsSource::from_with_package_argument(&pkg)?);
             }
-            for package in args.with_editable {
-                requirements.push(RequirementsSource::from_editable(&package)?);
+            for pkg in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&pkg)?);
             }
-            requirements.extend(
-                args.with_requirements
-                    .into_iter()
-                    .map(RequirementsSource::from_requirements_file)
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
+            for path in args.with_requirements {
+                requirements.push(RequirementsSource::from_requirements_file(path)?);
+            }
+            for pkg in &args.with_executables_from {
+                let source = RequirementsSource::from_with_package_argument(pkg)?;
+                let RequirementsSource::Package(RequirementsTxtRequirement::Named(requirement)) =
+                    &source
+                else {
+                    bail!(
+                        "Expected a named package for `--with-executables-from`, but got: {}",
+                        source.to_string().cyan()
+                    )
+                };
+                entrypoints.push(requirement.name.clone());
+                requirements.push(source);
+            }
 
             let constraints = args
                 .constraints
@@ -1265,6 +1312,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &constraints,
                 &overrides,
                 &build_constraints,
+                &entrypoints,
                 args.python,
                 args.install_mirrors,
                 args.force,
@@ -1467,7 +1515,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if let Some(Pep723Item::Script(script)) = script {
                 commands::python_find_script(
-                    Pep723ItemRef::Script(&script),
+                    (&script).into(),
                     args.show_version,
                     &globals.network_settings,
                     globals.python_preference,

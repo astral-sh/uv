@@ -3,6 +3,38 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.4
+
+### Enhancements
+
+- Improve styling of warning cause chains  ([#14934](https://github.com/astral-sh/uv/pull/14934))
+- Extend wheel filtering to Android tags ([#14977](https://github.com/astral-sh/uv/pull/14977))
+- Perform wheel lockfile filtering based on platform and OS intersection ([#14976](https://github.com/astral-sh/uv/pull/14976))
+- Clarify messaging when a new resolution needs to be performed ([#14938](https://github.com/astral-sh/uv/pull/14938))
+
+### Preview features
+
+- Add support for extending package's build dependencies with `extra-build-dependencies` ([#14735](https://github.com/astral-sh/uv/pull/14735))
+- Split preview mode into separate feature flags ([#14823](https://github.com/astral-sh/uv/pull/14823))
+
+### Configuration
+
+- Add support for package specific `exclude-newer` dates via `exclude-newer-package` ([#14489](https://github.com/astral-sh/uv/pull/14489))
+
+### Bug fixes
+
+- Avoid invalidating lockfile when path or workspace dependencies define explicit indexes ([#14876](https://github.com/astral-sh/uv/pull/14876))
+- Copy entrypoints that have a shebang that differs in `python` vs `python3` ([#14970](https://github.com/astral-sh/uv/pull/14970))
+- Fix incorrect file permissions in wheel packages ([#14930](https://github.com/astral-sh/uv/pull/14930))
+- Update validation for `environments` and `required-environments` in `uv.toml` ([#14905](https://github.com/astral-sh/uv/pull/14905))
+
+### Documentation
+
+- Show `uv_build` in projects documentation ([#14968](https://github.com/astral-sh/uv/pull/14968))
+- Add `UV_` prefix to installer environment variables ([#14964](https://github.com/astral-sh/uv/pull/14964))
+- Un-hide `uv` from `--build-backend` options ([#14939](https://github.com/astral-sh/uv/pull/14939))
+- Update documentation for preview flags ([#14902](https://github.com/astral-sh/uv/pull/14902))
+
 ## 0.8.3
 
 ### Python

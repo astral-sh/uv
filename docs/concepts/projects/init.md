@@ -111,8 +111,8 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
 ```
 
 !!! tip
@@ -134,8 +134,8 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
 ```
 
 The command can be executed with `uv run`:
@@ -195,8 +195,8 @@ requires-python = ">=3.11"
 dependencies = []
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
 ```
 
 !!! tip

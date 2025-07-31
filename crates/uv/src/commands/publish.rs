@@ -1,11 +1,10 @@
 use std::fmt::Write;
-use std::iter;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
-use owo_colors::OwoColorize;
+use owo_colors::{AnsiColors, OwoColorize};
 use tokio::sync::Semaphore;
 use tracing::{debug, info};
 use uv_auth::Credentials;
@@ -17,7 +16,7 @@ use uv_publish::{
     CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user_once, write_error_chain};
 
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -274,19 +273,15 @@ async fn gather_credentials(
                 fetching the trusted publishing token. If you don't want to use trusted \
                 publishing, you can ignore this error, but you need to provide credentials."
             )?;
-            writeln!(
+
+            write_error_chain(
+                anyhow::Error::from(err)
+                    .context("Trusted publishing failed")
+                    .as_ref(),
                 printer.stderr(),
-                "{}: {err}",
-                "Trusted publishing error".red().bold()
+                "error",
+                AnsiColors::Red,
             )?;
-            for source in iter::successors(std::error::Error::source(&err), |&err| err.source()) {
-                writeln!(
-                    printer.stderr(),
-                    "  {}: {}",
-                    "Caused by".red().bold(),
-                    source.to_string().trim()
-                )?;
-            }
         }
     }
 

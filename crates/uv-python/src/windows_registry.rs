@@ -1,7 +1,6 @@
 //! PEP 514 interactions with the Windows registry.
 
 use crate::managed::ManagedPythonInstallation;
-use crate::platform::Arch;
 use crate::{COMPANY_DISPLAY_NAME, COMPANY_KEY, PythonInstallationKey, PythonVersion};
 use anyhow::anyhow;
 use std::cmp::Ordering;
@@ -11,6 +10,7 @@ use std::str::FromStr;
 use target_lexicon::PointerWidth;
 use thiserror::Error;
 use tracing::debug;
+use uv_platform::Arch;
 use uv_warnings::{warn_user, warn_user_once};
 use windows_registry::{CURRENT_USER, HSTRING, Key, LOCAL_MACHINE, Value};
 use windows_result::HRESULT;

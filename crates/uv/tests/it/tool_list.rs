@@ -89,8 +89,8 @@ fn tool_list_paths_windows() {
     exit_code: 0
     ----- stdout -----
     black v24.2.0 ([TEMP_DIR]\tools\black)
-    - black.exe ([TEMP_DIR]\bin\black.exe)
-    - blackd.exe ([TEMP_DIR]\bin\blackd.exe)
+    - black ([TEMP_DIR]\bin\black.exe)
+    - blackd ([TEMP_DIR]\bin\blackd.exe)
 
     ----- stderr -----
     "###);
@@ -218,8 +218,8 @@ fn tool_list_deprecated() -> Result<()> {
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
 
         [tool.options]
@@ -234,8 +234,8 @@ fn tool_list_deprecated() -> Result<()> {
         [tool]
         requirements = ["black==24.2.0"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
         "#,
     )?;
@@ -261,8 +261,8 @@ fn tool_list_deprecated() -> Result<()> {
         [tool]
         requirements = ["black<>24.2.0"]
         entrypoints = [
-            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
-            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
         ]
         "#,
     )?;

@@ -3,18 +3,22 @@
 //! Taken from `glibc_version` (<https://github.com/delta-incubator/glibc-version-rs>),
 //! which used the Apache 2.0 license (but not the MIT license)
 
+use crate::cpuinfo::detect_hardware_floating_point_support;
 use fs_err as fs;
 use goblin::elf::Elf;
 use regex::Regex;
+use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::str::FromStr;
 use std::sync::LazyLock;
-use thiserror::Error;
+use std::{env, fmt};
 use tracing::trace;
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum LibcDetectionError {
     #[error(
         "Could not detect either glibc version nor musl libc version, at least one of which is required"
@@ -45,9 +49,87 @@ pub enum LibcDetectionError {
 
 /// We support glibc (manylinux) and musl (musllinux) on linux.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum LibcVersion {
+pub enum LibcVersion {
     Manylinux { major: u32, minor: u32 },
     Musllinux { major: u32, minor: u32 },
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+pub enum Libc {
+    Some(target_lexicon::Environment),
+    None,
+}
+
+impl Libc {
+    pub fn from_env() -> Result<Self, crate::Error> {
+        match env::consts::OS {
+            "linux" => {
+                if let Ok(libc) = env::var(EnvVars::UV_LIBC) {
+                    if !libc.is_empty() {
+                        return Self::from_str(&libc);
+                    }
+                }
+
+                Ok(Self::Some(match detect_linux_libc()? {
+                    LibcVersion::Manylinux { .. } => match env::consts::ARCH {
+                        // Checks if the CPU supports hardware floating-point operations.
+                        // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
+                        // download-metadata.json only includes armv7.
+                        "arm" | "armv5te" | "armv7" => {
+                            match detect_hardware_floating_point_support() {
+                                Ok(true) => target_lexicon::Environment::Gnueabihf,
+                                Ok(false) => target_lexicon::Environment::Gnueabi,
+                                Err(_) => target_lexicon::Environment::Gnu,
+                            }
+                        }
+                        _ => target_lexicon::Environment::Gnu,
+                    },
+                    LibcVersion::Musllinux { .. } => target_lexicon::Environment::Musl,
+                }))
+            }
+            "windows" | "macos" => Ok(Self::None),
+            // Use `None` on platforms without explicit support.
+            _ => Ok(Self::None),
+        }
+    }
+
+    pub fn is_musl(&self) -> bool {
+        matches!(self, Self::Some(target_lexicon::Environment::Musl))
+    }
+}
+
+impl FromStr for Libc {
+    type Err = crate::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "gnu" => Ok(Self::Some(target_lexicon::Environment::Gnu)),
+            "gnueabi" => Ok(Self::Some(target_lexicon::Environment::Gnueabi)),
+            "gnueabihf" => Ok(Self::Some(target_lexicon::Environment::Gnueabihf)),
+            "musl" => Ok(Self::Some(target_lexicon::Environment::Musl)),
+            "none" => Ok(Self::None),
+            _ => Err(crate::Error::UnknownLibc(s.to_string())),
+        }
+    }
+}
+
+impl Display for Libc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Some(env) => write!(f, "{env}"),
+            Self::None => write!(f, "none"),
+        }
+    }
+}
+
+impl From<&uv_platform_tags::Os> for Libc {
+    fn from(value: &uv_platform_tags::Os) -> Self {
+        match value {
+            uv_platform_tags::Os::Manylinux { .. } => Libc::Some(target_lexicon::Environment::Gnu),
+            uv_platform_tags::Os::Musllinux { .. } => Libc::Some(target_lexicon::Environment::Musl),
+            _ => Libc::None,
+        }
+    }
 }
 
 /// Determine whether we're running glibc or musl and in which version, given we are on linux.

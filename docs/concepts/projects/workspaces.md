@@ -75,8 +75,8 @@ bird-feeder = { workspace = true }
 members = ["packages/*"]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
 ```
 
 In this example, the `albatross` project depends on the `bird-feeder` project, which is a member of
@@ -106,8 +106,8 @@ tqdm = { git = "https://github.com/tqdm/tqdm" }
 members = ["packages/*"]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
 ```
 
 Every workspace member would, by default, install `tqdm` from GitHub, unless a specific member
@@ -188,8 +188,8 @@ dependencies = ["bird-feeder", "tqdm>=4,<5"]
 bird-feeder = { path = "packages/bird-feeder" }
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
 ```
 
 This approach conveys many of the same benefits, but allows for more fine-grained control over

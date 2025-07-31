@@ -22,6 +22,7 @@ use uv_configuration::{
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
+use uv_distribution::ExtraBuildRequires;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, Identifier, IndexCapabilities, IndexLocations,
@@ -88,12 +89,13 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
+    extra_build_requires: &'a ExtraBuildRequires,
     link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
     hasher: &'a HashStrategy,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
     sources: NoSources,
@@ -116,10 +118,11 @@ impl<'a> BuildDispatch<'a> {
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
         build_isolation: BuildIsolation<'a>,
+        extra_build_requires: &'a ExtraBuildRequires,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
-        exclude_newer: Option<ExcludeNewer>,
+        exclude_newer: ExcludeNewer,
         sources: NoSources,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
@@ -138,6 +141,7 @@ impl<'a> BuildDispatch<'a> {
             config_settings,
             config_settings_package,
             build_isolation,
+            extra_build_requires,
             link_mode,
             build_options,
             hasher,
@@ -219,6 +223,10 @@ impl BuildContext for BuildDispatch<'_> {
         &self.workspace_cache
     }
 
+    fn extra_build_dependencies(&self) -> &uv_workspace::pyproject::ExtraBuildDependencies {
+        &self.extra_build_requires.extra_build_dependencies
+    }
+
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
@@ -231,7 +239,7 @@ impl BuildContext for BuildDispatch<'_> {
         let resolver = Resolver::new(
             Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
             OptionsBuilder::new()
-                .exclude_newer(self.exclude_newer)
+                .exclude_newer(self.exclude_newer.clone())
                 .index_strategy(self.index_strategy)
                 .build_options(self.build_options.clone())
                 .flexibility(Flexibility::Fixed)
@@ -452,6 +460,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.workspace_cache(),
             config_settings,
             self.build_isolation,
+            &self.extra_build_requires.extra_build_dependencies,
             &build_stack,
             build_kind,
             self.build_extra_env_vars.clone(),

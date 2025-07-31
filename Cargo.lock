@@ -716,7 +716,7 @@ dependencies = [
  "ciborium",
  "clap",
  "codspeed",
- "criterion-plot",
+ "criterion-plot 0.5.0",
  "is-terminal",
  "itertools 0.10.5",
  "num-traits",
@@ -749,7 +749,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -843,15 +843,15 @@ dependencies = [
 
 [[package]]
 name = "criterion"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bf7af66b0989381bd0be551bd7cc91912a655a58c6918420c9527b1fd8b4679"
+checksum = "e1c047a62b0cc3e145fa84415a3191f628e980b194c2755aa12300a4e6cbd928"
 dependencies = [
  "anes",
  "cast",
  "ciborium",
  "clap",
- "criterion-plot",
+ "criterion-plot 0.6.0",
  "itertools 0.13.0",
  "num-traits",
  "oorandom",
@@ -871,6 +871,16 @@ checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
  "itertools 0.10.5",
+]
+
+[[package]]
+name = "criterion-plot"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b1bcc0dc7dfae599d84ad0b1a55f80cde8af3725da8313b528da95ef783e338"
+dependencies = [
+ "cast",
+ "itertools 0.13.0",
 ]
 
 [[package]]
@@ -4153,9 +4163,9 @@ source = "git+https://github.com/astral-sh/tl.git?rev=6e25b2ee2513d75385101a8ff9
 
 [[package]]
 name = "tokio"
-version = "1.46.1"
+version = "1.47.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cc3a2344dafbe23a245241fe8b09735b521110d30fcefbbd5feb1797ca35d17"
+checksum = "43864ed400b6043a4757a25c7a64a8efde741aed79a056a2fb348a406701bb35"
 dependencies = [
  "backtrace",
  "bytes",
@@ -4166,9 +4176,9 @@ dependencies = [
  "pin-project-lite",
  "signal-hook-registry",
  "slab",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "tokio-macros",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4645,7 +4655,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4722,6 +4732,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-performance-memory-allocator",
+ "uv-platform",
  "uv-platform-tags",
  "uv-publish",
  "uv-pypi-types",
@@ -4811,7 +4822,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "anyhow",
  "uv-build-backend",
@@ -5505,6 +5516,7 @@ dependencies = [
  "tracing",
  "unicode-width 0.2.1",
  "unscanny",
+ "uv-cache-key",
  "version-ranges",
 ]
 
@@ -5528,6 +5540,7 @@ dependencies = [
  "tracing-test",
  "unicode-width 0.2.1",
  "url",
+ "uv-cache-key",
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
@@ -5541,6 +5554,23 @@ version = "0.1.0"
 dependencies = [
  "mimalloc",
  "tikv-jemallocator",
+]
+
+[[package]]
+name = "uv-platform"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "goblin",
+ "indoc",
+ "procfs",
+ "regex",
+ "target-lexicon",
+ "thiserror 2.0.12",
+ "tracing",
+ "uv-fs",
+ "uv-platform-tags",
+ "uv-static",
 ]
 
 [[package]]
@@ -5616,6 +5646,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "url",
+ "uv-cache-key",
  "uv-distribution-filename",
  "uv-git-types",
  "uv-normalize",
@@ -5636,14 +5667,12 @@ dependencies = [
  "dunce",
  "fs-err",
  "futures",
- "goblin",
  "indexmap",
  "indoc",
  "insta",
  "itertools 0.14.0",
  "once_cell",
  "owo-colors",
- "procfs",
  "ref-cast",
  "regex",
  "reqwest",
@@ -5677,6 +5706,7 @@ dependencies = [
  "uv-install-wheel",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform",
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-redacted",
@@ -5837,6 +5867,8 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "url",
+ "uv-configuration",
+ "uv-distribution-types",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
@@ -6007,7 +6039,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.8.3"
+version = "0.8.4"
 
 [[package]]
 name = "uv-virtualenv"
@@ -6332,7 +6364,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

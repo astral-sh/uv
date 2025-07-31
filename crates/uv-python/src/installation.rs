@@ -10,6 +10,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Preview;
 use uv_pep440::{Prerelease, Version};
+use uv_platform::{Arch, Libc, Os};
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
@@ -17,7 +18,6 @@ use crate::discovery::{
 use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest, Reporter};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
-use crate::platform::{Arch, Libc, Os};
 use crate::{
     Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference, PythonSource,
     PythonVariant, PythonVersion, downloads,

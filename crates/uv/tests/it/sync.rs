@@ -1567,6 +1567,401 @@ fn sync_build_isolation_extra() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_extra_build_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import sys
+
+        from hatchling.build import *
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Adding `extra-build-dependencies` with the wrong name should fail the build
+    // (the cache is invalidated when extra build dependencies change)
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        wrong_name = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Write a test package that arbitrarily bans `anyio` at build time
+    let bad_child = context.temp_dir.child("bad_child");
+    bad_child.create_dir_all()?;
+    let bad_child_pyproject_toml = bad_child.child("pyproject.toml");
+    bad_child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "bad_child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = bad_child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import sys
+
+        from hatchling.build import *
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            pass
+        else:
+            print("Found `anyio` module", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    bad_child.child("src/bad_child/__init__.py").touch()?;
+
+    // Depend on `bad_child` too
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child", "bad_child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        bad_child = { path = "bad_child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+        bad_child = ["anyio"]
+    "#})?;
+
+    // Confirm that `bad_child` fails if anyio is provided
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Found `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
+    ");
+
+    // But `anyio` is not provided to `bad_child` if scoped to `child`
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child", "bad_child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        bad_child = { path = "bad_child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + bad-child==0.1.0 (from file://[TEMP_DIR]/bad_child)
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+
+    // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(&formatdoc! {r#"
+        import sys
+
+        from hatchling.build import *
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        # Check that we got the local version of anyio by checking for the marker
+        if not hasattr(anyio, 'LOCAL_ANYIO_MARKER'):
+            print("Found system anyio instead of local anyio", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child"]
+
+            [tool.uv.sources]
+            anyio = {{ path = "{anyio_local}" }}
+            child = {{ path = "child" }}
+
+            [tool.uv.extra-build-dependencies]
+            child = ["anyio"]
+        "#,
+        anyio_local = anyio_local.portable_display(),
+    })?;
+
+    // Running `uv sync` should succeed, as `anyio` is provided as a source
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // TODO(zanieb): We want to test with `--no-sources` too but unfortunately that's not easy
+    // because it'll disable the `child` path source too!
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+
+    // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.sources]
+        anyio = {{ path = "{}" }}
+    "#, anyio_local.portable_display()
+    })?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(&formatdoc! {r#"
+        import sys
+
+        from hatchling.build import *
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        # Check that we got the local version of anyio by checking for the marker
+        if not hasattr(anyio, 'LOCAL_ANYIO_MARKER'):
+            print("Found system anyio instead of local anyio", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["child"]
+
+            [tool.uv.sources]
+            child = { path = "child" }
+
+            [tool.uv.extra-build-dependencies]
+            child = ["anyio"]
+        "#,
+    })?;
+
+    // Running `uv sync` should fail due to the unapplied source
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Found system anyio instead of local anyio
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `project` (v0.1.0) depends on `child`
+    ");
+
+    Ok(())
+}
+
 /// Avoid using incompatible versions for build dependencies that are also part of the resolved
 /// environment. This is a very subtle issue, but: when locking, we don't enforce platform
 /// compatibility. So, if we reuse the resolver state to install, and the install itself has to
@@ -1691,7 +2086,7 @@ fn sync_relative_wheel() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -3246,7 +3641,7 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -3357,7 +3752,7 @@ fn sync_group_self() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4199,6 +4594,187 @@ fn no_install_project_no_build() -> Result<()> {
 }
 
 #[test]
+fn sync_extra_build_dependencies_script() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import sys
+        from hatchling.build import *
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Create a script that depends on the child package
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        # ///
+    "#})?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/script-[a-z0-9]+",
+            "environments-v2/script-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    // Add extra build dependencies to the script
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # child = { path = "child" }
+        #
+        # [tool.uv.extra-build-dependencies]
+        # child = ["anyio"]
+        # ///
+    "#})?;
+
+    // Running `uv sync` should now succeed due to extra build-dependencies
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_script_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+
+    // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(&formatdoc! {r#"
+        import sys
+        from hatchling.build import *
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        # Check that we got the local version of anyio by checking for the marker
+        if not hasattr(anyio, 'LOCAL_ANYIO_MARKER'):
+            print("Found system anyio instead of local anyio", file=sys.stderr)
+            sys.exit(1)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Create a script that depends on the child package
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&formatdoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["child"]
+        #
+        # [tool.uv.sources]
+        # anyio = {{ path = "{}" }}
+        # child = {{ path = "child" }}
+        #
+        # [tool.uv.extra-build-dependencies]
+        # child = ["anyio"]
+        # ///
+    "#, anyio_local.portable_display()
+    })?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/script-[a-z0-9]+",
+            "environments-v2/script-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Running `uv sync` should succeed with the sources applied
+    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn virtual_no_build() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4367,7 +4943,7 @@ fn convert_to_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4427,7 +5003,7 @@ fn convert_to_virtual() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4496,7 +5072,7 @@ fn convert_to_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -4561,7 +5137,7 @@ fn convert_to_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -6456,7 +7032,7 @@ fn sync_dynamic_extra() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -7929,7 +8505,7 @@ fn sync_stale_egg_info() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8036,7 +8612,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8130,7 +8706,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8248,7 +8824,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8430,7 +9006,7 @@ fn sync_git_path_dependency() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.13"
 
             [options]
@@ -8538,7 +9114,7 @@ fn sync_build_tag() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -8880,7 +9456,7 @@ fn sync_dry_run() -> Result<()> {
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Would replace project environment at: .venv
-    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.12'` vs `python_full_version == '3.9.*'`
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.12'` vs `python_full_version == '3.9.*'`
     Resolved 2 packages in [TIME]
     Would update lockfile at: uv.lock
     Would install 1 package
@@ -8897,7 +9473,7 @@ fn sync_dry_run() -> Result<()> {
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
-    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.12'` vs `python_full_version == '3.9.*'`
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.12'` vs `python_full_version == '3.9.*'`
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
@@ -9206,7 +9782,7 @@ fn sync_locked_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.11"
 
         [options]
@@ -9311,7 +9887,7 @@ fn sync_locked_script() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.11"
 
         [options]
@@ -9388,7 +9964,7 @@ fn sync_locked_script() -> Result<()> {
 
     ----- stderr -----
     Updating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
-    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
@@ -9400,7 +9976,7 @@ fn sync_locked_script() -> Result<()> {
 
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
-    warning: Ignoring existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
+    warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -10077,7 +10653,7 @@ fn locked_version_coherence() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [options]
@@ -10181,7 +10757,7 @@ fn sync_build_constraints() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 2
+            revision = 3
             requires-python = ">=3.12"
 
             [options]
@@ -10685,6 +11261,157 @@ fn sync_url_with_query_parameters() -> Result<()> {
     Ok(())
 }
 
+/// Test uv sync with --exclude-newer-package
+#[test]
+fn sync_exclude_newer_package() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+"#,
+    )?;
+
+    // First sync with only the global exclude-newer to show the baseline
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + certifi==2021.10.8
+     + charset-normalizer==2.0.12
+     + idna==3.3
+     + requests==2.27.1
+     + tqdm==4.64.0
+     + urllib3==1.26.9
+    "
+    );
+
+    // Now sync with --exclude-newer-package to allow tqdm to use a newer version
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=2022-09-04T00:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in timestamp cutoff: `global: 2022-04-04T12:00:00Z` vs. `global: 2022-04-04T12:00:00Z, tqdm: 2022-09-04T00:00:00Z`
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - tqdm==4.64.0
+     + tqdm==4.64.1
+    "
+    );
+
+    Ok(())
+}
+
+/// Test exclude-newer-package in pyproject.toml configuration
+#[test]
+fn sync_exclude_newer_package_config() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+
+[tool.uv]
+exclude-newer = "2022-04-04T12:00:00Z"
+"#,
+    )?;
+
+    // First sync with only the global exclude-newer from the config
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + certifi==2021.10.8
+     + charset-normalizer==2.0.12
+     + idna==3.3
+     + requests==2.27.1
+     + tqdm==4.64.0
+     + urllib3==1.26.9
+    "
+    );
+
+    // Now add the package-specific exclude-newer to the config
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tqdm",
+    "requests",
+]
+
+[tool.uv]
+exclude-newer = "2022-04-04T12:00:00Z"
+exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
+"#,
+    )?;
+
+    // Sync again with the package-specific override
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in timestamp cutoff: `global: 2022-04-04T12:00:00Z` vs. `global: 2022-04-04T12:00:00Z, tqdm: 2022-09-04T00:00:00Z`
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - tqdm==4.64.0
+     + tqdm==4.64.1
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg(unix)]
 fn read_only() -> Result<()> {
@@ -10853,7 +11580,7 @@ fn conflicting_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },
@@ -11019,7 +11746,7 @@ fn undeclared_editable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
         conflicts = [[
             { package = "project", group = "bar" },

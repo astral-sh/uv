@@ -116,7 +116,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     build_options: &'a BuildOptions,
     capabilities: &'a IndexCapabilities,
 }
@@ -130,7 +130,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         requires_python: &'a RequiresPython,
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
-        exclude_newer: Option<ExcludeNewer>,
+        exclude_newer: ExcludeNewer,
         build_options: &'a BuildOptions,
         capabilities: &'a IndexCapabilities,
     ) -> Self {
@@ -184,7 +184,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             &self.requires_python,
                             &self.allowed_yanks,
                             &self.hasher,
-                            self.exclude_newer.as_ref(),
+                            Some(&self.exclude_newer),
                             flat_index
                                 .and_then(|flat_index| flat_index.get(package_name))
                                 .cloned(),

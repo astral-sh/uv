@@ -32,8 +32,9 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -67,11 +68,12 @@ pub(crate) async fn pip_sync(
     config_settings_package: &PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
+    extra_build_dependencies: &ExtraBuildDependencies,
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     strict: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
@@ -85,6 +87,15 @@ pub(crate) async fn pip_sync(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+        && !extra_build_dependencies.is_empty()
+    {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+        );
+    }
+
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
         .connectivity(network_settings.connectivity)
@@ -348,6 +359,8 @@ pub(crate) async fn pip_sync(
     let state = SharedState::default();
 
     // Create a build dispatch.
+    let extra_build_requires =
+        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -361,10 +374,11 @@ pub(crate) async fn pip_sync(
         config_settings,
         config_settings_package,
         build_isolation,
+        &extra_build_requires,
         link_mode,
         &build_options,
         &build_hasher,
-        exclude_newer,
+        exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
         concurrency,
