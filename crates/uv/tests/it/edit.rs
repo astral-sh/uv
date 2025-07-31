@@ -13596,7 +13596,7 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
     Ok(())
 }
 
-/// See: https://github.com/astral-sh/uv/issues/14961
+/// See: <https://github.com/astral-sh/uv/issues/14961>
 #[test]
 fn add_multiline_indentation() -> Result<()> {
     let context = TestContext::new("3.12");
