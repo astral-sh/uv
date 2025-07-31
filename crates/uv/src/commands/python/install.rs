@@ -706,6 +706,7 @@ pub(crate) async fn install(
                         Some(true) => ("error", AnsiColors::Red),
                     };
 
+                    trace!("Error trace: {err:?}");
                     write_error_chain(
                         err.context(format!("Failed to create registry entry for {key}"))
                             .as_ref(),
