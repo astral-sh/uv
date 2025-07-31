@@ -1102,23 +1102,23 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
-            Self::SourceDistributions => "sdists-v9",
-            Self::FlatIndex => "flat-index-v2",
-            Self::Git => "git-v0",
-            Self::Interpreter => "interpreter-v4",
+            Self::SourceDistributions => "wheelnext-sdists-v9",
+            Self::FlatIndex => "wheelnext-flat-index-v2",
+            Self::Git => "wheelnext-git-v0",
+            Self::Interpreter => "wheelnext-interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_clean.rs`.
-            Self::Simple => "simple-v18",
+            Self::Simple => "wheelnext-simple-v18",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
-            Self::Wheels => "wheels-v5",
+            Self::Wheels => "wheelnext-wheels-v5",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
-            Self::Archive => "archive-v0",
-            Self::Builds => "builds-v0",
-            Self::Environments => "environments-v2",
-            Self::Python => "python-v0",
-            Self::Binaries => "binaries-v0",
+            Self::Archive => "wheelnext-archive-v0",
+            Self::Builds => "wheelnext-builds-v0",
+            Self::Environments => "wheelnext-environments-v2",
+            Self::Python => "wheelnext-python-v0",
+            Self::Binaries => "wheelnext-binaries-v0",
         }
     }
 
