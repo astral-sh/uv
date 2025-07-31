@@ -24,6 +24,7 @@ use uv_installer::SitePackages;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
+use uv_virtualenv::remove_virtualenv;
 
 mod receipt;
 mod tool;
@@ -198,7 +199,7 @@ impl InstalledTools {
             }
         }
 
-        fs_err::remove_dir_all(environment_path)?;
+        remove_virtualenv(environment_path.as_path())?;
 
         Ok(())
     }
