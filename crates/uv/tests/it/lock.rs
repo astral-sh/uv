@@ -10434,23 +10434,31 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
 /// Lock against a local directory laid out as a PEP 503-compatible index.
 #[test]
 fn lock_local_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.13");
 
     let root = context.temp_dir.child("simple-html");
     fs_err::create_dir_all(&root)?;
 
-    let tqdm = root.child("tqdm");
-    fs_err::create_dir_all(&tqdm)?;
+    let basic_package = root.child("basic-package");
+    fs_err::create_dir_all(&basic_package)?;
 
-    let wheel = tqdm.child("tqdm-1000.0.0-py3-none-any.whl");
+    let sdist = basic_package.child("basic_package-0.1.0.tar.gz");
     fs_err::copy(
         context
             .workspace_root
-            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl"),
+            .join("scripts/links/basic_package-0.1.0.tar.gz"),
+        &sdist,
+    )?;
+
+    let wheel = basic_package.child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("scripts/links/basic_package-0.1.0-py3-none-any.whl"),
         &wheel,
     )?;
 
-    let index = tqdm.child("index.html");
+    let index = basic_package.child("index.html");
     index.write_str(&formatdoc! {r#"
         <!DOCTYPE html>
         <html>
@@ -10458,26 +10466,33 @@ fn lock_local_index() -> Result<()> {
             <meta name="pypi:repository-version" content="1.1" />
           </head>
           <body>
-            <h1>Links for tqdm</h1>
+            <h1>Links for basic-package</h1>
             <a
-              href="{}"
-              data-requires-python=">=3.8"
+              href="{}#sha256=7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
+              data-requires-python=">=3.13"
             >
-              tqdm-1000.0.0-py3-none-any.whl
+              basic_package-0.1.0-py3-none-any.whl
+            </a>
+            <a
+              href="{}#sha256=af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4"
+              data-requires-python=">=3.13"
+            >
+              basic_package-0.1.0.tar.gz
             </a>
           </body>
         </html>
-    "#, Url::from_file_path(wheel).unwrap().as_str()})?;
-
-    let context = TestContext::new("3.12");
+    "#,
+        Url::from_file_path(wheel).unwrap().as_str(),
+        Url::from_file_path(sdist).unwrap().as_str(),
+    })?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! { r#"
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["tqdm"]
+        requires-python = ">=3.13"
+        dependencies = ["basic-package"]
 
         [tool.uv]
         extra-index-url = ["{}"]
@@ -10509,26 +10524,27 @@ fn lock_local_index() -> Result<()> {
             lock, @r#"
         version = 1
         revision = 3
-        requires-python = ">=3.12"
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "simple-html" }
+        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        wheels = [
+            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+        ]
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "tqdm" },
+            { name = "basic-package" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "tqdm" }]
-
-        [[package]]
-        name = "tqdm"
-        version = "1000.0.0"
-        source = { registry = "../../[TMP]/simple-html" }
-        wheels = [
-            { path = "tqdm/tqdm-1000.0.0-py3-none-any.whl" },
-        ]
+        requires-dist = [{ name = "basic-package" }]
         "#
         );
     });
@@ -10544,7 +10560,7 @@ fn lock_local_index() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10552,8 +10568,8 @@ fn lock_local_index() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==1000.0.0
-    "###);
+     + basic-package==0.1.0
+    ");
 
     Ok(())
 }
