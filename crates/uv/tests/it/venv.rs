@@ -1392,7 +1392,7 @@ fn venv_python_preference() {
 #[test]
 #[cfg(unix)]
 fn create_venv_symlink_clear_preservation() -> Result<()> {
-    use std::os::unix::fs::symlink;
+    use fs_err::os::unix::fs::symlink;
 
     let context = TestContext::new_with_versions(&["3.12"]);
 
@@ -1452,7 +1452,7 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn create_venv_symlink_recreate_preservation() -> Result<()> {
-    use std::os::unix::fs::symlink;
+    use fs_err::os::unix::fs::symlink;
 
     let context = TestContext::new_with_versions(&["3.12"]);
 
@@ -1512,7 +1512,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn create_venv_nested_symlink_preservation() -> Result<()> {
-    use std::os::unix::fs::symlink;
+    use fs_err::os::unix::fs::symlink;
 
     let context = TestContext::new_with_versions(&["3.12"]);
 
