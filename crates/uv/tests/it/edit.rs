@@ -13595,3 +13595,58 @@ fn add_path_outside_workspace_no_default() -> Result<()> {
 
     Ok(())
 }
+
+/// See: <https://github.com/astral-sh/uv/issues/14961>
+#[test]
+fn add_multiline_indentation() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["ruff", "typing-extensions"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + iniconfig==2.0.0
+     + ruff==0.3.4
+     + typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            "iniconfig>=2.0.0",
+            "ruff",
+            "typing-extensions",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
