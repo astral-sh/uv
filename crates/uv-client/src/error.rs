@@ -11,21 +11,58 @@ use uv_redacted::DisplaySafeUrl;
 use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
 
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
+#[derive(Debug)]
 pub struct Error {
     kind: Box<ErrorKind>,
+    retries: u32,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.retries > 0 {
+            write!(
+                f,
+                "Request failed after {retries} retries",
+                retries = self.retries
+            )
+        } else {
+            Display::fmt(&self.kind, f)
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        if self.retries > 0 {
+            Some(&self.kind)
+        } else {
+            self.kind.source()
+        }
+    }
 }
 
 impl Error {
-    /// Convert this error into its [`ErrorKind`] variant.
+    /// Create a new [`Error`] with the given [`ErrorKind`] and number of retries.
+    pub fn new(kind: ErrorKind, retries: u32) -> Self {
+        Self {
+            kind: Box::new(kind),
+            retries,
+        }
+    }
+
+    /// Return the number of retries that were attempted before this error was returned.
+    pub fn retries(&self) -> u32 {
+        self.retries
+    }
+
+    /// Convert this error into an [`ErrorKind`].
     pub fn into_kind(self) -> ErrorKind {
-        self.kind.into_base()
+        *self.kind
     }
 
     /// Return the [`ErrorKind`] of this error.
     pub fn kind(&self) -> &ErrorKind {
-        self.kind.base()
+        &self.kind
     }
 
     /// Create a new error from a JSON parsing error.
@@ -40,12 +77,12 @@ impl Error {
 
     /// Returns `true` if this error corresponds to an offline error.
     pub(crate) fn is_offline(&self) -> bool {
-        matches!(self.kind.base(), ErrorKind::Offline(_))
+        matches!(&*self.kind, ErrorKind::Offline(_))
     }
 
     /// Returns `true` if this error corresponds to an I/O "not found" error.
     pub(crate) fn is_file_not_exists(&self) -> bool {
-        let ErrorKind::Io(err) = self.kind.base() else {
+        let ErrorKind::Io(err) = &*self.kind else {
             return false;
         };
         matches!(err.kind(), std::io::ErrorKind::NotFound)
@@ -53,12 +90,12 @@ impl Error {
 
     /// Returns `true` if the error is due to an SSL error.
     pub fn is_ssl(&self) -> bool {
-        matches!(self.kind.base(), ErrorKind::WrappedReqwestError(.., err) if err.is_ssl())
+        matches!(&*self.kind, ErrorKind::WrappedReqwestError(.., err) if err.is_ssl())
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
     pub fn is_http_range_requests_unsupported(&self) -> bool {
-        match self.kind.base() {
+        match &*self.kind {
             // The server doesn't support range requests (as reported by the `HEAD` check).
             ErrorKind::AsyncHttpRangeReader(
                 _,
@@ -133,7 +170,7 @@ impl Error {
     /// streaming, like data descriptors.
     pub fn is_http_streaming_unsupported(&self) -> bool {
         matches!(
-            self.kind.base(),
+            &*self.kind,
             ErrorKind::Zip(_, ZipError::FeatureNotSupported(_))
         )
     }
@@ -143,6 +180,7 @@ impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
         Self {
             kind: Box::new(kind),
+            retries: 0,
         }
     }
 }
@@ -265,22 +303,6 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
-    /// Return the [`ErrorKind`] without the retry wrapper, if it exists.
-    fn base(&self) -> &Self {
-        match self {
-            ErrorKind::RequestWithRetries { source, .. } => source,
-            _ => self,
-        }
-    }
-
-    /// Return the [`ErrorKind`] without the retry wrapper, if it exists.
-    fn into_base(self) -> Self {
-        match self {
-            ErrorKind::RequestWithRetries { source, .. } => *source,
-            _ => self,
-        }
-    }
-
     /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
         Self::WrappedReqwestError(url, WrappedReqwestError::from(error))

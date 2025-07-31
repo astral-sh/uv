@@ -246,20 +246,25 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
-                uv_distribution::Error::Client(client) => match client.into_kind() {
-                    uv_client::ErrorKind::Offline(_) => {
-                        Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
+                uv_distribution::Error::Client(client) => {
+                    let retries = client.retries();
+                    match client.into_kind() {
+                        uv_client::ErrorKind::Offline(_) => {
+                            Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
+                        }
+                        uv_client::ErrorKind::MetadataParseError(_, _, err) => {
+                            Ok(MetadataResponse::Unavailable(
+                                MetadataUnavailable::InvalidMetadata(Arc::new(*err)),
+                            ))
+                        }
+                        uv_client::ErrorKind::Metadata(_, err) => {
+                            Ok(MetadataResponse::Unavailable(
+                                MetadataUnavailable::InvalidStructure(Arc::new(err)),
+                            ))
+                        }
+                        kind => Err(uv_client::Error::new(kind, retries).into()),
                     }
-                    uv_client::ErrorKind::MetadataParseError(_, _, err) => {
-                        Ok(MetadataResponse::Unavailable(
-                            MetadataUnavailable::InvalidMetadata(Arc::new(*err)),
-                        ))
-                    }
-                    uv_client::ErrorKind::Metadata(_, err) => Ok(MetadataResponse::Unavailable(
-                        MetadataUnavailable::InvalidStructure(Arc::new(err)),
-                    )),
-                    kind => Err(uv_client::Error::from(kind).into()),
-                },
+                }
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {
                     Ok(MetadataResponse::Unavailable(
                         MetadataUnavailable::InconsistentMetadata(Arc::new(err)),
