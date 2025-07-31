@@ -109,6 +109,9 @@ pub(crate) fn create(
                 }
                 OnExisting::Remove => {
                     debug!("Removing existing {name} due to `--clear`");
+                    // Before removing the virtual environment, we need to canonicalize the path
+                    // because `Path::metadata` will follow the symlink but we're still operating on
+                    // the unresolved path and will remove the symlink itself.
                     let location = location
                         .canonicalize()
                         .unwrap_or_else(|_| location.to_path_buf());
@@ -119,6 +122,9 @@ pub(crate) fn create(
                     match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
+                            // Before removing the virtual environment, we need to canonicalize the
+                            // path because `Path::metadata` will follow the symlink but we're still
+                            // operating on the unresolved path and will remove the symlink itself.
                             let location = location
                                 .canonicalize()
                                 .unwrap_or_else(|_| location.to_path_buf());
