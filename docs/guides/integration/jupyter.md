@@ -31,6 +31,28 @@ If you're looking for read-only access to the project's virtual environment, the
 more to it. However, if you need to install additional packages from within the notebook, there are
 a few extra details to consider.
 
+## Setting up an ephemeral Jupyter environment
+
+If you are looking for a way to quickly hack on something in a Jupyter notebook, you can set up a
+system where uv sets up an ephemeral virtual environment, like how Google Colab works, but locally
+and self-hosted.
+
+You can spin up a cloud instance with the resources you need, install uv, run a single command, then
+use, for example, the VS Code SSH and Jupyter extension and quickly start experimenting and hacking.
+Messed up? Just restart the kernel!
+
+A virtual environment, to be usable in Jupyter, only needs ipykernel and it's dependencies, so
+Jupyter can run independently of ipykernel. The following command sets up ipykernel kernels to run
+using `uv run`:
+
+```console
+$ uvx uv-jupyter-kernel --versions 3.13 3.12 3.11 # or any other python version uv supports
+```
+
+As the command is idempotent and only sets up the entry point, there is no need to regularly run it.
+You only need to run once! Need more python versions? Just run it again passing any Python version
+you want! Everything else but native libraries is setup and downloaded on the first time you use it.
+
 ### Creating a kernel
 
 If you need to install packages from within the notebook, we recommend creating a dedicated kernel
