@@ -2708,7 +2708,7 @@ mod tests {
                 Preview::default(),
             )
         })??;
-        // We should find the Pyodide intepreter
+        // We should find the Pyodide interpreter
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.13.2"
