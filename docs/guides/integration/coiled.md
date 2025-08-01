@@ -137,7 +137,7 @@ jobs, however, if the user experience for running the script locally is that it 
 and shows the output, then we need to address that difference in user experience here.
 
 It looks like `uvx coiled batch run -- uv run process.py` isn't supported (using the `--` as a
-separator), I wanted to use that for a single-line commmand that still separated the `uv run`
+separator), I wanted to use that for a single-line command that still separated the `uv run`
 command.
 -->
 
