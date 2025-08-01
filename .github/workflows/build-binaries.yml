@@ -67,9 +67,9 @@ jobs:
         run: |
           # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
           # we run the risk that pip pull uv from PyPI instead.
-          pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
-          ${{ env.MODULE_NAME }} --help
-          python -m ${{ env.MODULE_NAME }} --help
+          pip install dist/${PACKAGE_NAME}-*.tar.gz --force-reinstall
+          ${MODULE_NAME} --help
+          python -m ${MODULE_NAME} --help
           uvx --help
       - name: "Upload sdist"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -85,9 +85,9 @@ jobs:
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Test sdist uv-build"
         run: |
-          pip install crates/uv-build/dist/${{ env.PACKAGE_NAME }}_build-*.tar.gz --force-reinstall
-          ${{ env.MODULE_NAME }}-build --help
-          python -m ${{ env.MODULE_NAME }}_build --help
+          pip install crates/uv-build/dist/${PACKAGE_NAME}_build-*.tar.gz --force-reinstall
+          ${MODULE_NAME}-build --help
+          python -m ${MODULE_NAME}_build --help
       - name: "Upload sdist uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -174,9 +174,9 @@ jobs:
           args: --release --locked --out dist --features self-update
       - name: "Test wheel - aarch64"
         run: |
-          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-          ${{ env.MODULE_NAME }} --help
-          python -m ${{ env.MODULE_NAME }} --help
+          pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+          ${MODULE_NAME} --help
+          python -m ${MODULE_NAME} --help
           uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -210,9 +210,9 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Test wheel - aarch64"
         run: |
-          pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-          ${{ env.MODULE_NAME }}-build --help
-          python -m ${{ env.MODULE_NAME }}_build --help
+          pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+          ${MODULE_NAME}-build --help
+          python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -253,9 +253,9 @@ jobs:
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
-          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-          ${{ env.MODULE_NAME }} --help
-          python -m ${{ env.MODULE_NAME }} --help
+          pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+          ${MODULE_NAME} --help
+          python -m ${MODULE_NAME} --help
           uvx --help
           uvw --help
       - name: "Upload wheels"
@@ -266,11 +266,13 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          ARCHIVE_FILE=uv-${{ matrix.platform.target }}.zip
-          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uv.exe
-          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uvx.exe
-          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uvw.exe
+          ARCHIVE_FILE=uv-${PLATFORM_TARGET}.zip
+          7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uv.exe
+          7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uvx.exe
+          7z a $ARCHIVE_FILE ./target/${PLATFORM_TARGET}/release/uvw.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+        env:
+          PLATFORM_TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -289,9 +291,9 @@ jobs:
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
-          pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-          ${{ env.MODULE_NAME }}-build --help
-          python -m ${{ env.MODULE_NAME }}_build --help
+          pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+          ${MODULE_NAME}-build --help
+          python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -354,9 +356,9 @@ jobs:
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
-          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-          ${{ env.MODULE_NAME }} --help
-          python -m ${{ env.MODULE_NAME }} --help
+          pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+          ${MODULE_NAME} --help
+          python -m ${MODULE_NAME} --help
           uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -366,7 +368,6 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          TARGET=${{ matrix.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
@@ -375,6 +376,8 @@ jobs:
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+        env:
+          TARGET: ${{ matrix.target }}
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -393,9 +396,9 @@ jobs:
       - name: "Test wheel uv-build"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
-          pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-          ${{ env.MODULE_NAME }}-build --help
-          python -m ${{ env.MODULE_NAME }}_build --help
+          pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+          ${MODULE_NAME}-build --help
+          python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -449,10 +452,10 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
+            pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }} --help
+            # python -m ${MODULE_NAME} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -462,7 +465,6 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
@@ -471,6 +473,8 @@ jobs:
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+        env:
+          TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -498,10 +502,10 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
+            pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+            ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }}_build --help
+            # python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -552,10 +556,10 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
+            pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }} --help
+            # python -m ${MODULE_NAME} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -565,7 +569,6 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
@@ -574,6 +577,8 @@ jobs:
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+        env:
+          TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -601,10 +606,10 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
+            pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }}-build --help
+            # python -m ${MODULE_NAME}-build --help
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -665,10 +670,10 @@ jobs:
       #       apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
       #       pip3 install -U pip
       #     run: |
-      #       pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-      #       ${{ env.MODULE_NAME }} --help
+      #       pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+      #       ${MODULE_NAME} --help
       #       #(konsti) TODO: Enable this test on all platforms,currently `find_uv_bin` is failingto discover uv here.
-      #       # python -m ${{ env.MODULE_NAME }} --helppython -m ${{ env.MODULE_NAME }} --help
+      #       # python -m ${MODULE_NAME} --helppython -m ${MODULE_NAME} --help
       #       uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -678,7 +683,6 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
@@ -687,6 +691,8 @@ jobs:
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+        env:
+          TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -758,10 +764,10 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
+            pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }} --help
+            # python -m ${MODULE_NAME} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -771,7 +777,6 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
@@ -780,6 +785,8 @@ jobs:
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+        env:
+          TARGET: ${{ matrix.platform.target }}
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -807,10 +814,10 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
+            pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }}-build --help
+            # python -m ${MODULE_NAME}-build --help
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -854,10 +861,10 @@ jobs:
             apk add python3
             python3 -m venv .venv
             .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/${{ env.MODULE_NAME }} --help
+            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            .venv/bin/${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${{ env.MODULE_NAME }} --help
+            # .venv/bin/python -m ${MODULE_NAME} --help
             .venv/bin/uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -867,7 +874,6 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          TARGET=${{ matrix.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
@@ -876,6 +882,8 @@ jobs:
           cp target/$TARGET/release/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+        env:
+          TARGET: ${{ matrix.target }}
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -901,9 +909,9 @@ jobs:
             apk add python3
             python3 -m venv .venv
             .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            .venv/bin/${{ env.MODULE_NAME }}-build --help
-            .venv/bin/python -m ${{ env.MODULE_NAME }}_build --help
+            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            .venv/bin/${MODULE_NAME}-build --help
+            .venv/bin/python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -952,10 +960,10 @@ jobs:
             apk add python3
           run: |
             python -m venv .venv
-            .venv/bin/pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/${{ env.MODULE_NAME }} --help
+            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            .venv/bin/${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${{ env.MODULE_NAME }} --help
+            # .venv/bin/python -m ${MODULE_NAME} --help
             .venv/bin/uvx --help
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel (manylinux)"
@@ -968,10 +976,10 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
+            pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
+            ${MODULE_NAME} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }} --help
+            # python -m ${MODULE_NAME} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -981,16 +989,17 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
-          PROFILE="${{ matrix.platform.arch == 'ppc64le' && 'release-no-lto' || 'release' }}"
 
           mkdir -p $ARCHIVE_NAME
           cp target/$TARGET/$PROFILE/uv $ARCHIVE_NAME/uv
           cp target/$TARGET/$PROFILE/uvx $ARCHIVE_NAME/uvx
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+        env:
+          TARGET: ${{ matrix.platform.target }}
+          PROFILE: ${{ matrix.platform.arch == 'ppc64le' && 'release-no-lto' || 'release' }}
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -1017,10 +1026,10 @@ jobs:
             apk add python3
           run: |
             python -m venv .venv
-            .venv/bin/pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            .venv/bin/${{ env.MODULE_NAME }}-build --help
+            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            .venv/bin/${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${{ env.MODULE_NAME }}_build --help
+            # .venv/bin/python -m ${MODULE_NAME}_build --help
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
@@ -1032,10 +1041,10 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
+            pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # python -m ${{ env.MODULE_NAME }}_build --help
+            # python -m ${MODULE_NAME}_build --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
