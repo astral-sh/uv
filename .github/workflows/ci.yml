@@ -1442,7 +1442,7 @@ jobs:
           ./uv venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide2
           # TODO: be able to install Emscripten wheels here...
           source ./venv-pyodide2/bin/activate
-          uv pip install packaging
+          ./uv pip install packaging
           python -c 'import packaging'
 
   integration-test-github-actions:
