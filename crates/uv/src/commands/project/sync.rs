@@ -749,6 +749,7 @@ pub(super) async fn do_sync(
         config_setting,
         config_settings_package,
         build_isolation,
+        &extra_build_requires,
         link_mode,
         build_options,
         &build_hasher,
