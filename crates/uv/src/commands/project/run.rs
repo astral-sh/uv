@@ -1102,6 +1102,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                                 &entry.path().display()
                             );
                         }
+                        Err(CopyEntrypointError::Io(err))
+                            if err.kind() == std::io::ErrorKind::PermissionDenied =>
+                        {
+                            trace!(
+                                "Skipping copy of entrypoint `{}`: permission denied",
+                                &entry.path().display()
+                            );
+                        }
                         Err(err) => return Err(err.into()),
                     }
                 }
