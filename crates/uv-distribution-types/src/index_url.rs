@@ -25,9 +25,8 @@ static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     ))))
 });
 
-static VARIANT_URL: LazyLock<DisplaySafeUrl> = LazyLock::new(|| {
-    DisplaySafeUrl::parse("https://download.pytorch.org/whl/test/variant").unwrap()
-});
+static VARIANT_URL: LazyLock<DisplaySafeUrl> =
+    LazyLock::new(|| DisplaySafeUrl::parse("https://download.pytorch.org/whl/variant").unwrap());
 
 static VARIANT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_extra_index_url(IndexUrl::Url(Arc::new(VerbatimUrl::from_url(
