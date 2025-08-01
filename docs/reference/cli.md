@@ -21,7 +21,7 @@ uv [OPTIONS] <COMMAND>
 <dt><a href="#uv-lock"><code>uv lock</code></a></dt><dd><p>Update the project's lockfile</p></dd>
 <dt><a href="#uv-export"><code>uv export</code></a></dt><dd><p>Export the project's lockfile to an alternate format</p></dd>
 <dt><a href="#uv-tree"><code>uv tree</code></a></dt><dd><p>Display the project's dependency tree</p></dd>
-<dt><a href="#uv-format"><code>uv format</code></a></dt><dd><p>Format Python source files using Ruff</p></dd>
+<dt><a href="#uv-format"><code>uv format</code></a></dt><dd><p>Format Python files</p></dd>
 <dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and install commands provided by Python packages</p></dd>
 <dt><a href="#uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations</p></dd>
 <dt><a href="#uv-pip"><code>uv pip</code></a></dt><dd><p>Manage Python packages with a pip-compatible interface</p></dd>
@@ -1830,13 +1830,13 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 
 ## uv format
 
-Format Python source files using Ruff.
+Format Python files.
 
-Formats Python source files using the Ruff formatter. By default, all Python files in the current directory and subdirectories are formatted.
+Formats Python files using the Ruff formatter. By default, all Python files in the project are formatted.
 
 To check if files are formatted without modifying them, use `--check`. To see a diff of formatting changes, use `--diff`.
 
-Additional arguments can be passed to Ruff after `--`. For example: `uv format src/ -- --line-length 100`
+Additional arguments can be passed to Ruff after `--`.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -1894,7 +1894,7 @@ uv format [OPTIONS] [COMMAND]
 </dd><dt id="uv-format--verbose"><a href="#uv-format--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd><dt id="uv-format--version"><a href="#uv-format--version"><code>--version</code></a> <i>version</i></dt><dd><p>The version of Ruff to use for formatting.</p>
-<p>By default, the latest version of Ruff will be used.</p>
+<p>By default, a version of Ruff pinned by uv will be used.</p>
 </dd></dl>
 
 ## uv tool

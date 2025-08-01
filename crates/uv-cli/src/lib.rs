@@ -1004,16 +1004,15 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
-    /// Format Python source files using Ruff.
+    /// Format Python files.
     ///
-    /// Formats Python source files using the Ruff formatter. By default, all Python files
-    /// in the current directory and subdirectories are formatted.
+    /// Formats Python files using the Ruff formatter. By default, all Python files in the project
+    /// are formatted.
     ///
-    /// To check if files are formatted without modifying them, use `--check`.
-    /// To see a diff of formatting changes, use `--diff`.
+    /// To check if files are formatted without modifying them, use `--check`. To see a diff of
+    /// formatting changes, use `--diff`.
     ///
-    /// Additional arguments can be passed to Ruff after `--`. For example:
-    /// `uv format src/ -- --line-length 100`
+    /// Additional arguments can be passed to Ruff after `--`.
     #[command(
         after_help = "Use `uv help format` for more details.",
         after_long_help = ""
@@ -4281,14 +4280,14 @@ pub struct FormatArgs {
 
     /// The version of Ruff to use for formatting.
     ///
-    /// By default, the latest version of Ruff will be used.
+    /// By default, a version of Ruff pinned by uv will be used.
     #[arg(long)]
     pub version: Option<String>,
 
-    /// Additional arguments to pass to Ruff, including specific files or directories.
+    /// Additional arguments to pass to Ruff.
     ///
-    /// Use `--` to separate these arguments from uv arguments.
-    /// For example: `uv format -- --line-length 100` or `uv format -- src/`
+    /// For example, use `uv format -- --line-length 100` to set the line length or
+    /// `uv format -- src/module/foo.py` to format a specific file.
     #[command(subcommand)]
     pub args: Option<ExternalCommand>,
 }
