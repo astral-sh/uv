@@ -49,8 +49,6 @@ jobs:
           display_name="$version"
 
           echo "DISPLAY_NAME=$display_name" >> $GITHUB_ENV
-        env:
-          VERSION: ${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}
 
       - name: "Set branch name"
         run: |
