@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
 use std::str::FromStr;
@@ -788,6 +789,38 @@ pub trait MarkerVariantsEnvironment {
     /// Whether there is the given property, for evaluating `... in variant_properties`.
     fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool;
 
+    /// Whether the base package has a property with the given namespace, for evaluating
+    /// `... in variant_namespaces`.
+    ///
+    /// This is an extension to the standard use internally by uv when variant markers occur
+    /// outside their base package.
+    fn contains_base_namespace(&self, _base: &str, _namespace: &str) -> bool {
+        false
+    }
+
+    /// Whether the base package has a property with the given feature, for evaluating
+    /// `... in variant_features`.
+    ///
+    /// This is an extension to the standard use internally by uv when variant markers occur
+    /// outside their base package.
+    fn contains_based_feature(&self, _base: &str, _namespace: &str, _feature: &str) -> bool {
+        false
+    }
+
+    /// Whether the base package has the given property, for evaluating `... in variant_properties`.
+    ///
+    /// This is an extension to the standard use internally by uv when variant markers occur
+    /// outside their base package.
+    fn contains_based_property(
+        &self,
+        _base: &str,
+        _namespace: &str,
+        _feature: &str,
+        _property: &str,
+    ) -> bool {
+        false
+    }
+
     /// Whether variant markers always evaluate to `true`.
     // TODO(konsti): This should be encoded in the type system.
     fn is_universal(&self) -> bool {
@@ -830,6 +863,24 @@ impl<T: MarkerVariantsEnvironment> MarkerVariantsEnvironment for &T {
     fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
         T::contains_property(self, namespace, feature, property)
     }
+
+    fn contains_base_namespace(&self, prefix: &str, namespace: &str) -> bool {
+        T::contains_base_namespace(self, prefix, namespace)
+    }
+
+    fn contains_based_feature(&self, prefix: &str, namespace: &str, feature: &str) -> bool {
+        T::contains_based_feature(self, prefix, namespace, feature)
+    }
+
+    fn contains_based_property(
+        &self,
+        prefix: &str,
+        namespace: &str,
+        feature: &str,
+        property: &str,
+    ) -> bool {
+        T::contains_based_property(self, prefix, namespace, feature, property)
+    }
 }
 
 /// A marker variants environment that always evaluates to `true`.
@@ -845,6 +896,24 @@ impl MarkerVariantsEnvironment for MarkerVariantsUniversal {
     }
 
     fn contains_property(&self, _namespace: &str, _feature: &str, _property: &str) -> bool {
+        true
+    }
+
+    fn contains_base_namespace(&self, _prefix: &str, _namespace: &str) -> bool {
+        true
+    }
+
+    fn contains_based_feature(&self, _prefix: &str, _namespace: &str, _feature: &str) -> bool {
+        true
+    }
+
+    fn contains_based_property(
+        &self,
+        _prefix: &str,
+        _namespace: &str,
+        _feature: &str,
+        _property: &str,
+    ) -> bool {
         true
     }
 
@@ -1218,27 +1287,46 @@ impl MarkerTree {
             }
             MarkerTreeKind::List(marker) => {
                 let edge = match marker.pair() {
-                    CanonicalMarkerListPair::VariantNamespaces { namespace } => {
+                    CanonicalMarkerListPair::VariantNamespaces { base, namespace } => {
                         if variants.is_universal() {
                             return true;
                         }
-                        variants.contains_namespace(namespace)
-                    }
-                    CanonicalMarkerListPair::VariantFeatures { namespace, feature } => {
-                        if variants.is_universal() {
-                            return true;
+                        if let Some(base) = base {
+                            variants.contains_base_namespace(base, namespace)
+                        } else {
+                            variants.contains_namespace(namespace)
                         }
-                        variants.contains_feature(namespace, feature)
                     }
-                    CanonicalMarkerListPair::VariantProperties {
+                    CanonicalMarkerListPair::VariantFeatures {
+                        base,
                         namespace,
                         feature,
-                        value: property,
                     } => {
                         if variants.is_universal() {
                             return true;
                         }
-                        variants.contains_property(namespace, feature, property)
+
+                        if let Some(base) = base {
+                            variants.contains_based_feature(base, namespace, feature)
+                        } else {
+                            variants.contains_feature(namespace, feature)
+                        }
+                    }
+                    CanonicalMarkerListPair::VariantProperties {
+                        base,
+                        namespace,
+                        feature,
+                        value,
+                    } => {
+                        if variants.is_universal() {
+                            return true;
+                        }
+
+                        if let Some(base) = base {
+                            variants.contains_based_property(base, namespace, feature, value)
+                        } else {
+                            variants.contains_property(namespace, feature, value)
+                        }
                     }
                     CanonicalMarkerListPair::Extras(extra) => extras.extras().contains(extra),
                     CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
@@ -1539,6 +1627,58 @@ impl MarkerTree {
         imp(self, &mut f);
     }
 
+    /// Ensure variant markers are globally identifiable by adding a prefix to all un-prefixed
+    /// variant markers.
+    ///
+    /// When using variant markers outside their original package, for example in the resolver forks
+    /// or in the lockfile, we need to attach the package of orign they need to be evaluated from.
+    #[must_use]
+    pub fn with_variant_base(self, base: &str) -> Self {
+        if !self.has_variant_expression() {
+            return self;
+        }
+
+        MarkerTree(INTERNER.lock().edit_variable(self.0, &|var| match var {
+            Variable::List(CanonicalMarkerListPair::VariantNamespaces {
+                base: None,
+                namespace,
+            }) => Some(Variable::List(CanonicalMarkerListPair::VariantNamespaces {
+                base: Some(base.to_string()),
+                namespace: namespace.clone(),
+            })),
+            Variable::List(CanonicalMarkerListPair::VariantFeatures {
+                base: None,
+                namespace,
+                feature,
+            }) => Some(Variable::List(CanonicalMarkerListPair::VariantFeatures {
+                base: Some(base.to_string()),
+                namespace: namespace.clone(),
+                feature: feature.clone(),
+            })),
+            Variable::List(CanonicalMarkerListPair::VariantProperties {
+                base: None,
+                namespace,
+                feature,
+                value,
+            }) => Some(Variable::List(CanonicalMarkerListPair::VariantProperties {
+                base: Some(base.to_string()),
+                namespace: namespace.clone(),
+                feature: feature.clone(),
+                value: value.clone(),
+            })),
+            _ => None,
+        }))
+    }
+
+    /// The base packages for variant markers, if any.
+    ///
+    /// Variant markers without a base package are ignored.
+    pub fn collect_variant_bases(&self) -> BTreeSet<String> {
+        let mut bases = BTreeSet::new();
+        INTERNER.lock().collect_variant_bases(self.0, &mut bases);
+        bases
+    }
+
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
         MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(true),
@@ -1552,21 +1692,7 @@ impl MarkerTree {
             _ => None,
         }))
     }
-}
 
-impl fmt::Debug for MarkerTree {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.is_true() {
-            return write!(f, "true");
-        }
-        if self.is_false() {
-            return write!(f, "false");
-        }
-        write!(f, "{}", self.contents().unwrap())
-    }
-}
-
-impl MarkerTree {
     /// Formats a [`MarkerTree`] as a graph.
     ///
     /// This is useful for debugging when one wants to look at a
@@ -1677,6 +1803,18 @@ impl MarkerTree {
     }
 }
 
+impl fmt::Debug for MarkerTree {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.is_true() {
+            return write!(f, "true");
+        }
+        if self.is_false() {
+            return write!(f, "false");
+        }
+        write!(f, "{}", self.contents().unwrap())
+    }
+}
+
 impl PartialOrd for MarkerTree {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -1753,16 +1891,9 @@ impl MarkerTreeKind<'_> {
             MarkerTreeKind::True | MarkerTreeKind::False => false,
             Self::List(ListMarkerTree {
                 pair:
-                    CanonicalMarkerListPair::VariantNamespaces { namespace: _ }
-                    | CanonicalMarkerListPair::VariantFeatures {
-                        namespace: _,
-                        feature: _,
-                    }
-                    | CanonicalMarkerListPair::VariantProperties {
-                        namespace: _,
-                        feature: _,
-                        value: _,
-                    },
+                    CanonicalMarkerListPair::VariantNamespaces { .. }
+                    | CanonicalMarkerListPair::VariantFeatures { .. }
+                    | CanonicalMarkerListPair::VariantProperties { .. },
                 ..
             }) => true,
             _ => true,
@@ -3966,5 +4097,19 @@ mod test {
         assert!(marker.evaluate(&env37, cu126, &[]));
         assert!(marker.evaluate(&env37, cu126_2, &[]));
         assert!(!marker.evaluate(&env37, cu128, &[]));
+    }
+
+    #[test]
+    fn base_variant_marker() {
+        let env37 = env37();
+        let cu128 = [("nvidia", "ctk", "12.8")].as_slice();
+
+        let marker = m(
+            " platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.8' in variant_properties",
+        );
+        let marker_base = marker.with_variant_base("torch");
+
+        assert!(marker.evaluate(&env37, cu128, &[]));
+        assert!(!marker_base.evaluate(&env37, cu128, &[]));
     }
 }

@@ -1480,13 +1480,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
+        let variant_base = package
+            .name()
+            .map(ToString::to_string)
+            .unwrap_or("TODO".to_string());
+
         // If the user explicitly marked a platform as required, ensure it has coverage.
         for marker in self.options.required_environments.iter().copied() {
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution...
                 if dist.implied_markers().is_disjoint(marker)
-                    && !find_environments(id, pubgrub).is_disjoint(marker)
+                    && !find_environments(id, pubgrub, &variant_base).is_disjoint(marker)
                 {
                     // Then we need to fork.
                     let Some((left, right)) = fork_version_by_marker(env, marker) else {
@@ -1783,7 +1788,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             })
         } else {
-            Ok(result?.fork(env, python_requirement, &self.conflicts))
+            let variant_base = package
+                .name()
+                .map(ToString::to_string)
+                .unwrap_or("TODO".to_string());
+            Ok(result?.fork(env, python_requirement, &self.conflicts, &variant_base))
         }
     }
 
@@ -3625,6 +3634,7 @@ impl Dependencies {
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         conflicts: &Conflicts,
+        variant_base: &str,
     ) -> ForkedDependencies {
         let deps = match self {
             Dependencies::Available(deps) => deps,
@@ -3643,7 +3653,13 @@ impl Dependencies {
         let Forks {
             mut forks,
             diverging_packages,
-        } = Forks::new(name_to_deps, env, python_requirement, conflicts);
+        } = Forks::new(
+            name_to_deps,
+            env,
+            python_requirement,
+            conflicts,
+            variant_base,
+        );
         if forks.is_empty() {
             ForkedDependencies::Unforked(vec![])
         } else if forks.len() == 1 {
@@ -3701,6 +3717,7 @@ impl Forks {
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         conflicts: &Conflicts,
+        variant_base: &str,
     ) -> Forks {
         let python_marker = python_requirement.to_marker_tree();
 
@@ -3730,7 +3747,7 @@ impl Forks {
                     .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
-                    let marker = dep.package.marker();
+                    let marker = dep.package.marker().with_variant_base(variant_base);
                     for fork in &mut forks {
                         if fork.env.included_by_marker(marker) {
                             fork.add_dependency(dep.clone());
@@ -3741,8 +3758,11 @@ impl Forks {
             } else {
                 // If all dependencies have the same markers, we should also avoid forking.
                 if let Some(dep) = deps.first() {
-                    let marker = dep.package.marker();
-                    if deps.iter().all(|dep| marker == dep.package.marker()) {
+                    let marker = dep.package.marker().with_variant_base(variant_base);
+                    if deps
+                        .iter()
+                        .all(|dep| marker == dep.package.marker().with_variant_base(variant_base))
+                    {
                         // Unless that "same marker" is a Python requirement that is stricter than
                         // the current Python requirement. In that case, we need to fork to respect
                         // the stricter requirement.
@@ -3762,7 +3782,7 @@ impl Forks {
                 }
             }
             for dep in deps {
-                let mut forker = match ForkingPossibility::new(env, &dep) {
+                let mut forker = match ForkingPossibility::new(env, &dep, variant_base) {
                     ForkingPossibility::Possible(forker) => forker,
                     ForkingPossibility::DependencyAlwaysExcluded => {
                         // If the markers can never be satisfied by the parent
@@ -3791,12 +3811,12 @@ impl Forks {
 
                     for fork_env in envs {
                         let mut new_fork = fork.clone();
-                        new_fork.set_env(fork_env);
+                        new_fork.set_env(fork_env, variant_base);
                         // We only add the dependency to this fork if it
                         // satisfies the fork's markers. Some forks are
                         // specifically created to exclude this dependency,
                         // so this isn't always true!
-                        if forker.included(&new_fork.env) {
+                        if forker.included(&new_fork.env, variant_base) {
                             new_fork.add_dependency(dep.clone());
                         }
                         // Filter out any forks we created that are disjoint with our
@@ -3935,10 +3955,10 @@ impl Fork {
     ///
     /// Any dependency in this fork that does not satisfy the given environment
     /// is removed.
-    fn set_env(&mut self, env: ResolverEnvironment) {
+    fn set_env(&mut self, env: ResolverEnvironment, variant_base: &str) {
         self.env = env;
         self.dependencies.retain(|dep| {
-            let marker = dep.package.marker();
+            let marker = dep.package.marker().with_variant_base(variant_base);
             if self.env.included_by_marker(marker) {
                 return true;
             }
@@ -4057,7 +4077,11 @@ fn enrich_dependency_error(
 }
 
 /// Compute the set of markers for which a package is known to be relevant.
-fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>) -> MarkerTree {
+fn find_environments(
+    id: Id<PubGrubPackage>,
+    state: &State<UvDependencyProvider>,
+    variant_base: &str,
+) -> MarkerTree {
     let package = &state.package_store[id];
     if package.is_root() {
         return MarkerTree::TRUE;
@@ -4075,8 +4099,8 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
         if let Kind::FromDependencyOf(id1, _, id2, _) = &incompat.kind {
             if id == *id2 {
                 marker.or({
-                    let mut marker = package.marker();
-                    marker.and(find_environments(*id1, state));
+                    let mut marker = package.marker().with_variant_base(variant_base);
+                    marker.and(find_environments(*id1, state, variant_base));
                     marker
                 });
             }

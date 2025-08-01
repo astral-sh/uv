@@ -45,6 +45,24 @@ impl MarkerVariantsEnvironment for Variant {
 
         properties.iter().any(|p| p == property)
     }
+
+    fn contains_base_namespace(&self, _prefix: &str, _namespace: &str) -> bool {
+        false
+    }
+
+    fn contains_based_feature(&self, _prefix: &str, _namespace: &str, _feature: &str) -> bool {
+        false
+    }
+
+    fn contains_based_property(
+        &self,
+        _prefix: &str,
+        _namespace: &str,
+        _feature: &str,
+        _property: &str,
+    ) -> bool {
+        false
+    }
 }
 
 impl Deref for Variant {

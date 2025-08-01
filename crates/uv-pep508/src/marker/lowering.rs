@@ -170,11 +170,22 @@ pub enum CanonicalMarkerListPair {
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
     /// A valid `variant_namespaces`.
-    VariantNamespaces { namespace: String },
+    VariantNamespaces {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: String,
+    },
     /// A valid `variant_features`.
-    VariantFeatures { namespace: String, feature: String },
+    VariantFeatures {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
+        namespace: String,
+        feature: String,
+    },
     /// A valid `variant_properties`.
     VariantProperties {
+        /// If set, the variant marker is evaluated as a variant of the base package.
+        base: Option<String>,
         namespace: String,
         feature: String,
         value: String,
@@ -201,17 +212,38 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
-            Self::VariantNamespaces { namespace } => namespace.clone(),
-            Self::VariantFeatures { namespace, feature } => {
-                format!("{namespace} :: {feature}")
+            Self::VariantNamespaces {
+                base: prefix,
+                namespace,
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace}")
+                } else {
+                    namespace.clone()
+                }
             }
-            Self::VariantProperties {
+            Self::VariantFeatures {
+                base: prefix,
                 namespace,
                 feature,
-
+            } => {
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace} :: {feature}")
+                } else {
+                    format!("{namespace} :: {feature}")
+                }
+            }
+            Self::VariantProperties {
+                base: prefix,
+                namespace,
+                feature,
                 value,
             } => {
-                format!("{namespace} :: {feature} :: {value}")
+                if let Some(prefix) = prefix {
+                    format!("{prefix} | {namespace} :: {feature} :: {value}")
+                } else {
+                    format!("{namespace} :: {feature} :: {value}")
+                }
             }
             Self::Arbitrary { value, .. } => value.clone(),
         }

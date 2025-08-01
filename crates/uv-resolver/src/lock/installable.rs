@@ -5,6 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use either::Either;
+use hashbrown::HashMap;
 use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -14,7 +15,7 @@ use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOption
 use uv_distribution::{DistributionDatabase, PackageVariantCache};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerVariantsUniversal;
+use uv_pep508::{MarkerVariantsEnvironment, MarkerVariantsUniversal};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_types::BuildContext;
@@ -58,6 +59,8 @@ pub trait Installable<'lock> {
         let mut seen = FxHashSet::default();
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
+
+        let mut resolved_variants = ResolvedVariants::default();
 
         let root = petgraph.add_node(Node::Root);
 
@@ -473,25 +476,33 @@ pub trait Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
 
-            let variant_properties = determine_properties(
-                package,
-                self.install_path(),
-                &distribution_database,
-                variants_cache,
-            )
-            .await?;
+            if !resolved_variants
+                .0
+                .contains_key(&package.name().to_string())
+            {
+                let variant_properties = determine_properties(
+                    package,
+                    self.install_path(),
+                    &distribution_database,
+                    variants_cache,
+                )
+                .await?;
+
+                resolved_variants
+                    .0
+                    .insert(package.name().to_string(), variant_properties);
+            }
 
             for dep in deps {
-                // TODO(konsti): This is horrible plz no.
-                if seen.iter().any(|(package, _)| {
-                    package.name == dep.package_id.name && *package != &dep.package_id
-                }) {
-                    continue;
-                }
-
                 if !dep.complexified_marker.evaluate(
                     marker_env,
-                    &variant_properties,
+                    CurrentResolvedVariants {
+                        current: &resolved_variants,
+                        global: resolved_variants
+                            .0
+                            .get(&package.name().to_string())
+                            .unwrap(),
+                    },
                     activated_extras.iter().copied(),
                     activated_groups.iter().copied(),
                 ) {
@@ -608,6 +619,61 @@ pub trait Installable<'lock> {
         } else {
             self.non_installable_node(package, tags)
         }
+    }
+}
+
+/// Map for the package identifier to the package's variants for marker evaluation.
+#[derive(Default, Debug)]
+struct ResolvedVariants(HashMap<String, Variant>);
+
+/// Variants for markers evaluation both for the current package (without base) and globally (with
+/// base).
+struct CurrentResolvedVariants<'a> {
+    current: &'a ResolvedVariants,
+    global: &'a Variant,
+}
+
+impl MarkerVariantsEnvironment for CurrentResolvedVariants<'_> {
+    fn contains_namespace(&self, namespace: &str) -> bool {
+        self.global.contains_namespace(namespace)
+    }
+
+    fn contains_feature(&self, namespace: &str, feature: &str) -> bool {
+        self.global.contains_feature(namespace, feature)
+    }
+
+    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
+        self.global.contains_property(namespace, feature, property)
+    }
+
+    fn contains_base_namespace(&self, prefix: &str, namespace: &str) -> bool {
+        let Some(variant) = self.current.0.get(prefix) else {
+            return false;
+        };
+
+        variant.contains_namespace(namespace)
+    }
+
+    fn contains_based_feature(&self, prefix: &str, namespace: &str, feature: &str) -> bool {
+        let Some(variant) = self.current.0.get(prefix) else {
+            return false;
+        };
+
+        variant.contains_feature(namespace, feature)
+    }
+
+    fn contains_based_property(
+        &self,
+        prefix: &str,
+        namespace: &str,
+        feature: &str,
+        property: &str,
+    ) -> bool {
+        let Some(variant) = self.current.0.get(prefix) else {
+            return false;
+        };
+
+        variant.contains_property(namespace, feature, property)
     }
 }
 
