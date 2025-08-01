@@ -110,7 +110,8 @@ async fn do_uninstall(
                         )?;
                         continue;
                     }
-                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    // Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    Err(uv_tool::Error::VirtualEnvError(_err)) => {
                         bail!("`{name}` is not installed");
                     }
                     Err(err) => {
@@ -135,7 +136,8 @@ async fn do_uninstall(
                         )?;
                         return Ok(());
                     }
-                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    // Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    Err(uv_tool::Error::VirtualEnvError(_err)) => {
                         bail!("`{name}` is not installed");
                     }
                     Err(err) => {
