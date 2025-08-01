@@ -2162,6 +2162,93 @@ fn tool_run_hint_version_not_available() {
 }
 
 #[test]
+fn tool_run_python_from_global_version_file() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+}
+
+#[test]
+fn tool_run_python_version_overrides_global_pin() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    // Set global pin to 3.11
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    // Explicitly request python3.12, should override global pin
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python3.12")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+}
+
+#[test]
+fn tool_run_python_with_explicit_default_bypasses_global_pin() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    // Set global pin to 3.11
+    context
+        .python_pin()
+        .arg("3.11")
+        .arg("--global")
+        .assert()
+        .success();
+
+    // Explicitly request --python default, should bypass global pin and use system default (3.12)
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--python")
+        .arg("default")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+}
+
+#[test]
 fn tool_run_python_from() {
     let context = TestContext::new_with_versions(&["3.12", "3.11"])
         .with_filtered_counts()
