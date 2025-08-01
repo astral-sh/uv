@@ -10,10 +10,10 @@ description:
 [Coiled](https://coiled.io?utm_source=uv-docs) is a serverless, UX-focused cloud computing platform
 that makes it easy to run code on cloud hardware (AWS, GCP, and Azure).
 
-This guide shows how to run Python scripts on the cloud using uv for software dependency management
-and Coiled for cloud deployment.
+This guide shows how to run Python scripts on the cloud using uv for dependency management and
+Coiled for cloud deployment.
 
-## Scripts with inline metadata
+## Managing script dependencies with uv
 
 !!! note
 
