@@ -13,37 +13,16 @@ that makes it easy to run code on cloud hardware (AWS, GCP, and Azure).
 This guide shows how to run Python scripts on the cloud using uv for software dependency management
 and Coiled for cloud deployment.
 
-## Managing software with uv
+## Scripts with inline metadata
 
-Here's a `process.py` script that uses [`pandas`](https://pandas.pydata.org/docs/) to load a Parquet
-data file hosted in a public bucket on S3 and prints the first few rows:
+!!! note
 
-```python title="process.py"
+    We'll use this concrete example throughout this guide, but any Python script can be used with
+    uv and Coiled.
 
-import pandas as pd
-
-df = pd.read_parquet(
-    "s3://coiled-data/uber/part.0.parquet",
-    storage_options={"anon": True},
-)
-print(df.head())
-```
-
-We'll use this concrete example throughout the rest of the guide, but know that the script contents
-could be _any_ Python code.
-
-Running this script requires `pandas`, `pyarrow`, and `s3fs`. uv makes it easy to embed these
-dependencies directly in the script using [PEP 273](https://peps.python.org/pep-0723/) inline
-metadata with the [`uv add --script` command](../scripts.md#declaring-script-dependencies).
-
-```bash
-$ uv add --script process.py pandas pyarrow s3fs
-```
-
-which adds these comments with the specified dependencies to the script
+We'll use the following script as an example:
 
 ```python title="process.py" hl_lines="1-8"
-
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
@@ -62,65 +41,48 @@ df = pd.read_parquet(
 print(df.head())
 ```
 
-We then use `uv run` to run the script locally
+The script uses [`pandas`](https://pandas.pydata.org/docs/) to load a Parquet file hosted in a
+public bucket on S3, then prints the first few rows. It uses
+[inline script metadata](https://peps.python.org/pep-0723/) to enumerate its dependencies.
+
+When running this script locally, e.g., with:
 
 ```bash
 $ uv run process.py
 ```
 
-uv automatically creates a virtual environment, installs the dependencies, and then runs
-`process.py` in that environment. Here's the output we get:
+uv will automatically create a virtual environment and installs its dependencies.
 
-```
-hvfhs_license_num dispatching_base_num originating_base_num    request_datetime   on_scene_datetime  ... shared_request_flag shared_match_flag  access_a_ride_flag  wav_request_flag  wav_match_flag
-__null_dask_index__                                                                                                      ...
-18979859                       HV0003               B02875               B02875 2019-05-26 23:29:35 2019-05-26 23:30:33  ...                   N                 N                 NaN                 N             NaN
-18979860                       HV0003               B02875               B02875 2019-05-26 23:56:48 2019-05-26 23:57:03  ...                   N                 N                 NaN                 N             NaN
-18979861                       HV0003               B02765               B02765 2019-05-26 23:56:35 2019-05-26 23:56:41  ...                   N                 N                 NaN                 N             NaN
-18979862                       HV0003               B02682               B02682 2019-05-26 22:52:34 2019-05-26 23:10:38  ...                   Y                 N                 NaN                 N             NaN
-18979863                       HV0002               B03035               B03035 2019-05-26 23:16:34 1970-01-01 00:00:00  ...                   N                 N                   N                 N             NaN
+To learn more about using inline script metadata with uv, see the
+[script guide](../scripts.md#declaring-script-dependencies).
 
-[5 rows x 24 columns]
-```
+## Running scripts on the cloud with Coiled
 
-What's nice about this is we didn't have to think about managing local virtual environments
-ourselves and the dependencies needed are included directly in the script which makes things nicely
-self-contained.
+Using inline script metadata makes the script fully self-contained: it includes the information that
+is needed to run it. This makes it easier to run on other machines, like a machine in the cloud.
 
-That's really all we need for running scripts locally. However, there are many common use cases
-where resources beyond what's available on our local workstation are needed, like:
+There are many use cases where resources beyond what's available on a local workstation are needed,
+e.g.:
 
 - Processing large amounts of cloud-hosted data
 - Needing accelerated hardware like GPUs or a big machine with more memory
 - Running the same script with hundreds or thousands of different inputs, in parallel
 
-In these situations running scripts directly on cloud hardware is often a good solution.
+Coiled makes it simple to run code on cloud hardware.
 
-## Running on the cloud with Coiled
-
-Similar to how uv makes it straightforward to handle Python dependency management, Coiled makes it
-straightforward to handle running code on cloud hardware.
-
-Let's start by authenticating whatever machine you're running on with Coiled using the
-[`coiled login` CLI](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-login)
-(you'll be prompted to create a Coiled account if you don't already have one -- and it's totally
-free to start using Coiled):
+First, authenticate with Coiled using
+[`coiled login`](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-login) :
 
 ```bash
 $ uvx coiled login
 ```
 
-!!! tip
+You'll be prompted to create a Coiled account if you don't already have one — it's free to start
+using Coiled.
 
-    While Coiled supports AWS, GCP, and Azure, this example assumes AWS is being used
-    (see the `region` option below). If you're new to Coiled, you'll automatically have
-    access to a free account running on AWS. If you're not running on AWS, you can either use
-    a valid `region` for your cloud provider or remove the `region` line below.
-
-To have Coiled run our script on a VM on AWS, we'll add these two comments:
+To instruct Coiled to run the script on a virtual machine on AWS, add two comments to the top:
 
 ```python title="process.py" hl_lines="1-2"
-
 # COILED container ghcr.io/astral-sh/uv:debian-slim
 # COILED region us-east-2
 
@@ -142,27 +104,50 @@ df = pd.read_parquet(
 print(df.head())
 ```
 
-They tell Coiled to use the official
-[uv Docker image](https://github.com/astral-sh/uv/pkgs/container/uv) when running the script (this
-makes sure uv is installed) and to run the script in the `us-east-2` region on AWS (where this data
-file happens to live) to avoid any data egress. There are several other options we could have
-specified here like VM instance type (the default is a 4-core VM with 16 GiB of memory), whether to
-use spot instance, etc. See the
-[Coiled Batch docs](https://docs.coiled.io/user_guide/batch.html?utm_source=uv-docs) for more
-details.
+!!! tip
 
-Finally we use the
-[`coiled batch run` CLI](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-batch-run)
-to run our existing `uv run` command on a cloud VM.
+    While Coiled supports AWS, GCP, and Azure, this example assumes AWS is being used
+    (see the `region` option below). If you're new to Coiled, you'll automatically have
+    access to a free account running on AWS. If you're not running on AWS, you can either use
+    a valid `region` for your cloud provider or remove the `region` line below.
 
-```bash hl_lines="1"
+The comments tell Coiled to use the official [uv Docker image](../integration/docker.md) when
+running the script (ensuring uv is available) and to run in the `us-east-2` region on AWS (where
+this example data file happens to live) to avoid any data egress.
 
+To run the script, use
+[`coiled batch run`](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-batch-run)
+to execute the `uv run` command in the cloud:
+
+```bash hl-lines="1"
 $ uvx coiled batch run \
     uv run process.py
 ```
 
+<!-- TODO
+This command returns immediately, it doesn't wait for the job to finish and it doesn't seem
+like there's a flag for that. It also doesn't happen much faster, because a remote job needs to
+spawn. I also wasn't sure how to get the logs for the job. I eventually found it with
+`uvx coiled batch logs 1067394`. I also tried `uvx coiled batch wait 1067394`, but it didn't have
+an option to show logs and that retrieving the id in the first place was a bit challenging, e.g.,
+`uvx coiled batch status` shows it as a cluster ID at the top but that's not obvious.
+
+I presume some of these problems are because this API is designed around running multiple batch
+jobs, however, if the user experience for running the script locally is that it waits for execution
+and shows the output, then we need to address that difference in user experience here.
+
+It looks like `uvx coiled batch run -- uv run process.py` isn't supported (using the `--` as a
+separator), I wanted to use that for a single-line commmand that still separated the `uv run`
+command.
+-->
+
 The same exact thing that happened locally before now happens on a cloud VM on AWS, only this time
 the script is faster because we didn't have to transfer any data from S3 to a local laptop.
+
+There are other options we could have specified, like, the instance type (the default is a 4-core
+virtual machine with 16 GiB of memory), whether to use spot instance, etc. See the
+[Coiled Batch documentation](https://docs.coiled.io/user_guide/batch.html?utm_source=uv-docs) for
+more details.
 
 ![Coiled UI](https://docs.coiled.io/_images/uv-coiled.png)
 
