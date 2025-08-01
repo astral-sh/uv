@@ -2726,7 +2726,6 @@ mod tests {
                 Preview::default(),
             )
         })??;
-        // TODO: How to fix this?
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.15.7"

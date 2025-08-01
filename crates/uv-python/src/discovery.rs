@@ -1260,6 +1260,7 @@ pub(crate) fn find_python_installation(
         find_python_installations(request, environments, preference, cache, preview);
     let mut first_prerelease = None;
     let mut first_error = None;
+    let mut emscripten_installation = None;
     for result in installations {
         // Iterate until the first critical error or happy result
         if !result.as_ref().err().is_none_or(Error::is_critical) {
@@ -1276,6 +1277,15 @@ pub(crate) fn find_python_installation(
         let Ok(Ok(ref installation)) = result else {
             return result;
         };
+
+        if installation.os().is_emscripten() {
+            // We want to pick a native Python over an Emscripten Python if we
+            // can find any native Python.
+            if emscripten_installation.is_none() {
+                emscripten_installation = Some(installation.clone());
+            }
+            continue;
+        }
 
         // Check if we need to skip the interpreter because it is "not allowed", e.g., if it is a
         // pre-release version or an alternative implementation, using it requires opt-in.
@@ -1322,6 +1332,10 @@ pub(crate) fn find_python_installation(
     // If we only found pre-releases, they're implicitly allowed and we should return the first one.
     if let Some(installation) = first_prerelease {
         return Ok(Ok(installation));
+    }
+
+    if let Some(emscripten_python) = emscripten_installation {
+        return Ok(Ok(emscripten_python));
     }
 
     // If we found a Python, but it was unusable for some reason, report that instead of saying we
