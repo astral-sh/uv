@@ -337,15 +337,17 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                         }
                         MarkerValueList::VariantNamespaces => {
                             // TODO(konsti): Validate
-                            CanonicalMarkerListPair::VariantNamespaces(l_string.trim().to_string())
+                            CanonicalMarkerListPair::VariantNamespaces {
+                                namespace: l_string.trim().to_string(),
+                            }
                         }
                         MarkerValueList::VariantFeatures => {
                             if let Some((namespace, feature)) = l_string.split_once("::") {
                                 // TODO(konsti): Validate
-                                CanonicalMarkerListPair::VariantFeatures(
-                                    namespace.trim().to_string(),
-                                    feature.trim().to_string(),
-                                )
+                                CanonicalMarkerListPair::VariantFeatures {
+                                    namespace: namespace.trim().to_string(),
+                                    feature: feature.trim().to_string(),
+                                }
                             } else {
                                 reporter.report(
                                     MarkerWarningKind::ListInvalidComparison,
@@ -366,11 +368,11 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                 components.next(),
                             ) {
                                 // TODO(konsti): Validate
-                                CanonicalMarkerListPair::VariantProperties(
-                                    namespace.trim().to_string(),
-                                    feature.trim().to_string(),
-                                    property.trim().to_string(),
-                                )
+                                CanonicalMarkerListPair::VariantProperties {
+                                    namespace: namespace.trim().to_string(),
+                                    feature: feature.trim().to_string(),
+                                    value: property.trim().to_string(),
+                                }
                             } else {
                                 reporter.report(
                                     MarkerWarningKind::ListInvalidComparison,

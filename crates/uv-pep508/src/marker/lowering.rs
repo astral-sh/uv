@@ -170,11 +170,15 @@ pub enum CanonicalMarkerListPair {
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
     /// A valid `variant_namespaces`.
-    VariantNamespaces(String),
+    VariantNamespaces { namespace: String },
     /// A valid `variant_features`.
-    VariantFeatures(String, String),
+    VariantFeatures { namespace: String, feature: String },
     /// A valid `variant_properties`.
-    VariantProperties(String, String, String),
+    VariantProperties {
+        namespace: String,
+        feature: String,
+        value: String,
+    },
     /// For leniency, preserve invalid values.
     Arbitrary { key: MarkerValueList, value: String },
 }
@@ -185,9 +189,9 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(_) => MarkerValueList::Extras,
             Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
-            Self::VariantNamespaces(_) => MarkerValueList::VariantNamespaces,
-            Self::VariantFeatures(_, _) => MarkerValueList::VariantFeatures,
-            Self::VariantProperties(_, _, _) => MarkerValueList::VariantProperties,
+            Self::VariantNamespaces { .. } => MarkerValueList::VariantNamespaces,
+            Self::VariantFeatures { .. } => MarkerValueList::VariantFeatures,
+            Self::VariantProperties { .. } => MarkerValueList::VariantProperties,
             Self::Arbitrary { key, .. } => *key,
         }
     }
@@ -197,12 +201,17 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
-            Self::VariantNamespaces(namespace) => namespace.clone(),
-            Self::VariantFeatures(namespace, property) => {
-                format!("{namespace} :: {property}")
+            Self::VariantNamespaces { namespace } => namespace.clone(),
+            Self::VariantFeatures { namespace, feature } => {
+                format!("{namespace} :: {feature}")
             }
-            Self::VariantProperties(namespace, property, value) => {
-                format!("{namespace} :: {property} :: {value}")
+            Self::VariantProperties {
+                namespace,
+                feature,
+
+                value,
+            } => {
+                format!("{namespace} :: {feature} :: {value}")
             }
             Self::Arbitrary { value, .. } => value.clone(),
         }

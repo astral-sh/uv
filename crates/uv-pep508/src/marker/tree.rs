@@ -1218,19 +1218,23 @@ impl MarkerTree {
             }
             MarkerTreeKind::List(marker) => {
                 let edge = match marker.pair() {
-                    CanonicalMarkerListPair::VariantNamespaces(namespace) => {
+                    CanonicalMarkerListPair::VariantNamespaces { namespace } => {
                         if variants.is_universal() {
                             return true;
                         }
                         variants.contains_namespace(namespace)
                     }
-                    CanonicalMarkerListPair::VariantFeatures(namespace, feature) => {
+                    CanonicalMarkerListPair::VariantFeatures { namespace, feature } => {
                         if variants.is_universal() {
                             return true;
                         }
                         variants.contains_feature(namespace, feature)
                     }
-                    CanonicalMarkerListPair::VariantProperties(namespace, feature, property) => {
+                    CanonicalMarkerListPair::VariantProperties {
+                        namespace,
+                        feature,
+                        value: property,
+                    } => {
                         if variants.is_universal() {
                             return true;
                         }
@@ -1749,9 +1753,16 @@ impl MarkerTreeKind<'_> {
             MarkerTreeKind::True | MarkerTreeKind::False => false,
             Self::List(ListMarkerTree {
                 pair:
-                    CanonicalMarkerListPair::VariantNamespaces(_)
-                    | CanonicalMarkerListPair::VariantFeatures(_, _)
-                    | CanonicalMarkerListPair::VariantProperties(_, _, _),
+                    CanonicalMarkerListPair::VariantNamespaces { namespace: _ }
+                    | CanonicalMarkerListPair::VariantFeatures {
+                        namespace: _,
+                        feature: _,
+                    }
+                    | CanonicalMarkerListPair::VariantProperties {
+                        namespace: _,
+                        feature: _,
+                        value: _,
+                    },
                 ..
             }) => true,
             _ => true,
