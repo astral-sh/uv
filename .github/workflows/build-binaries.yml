@@ -814,7 +814,7 @@ jobs:
           args: --release --locked --out dist --features self-update
       - name: "Test wheel"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: addnab/docker-run-action@v3
+        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
         with:
           image: alpine:3.12
           options: -v ${{ github.workspace }}:/io -w /io
@@ -861,7 +861,7 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Test wheel uv-build"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: addnab/docker-run-action@v3
+        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
         with:
           image: alpine:3.12
           options: -v ${{ github.workspace }}:/io -w /io
