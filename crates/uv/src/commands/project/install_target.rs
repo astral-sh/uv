@@ -378,7 +378,7 @@ impl<'lock> InstallTarget<'lock> {
         &self,
         extras: &ExtrasSpecification,
         groups: &DependencyGroupsWithDefaults,
-    ) -> BTreeSet<PackageName> {
+    ) -> BTreeSet<&PackageName> {
         match self {
             Self::Project { name, lock, .. } => {
                 // Collect the packages by name for efficient lookup
@@ -390,7 +390,7 @@ impl<'lock> InstallTarget<'lock> {
 
                 // We'll include the project itself
                 let mut required_members = BTreeSet::new();
-                required_members.insert((*name).clone());
+                required_members.insert(*name);
 
                 // Find all workspace member dependencies recursively
                 let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
@@ -429,7 +429,7 @@ impl<'lock> InstallTarget<'lock> {
 
                 while let Some((pkg_name, extra)) = queue.pop_front() {
                     if lock.members().contains(pkg_name) {
-                        required_members.insert(pkg_name.clone());
+                        required_members.insert(pkg_name);
                     }
 
                     let Some(package) = packages.get(pkg_name) else {
@@ -465,7 +465,7 @@ impl<'lock> InstallTarget<'lock> {
             }
             Self::Workspace { lock, .. } | Self::NonProjectWorkspace { lock, .. } => {
                 // Return all workspace members
-                lock.members().clone()
+                lock.members().iter().collect()
             }
             Self::Script { .. } => {
                 // Scripts don't have workspace members

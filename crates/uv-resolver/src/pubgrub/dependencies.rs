@@ -27,7 +27,7 @@ pub(crate) struct PubGrubDependency {
     /// dependencies when a conflict is declared between the project and a
     /// group.
     ///
-    /// The main problem with deal with project level conflicts is that if you
+    /// The main problem with dealing with project level conflicts is that if you
     /// declare a conflict between a package and a group, we represent that
     /// group as a dependency of that package. So if you filter out the package
     /// in a fork due to a conflict, you also filter out the group. Therefore,
@@ -169,13 +169,7 @@ impl PubGrubDependency {
     /// If this package can't possibly be classified as conflicting, then this
     /// returns `None`.
     pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
-        if let Some(conflict) = self.package.conflicting_item() {
-            return Some(conflict);
-        }
-        if let Some(ref parent) = self.parent {
-            return Some(ConflictItemRef::from(parent));
-        }
-        None
+        self.package.conflicting_item()
     }
 }
 
