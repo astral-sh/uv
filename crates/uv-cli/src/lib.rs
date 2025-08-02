@@ -543,6 +543,47 @@ pub enum Commands {
         ),
     )]
     Help(HelpArgs),
+
+    /// Add the envy auto source command to the command line.
+    #[command(name = "envy")]
+    Envy(EnvyArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct EnvyArgs {
+    #[arg(action = clap::ArgAction::SetTrue, long, short, help_heading = "Envy options")]
+    pub jump: bool,
+
+    /// Add the shell init subcommand
+    #[command(subcommand)]
+    pub init: Option<EnvyInitSubcommand>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum EnvyInitSubcommand {
+    /// Initialize the shell for envy.
+    Init(EnvyInitArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct EnvyInitArgs {
+    /// The shell to initialize.
+    ///
+    /// Supported shells are `bash`, `zsh`, `fish`, and `powershell`.
+    #[arg(value_enum, help_heading = "Envy options")]
+    pub shell: EnvyShell,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum EnvyShell {
+    /// Initialize the bash shell.
+    Bash,
+    /// Initialize the zsh shell.
+    Zsh,
+    /// Initialize the fish shell.
+    Fish,
+    /// Initialize the `PowerShell` shell.
+    Powershell,
 }
 
 #[derive(Args, Debug)]
