@@ -4,9 +4,9 @@ use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
-use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::CanonicalMarkerListPair;
 use crate::marker::tree::{ContainerOperator, MarkerValueList};
+use crate::marker::{MarkerValueExtra, VariantFeature, VariantNamespace, VariantValue};
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
     MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -343,10 +343,16 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                     (None, l_string.as_str())
                                 };
 
-                            // TODO(konsti): Validate
                             CanonicalMarkerListPair::VariantNamespaces {
                                 base,
-                                namespace: value.trim().to_string(),
+                                namespace: VariantNamespace::from_str(value).map_err(|err| {
+                                    Pep508Error {
+                                        message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                        start,
+                                        len,
+                                        input: cursor.to_string(),
+                                    }
+                                })?,
                             }
                         }
                         MarkerValueList::VariantFeatures => {
@@ -358,11 +364,24 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                 };
 
                             if let Some((namespace, feature)) = value.split_once("::") {
-                                // TODO(konsti): Validate
                                 CanonicalMarkerListPair::VariantFeatures {
                                     base,
-                                    namespace: namespace.trim().to_string(),
-                                    feature: feature.trim().to_string(),
+                                    namespace: VariantNamespace::from_str(namespace).map_err(
+                                        |err| Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        },
+                                    )?,
+                                    feature: VariantFeature::from_str(feature).map_err(|err| {
+                                        Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        }
+                                    })?,
                                 }
                             } else {
                                 reporter.report(
@@ -390,12 +409,32 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                 components.next(),
                                 components.next(),
                             ) {
-                                // TODO(konsti): Validate
                                 CanonicalMarkerListPair::VariantProperties {
                                     base,
-                                    namespace: namespace.trim().to_string(),
-                                    feature: feature.trim().to_string(),
-                                    value: property.trim().to_string(),
+                                    namespace: VariantNamespace::from_str(namespace).map_err(
+                                        |err| Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        },
+                                    )?,
+                                    feature: VariantFeature::from_str(feature).map_err(|err| {
+                                        Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        }
+                                    })?,
+                                    value: VariantValue::from_str(property).map_err(|err| {
+                                        Pep508Error {
+                                            message: Pep508ErrorSource::InvalidVariantSegment(err),
+                                            start,
+                                            len,
+                                            input: cursor.to_string(),
+                                        }
+                                    })?,
                                 }
                             } else {
                                 reporter.report(

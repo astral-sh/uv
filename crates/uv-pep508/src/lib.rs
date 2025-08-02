@@ -35,7 +35,8 @@ pub use marker::{
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
     MarkerValueVersion, MarkerVariantsEnvironment, MarkerVariantsUniversal, MarkerWarningKind,
-    StringMarkerTree, StringVersion, VersionMarkerTree,
+    StringMarkerTree, StringVersion, VariantFeature, VariantNamespace, VariantValue,
+    VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -49,6 +50,8 @@ pub use verbatim_url::{
     Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
     split_scheme, strip_host,
 };
+
+use crate::marker::VariantParseError;
 
 mod cursor;
 pub mod marker;
@@ -93,6 +96,9 @@ pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
     /// The variant marker is on the left hand side of the expression.
     #[error("The marker {0} must be on the right hand side of the expression")]
     ListLValue(MarkerValueList),
+    /// A variant segment uses invalid characters.
+    #[error(transparent)]
+    InvalidVariantSegment(VariantParseError),
 }
 
 impl<T: Pep508Url> Display for Pep508Error<T> {

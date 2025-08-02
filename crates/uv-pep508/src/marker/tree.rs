@@ -19,7 +19,7 @@ use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
-use crate::marker::parse;
+use crate::marker::{VariantFeature, VariantNamespace, VariantValue, parse};
 use crate::{
     CanonicalMarkerValueExtra, MarkerEnvironment, Pep508Error, Pep508ErrorSource, Pep508Url,
     Reporter, TracingReporter,
@@ -780,21 +780,26 @@ impl<'a> ExtrasEnvironment<'a> {
 pub trait MarkerVariantsEnvironment {
     /// Whether there is a property with the given namespace, for evaluating
     /// `... in variant_namespaces`.
-    fn contains_namespace(&self, namespace: &str) -> bool;
+    fn contains_namespace(&self, namespace: &VariantNamespace) -> bool;
 
     /// Whether there is a property with the given feature, for evaluating
     /// `... in variant_features`.
-    fn contains_feature(&self, namespace: &str, feature: &str) -> bool;
+    fn contains_feature(&self, namespace: &VariantNamespace, feature: &VariantFeature) -> bool;
 
     /// Whether there is the given property, for evaluating `... in variant_properties`.
-    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool;
+    fn contains_property(
+        &self,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
+    ) -> bool;
 
     /// Whether the base package has a property with the given namespace, for evaluating
     /// `... in variant_namespaces`.
     ///
     /// This is an extension to the standard use internally by uv when variant markers occur
     /// outside their base package.
-    fn contains_base_namespace(&self, _base: &str, _namespace: &str) -> bool {
+    fn contains_base_namespace(&self, _base: &str, _namespace: &VariantNamespace) -> bool {
         false
     }
 
@@ -803,7 +808,12 @@ pub trait MarkerVariantsEnvironment {
     ///
     /// This is an extension to the standard use internally by uv when variant markers occur
     /// outside their base package.
-    fn contains_based_feature(&self, _base: &str, _namespace: &str, _feature: &str) -> bool {
+    fn contains_based_feature(
+        &self,
+        _base: &str,
+        _namespace: &VariantNamespace,
+        _feature: &VariantFeature,
+    ) -> bool {
         false
     }
 
@@ -814,9 +824,9 @@ pub trait MarkerVariantsEnvironment {
     fn contains_based_property(
         &self,
         _base: &str,
-        _namespace: &str,
-        _feature: &str,
-        _property: &str,
+        _namespace: &VariantNamespace,
+        _feature: &VariantFeature,
+        _value: &VariantValue,
     ) -> bool {
         false
     }
@@ -828,58 +838,70 @@ pub trait MarkerVariantsEnvironment {
     }
 }
 
-// Useful for tests
-impl<S: AsRef<str>> MarkerVariantsEnvironment for &[(S, S, S)] {
-    fn contains_namespace(&self, namespace: &str) -> bool {
+/// Evaluate lists of properties.
+impl MarkerVariantsEnvironment for &[(VariantNamespace, VariantFeature, VariantValue)] {
+    fn contains_namespace(&self, namespace: &VariantNamespace) -> bool {
         self.iter()
-            .any(|(namespace_, _feature, _property)| namespace == namespace_.as_ref())
+            .any(|(namespace_, _feature, _value)| namespace == namespace_)
     }
 
-    fn contains_feature(&self, namespace: &str, feature: &str) -> bool {
-        self.iter().any(|(namespace_, feature_, _property)| {
-            namespace == namespace_.as_ref() && feature == feature_.as_ref()
-        })
+    fn contains_feature(&self, namespace: &VariantNamespace, feature: &VariantFeature) -> bool {
+        self.iter()
+            .any(|(namespace_, feature_, _value)| namespace == namespace_ && feature == feature_)
     }
 
-    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
-        self.iter().any(|(namespace_, feature_, property_)| {
-            namespace == namespace_.as_ref()
-                && feature == feature_.as_ref()
-                && property == property_.as_ref()
+    fn contains_property(
+        &self,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
+    ) -> bool {
+        self.iter().any(|(namespace_, feature_, value_)| {
+            namespace == namespace_ && feature == feature_ && value == value_
         })
     }
 }
 
 // TODO(konsti): Use `AsRef` instead?
 impl<T: MarkerVariantsEnvironment> MarkerVariantsEnvironment for &T {
-    fn contains_namespace(&self, namespace: &str) -> bool {
+    fn contains_namespace(&self, namespace: &VariantNamespace) -> bool {
         T::contains_namespace(self, namespace)
     }
 
-    fn contains_feature(&self, namespace: &str, feature: &str) -> bool {
+    fn contains_feature(&self, namespace: &VariantNamespace, feature: &VariantFeature) -> bool {
         T::contains_feature(self, namespace, feature)
     }
 
-    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
-        T::contains_property(self, namespace, feature, property)
+    fn contains_property(
+        &self,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
+    ) -> bool {
+        T::contains_property(self, namespace, feature, value)
     }
 
-    fn contains_base_namespace(&self, prefix: &str, namespace: &str) -> bool {
+    fn contains_base_namespace(&self, prefix: &str, namespace: &VariantNamespace) -> bool {
         T::contains_base_namespace(self, prefix, namespace)
     }
 
-    fn contains_based_feature(&self, prefix: &str, namespace: &str, feature: &str) -> bool {
+    fn contains_based_feature(
+        &self,
+        prefix: &str,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+    ) -> bool {
         T::contains_based_feature(self, prefix, namespace, feature)
     }
 
     fn contains_based_property(
         &self,
         prefix: &str,
-        namespace: &str,
-        feature: &str,
-        property: &str,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
     ) -> bool {
-        T::contains_based_property(self, prefix, namespace, feature, property)
+        T::contains_based_property(self, prefix, namespace, feature, value)
     }
 }
 
@@ -887,32 +909,42 @@ impl<T: MarkerVariantsEnvironment> MarkerVariantsEnvironment for &T {
 pub struct MarkerVariantsUniversal;
 
 impl MarkerVariantsEnvironment for MarkerVariantsUniversal {
-    fn contains_namespace(&self, _namespace: &str) -> bool {
+    fn contains_namespace(&self, _namespace: &VariantNamespace) -> bool {
         true
     }
 
-    fn contains_feature(&self, _namespace: &str, _feature: &str) -> bool {
+    fn contains_feature(&self, _namespace: &VariantNamespace, _feature: &VariantFeature) -> bool {
         true
     }
 
-    fn contains_property(&self, _namespace: &str, _feature: &str, _property: &str) -> bool {
+    fn contains_property(
+        &self,
+        _namespace: &VariantNamespace,
+        _feature: &VariantFeature,
+        _value: &VariantValue,
+    ) -> bool {
         true
     }
 
-    fn contains_base_namespace(&self, _prefix: &str, _namespace: &str) -> bool {
+    fn contains_base_namespace(&self, _prefix: &str, _namespace: &VariantNamespace) -> bool {
         true
     }
 
-    fn contains_based_feature(&self, _prefix: &str, _namespace: &str, _feature: &str) -> bool {
+    fn contains_based_feature(
+        &self,
+        _prefix: &str,
+        _namespace: &VariantNamespace,
+        _feature: &VariantFeature,
+    ) -> bool {
         true
     }
 
     fn contains_based_property(
         &self,
         _prefix: &str,
-        _namespace: &str,
-        _feature: &str,
-        _property: &str,
+        _namespace: &VariantNamespace,
+        _feature: &VariantFeature,
+        _value: &VariantValue,
     ) -> bool {
         true
     }
@@ -2264,7 +2296,8 @@ mod test {
 
     use crate::marker::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use crate::{
-        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerVariantsUniversal,
+        MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerVariantsEnvironment,
+        MarkerVariantsUniversal, VariantFeature, VariantNamespace, VariantValue,
     };
 
     fn parse_err(input: &str) -> String {
@@ -2290,6 +2323,51 @@ mod test {
             sys_platform: "linux",
         })
         .unwrap()
+    }
+
+    struct VariantEnv(Vec<(VariantNamespace, VariantFeature, VariantValue)>);
+
+    impl VariantEnv {
+        fn new(namespaces: &[(&str, &str, &str)]) -> Self {
+            Self(
+                namespaces
+                    .iter()
+                    .map(|(namespace, feature, value)| {
+                        (
+                            VariantNamespace::from_str(namespace).unwrap(),
+                            VariantFeature::from_str(feature).unwrap(),
+                            VariantValue::from_str(value).unwrap(),
+                        )
+                    })
+                    .collect(),
+            )
+        }
+    }
+
+    #[cfg(test)]
+    impl MarkerVariantsEnvironment for &VariantEnv {
+        fn contains_namespace(&self, namespace: &VariantNamespace) -> bool {
+            self.0
+                .iter()
+                .any(|(namespace_, _feature, _value)| namespace == namespace_)
+        }
+
+        fn contains_feature(&self, namespace: &VariantNamespace, feature: &VariantFeature) -> bool {
+            self.0.iter().any(|(namespace_, feature_, _value)| {
+                namespace == namespace_ && feature == feature_
+            })
+        }
+
+        fn contains_property(
+            &self,
+            namespace: &VariantNamespace,
+            feature: &VariantFeature,
+            value: &VariantValue,
+        ) -> bool {
+            self.0.iter().any(|(namespace_, feature_, value_)| {
+                namespace == namespace_ && feature == feature_ && value == value_
+            })
+        }
     }
 
     /// Copied from <https://github.com/pypa/packaging/blob/85ff971a250dc01db188ef9775499c15553a8c95/tests/test_markers.py#L175-L221>
@@ -3962,8 +4040,8 @@ mod test {
     #[test]
     fn marker_evaluation_variants() {
         let env37 = env37();
-        let gpu_namespaces = [("gpu", "cuda", "12.4")].as_slice();
-        let cpu_namespaces = [("cpu", "", "")].as_slice();
+        let gpu_namespaces = VariantEnv::new(&[("gpu", "cuda", "12.4")]);
+        let cpu_namespaces = VariantEnv::new(&[("cpu", "", "")]);
 
         // namespace variant markers
         let marker1 = m("'gpu' in variant_namespaces");
@@ -3973,10 +4051,10 @@ mod test {
         assert!(marker1.evaluate(&env37, MarkerVariantsUniversal, &[]));
         assert!(marker2.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
-        assert!(marker1.evaluate(&env37, gpu_namespaces, &[]));
-        assert!(!marker1.evaluate(&env37, cpu_namespaces, &[]));
-        assert!(!marker2.evaluate(&env37, gpu_namespaces, &[]));
-        assert!(marker2.evaluate(&env37, cpu_namespaces, &[]));
+        assert!(marker1.evaluate(&env37, &gpu_namespaces, &[]));
+        assert!(!marker1.evaluate(&env37, &cpu_namespaces, &[]));
+        assert!(!marker2.evaluate(&env37, &gpu_namespaces, &[]));
+        assert!(marker2.evaluate(&env37, &cpu_namespaces, &[]));
 
         // property variant markers
         let marker3 = m("'gpu :: cuda' in variant_features");
@@ -3985,10 +4063,10 @@ mod test {
         assert!(marker3.evaluate(&env37, MarkerVariantsUniversal, &[]));
         assert!(marker4.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
-        assert!(marker3.evaluate(&env37, gpu_namespaces, &[]));
-        assert!(!marker3.evaluate(&env37, cpu_namespaces, &[]));
-        assert!(!marker4.evaluate(&env37, gpu_namespaces, &[]));
-        assert!(!marker4.evaluate(&env37, cpu_namespaces, &[]));
+        assert!(marker3.evaluate(&env37, &gpu_namespaces, &[]));
+        assert!(!marker3.evaluate(&env37, &cpu_namespaces, &[]));
+        assert!(!marker4.evaluate(&env37, &gpu_namespaces, &[]));
+        assert!(!marker4.evaluate(&env37, &cpu_namespaces, &[]));
 
         // feature variant markers
         let marker5 = m("'gpu :: cuda :: 12.4' in variant_properties");
@@ -3997,34 +4075,33 @@ mod test {
         assert!(marker5.evaluate(&env37, MarkerVariantsUniversal, &[]));
         assert!(marker6.evaluate(&env37, MarkerVariantsUniversal, &[]));
 
-        assert!(marker5.evaluate(&env37, gpu_namespaces, &[]));
-        assert!(!marker5.evaluate(&env37, cpu_namespaces, &[]));
-        assert!(!marker6.evaluate(&env37, gpu_namespaces, &[]));
-        assert!(!marker6.evaluate(&env37, cpu_namespaces, &[]));
+        assert!(marker5.evaluate(&env37, &gpu_namespaces, &[]));
+        assert!(!marker5.evaluate(&env37, &cpu_namespaces, &[]));
+        assert!(!marker6.evaluate(&env37, &gpu_namespaces, &[]));
+        assert!(!marker6.evaluate(&env37, &cpu_namespaces, &[]));
     }
 
     #[test]
     fn marker_evaluation_variants_combined() {
         let env37 = env37();
-        let namespaces = [
+        let namespaces = VariantEnv::new(&[
             ("gpu", "cuda", "12.4"),
             ("gpu", "cuda", "12.6"),
             ("cpu", "x86_64", "v1"),
             ("cpu", "x86_64", "v2"),
             ("cpu", "x86_64", "v3"),
-        ]
-        .as_slice();
+        ]);
 
         let marker1 = m("'gpu' in variant_namespaces \
             and 'cpu:: x86_64      :: v3' in variant_properties \
             and python_version >= '3.7' \
             and 'gpu :: rocm' not in variant_features");
         assert!(marker1.evaluate(&env37, MarkerVariantsUniversal, &[]));
-        assert!(marker1.evaluate(&env37, namespaces, &[]));
+        assert!(marker1.evaluate(&env37, &namespaces, &[]));
 
         let marker2 = m("python_version >= '3.7' and 'gpu' not in variant_namespaces");
         assert!(marker2.evaluate(&env37, MarkerVariantsUniversal, &[]));
-        assert!(!marker2.evaluate(&env37, namespaces, &[]));
+        assert!(!marker2.evaluate(&env37, &namespaces, &[]));
     }
 
     #[test]
@@ -4072,44 +4149,43 @@ mod test {
     #[test]
     fn variant_invalid() {
         let env37 = env37();
-        let namespaces = [("gpu", "cuda", "cuda126")].as_slice();
+        let namespaces = VariantEnv::new(&[("gpu", "cuda", "cuda126")]);
 
         let marker = m(r"'gpu :: cuda :: cuda126 :: gtx1080' in variant_properties");
-        assert!(!marker.evaluate(&env37, namespaces, &[]));
+        assert!(!marker.evaluate(&env37, &namespaces, &[]));
     }
 
     #[test]
     fn torch_variant_marker() {
         let env37 = env37();
-        let cu126 = [("nvidia", "ctk", "12.6")].as_slice();
-        let cu126_2 = [
+        let cu126 = VariantEnv::new(&[("nvidia", "ctk", "12.6")]);
+        let cu126_2 = VariantEnv::new(&[
             ("nvidia", "ctk", "12.6"),
             ("nvidia", "cuda_version", ">=12.6,<13"),
-        ]
-        .as_slice();
-        let cu128 = [("nvidia", "ctk", "12.8")].as_slice();
+        ]);
+        let cu128 = VariantEnv::new(&[("nvidia", "ctk", "12.8")]);
 
         let marker = m(
             " platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.6' in variant_properties",
         );
 
         assert!(marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
-        assert!(marker.evaluate(&env37, cu126, &[]));
-        assert!(marker.evaluate(&env37, cu126_2, &[]));
-        assert!(!marker.evaluate(&env37, cu128, &[]));
+        assert!(marker.evaluate(&env37, &cu126, &[]));
+        assert!(marker.evaluate(&env37, &cu126_2, &[]));
+        assert!(!marker.evaluate(&env37, &cu128, &[]));
     }
 
     #[test]
     fn base_variant_marker() {
         let env37 = env37();
-        let cu128 = [("nvidia", "ctk", "12.8")].as_slice();
+        let cu128 = VariantEnv::new(&[("nvidia", "ctk", "12.8")]);
 
         let marker = m(
             " platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.8' in variant_properties",
         );
         let marker_base = marker.with_variant_base("torch");
 
-        assert!(marker.evaluate(&env37, cu128, &[]));
-        assert!(!marker_base.evaluate(&env37, cu128, &[]));
+        assert!(marker.evaluate(&env37, &cu128, &[]));
+        assert!(!marker_base.evaluate(&env37, &cu128, &[]));
     }
 }

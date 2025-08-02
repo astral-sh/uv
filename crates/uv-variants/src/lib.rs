@@ -2,8 +2,9 @@ pub mod cache;
 pub mod resolved_variants;
 pub mod variants_json;
 
-use crate::variants_json::{DefaultPriorities, Variant, VariantNamespace};
+use crate::variants_json::{DefaultPriorities, Variant};
 use std::sync::Arc;
+use uv_pep508::{VariantFeature, VariantNamespace, VariantValue};
 
 use indexmap::IndexMap;
 use rustc_hash::FxHashMap;
@@ -12,9 +13,9 @@ use tracing::debug;
 #[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize)]
 pub struct VariantProviderOutput {
     /// The namespace of the provider.
-    pub namespace: String,
+    pub namespace: VariantNamespace,
     /// Features (in order) mapped to their properties (in order).
-    pub features: IndexMap<String, Vec<String>>,
+    pub features: IndexMap<VariantFeature, Vec<VariantValue>>,
 }
 
 /// The priority of a variant.
@@ -72,13 +73,13 @@ pub fn score_variant(
         );
 
         for feature in feature_priorities {
-            let value_priorities: Vec<String> = default_priorities
+            let value_priorities: Vec<VariantValue> = default_priorities
                 .property
                 .get(namespace)
                 .and_then(|namespace_features| namespace_features.get(feature))
                 .into_iter()
                 .flatten()
-                .map(ToString::to_string)
+                .cloned()
                 .chain(
                     target_namespaces
                         .get(namespace)
@@ -110,18 +111,16 @@ pub fn score_variant(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        VariantProviderOutput,
-        variants_json::{DefaultPriorities, Variant, VariantNamespace},
-    };
-    use itertools::Itertools;
-    use std::sync::Arc;
-
-    use super::score_variant;
+    use crate::variants_json::{DefaultPriorities, Variant};
+    use crate::{VariantProviderOutput, score_variant};
 
     use insta::assert_snapshot;
+    use itertools::Itertools;
     use rustc_hash::FxHashMap;
     use serde_json::json;
+    use std::sync::Arc;
+
+    use uv_pep508::VariantNamespace;
 
     fn host() -> FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> {
         serde_json::from_value(json!({

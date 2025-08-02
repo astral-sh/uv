@@ -11,7 +11,7 @@ license.workspace = true
 
 [dependencies]
 uv-once-map = { workspace = true }
-uv-pep508 = { workspace = true }
+uv-pep508 = { workspace = true, features = ["serde"] }
 uv-pypi-types = { workspace = true }
 
 indexmap = { workspace = true }

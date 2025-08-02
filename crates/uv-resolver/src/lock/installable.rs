@@ -15,7 +15,10 @@ use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOption
 use uv_distribution::{DistributionDatabase, PackageVariantCache};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerVariantsEnvironment, MarkerVariantsUniversal};
+use uv_pep508::{
+    MarkerVariantsEnvironment, MarkerVariantsUniversal, VariantFeature, VariantNamespace,
+    VariantValue,
+};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_types::BuildContext;
@@ -222,7 +225,7 @@ pub trait Installable<'lock> {
             if !dependency
                 .marker
                 // No package, evaluate markers to false.
-                .evaluate(marker_env, Vec::<(String, _, _)>::new().as_slice(), &[])
+                .evaluate(marker_env, Vec::new().as_slice(), &[])
             {
                 continue;
             }
@@ -634,19 +637,24 @@ struct CurrentResolvedVariants<'a> {
 }
 
 impl MarkerVariantsEnvironment for CurrentResolvedVariants<'_> {
-    fn contains_namespace(&self, namespace: &str) -> bool {
+    fn contains_namespace(&self, namespace: &VariantNamespace) -> bool {
         self.global.contains_namespace(namespace)
     }
 
-    fn contains_feature(&self, namespace: &str, feature: &str) -> bool {
+    fn contains_feature(&self, namespace: &VariantNamespace, feature: &VariantFeature) -> bool {
         self.global.contains_feature(namespace, feature)
     }
 
-    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
-        self.global.contains_property(namespace, feature, property)
+    fn contains_property(
+        &self,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
+    ) -> bool {
+        self.global.contains_property(namespace, feature, value)
     }
 
-    fn contains_base_namespace(&self, prefix: &str, namespace: &str) -> bool {
+    fn contains_base_namespace(&self, prefix: &str, namespace: &VariantNamespace) -> bool {
         let Some(variant) = self.current.0.get(prefix) else {
             return false;
         };
@@ -654,7 +662,12 @@ impl MarkerVariantsEnvironment for CurrentResolvedVariants<'_> {
         variant.contains_namespace(namespace)
     }
 
-    fn contains_based_feature(&self, prefix: &str, namespace: &str, feature: &str) -> bool {
+    fn contains_based_feature(
+        &self,
+        prefix: &str,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+    ) -> bool {
         let Some(variant) = self.current.0.get(prefix) else {
             return false;
         };
@@ -665,15 +678,15 @@ impl MarkerVariantsEnvironment for CurrentResolvedVariants<'_> {
     fn contains_based_property(
         &self,
         prefix: &str,
-        namespace: &str,
-        feature: &str,
-        property: &str,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
     ) -> bool {
         let Some(variant) = self.current.0.get(prefix) else {
             return false;
         };
 
-        variant.contains_property(namespace, feature, property)
+        variant.contains_property(namespace, feature, value)
     }
 }
 

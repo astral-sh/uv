@@ -28,6 +28,7 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
+use uv_pep508::VariantNamespace;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::DisplaySafeUrl;
@@ -588,7 +589,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Arc::new(known_properties.into_iter().collect());
 
         // Compute the set of available variants.
-        let provider_outputs: FxHashMap<String, Arc<VariantProviderOutput>> =
+        let provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
             futures::stream::iter(variants_json.providers.iter())
                 .map(|(name, provider)| {
                     let known_properties = Arc::clone(&known_properties);

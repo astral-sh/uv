@@ -4,25 +4,22 @@ use indoc::formatdoc;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
-use uv_pep508::{MarkerVariantsEnvironment, Requirement};
+use uv_pep508::{
+    MarkerVariantsEnvironment, Requirement, VariantFeature, VariantNamespace, VariantValue,
+};
 use uv_pypi_types::VerbatimParsedUrl;
-
-// TODO(konsti): Validate the string contents
-pub type VariantNamespace = String;
-pub type VariantFeature = String;
-pub type VariantProperty = String;
 
 /// Mapping of namespaces in a variant
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Variant(FxHashMap<String, FxHashMap<String, Vec<String>>>);
+pub struct Variant(FxHashMap<VariantNamespace, FxHashMap<VariantFeature, Vec<VariantValue>>>);
 
 impl MarkerVariantsEnvironment for Variant {
-    fn contains_namespace(&self, namespace: &str) -> bool {
+    fn contains_namespace(&self, namespace: &VariantNamespace) -> bool {
         self.0.contains_key(namespace)
     }
 
-    fn contains_feature(&self, namespace: &str, feature: &str) -> bool {
+    fn contains_feature(&self, namespace: &VariantNamespace, feature: &VariantFeature) -> bool {
         let Some(features) = self.0.get(namespace) else {
             return false;
         };
@@ -34,39 +31,49 @@ impl MarkerVariantsEnvironment for Variant {
         !properties.is_empty()
     }
 
-    fn contains_property(&self, namespace: &str, feature: &str, property: &str) -> bool {
+    fn contains_property(
+        &self,
+        namespace: &VariantNamespace,
+        feature: &VariantFeature,
+        value: &VariantValue,
+    ) -> bool {
         let Some(features) = self.0.get(namespace) else {
             return false;
         };
 
-        let Some(properties) = features.get(feature) else {
+        let Some(values) = features.get(feature) else {
             return false;
         };
 
-        properties.iter().any(|p| p == property)
+        values.iter().any(|values| values == value)
     }
 
-    fn contains_base_namespace(&self, _prefix: &str, _namespace: &str) -> bool {
+    fn contains_base_namespace(&self, _prefix: &str, _namespace: &VariantNamespace) -> bool {
         false
     }
 
-    fn contains_based_feature(&self, _prefix: &str, _namespace: &str, _feature: &str) -> bool {
+    fn contains_based_feature(
+        &self,
+        _prefix: &str,
+        _namespace: &VariantNamespace,
+        _feature: &VariantFeature,
+    ) -> bool {
         false
     }
 
     fn contains_based_property(
         &self,
         _prefix: &str,
-        _namespace: &str,
-        _feature: &str,
-        _property: &str,
+        _namespace: &VariantNamespace,
+        _feature: &VariantFeature,
+        _value: &VariantValue,
     ) -> bool {
         false
     }
 }
 
 impl Deref for Variant {
-    type Target = FxHashMap<String, FxHashMap<String, Vec<String>>>;
+    type Target = FxHashMap<VariantNamespace, FxHashMap<VariantFeature, Vec<VariantValue>>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -92,22 +99,22 @@ pub struct VariantsJsonContent {
 #[serde(rename_all = "kebab-case")]
 pub struct DefaultPriorities {
     /// Default namespace priorities
-    pub namespace: Vec<String>,
+    pub namespace: Vec<VariantNamespace>,
     /// Default feature priorities
     #[serde(default)]
     pub feature: FxHashMap<VariantNamespace, Vec<VariantFeature>>,
     /// Default property priorities
     #[serde(default)]
-    pub property: FxHashMap<VariantNamespace, FxHashMap<VariantFeature, Vec<VariantProperty>>>,
+    pub property: FxHashMap<VariantNamespace, FxHashMap<VariantFeature, Vec<VariantValue>>>,
 }
 
 /// A `namespace :: feature :: property` entry.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct VariantPropertyType {
-    pub namespace: String,
-    pub feature: String,
-    pub value: String,
+    pub namespace: VariantNamespace,
+    pub feature: VariantFeature,
+    pub value: VariantValue,
 }
 
 /// Provider information

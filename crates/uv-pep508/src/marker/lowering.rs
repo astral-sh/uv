@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use uv_normalize::{ExtraName, GroupName};
 
 use crate::marker::tree::MarkerValueList;
+use crate::marker::{VariantFeature, VariantNamespace, VariantValue};
 use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
@@ -173,22 +174,22 @@ pub enum CanonicalMarkerListPair {
     VariantNamespaces {
         /// If set, the variant marker is evaluated as a variant of the base package.
         base: Option<String>,
-        namespace: String,
+        namespace: VariantNamespace,
     },
     /// A valid `variant_features`.
     VariantFeatures {
         /// If set, the variant marker is evaluated as a variant of the base package.
         base: Option<String>,
-        namespace: String,
-        feature: String,
+        namespace: VariantNamespace,
+        feature: VariantFeature,
     },
     /// A valid `variant_properties`.
     VariantProperties {
         /// If set, the variant marker is evaluated as a variant of the base package.
         base: Option<String>,
-        namespace: String,
-        feature: String,
-        value: String,
+        namespace: VariantNamespace,
+        feature: VariantFeature,
+        value: VariantValue,
     },
     /// For leniency, preserve invalid values.
     Arbitrary { key: MarkerValueList, value: String },
@@ -219,7 +220,7 @@ impl CanonicalMarkerListPair {
                 if let Some(prefix) = prefix {
                     format!("{prefix} | {namespace}")
                 } else {
-                    namespace.clone()
+                    namespace.to_string()
                 }
             }
             Self::VariantFeatures {

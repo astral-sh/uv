@@ -2,8 +2,10 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
+use uv_pep508::VariantNamespace;
+
 use crate::VariantProviderOutput;
-use crate::variants_json::{VariantNamespace, VariantsJsonContent};
+use crate::variants_json::VariantsJsonContent;
 
 #[derive(Debug, Clone)]
 pub struct ResolvedVariants {
