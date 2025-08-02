@@ -1606,7 +1606,7 @@ impl PylockTomlArchive {
                 }
             }
         } else {
-            return Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()));
+            Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()))
         }
     }
 
@@ -1631,7 +1631,7 @@ impl PylockTomlArchive {
             let ext = DistExtension::from_path(filename)?;
             Ok(matches!(ext, DistExtension::Wheel))
         } else {
-            return Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()));
+            Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()))
         }
     }
 }

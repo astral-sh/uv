@@ -248,7 +248,7 @@ pub(crate) async fn sync(
                 });
 
             match update_environment(
-                Deref::deref(&environment).clone(),
+                environment.clone(),
                 spec,
                 modifications,
                 build_constraints.unwrap_or_default(),

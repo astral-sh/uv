@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::convert::Infallible;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
@@ -3907,7 +3906,7 @@ struct SourceDistMetadata {
 /// future, so this should be treated as only a hint to where to look
 /// and/or recording where the source dist file originally came from.
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(try_from = "SourceDistWire")]
+#[serde(from = "SourceDistWire")]
 enum SourceDist {
     Url {
         url: UrlString,
@@ -4206,17 +4205,15 @@ impl SourceDist {
     }
 }
 
-impl TryFrom<SourceDistWire> for SourceDist {
-    type Error = Infallible;
-
-    fn try_from(wire: SourceDistWire) -> Result<SourceDist, Infallible> {
+impl From<SourceDistWire> for SourceDist {
+    fn from(wire: SourceDistWire) -> SourceDist {
         match wire {
-            SourceDistWire::Url { url, metadata } => Ok(SourceDist::Url { url, metadata }),
-            SourceDistWire::Path { path, metadata } => Ok(SourceDist::Path {
+            SourceDistWire::Url { url, metadata } => SourceDist::Url { url, metadata },
+            SourceDistWire::Path { path, metadata } => SourceDist::Path {
                 path: path.into(),
                 metadata,
-            }),
-            SourceDistWire::Metadata { metadata } => Ok(SourceDist::Metadata { metadata }),
+            },
+            SourceDistWire::Metadata { metadata } => SourceDist::Metadata { metadata },
         }
     }
 }
