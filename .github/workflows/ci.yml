@@ -1339,6 +1339,11 @@ jobs:
         run: |
           ./uv pip install anyio
 
+      - name: "Check a GraalPy dev version (different version parsing)"
+        run: |
+          curl -sLf https://github.com/graalvm/graal-languages-ea-builds/releases/download/graalpy-25.0.0-ea.31/graalpy-25.0.0-ea.31-linux-amd64.tar.gz | tar xz
+          ./uv run -p ./graalpy-25.0.0-dev-linux-amd64/bin/python python --version
+
   integration-test-graalpy-windows-x86_64:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64

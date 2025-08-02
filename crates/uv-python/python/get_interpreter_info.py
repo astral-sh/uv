@@ -41,7 +41,9 @@ if hasattr(sys, "implementation"):
         import re
 
         implementation_version = re.sub(
-            r"graalpy(\d)(\d+)-\d+", r"\1.\2", sys.implementation.cache_tag
+            r"graalpy(\d)(\d+)(?:dev[\da-f]+)?-\d+",
+            r"\1.\2",
+            sys.implementation.cache_tag,
         )
     else:
         implementation_version = format_full_version(sys.implementation.version)
