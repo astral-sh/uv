@@ -8152,7 +8152,7 @@ fn universal_platform_fork() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("-c")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8176,9 +8176,9 @@ fn universal_platform_fork() -> Result<()> {
         # via torch
     sympy==1.13.1
         # via torch
-    torch==2.5.1 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
+    torch==2.5.1 ; (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'
         # via -r requirements.in
-    torch==2.5.1+cpu ; (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
+    torch==2.5.1+cpu ; (python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     typing-extensions==4.9.0
         # via
@@ -8187,7 +8187,7 @@ fn universal_platform_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8582,7 +8582,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8608,7 +8608,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via torch
     sympy==1.13.3
         # via torch
-    torch==2.0.0 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'darwin')
+    torch==2.0.0 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'darwin')
         # via
         #   -r requirements.in
         #   example
@@ -8616,7 +8616,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via
         #   -r requirements.in
         #   example
-    torch==2.0.0+cu118 ; (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'darwin') or (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')
+    torch==2.0.0+cu118 ; (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'darwin') or (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via
         #   -r requirements.in
         #   example
@@ -8628,7 +8628,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 14 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8663,7 +8663,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8694,7 +8694,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     sympy==1.13.3
         # via torch
@@ -8705,9 +8705,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
+    torch==2.3.0 ; (python_full_version < '3.13' and implementation_name != 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8716,7 +8716,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    "###
+    "
     );
 
     // A similar case, except the nested marker is now on the path requirement.
@@ -8827,7 +8827,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8858,7 +8858,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux') or (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     sympy==1.13.3
         # via torch
@@ -8873,9 +8873,9 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
+    torch==2.3.0 ; (python_full_version < '3.13' and os_name != 'Linux' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux') or (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and os_name == 'Linux' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8884,7 +8884,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 20 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9617,7 +9617,7 @@ fn universal_marker_propagation() -> Result<()> {
         # via requests
     charset-normalizer==3.3.2
         # via requests
-    cmake==3.28.4 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    cmake==3.28.4 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via pytorch-triton-rocm
     filelock==3.13.1
         # via
@@ -9629,7 +9629,7 @@ fn universal_marker_propagation() -> Result<()> {
         # via requests
     jinja2==3.1.3
         # via torch
-    lit==18.1.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    lit==18.1.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via pytorch-triton-rocm
     markupsafe==2.1.5
         # via jinja2
@@ -9645,17 +9645,17 @@ fn universal_marker_propagation() -> Result<()> {
         # via torchvision
     pillow==10.2.0
         # via torchvision
-    pytorch-triton-rocm==2.0.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    pytorch-triton-rocm==2.0.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     requests==2.31.0
         # via torchvision
     sympy==1.12
         # via torch
-    torch==2.0.0 ; (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
+    torch==2.0.0 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
         # via
         #   -r requirements.in
         #   torchvision
-    torch==2.0.0+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torch==2.0.0+rocm5.4.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via
         #   -r requirements.in
         #   pytorch-triton-rocm
@@ -9664,9 +9664,9 @@ fn universal_marker_propagation() -> Result<()> {
         # via
         #   -r requirements.in
         #   torchvision
-    torchvision==0.15.1 ; (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
+    torchvision==0.15.1 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
         # via -r requirements.in
-    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torchvision==0.15.1+rocm5.4.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     torchvision==0.17.0 ; platform_machine != 'x86_64'
         # via -r requirements.in
