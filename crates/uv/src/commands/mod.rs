@@ -23,6 +23,7 @@ pub(crate) use pip::tree::pip_tree;
 pub(crate) use pip::uninstall::pip_uninstall;
 pub(crate) use project::add::add;
 pub(crate) use project::export::export;
+pub(crate) use project::format::format;
 pub(crate) use project::init::{InitKind, InitProjectKind, init};
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;

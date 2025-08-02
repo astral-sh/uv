@@ -1004,6 +1004,20 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
+    /// Format Python files.
+    ///
+    /// Formats Python files using the Ruff formatter. By default, all Python files in the project
+    /// are formatted.
+    ///
+    /// To check if files are formatted without modifying them, use `--check`. To see a diff of
+    /// formatting changes, use `--diff`.
+    ///
+    /// Additional arguments can be passed to Ruff after `--`.
+    #[command(
+        after_help = "Use `uv help format` for more details.",
+        after_long_help = ""
+    )]
+    Format(FormatArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -4250,6 +4264,32 @@ pub struct ExportArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+}
+
+#[derive(Args)]
+pub struct FormatArgs {
+    /// Check if files are formatted without applying changes.
+    #[arg(long)]
+    pub check: bool,
+
+    /// Show a diff of formatting changes without applying them.
+    ///
+    /// Implies `--check`.
+    #[arg(long)]
+    pub diff: bool,
+
+    /// The version of Ruff to use for formatting.
+    ///
+    /// By default, a version of Ruff pinned by uv will be used.
+    #[arg(long)]
+    pub version: Option<String>,
+
+    /// Additional arguments to pass to Ruff.
+    ///
+    /// For example, use `uv format -- --line-length 100` to set the line length or
+    /// `uv format -- src/module/foo.py` to format a specific file.
+    #[command(subcommand)]
+    pub args: Option<ExternalCommand>,
 }
 
 #[derive(Args)]

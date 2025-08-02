@@ -962,6 +962,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv format` command with options shared across scenarios.
+    pub fn format(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("format");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv build` command with options shared across scenarios.
     pub fn build(&self) -> Command {
         let mut command = self.new_command();
