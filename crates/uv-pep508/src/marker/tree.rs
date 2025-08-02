@@ -2328,19 +2328,18 @@ mod test {
     struct VariantEnv(Vec<(VariantNamespace, VariantFeature, VariantValue)>);
 
     impl VariantEnv {
-        fn new(namespaces: &[(&str, &str, &str)]) -> Self {
-            Self(
-                namespaces
-                    .iter()
-                    .map(|(namespace, feature, value)| {
-                        (
-                            VariantNamespace::from_str(namespace).unwrap(),
-                            VariantFeature::from_str(feature).unwrap(),
-                            VariantValue::from_str(value).unwrap(),
-                        )
-                    })
-                    .collect(),
-            )
+        fn new(properties: &[(&str, &str, &str)]) -> Self {
+            let properties = properties
+                .iter()
+                .map(|(namespace, feature, value)| {
+                    (
+                        VariantNamespace::from_str(namespace).unwrap(),
+                        VariantFeature::from_str(feature).unwrap(),
+                        VariantValue::from_str(value).unwrap(),
+                    )
+                })
+                .collect();
+            Self(properties)
         }
     }
 
@@ -4111,10 +4110,10 @@ mod test {
         };
         assert_roundtrips("'gpu' in variant_namespaces");
         assert_roundtrips("'gpu' not in variant_namespaces");
-        assert_roundtrips("'gpu :: cuda' in variant_properties");
-        assert_roundtrips("'gpu :: cuda' not in variant_properties");
-        assert_roundtrips("'gpu :: cuda :: 12.4' in variant_features");
-        assert_roundtrips("'gpu :: cuda :: 12.8' not in variant_features");
+        assert_roundtrips("'gpu :: cuda' in variant_features");
+        assert_roundtrips("'gpu :: cuda' not in variant_features");
+        assert_roundtrips("'gpu :: cuda :: 12.4' in variant_properties");
+        assert_roundtrips("'gpu :: cuda :: 12.8' not in variant_properties");
 
         // TODO(konsti): Implement normalization and test it.
     }
@@ -4166,7 +4165,7 @@ mod test {
         let cu128 = VariantEnv::new(&[("nvidia", "ctk", "12.8")]);
 
         let marker = m(
-            " platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.6' in variant_properties",
+            "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.6' in variant_properties",
         );
 
         assert!(marker.evaluate(&env37, MarkerVariantsUniversal, &[]));
@@ -4181,11 +4180,17 @@ mod test {
         let cu128 = VariantEnv::new(&[("nvidia", "ctk", "12.8")]);
 
         let marker = m(
-            " platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.8' in variant_properties",
+            "platform_machine == 'x86_64' and sys_platform == 'linux' and 'nvidia :: ctk :: 12.8' in variant_properties",
         );
-        let marker_base = marker.with_variant_base("torch");
+        let marker_base = marker.with_variant_base("torch 2.8.0");
 
         assert!(marker.evaluate(&env37, &cu128, &[]));
         assert!(!marker_base.evaluate(&env37, &cu128, &[]));
+
+        let marker = m(
+            "platform_machine == 'x86_64' and sys_platform == 'linux' and 'torch 2.8.0 | nvidia :: ctk :: 12.8' in variant_properties",
+        );
+
+        assert!(!marker.evaluate(&env37, &cu128, &[]));
     }
 }
