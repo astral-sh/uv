@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Preview;
 use uv_pep440::{Prerelease, Version};
-use uv_platform::{Arch, Libc, Os};
+use uv_platform::{Arch, Libc, Os, Platform};
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
@@ -352,9 +352,7 @@ pub struct PythonInstallationKey {
     pub(crate) minor: u8,
     pub(crate) patch: u8,
     pub(crate) prerelease: Option<Prerelease>,
-    pub(crate) os: Os,
-    pub(crate) arch: Arch,
-    pub(crate) libc: Libc,
+    pub(crate) platform: Platform,
     pub(crate) variant: PythonVariant,
 }
 
@@ -365,9 +363,7 @@ impl PythonInstallationKey {
         minor: u8,
         patch: u8,
         prerelease: Option<Prerelease>,
-        os: Os,
-        arch: Arch,
-        libc: Libc,
+        platform: Platform,
         variant: PythonVariant,
     ) -> Self {
         Self {
@@ -376,9 +372,7 @@ impl PythonInstallationKey {
             minor,
             patch,
             prerelease,
-            os,
-            arch,
-            libc,
+            platform,
             variant,
         }
     }
@@ -386,9 +380,7 @@ impl PythonInstallationKey {
     pub fn new_from_version(
         implementation: LenientImplementationName,
         version: &PythonVersion,
-        os: Os,
-        arch: Arch,
-        libc: Libc,
+        platform: Platform,
         variant: PythonVariant,
     ) -> Self {
         Self {
@@ -397,9 +389,7 @@ impl PythonInstallationKey {
             minor: version.minor(),
             patch: version.patch().unwrap_or_default(),
             prerelease: version.pre(),
-            os,
-            arch,
-            libc,
+            platform,
             variant,
         }
     }
@@ -434,16 +424,20 @@ impl PythonInstallationKey {
         self.minor
     }
 
+    pub fn platform(&self) -> &Platform {
+        &self.platform
+    }
+
     pub fn arch(&self) -> &Arch {
-        &self.arch
+        &self.platform.arch
     }
 
     pub fn os(&self) -> &Os {
-        &self.os
+        &self.platform.os
     }
 
     pub fn libc(&self) -> &Libc {
-        &self.libc
+        &self.platform.libc
     }
 
     pub fn variant(&self) -> &PythonVariant {
@@ -489,7 +483,7 @@ impl fmt::Display for PythonInstallationKey {
         };
         write!(
             f,
-            "{}-{}.{}.{}{}{}-{}-{}-{}",
+            "{}-{}.{}.{}{}{}-{}",
             self.implementation,
             self.major,
             self.minor,
@@ -498,9 +492,7 @@ impl fmt::Display for PythonInstallationKey {
                 .map(|pre| pre.to_string())
                 .unwrap_or_default(),
             variant,
-            self.os,
-            self.arch,
-            self.libc
+            self.platform
         )
     }
 }
@@ -510,31 +502,18 @@ impl FromStr for PythonInstallationKey {
 
     fn from_str(key: &str) -> Result<Self, Self::Err> {
         let parts = key.split('-').collect::<Vec<_>>();
-        let [implementation, version, os, arch, libc] = parts.as_slice() else {
+
+        // We need at least implementation-version-platform (where platform is os-arch-libc)
+        if parts.len() < 5 {
             return Err(PythonInstallationKeyError::ParseError(
                 key.to_string(),
                 "not enough `-`-separated values".to_string(),
             ));
-        };
+        }
 
-        let implementation = LenientImplementationName::from(*implementation);
+        let implementation = LenientImplementationName::from(parts[0]);
 
-        let os = Os::from_str(os).map_err(|err| {
-            PythonInstallationKeyError::ParseError(key.to_string(), format!("invalid OS: {err}"))
-        })?;
-
-        let arch = Arch::from_str(arch).map_err(|err| {
-            PythonInstallationKeyError::ParseError(
-                key.to_string(),
-                format!("invalid architecture: {err}"),
-            )
-        })?;
-
-        let libc = Libc::from_str(libc).map_err(|err| {
-            PythonInstallationKeyError::ParseError(key.to_string(), format!("invalid libc: {err}"))
-        })?;
-
-        let (version, variant) = match version.split_once('+') {
+        let (version, variant) = match parts[1].split_once('+') {
             Some((version, variant)) => {
                 let variant = PythonVariant::from_str(variant).map_err(|()| {
                     PythonInstallationKeyError::ParseError(
@@ -544,7 +523,7 @@ impl FromStr for PythonInstallationKey {
                 })?;
                 (version, variant)
             }
-            None => (*version, PythonVariant::Default),
+            None => (parts[1], PythonVariant::Default),
         };
 
         let version = PythonVersion::from_str(version).map_err(|err| {
@@ -554,14 +533,24 @@ impl FromStr for PythonInstallationKey {
             )
         })?;
 
-        Ok(Self::new_from_version(
+        // Join the remaining parts as the platform string
+        let platform_str = parts[2..].join("-");
+        let platform = Platform::from_str(&platform_str).map_err(|err| {
+            PythonInstallationKeyError::ParseError(
+                key.to_string(),
+                format!("invalid platform: {err}"),
+            )
+        })?;
+
+        Ok(Self {
             implementation,
-            &version,
-            os,
-            arch,
-            libc,
+            major: version.major(),
+            minor: version.minor(),
+            patch: version.patch().unwrap_or_default(),
+            prerelease: version.pre(),
+            platform,
             variant,
-        ))
+        })
     }
 }
 
@@ -576,10 +565,8 @@ impl Ord for PythonInstallationKey {
         self.implementation
             .cmp(&other.implementation)
             .then_with(|| self.version().cmp(&other.version()))
-            .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
-            // Architectures are sorted in preferred order, with native architectures first
-            .then_with(|| self.arch.cmp(&other.arch).reverse())
-            .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
+            // Platforms are sorted in preferred order for the target
+            .then_with(|| self.platform.cmp(&other.platform).reverse())
             // Python variants are sorted in preferred order, with `Default` first
             .then_with(|| self.variant.cmp(&other.variant).reverse())
     }
@@ -632,14 +619,8 @@ impl fmt::Display for PythonInstallationMinorVersionKey {
         };
         write!(
             f,
-            "{}-{}.{}{}-{}-{}-{}",
-            self.0.implementation,
-            self.0.major,
-            self.0.minor,
-            variant,
-            self.0.os,
-            self.0.arch,
-            self.0.libc,
+            "{}-{}.{}{}-{}",
+            self.0.implementation, self.0.major, self.0.minor, variant, self.0.platform,
         )
     }
 }
@@ -653,9 +634,9 @@ impl fmt::Debug for PythonInstallationMinorVersionKey {
             .field("major", &self.0.major)
             .field("minor", &self.0.minor)
             .field("variant", &self.0.variant)
-            .field("os", &self.0.os)
-            .field("arch", &self.0.arch)
-            .field("libc", &self.0.libc)
+            .field("os", &self.0.platform.os)
+            .field("arch", &self.0.platform.arch)
+            .field("libc", &self.0.platform.libc)
             .finish()
     }
 }
@@ -667,9 +648,7 @@ impl PartialEq for PythonInstallationMinorVersionKey {
         self.0.implementation == other.0.implementation
             && self.0.major == other.0.major
             && self.0.minor == other.0.minor
-            && self.0.os == other.0.os
-            && self.0.arch == other.0.arch
-            && self.0.libc == other.0.libc
+            && self.0.platform == other.0.platform
             && self.0.variant == other.0.variant
     }
 }
@@ -681,9 +660,7 @@ impl Hash for PythonInstallationMinorVersionKey {
         self.0.implementation.hash(state);
         self.0.major.hash(state);
         self.0.minor.hash(state);
-        self.0.os.hash(state);
-        self.0.arch.hash(state);
-        self.0.libc.hash(state);
+        self.0.platform.hash(state);
         self.0.variant.hash(state);
     }
 }

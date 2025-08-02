@@ -1,7 +1,7 @@
 use crate::Error;
+use std::fmt;
 use std::fmt::Display;
 use std::str::FromStr;
-use std::{cmp, fmt};
 
 /// Architecture variants, e.g., with support for different instruction sets
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
@@ -21,54 +21,6 @@ pub enum ArchVariant {
 pub struct Arch {
     pub(crate) family: target_lexicon::Architecture,
     pub(crate) variant: Option<ArchVariant>,
-}
-
-impl Ord for Arch {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        if self.family == other.family {
-            return self.variant.cmp(&other.variant);
-        }
-
-        // For the time being, manually make aarch64 windows disfavored
-        // on its own host platform, because most packages don't have wheels for
-        // aarch64 windows, making emulation more useful than native execution!
-        //
-        // The reason we do this in "sorting" and not "supports" is so that we don't
-        // *refuse* to use an aarch64 windows pythons if they happen to be installed
-        // and nothing else is available.
-        //
-        // Similarly if someone manually requests an aarch64 windows install, we
-        // should respect that request (this is the way users should "override"
-        // this behaviour).
-        let preferred = if cfg!(all(windows, target_arch = "aarch64")) {
-            Arch {
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            }
-        } else {
-            // Prefer native architectures
-            Arch::from_env()
-        };
-
-        match (
-            self.family == preferred.family,
-            other.family == preferred.family,
-        ) {
-            (true, true) => unreachable!(),
-            (true, false) => cmp::Ordering::Less,
-            (false, true) => cmp::Ordering::Greater,
-            (false, false) => {
-                // Both non-preferred, fallback to lexicographic order
-                self.family.to_string().cmp(&other.family.to_string())
-            }
-        }
-    }
-}
-
-impl PartialOrd for Arch {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl Arch {
