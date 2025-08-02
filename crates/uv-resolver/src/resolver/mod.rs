@@ -1480,10 +1480,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        let variant_base = package
-            .name()
-            .map(ToString::to_string)
-            .unwrap_or("TODO".to_string());
+        let variant_base = format!("{} {}", candidate.name(), candidate.version());
 
         // If the user explicitly marked a platform as required, ensure it has coverage.
         for marker in self.options.required_environments.iter().copied() {
@@ -1788,10 +1785,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             })
         } else {
-            let variant_base = package
-                .name()
-                .map(ToString::to_string)
-                .unwrap_or("TODO".to_string());
+            let variant_base = format!(
+                "{} {}",
+                package
+                    .name()
+                    .map(ToString::to_string)
+                    .unwrap_or("TODO(konsti)".to_string()),
+                version
+            );
             Ok(result?.fork(env, python_requirement, &self.conflicts, &variant_base))
         }
     }
