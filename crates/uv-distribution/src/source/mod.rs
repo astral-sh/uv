@@ -29,7 +29,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl,
@@ -509,7 +509,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_dist_entry.path(),
                 subdirectory,
                 &cache_shard,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .await?;
 
@@ -645,7 +645,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source,
                 source_dist_entry.path(),
                 subdirectory,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .boxed_local()
             .await?
@@ -686,7 +686,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_dist_entry.path(),
                 subdirectory,
                 &cache_shard,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .await?;
 
@@ -880,7 +880,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_entry.path(),
                 None,
                 &cache_shard,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .await?;
 
@@ -978,7 +978,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, source_entry.path(), None, SourceStrategy::Disabled)
+            .build_metadata(source, source_entry.path(), None, NoSources::None)
             .boxed_local()
             .await?
         {
@@ -1027,7 +1027,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_entry.path(),
                 None,
                 &cache_shard,
-                SourceStrategy::Disabled,
+                NoSources::None,
             )
             .await?;
 
@@ -2333,7 +2333,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source_root: &Path,
         subdirectory: Option<&Path>,
         cache_shard: &CacheShard,
-        source_strategy: SourceStrategy,
+        no_sources: NoSources,
     ) -> Result<(String, WheelFilename, ResolutionMetadata), Error> {
         debug!("Building: {source}");
 
@@ -2408,7 +2408,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root: source_root.to_path_buf().into_boxed_path(),
                 subdirectory: subdirectory
                     .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
-                source_strategy,
+                no_sources: no_sources.clone(),
                 build_kind,
             };
 
@@ -2431,7 +2431,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         source_root,
                         Some(&source.to_string()),
                         source.as_dist(),
-                        source_strategy,
+                        &no_sources,
                         if source.is_editable() {
                             BuildKind::Editable
                         } else {
@@ -2480,7 +2480,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
-        source_strategy: SourceStrategy,
+        no_sources: NoSources,
     ) -> Result<Option<ResolutionMetadata>, Error> {
         debug!("Preparing metadata for: {source}");
 
@@ -2536,7 +2536,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root,
                 Some(&source.to_string()),
                 source.as_dist(),
-                source_strategy,
+                &no_sources,
                 build_kind,
                 BuildOutput::Debug,
                 self.build_stack.cloned().unwrap_or_default(),
@@ -2554,7 +2554,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root: source_root.to_path_buf().into_boxed_path(),
                 subdirectory: subdirectory
                     .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
-                source_strategy,
+                no_sources,
                 build_kind,
             },
             builder,

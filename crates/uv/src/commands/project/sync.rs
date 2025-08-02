@@ -611,7 +611,7 @@ pub(super) async fn do_sync(
                 extra_build_dependencies.clone(),
                 workspace,
                 index_locations,
-                sources,
+                &sources,
             )?
         }
         InstallTarget::Script { script, .. } => {
@@ -632,7 +632,7 @@ pub(super) async fn do_sync(
                 extra_build_dependencies: extra_build_dependencies.clone(),
                 prerelease: PrereleaseMode::default(),
                 resolution: ResolutionMode::default(),
-                sources,
+                sources: sources.clone(),
                 upgrade: Upgrade::default(),
             };
             script_extra_build_requires((*script).into(), &resolver_settings)?
@@ -772,7 +772,7 @@ pub(super) async fn do_sync(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,

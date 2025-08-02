@@ -17,8 +17,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PackageConfigSettings,
-    Preview, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, NoSources,
+    PackageConfigSettings, Preview, Reinstall,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -98,7 +98,7 @@ pub struct BuildDispatch<'a> {
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
-    sources: SourceStrategy,
+    sources: NoSources,
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
@@ -123,7 +123,7 @@ impl<'a> BuildDispatch<'a> {
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
-        sources: SourceStrategy,
+        sources: NoSources,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: Preview,
@@ -211,8 +211,8 @@ impl BuildContext for BuildDispatch<'_> {
         self.config_settings_package
     }
 
-    fn sources(&self) -> SourceStrategy {
-        self.sources
+    fn sources(&self) -> NoSources {
+        self.sources.clone()
     }
 
     fn locations(&self) -> &IndexLocations {
@@ -400,7 +400,7 @@ impl BuildContext for BuildDispatch<'_> {
         install_path: &'data Path,
         version_id: Option<&'data str>,
         dist: Option<&'data SourceDist>,
-        sources: SourceStrategy,
+        sources: &'data NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
         mut build_stack: BuildStack,
@@ -456,7 +456,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.source_build_context.clone(),
             version_id,
             self.index_locations,
-            sources,
+            sources.clone(),
             self.workspace_cache(),
             config_settings,
             self.build_isolation,
