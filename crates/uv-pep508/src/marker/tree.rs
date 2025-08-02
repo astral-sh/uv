@@ -1663,7 +1663,7 @@ impl MarkerTree {
     /// variant markers.
     ///
     /// When using variant markers outside their original package, for example in the resolver forks
-    /// or in the lockfile, we need to attach the package of orign they need to be evaluated from.
+    /// or in the lockfile, we need to attach the package of origin they need to be evaluated from.
     #[must_use]
     pub fn with_variant_base(self, base: &str) -> Self {
         if !self.has_variant_expression() {
