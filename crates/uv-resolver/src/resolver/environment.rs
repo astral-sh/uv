@@ -456,8 +456,9 @@ impl<'d> ForkingPossibility<'d> {
     pub(crate) fn new(
         env: &ResolverEnvironment,
         dep: &'d PubGrubDependency,
+        variant_base: &str,
     ) -> ForkingPossibility<'d> {
-        let marker = dep.package.marker();
+        let marker = dep.package.marker().with_variant_base(variant_base);
         if !env.included_by_marker(marker) {
             ForkingPossibility::DependencyAlwaysExcluded
         } else if marker.is_true() {
@@ -527,8 +528,8 @@ impl<'d> Forker<'d> {
 
     /// Returns true if the dependency represented by this forker may be
     /// included in the given resolver environment.
-    pub(crate) fn included(&self, env: &ResolverEnvironment) -> bool {
-        let marker = self.package.marker();
+    pub(crate) fn included(&self, env: &ResolverEnvironment, variant_base: &str) -> bool {
+        let marker = self.package.marker().with_variant_base(variant_base);
         env.included_by_marker(marker)
     }
 }
