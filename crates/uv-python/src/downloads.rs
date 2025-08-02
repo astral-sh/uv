@@ -378,21 +378,31 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
-        if let Some(os) = &self.os {
-            if key.os != *os {
-                return false;
-            }
+        let key_is_emscripten = key.os().is_emscripten();
+        let target_is_windows = self.os().filter(|x| x.is_windows()).is_some();
+        // Emscripten is not compatible with windows
+        if key_is_emscripten && target_is_windows {
+            return false;
         }
-
-        if let Some(arch) = &self.arch {
-            if !arch.satisfied_by(key.arch) {
-                return false;
+        // Emscripten is compatible with all other platforms so skip platform
+        // check in this case.
+        if !key_is_emscripten {
+            if let Some(os) = &self.os {
+                if key.os != *os {
+                    return false;
+                }
             }
-        }
 
-        if let Some(libc) = &self.libc {
-            if key.libc != *libc {
-                return false;
+            if let Some(arch) = &self.arch {
+                if !arch.satisfied_by(key.arch) {
+                    return false;
+                }
+            }
+
+            if let Some(libc) = &self.libc {
+                if key.libc != *libc {
+                    return false;
+                }
             }
         }
         if let Some(implementation) = &self.implementation {
@@ -452,24 +462,6 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
-        if let Some(os) = self.os() {
-            let interpreter_os = Os::from(interpreter.platform().os());
-            if &interpreter_os != os {
-                debug!(
-                    "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
-                );
-                return false;
-            }
-        }
-        if let Some(arch) = self.arch() {
-            let interpreter_arch = Arch::from(&interpreter.platform().arch());
-            if !arch.satisfied_by(interpreter_arch) {
-                debug!(
-                    "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
-                );
-                return false;
-            }
-        }
         if let Some(implementation) = self.implementation() {
             let interpreter_implementation = interpreter.implementation_name();
             if LenientImplementationName::from(interpreter_implementation)
@@ -481,13 +473,40 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
-        if let Some(libc) = self.libc() {
-            let interpreter_libc = Libc::from(interpreter.platform().os());
-            if &interpreter_libc != libc {
-                debug!(
-                    "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
-                );
-                return false;
+        let interpreter_os = Os::from(interpreter.platform().os());
+        let interp_is_emscripten = interpreter_os.is_emscripten();
+        let target_is_windows = self.os().filter(|os| os.is_windows()).is_some();
+        // Emscripten does not work on windows
+        if interp_is_emscripten && target_is_windows {
+            return false;
+        }
+        // Emscripten works on all other platforms
+        if !interp_is_emscripten {
+            if let Some(os) = self.os() {
+                if &interpreter_os != os {
+                    debug!(
+                        "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
+                    );
+                    return false;
+                }
+            }
+            if let Some(arch) = self.arch() {
+                let interpreter_arch = Arch::from(&interpreter.platform().arch());
+                if !arch.satisfied_by(interpreter_arch) {
+                    debug!(
+                        "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
+                    );
+                    return false;
+                }
+            }
+            if let Some(libc) = self.libc() {
+                let interpreter_libc = Libc::from(interpreter.platform().os());
+                if &interpreter_libc != libc {
+                    debug!(
+                        "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
+                    );
+                    return false;
+                }
             }
         }
         true
@@ -789,7 +808,7 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let url = self.download_url(python_install_mirror, pypy_install_mirror)?;
-        let path = installation_dir.join(self.key().to_string());
+        let mut path = installation_dir.join(self.key().to_string());
 
         // If it is not a reinstall and the dir already exists, return it.
         if !reinstall && path.is_dir() {
@@ -915,18 +934,22 @@ impl ManagedPythonDownload {
             extracted = extracted.join("install");
         }
 
-        // If the distribution is missing a `python`-to-`pythonX.Y` symlink, add it. PEP 394 permits
-        // it, and python-build-standalone releases after `20240726` include it, but releases prior
-        // to that date do not.
+        let is_emscripten: bool = self.os().is_emscripten();
+
         #[cfg(unix)]
         {
-            match fs_err::os::unix::fs::symlink(
-                format!("python{}.{}", self.key.major, self.key.minor),
-                extracted.join("bin").join("python"),
-            ) {
-                Ok(()) => {}
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(err) => return Err(err.into()),
+            let discard_already_exists_error = |res: io::Result<()>| match res {
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+                _ => res,
+            };
+            if !is_emscripten {
+                // If the distribution is missing a `python`-to-`pythonX.Y` symlink, add it. PEP 394 permits
+                // it, and python-build-standalone releases after `20240726` include it, but releases prior
+                // to that date do not.
+                discard_already_exists_error(fs_err::os::unix::fs::symlink(
+                    format!("python{}.{}", self.key.major, self.key.minor),
+                    extracted.join("bin").join("python"),
+                ))?;
             }
         }
 
@@ -934,6 +957,16 @@ impl ManagedPythonDownload {
         if path.is_dir() {
             debug!("Removing existing directory: {}", path.user_display());
             fs_err::tokio::remove_dir_all(&path).await?;
+        }
+
+        if is_emscripten {
+            fs_err::create_dir(&path)?;
+            extracted.push("pyodide-root/dist");
+            path.push("bin");
+            fs_err::copy(
+                extracted.join("python"),
+                extracted.join(format!("python{}.{}", self.key.major, self.key.minor)),
+            )?;
         }
 
         // Persist it to the target.
@@ -945,6 +978,9 @@ impl ManagedPythonDownload {
                 err,
             })?;
 
+        if is_emscripten {
+            path.pop();
+        }
         Ok(DownloadResult::Fetched(path))
     }
 
