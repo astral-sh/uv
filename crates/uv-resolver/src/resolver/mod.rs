@@ -2713,8 +2713,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         variants_json: RegistryVariantsJson,
         provider: &Provider,
     ) -> Result<ResolvedVariants, ResolveError> {
+        let Some(marker_env) = self.env.marker_environment() else {
+            unreachable!("Variants should only be queried in non-universal resolution")
+        };
         provider
-            .fetch_and_query_variants(&variants_json)
+            .fetch_and_query_variants(&variants_json, marker_env)
             .await
             .map_err(ResolveError::VariantFrontend)
     }

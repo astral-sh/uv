@@ -486,6 +486,7 @@ pub trait Installable<'lock> {
                 let variant_properties = determine_properties(
                     package,
                     self.install_path(),
+                    marker_env,
                     &distribution_database,
                     variants_cache,
                 )
@@ -693,6 +694,7 @@ impl MarkerVariantsEnvironment for CurrentResolvedVariants<'_> {
 async fn determine_properties<Context: BuildContext>(
     package: &Package,
     workspace_root: &Path,
+    marker_env: &ResolverMarkerEnvironment,
     distribution_database: &DistributionDatabase<'_, Context>,
     variants_cache: &PackageVariantCache,
 ) -> Result<Variant, LockError> {
@@ -702,7 +704,7 @@ async fn determine_properties<Context: BuildContext>(
     };
     let resolved_variants = if variants_cache.register(variants_json.version_id()) {
         let resolved_variants = distribution_database
-            .fetch_and_query_variants(&variants_json)
+            .fetch_and_query_variants(&variants_json, marker_env)
             .await
             .expect("TODO(konsti)");
 

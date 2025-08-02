@@ -5,7 +5,8 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use uv_pep508::{
-    MarkerVariantsEnvironment, Requirement, VariantFeature, VariantNamespace, VariantValue,
+    MarkerTree, MarkerVariantsEnvironment, Requirement, VariantFeature, VariantNamespace,
+    VariantValue,
 };
 use uv_pypi_types::VerbatimParsedUrl;
 
@@ -124,13 +125,12 @@ pub struct Provider {
     /// Object reference to plugin class
     pub plugin_api: Option<String>,
     /// Environment marker specifying when to enable the plugin
-    // TODO(konsti): Why does this break caching
-    /*#[serde(
+    #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
         default
     )]
-    pub enable_if: MarkerTree,*/
+    pub enable_if: MarkerTree,
     /// Dependency specifiers for how to install the plugin
     pub requires: Vec<Requirement<VerbatimParsedUrl>>,
 }

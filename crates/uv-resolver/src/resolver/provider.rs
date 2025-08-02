@@ -102,9 +102,11 @@ pub trait ResolverProvider {
         dist: &'io InstalledDist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
+    /// Fetch the variants for a distribution given the marker environment.
     fn fetch_and_query_variants<'io>(
         &'io self,
         variants_json: &'io RegistryVariantsJson,
+        marker_env: &'io uv_pep508::MarkerEnvironment,
     ) -> impl Future<Output = VariantProviderResult> + 'io;
 
     /// Set the [`Reporter`] to use for this installer.
@@ -315,11 +317,15 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         }
     }
 
+    /// Fetch the variants for a distribution given the marker environment.
     async fn fetch_and_query_variants<'io>(
         &'io self,
         variants_json: &'io RegistryVariantsJson,
+        marker_env: &'io uv_pep508::MarkerEnvironment,
     ) -> VariantProviderResult {
-        self.fetcher.fetch_and_query_variants(variants_json).await
+        self.fetcher
+            .fetch_and_query_variants(variants_json, marker_env)
+            .await
     }
 
     /// Set the [`Reporter`] to use for this installer.

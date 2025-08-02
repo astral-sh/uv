@@ -28,7 +28,7 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
-use uv_pep508::VariantNamespace;
+use uv_pep508::{MarkerEnvironment, MarkerVariantsUniversal, VariantNamespace};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::DisplaySafeUrl;
@@ -546,9 +546,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub async fn fetch_and_query_variants(
         &self,
         variants_json: &RegistryVariantsJson,
+        marker_env: &MarkerEnvironment,
     ) -> Result<ResolvedVariants, Error> {
         let variants_json = self.fetch_variants_json(variants_json).await?;
-        let resolved_variants = self.query_variant_providers(variants_json).await?;
+        let resolved_variants = self
+            .query_variant_providers(variants_json, marker_env)
+            .await?;
         Ok(resolved_variants)
     }
 
@@ -566,6 +569,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     async fn query_variant_providers(
         &self,
         variants_json: VariantsJsonContent,
+        marker_env: &MarkerEnvironment,
     ) -> Result<ResolvedVariants, Error> {
         // Collect all known properties for dynamic providers.
         // TODO(konsti): We shouldn't need to do this conversion.
@@ -590,44 +594,48 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Compute the set of available variants.
         let provider_outputs: FxHashMap<VariantNamespace, Arc<VariantProviderOutput>> =
-            futures::stream::iter(variants_json.providers.iter())
-                .map(|(name, provider)| {
-                    let known_properties = Arc::clone(&known_properties);
-                    async move {
-                        let config = if self.build_context.variants().register(provider.clone()) {
-                            debug!("Querying provider `{name}` for variants");
+            futures::stream::iter(variants_json.providers.iter().filter(|(_, provider)| {
+                provider
+                    .enable_if
+                    .evaluate(marker_env, MarkerVariantsUniversal, &[])
+            }))
+            .map(|(name, provider)| {
+                let known_properties = Arc::clone(&known_properties);
+                async move {
+                    let config = if self.build_context.variants().register(provider.clone()) {
+                        debug!("Querying provider `{name}` for variants");
 
-                            // TODO(konsti): That's not spec compliant
-                            let backend_name = provider.plugin_api.clone().unwrap_or(name.clone());
-                            let builder = self
-                                .build_context
-                                .setup_variants(backend_name, provider, BuildOutput::Debug)
-                                .await?;
-                            let config = builder.query(&known_properties).await?;
-                            trace!(
-                                "Found namespace {} with configs {:?}",
-                                config.namespace, config
-                            );
+                        // TODO(konsti): That's not spec compliant
+                        let backend_name = provider.plugin_api.clone().unwrap_or(name.clone());
+                        let builder = self
+                            .build_context
+                            .setup_variants(backend_name, provider, BuildOutput::Debug)
+                            .await?;
+                        let config = builder.query(&known_properties).await?;
+                        trace!(
+                            "Found namespace {} with configs {:?}",
+                            config.namespace, config
+                        );
 
-                            let config = Arc::new(config);
-                            self.build_context
-                                .variants()
-                                .done(provider.clone(), config.clone());
-                            config
-                        } else {
-                            debug!("Reading provider `{name}` from in-memory cache");
-                            self.build_context
-                                .variants()
-                                .wait(provider)
-                                .await
-                                .expect("missing value for registered task")
-                        };
-                        Ok::<_, Error>((config.namespace.clone(), config))
-                    }
-                })
-                .buffered(8)
-                .try_collect()
-                .await?;
+                        let config = Arc::new(config);
+                        self.build_context
+                            .variants()
+                            .done(provider.clone(), config.clone());
+                        config
+                    } else {
+                        debug!("Reading provider `{name}` from in-memory cache");
+                        self.build_context
+                            .variants()
+                            .wait(provider)
+                            .await
+                            .expect("missing value for registered task")
+                    };
+                    Ok::<_, Error>((config.namespace.clone(), config))
+                }
+            })
+            .buffered(8)
+            .try_collect()
+            .await?;
 
         Ok(ResolvedVariants {
             variants_json,

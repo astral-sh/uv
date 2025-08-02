@@ -830,6 +830,7 @@ pub(super) async fn do_sync(
         DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
     let resolution = resolve_variants(
         resolution,
+        &marker_env,
         distribution_database,
         state.index().variant_priorities(),
     )

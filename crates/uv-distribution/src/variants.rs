@@ -12,6 +12,7 @@ use uv_distribution_types::{
     RegistryVariantsJson, Resolution, ResolvedDist,
 };
 use uv_once_map::OnceMap;
+use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_types::BuildContext;
 use uv_variants::resolved_variants::ResolvedVariants;
 use uv_variants::score_variant;
@@ -35,6 +36,7 @@ impl std::ops::Deref for PackageVariantCache {
 /// Resolve all variants for the given resolution.
 pub async fn resolve_variants<Context: BuildContext>(
     resolution: Resolution,
+    marker_env: &ResolverMarkerEnvironment,
     distribution_database: DistributionDatabase<'_, Context>,
     cache: &PackageVariantCache,
 ) -> Result<Resolution, Error> {
@@ -51,7 +53,7 @@ pub async fn resolve_variants<Context: BuildContext>(
 
             let resolved_variants = if cache.register(id.clone()) {
                 let resolved_variants = distribution_database
-                    .fetch_and_query_variants(variants_json)
+                    .fetch_and_query_variants(variants_json, marker_env)
                     .await?;
 
                 let resolved_variants = Arc::new(resolved_variants);
