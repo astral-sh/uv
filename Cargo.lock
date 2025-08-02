@@ -5450,6 +5450,7 @@ dependencies = [
  "uv-static",
  "uv-types",
  "uv-warnings",
+ "uv-workspace",
  "walkdir",
 ]
 

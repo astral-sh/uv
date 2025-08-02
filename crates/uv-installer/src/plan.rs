@@ -1,5 +1,6 @@
-use anyhow::{Result, bail};
 use std::sync::Arc;
+
+use anyhow::{Result, bail};
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
@@ -17,6 +18,7 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::SitePackages;
 use crate::satisfies::RequirementSatisfaction;
@@ -53,6 +55,7 @@ impl<'a> Planner<'a> {
         index_locations: &IndexLocations,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
+        extra_build_dependencies: &ExtraBuildDependencies,
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
@@ -66,6 +69,7 @@ impl<'a> Planner<'a> {
             hasher,
             config_settings,
             config_settings_package,
+            extra_build_dependencies,
         );
 
         let mut cached = vec![];

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::cache_digest;
@@ -9,6 +10,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::Error;
 use crate::index::cached_wheel::CachedWheel;
@@ -22,6 +24,7 @@ pub struct BuiltWheelIndex<'a> {
     hasher: &'a HashStrategy,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
+    extra_build_dependencies: &'a ExtraBuildDependencies,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
@@ -32,6 +35,7 @@ impl<'a> BuiltWheelIndex<'a> {
         hasher: &'a HashStrategy,
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
+        extra_build_dependencies: &'a ExtraBuildDependencies,
     ) -> Self {
         Self {
             cache,
@@ -39,6 +43,7 @@ impl<'a> BuiltWheelIndex<'a> {
             hasher,
             config_settings,
             config_settings_package,
+            extra_build_dependencies,
         }
     }
 
@@ -69,10 +74,11 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         Ok(self.find(&cache_shard))
@@ -107,10 +113,11 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         Ok(self
@@ -156,10 +163,11 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         Ok(self
@@ -183,10 +191,11 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         self.find(&cache_shard)
@@ -256,5 +265,16 @@ impl<'a> BuiltWheelIndex<'a> {
         } else {
             Cow::Borrowed(self.config_settings)
         }
+    }
+
+    /// Determine the extra build dependencies for the given package name.
+    fn extra_build_dependencies_for(
+        &self,
+        name: &PackageName,
+    ) -> &[uv_pep508::Requirement<uv_pypi_types::VerbatimParsedUrl>] {
+        self.extra_build_dependencies
+            .get(name)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 }

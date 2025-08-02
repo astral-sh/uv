@@ -413,7 +413,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context
                 .extra_build_dependencies()
                 .get(name)
-                .map(|v| v.as_slice())
+                .map(Vec::as_slice)
         })
         .unwrap_or(&[])
     }

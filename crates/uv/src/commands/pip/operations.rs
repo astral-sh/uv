@@ -1,12 +1,13 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{Context, anyhow};
-use itertools::Itertools;
-use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use anyhow::{Context, anyhow};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -468,6 +469,7 @@ pub(crate) async fn install(
             index_urls,
             config_settings,
             config_settings_package,
+            build_dispatch.extra_build_dependencies(),
             cache,
             venv,
             tags,
