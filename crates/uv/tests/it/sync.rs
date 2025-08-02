@@ -1662,6 +1662,19 @@ fn sync_extra_build_dependencies() -> Result<()> {
      + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
     // Adding `extra-build-dependencies` with the wrong name should fail the build
     // (the cache is invalidated when extra build dependencies change)
     pyproject_toml.write_str(indoc! {r#"
