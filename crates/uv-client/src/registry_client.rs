@@ -21,8 +21,8 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
+    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -115,9 +115,22 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
+    pub fn retries_from_env(mut self) -> anyhow::Result<Self> {
+        self.base_client_builder = self.base_client_builder.retries_from_env()?;
+        Ok(self)
+    }
+
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.base_client_builder = self.base_client_builder.native_tls(native_tls);
+        self
+    }
+
+    #[must_use]
+    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
+        self.base_client_builder = self
+            .base_client_builder
+            .built_in_root_certs(built_in_root_certs);
         self
     }
 
@@ -506,11 +519,17 @@ impl RegistryClient {
             format!("{package_name}.rkyv"),
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => CacheControl::from(
-                self.cache
-                    .freshness(&cache_entry, Some(package_name), None)
-                    .map_err(ErrorKind::Io)?,
-            ),
+            Connectivity::Online => {
+                if let Some(header) = self.index_urls.simple_api_cache_control_for(index) {
+                    CacheControl::Override(header)
+                } else {
+                    CacheControl::from(
+                        self.cache
+                            .freshness(&cache_entry, Some(package_name), None)
+                            .map_err(ErrorKind::Io)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -530,11 +549,11 @@ impl RegistryClient {
 
         match result {
             Ok(metadata) => Ok(SimpleMetadataSearchOutcome::Found(metadata)),
-            Err(err) => match err.into_kind() {
+            Err(err) => match err.kind() {
                 // The package could not be found in the remote index.
-                ErrorKind::WrappedReqwestError(url, err) => {
-                    let Some(status_code) = err.status() else {
-                        return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                ErrorKind::WrappedReqwestError(.., reqwest_err) => {
+                    let Some(status_code) = reqwest_err.status() else {
+                        return Err(err);
                     };
                     let decision =
                         status_code_strategy.handle_status_code(status_code, index, capabilities);
@@ -543,7 +562,7 @@ impl RegistryClient {
                             status_code,
                             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
                         ) {
-                            return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                            return Err(err);
                         }
                     }
                     Ok(SimpleMetadataSearchOutcome::from(decision))
@@ -555,7 +574,7 @@ impl RegistryClient {
                 // The package could not be found in the local index.
                 ErrorKind::FileNotFound(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
-                err => Err(err.into()),
+                _ => Err(err),
             },
         }
     }
@@ -566,7 +585,7 @@ impl RegistryClient {
         package_name: &PackageName,
         url: &DisplaySafeUrl,
         cache_entry: &CacheEntry,
-        cache_control: CacheControl,
+        cache_control: CacheControl<'_>,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let simple_request = self
             .uncached_client(url)
@@ -682,30 +701,14 @@ impl RegistryClient {
 
                 let wheel = wheels.best_wheel();
 
-                let location = match &wheel.file.url {
-                    FileLocation::RelativeUrl(base, url) => {
-                        let url = uv_pypi_types::base_url_join_relative(base, url)
-                            .map_err(ErrorKind::JoinRelativeUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
-                    FileLocation::AbsoluteUrl(url) => {
-                        let url = url.to_url().map_err(ErrorKind::InvalidUrl)?;
-                        if url.scheme() == "file" {
-                            let path = url
-                                .to_file_path()
-                                .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
-                            WheelLocation::Path(path)
-                        } else {
-                            WheelLocation::Url(url)
-                        }
-                    }
+                let url = wheel.file.url.to_url().map_err(ErrorKind::InvalidUrl)?;
+                let location = if url.scheme() == "file" {
+                    let path = url
+                        .to_file_path()
+                        .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
+                    WheelLocation::Path(path)
+                } else {
+                    WheelLocation::Url(url)
                 };
 
                 match location {
@@ -794,11 +797,17 @@ impl RegistryClient {
                 format!("{}.msgpack", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
-                Connectivity::Online => CacheControl::from(
-                    self.cache
-                        .freshness(&cache_entry, Some(&filename.name), None)
-                        .map_err(ErrorKind::Io)?,
-                ),
+                Connectivity::Online => {
+                    if let Some(header) = self.index_urls.artifact_cache_control_for(index) {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                }
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
@@ -864,11 +873,25 @@ impl RegistryClient {
             format!("{}.msgpack", filename.cache_key()),
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => CacheControl::from(
-                self.cache
-                    .freshness(&cache_entry, Some(&filename.name), None)
-                    .map_err(ErrorKind::Io)?,
-            ),
+            Connectivity::Online => {
+                if let Some(index) = index {
+                    if let Some(header) = self.index_urls.artifact_cache_control_for(index) {
+                        CacheControl::Override(header)
+                    } else {
+                        CacheControl::from(
+                            self.cache
+                                .freshness(&cache_entry, Some(&filename.name), None)
+                                .map_err(ErrorKind::Io)?,
+                        )
+                    }
+                } else {
+                    CacheControl::from(
+                        self.cache
+                            .freshness(&cache_entry, Some(&filename.name), None)
+                            .map_err(ErrorKind::Io)?,
+                    )
+                }
+            }
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -1233,16 +1256,17 @@ mod tests {
 
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::{JoinRelativeError, SimpleJson};
+    use uv_pypi_types::SimpleJson;
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
+    use crate::RegistryClientBuilder;
     use uv_cache::Cache;
+    use uv_distribution_types::{FileLocation, ToUrlError};
+    use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    use crate::RegistryClientBuilder;
 
     type Error = Box<dyn std::error::Error>;
 
@@ -1469,7 +1493,7 @@ mod tests {
     ///
     /// See: <https://github.com/astral-sh/uv/issues/1388>
     #[test]
-    fn relative_urls_code_artifact() -> Result<(), JoinRelativeError> {
+    fn relative_urls_code_artifact() -> Result<(), ToUrlError> {
         let text = r#"
         <!DOCTYPE html>
         <html>
@@ -1492,12 +1516,13 @@ mod tests {
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
+        let base = SmallString::from(base.as_str());
 
         // Test parsing of the file urls
         let urls = files
-            .iter()
-            .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
-            .collect::<Result<Vec<_>, JoinRelativeError>>()?;
+            .into_iter()
+            .map(|file| FileLocation::new(file.url, &base).to_url())
+            .collect::<Result<Vec<_>, _>>()?;
         let urls = urls
             .iter()
             .map(DisplaySafeUrl::to_string)

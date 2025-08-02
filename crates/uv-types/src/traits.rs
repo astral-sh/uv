@@ -7,7 +7,9 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{
+    BuildKind, BuildOptions, BuildOutput, ConfigSettings, PackageConfigSettings, SourceStrategy,
+};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, DistributionId, IndexCapabilities, IndexLocations,
@@ -60,8 +62,10 @@ use crate::BuildArena;
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
 
+    // Note: this function is async deliberately, because downstream code may need to
+    // run async code to get the interpreter, to resolve the Python version.
     /// Return a reference to the interpreter.
-    fn interpreter(&self) -> &Interpreter;
+    fn interpreter(&self) -> impl Future<Output = &Interpreter> + '_;
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
@@ -87,6 +91,9 @@ pub trait BuildContext {
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
 
+    /// The [`ConfigSettings`] used to build a specific package.
+    fn config_settings_package(&self) -> &PackageConfigSettings;
+
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;
 
@@ -95,6 +102,9 @@ pub trait BuildContext {
 
     /// Workspace discovery caching.
     fn workspace_cache(&self) -> &WorkspaceCache;
+
+    /// Get the extra build dependencies.
+    fn extra_build_dependencies(&self) -> &uv_workspace::pyproject::ExtraBuildDependencies;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(

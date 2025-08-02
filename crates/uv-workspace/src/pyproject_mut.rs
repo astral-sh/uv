@@ -392,6 +392,7 @@ impl PyProjectTomlMut {
 
     /// Add an [`Index`] to `tool.uv.index`.
     pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
+        let size = self.doc.len();
         let existing = self
             .doc
             .entry("tool")
@@ -472,8 +473,7 @@ impl PyProjectTomlMut {
         if table
             .get("url")
             .and_then(|item| item.as_str())
-            .and_then(|url| DisplaySafeUrl::parse(url).ok())
-            .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
+            .is_none_or(|url| url != index.url.without_credentials().as_str())
         {
             let mut formatted = Formatted::new(index.url.without_credentials().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
@@ -552,6 +552,9 @@ impl PyProjectTomlMut {
                     table.set_position(position + 1);
                 }
             }
+        } else {
+            let position = isize::try_from(size).expect("TOML table size fits in `isize`");
+            table.set_position(position);
         }
 
         // Push the item to the table.
@@ -1559,28 +1562,28 @@ fn reformat_array_multiline(deps: &mut Array) {
 
     let mut indentation_prefix = None;
 
+    // Calculate the indentation prefix based on the indentation of the first dependency entry.
+    if let Some(first_item) = deps.iter().next() {
+        let decor_prefix = first_item
+            .decor()
+            .prefix()
+            .and_then(|s| s.as_str())
+            .and_then(|s| s.lines().last())
+            .unwrap_or_default();
+
+        let decor_prefix = decor_prefix
+            .split_once('#')
+            .map(|(s, _)| s)
+            .unwrap_or(decor_prefix);
+
+        indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
+    }
+
+    let indentation_prefix_str = format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
+
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
-
-        // Calculate the indentation prefix based on the indentation of the first dependency entry.
-        if indentation_prefix.is_none() {
-            let decor_prefix = decor
-                .prefix()
-                .and_then(|s| s.as_str())
-                .and_then(|s| s.lines().last())
-                .unwrap_or_default();
-
-            let decor_prefix = decor_prefix
-                .split_once('#')
-                .map(|(s, _)| s)
-                .unwrap_or(decor_prefix);
-
-            indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
-        }
-
-        let indentation_prefix_str =
-            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
             match comment.comment_type {

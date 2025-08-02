@@ -12,11 +12,13 @@ use itertools::Itertools;
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_configuration::PreviewMode;
+use uv_configuration::{Preview, PreviewFeatures};
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
+use uv_platform::Error as PlatformError;
+use uv_platform::{Arch, Libc, LibcDetectionError, Os};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, windows_python_launcher};
@@ -26,9 +28,6 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::{self, PythonInstallationKey};
-use crate::libc::LibcDetectionError;
-use crate::platform::Error as PlatformError;
-use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::{
     PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
@@ -271,7 +270,7 @@ impl ManagedPythonInstallations {
                     && (arch.supports(installation.key.arch)
                         // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
                         // implement this yet. See https://github.com/astral-sh/uv/pull/9788
-                        || arch.family == installation.key.arch.family)
+                        || arch.family() == installation.key.arch.family())
                     && installation.key.libc == libc
             });
 
@@ -519,7 +518,7 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self, preview: PreviewMode) -> Result<(), Error> {
+    pub fn ensure_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
         if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
             minor_version_link.create_directory()?;
         }
@@ -531,7 +530,7 @@ impl ManagedPythonInstallation {
     ///
     /// Unlike [`ensure_minor_version_link`], will not create a new symlink directory
     /// if one doesn't already exist,
-    pub fn update_minor_version_link(&self, preview: PreviewMode) -> Result<(), Error> {
+    pub fn update_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
         if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
             if !minor_version_link.exists() {
                 return Ok(());
@@ -545,7 +544,7 @@ impl ManagedPythonInstallation {
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
         // Construct the path to the `stdlib` directory.
-        let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
+        let stdlib = if self.key.os.is_windows() {
             self.python_dir().join("Lib")
         } else {
             let lib_suffix = self.key.variant.suffix();
@@ -702,7 +701,7 @@ impl PythonMinorVersionLink {
     pub fn from_executable(
         executable: &Path,
         key: &PythonInstallationKey,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Option<Self> {
         let implementation = key.implementation();
         if !matches!(
@@ -755,7 +754,7 @@ impl PythonMinorVersionLink {
         // If preview mode is disabled, still return a `MinorVersionSymlink` for
         // existing symlinks, allowing continued operations without the `--preview`
         // flag after initial symlink directory installation.
-        if preview.is_disabled() && !minor_version_link.exists() {
+        if !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) && !minor_version_link.exists() {
             return None;
         }
         Some(minor_version_link)
@@ -763,7 +762,7 @@ impl PythonMinorVersionLink {
 
     pub fn from_installation(
         installation: &ManagedPythonInstallation,
-        preview: PreviewMode,
+        preview: Preview,
     ) -> Option<Self> {
         PythonMinorVersionLink::from_executable(
             installation.executable(false).as_path(),
@@ -847,7 +846,7 @@ fn executable_path_from_base(
 /// Create a link to a managed Python executable.
 ///
 /// If the file already exists at the link path, an error will be returned.
-pub fn create_link_to_executable(link: &Path, executable: PathBuf) -> Result<(), Error> {
+pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
     fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
         to: link_parent.to_path_buf(),
@@ -856,20 +855,20 @@ pub fn create_link_to_executable(link: &Path, executable: PathBuf) -> Result<(),
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
-        match symlink_or_copy_file(&executable, link) {
+        match symlink_or_copy_file(executable, link) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                Err(Error::MissingExecutable(executable.clone()))
+                Err(Error::MissingExecutable(executable.to_path_buf()))
             }
             Err(err) => Err(Error::LinkExecutable {
-                from: executable,
+                from: executable.to_path_buf(),
                 to: link.to_path_buf(),
                 err,
             }),
         }
     } else if cfg!(windows) {
         // TODO(zanieb): Install GUI launchers as well
-        let launcher = windows_python_launcher(&executable, false)?;
+        let launcher = windows_python_launcher(executable, false)?;
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
@@ -878,7 +877,7 @@ pub fn create_link_to_executable(link: &Path, executable: PathBuf) -> Result<(),
             std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))
                 .map_err(|err| Error::LinkExecutable {
-                    from: executable,
+                    from: executable.to_path_buf(),
                     to: link.to_path_buf(),
                     err,
                 })

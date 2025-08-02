@@ -63,9 +63,9 @@ impl Urls {
                         verbatim: _,
                     } = package_url
                     {
-                        if !*editable {
+                        if editable.is_none() {
                             debug!("Allowing an editable variant of {}", &package_url.verbatim);
-                            *editable = true;
+                            *editable = Some(true);
                         }
                     }
                 }
@@ -155,10 +155,10 @@ impl Urls {
         parsed_url: &'a ParsedUrl,
     ) -> Result<&'a VerbatimParsedUrl, ResolveError> {
         let Some(expected) = self.get_regular(package_name) else {
-            return Err(ResolveError::DisallowedUrl(
-                package_name.clone(),
-                verbatim_url.to_string(),
-            ));
+            return Err(ResolveError::DisallowedUrl {
+                name: package_name.clone(),
+                url: verbatim_url.to_string(),
+            });
         };
 
         let matching_urls: Vec<_> = expected
@@ -201,8 +201,9 @@ fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
                 || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
         }
         (ParsedUrl::Directory(a), ParsedUrl::Directory(b)) => {
-            a.install_path == b.install_path
-                || is_same_file(&a.install_path, &b.install_path).unwrap_or(false)
+            (a.install_path == b.install_path
+                || is_same_file(&a.install_path, &b.install_path).unwrap_or(false))
+                && a.editable.is_none_or(|a| b.editable.is_none_or(|b| a == b))
         }
         _ => false,
     }

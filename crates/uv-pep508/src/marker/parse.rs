@@ -1,10 +1,12 @@
 use arcstr::ArcStr;
 use std::str::FromStr;
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, GroupName};
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
 use crate::marker::MarkerValueExtra;
+use crate::marker::lowering::CanonicalMarkerListPair;
+use crate::marker::tree::{ContainerOperator, MarkerValueList};
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
     MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
@@ -168,6 +170,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerExpression>, Pep508Error<T>> {
     cursor.eat_whitespace();
+    let start = cursor.pos();
     let l_value = parse_marker_value(cursor, reporter)?;
     cursor.eat_whitespace();
     // "not in" and "in" must be preceded by whitespace. We must already have matched a whitespace
@@ -176,6 +179,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     let operator = parse_marker_operator(cursor)?;
     cursor.eat_whitespace();
     let r_value = parse_marker_value(cursor, reporter)?;
+    let len = cursor.pos() - start;
 
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
@@ -209,7 +213,8 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
             let value = match r_value {
                 MarkerValue::Extra
                 | MarkerValue::MarkerEnvVersion(_)
-                | MarkerValue::MarkerEnvString(_) => {
+                | MarkerValue::MarkerEnvString(_)
+                | MarkerValue::MarkerEnvList(_) => {
                     reporter.report(
                         MarkerWarningKind::MarkerMarkerComparison,
                         "Comparing two markers with each other doesn't make any sense,
@@ -237,11 +242,23 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                 value,
             })
         }
+        // `extras in "test"` or `dependency_groups not in "dev"` are invalid.
+        MarkerValue::MarkerEnvList(key) => {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::String(format!(
+                    "The marker {key} must be on the right hand side of the expression"
+                )),
+                start,
+                len,
+                input: cursor.to_string(),
+            });
+        }
         // `extra == '...'`
         MarkerValue::Extra => {
             let value = match r_value {
                 MarkerValue::MarkerEnvVersion(_)
                 | MarkerValue::MarkerEnvString(_)
+                | MarkerValue::MarkerEnvList(_)
                 | MarkerValue::Extra => {
                     reporter.report(
                         MarkerWarningKind::ExtraInvalidComparison,
@@ -257,7 +274,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
 
             parse_extra_expr(operator, &value, reporter)
         }
-        // This is either MarkerEnvVersion, MarkerEnvString or Extra inverted
+        // This is either MarkerEnvVersion, MarkerEnvString, Extra (inverted), or Extras
         MarkerValue::QuotedString(l_string) => {
             match r_value {
                 // The only sound choice for this is `<quoted PEP 440 version> <version op>` <version key>
@@ -271,6 +288,54 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                     operator: operator.invert(),
                     value: l_string,
                 }),
+                // `"test" in extras` or `"dev" in dependency_groups`
+                MarkerValue::MarkerEnvList(key) => {
+                    let operator =
+                        ContainerOperator::from_marker_operator(operator).ok_or_else(|| {
+                            Pep508Error {
+                                message: Pep508ErrorSource::String(format!(
+                                    "The operator {operator} is not supported with the marker {key}, only the `in` and `not in` operators are supported"
+                                )),
+                                start,
+                                len,
+                                input: cursor.to_string(),
+                            }
+                        })?;
+                    let pair = match key {
+                        // `'...' in extras`
+                        MarkerValueList::Extras => match ExtraName::from_str(&l_string) {
+                            Ok(name) => CanonicalMarkerListPair::Extras(name),
+                            Err(err) => {
+                                reporter.report(
+                                    MarkerWarningKind::ExtrasInvalidComparison,
+                                    format!("Expected extra name (found `{l_string}`): {err}"),
+                                );
+                                CanonicalMarkerListPair::Arbitrary {
+                                    key,
+                                    value: l_string.to_string(),
+                                }
+                            }
+                        },
+                        // `'...' in dependency_groups`
+                        MarkerValueList::DependencyGroups => {
+                            match GroupName::from_str(&l_string) {
+                                Ok(name) => CanonicalMarkerListPair::DependencyGroup(name),
+                                Err(err) => {
+                                    reporter.report(
+                                    MarkerWarningKind::ExtrasInvalidComparison,
+                                    format!("Expected dependency group name (found `{l_string}`): {err}"),
+                                );
+                                    CanonicalMarkerListPair::Arbitrary {
+                                        key,
+                                        value: l_string.to_string(),
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    Some(MarkerExpression::List { pair, operator })
+                }
                 // `'...' == extra`
                 MarkerValue::Extra => parse_extra_expr(operator, &l_string, reporter),
                 // `'...' == '...'`, doesn't make much sense
@@ -319,10 +384,7 @@ fn parse_version_in_expr(
     value: &str,
     reporter: &mut impl Reporter,
 ) -> Option<MarkerExpression> {
-    if !matches!(operator, MarkerOperator::In | MarkerOperator::NotIn) {
-        return None;
-    }
-    let negated = matches!(operator, MarkerOperator::NotIn);
+    let operator = ContainerOperator::from_marker_operator(operator)?;
 
     let mut cursor = Cursor::new(value);
     let mut versions = Vec::new();
@@ -358,7 +420,7 @@ fn parse_version_in_expr(
     Some(MarkerExpression::VersionIn {
         key,
         versions,
-        negated,
+        operator,
     })
 }
 
@@ -491,8 +553,7 @@ fn parse_extra_expr(
 
     reporter.report(
         MarkerWarningKind::ExtraInvalidComparison,
-        "Comparing extra with something other than a quoted string is wrong,
-        will be ignored"
+        "Comparing `extra` with any operator other than `==` or `!=` is wrong and will be ignored"
             .to_string(),
     );
 

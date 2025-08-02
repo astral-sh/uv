@@ -37,7 +37,12 @@ def _run() -> None:
     if sys.platform == "win32":
         import subprocess
 
-        completed_process = subprocess.run([uv, *sys.argv[1:]], env=env)
+        # Avoid emitting a traceback on interrupt
+        try:
+            completed_process = subprocess.run([uv, *sys.argv[1:]], env=env)
+        except KeyboardInterrupt:
+            sys.exit(2)
+
         sys.exit(completed_process.returncode)
     else:
         os.execvpe(uv, [uv, *sys.argv[1:]], env=env)

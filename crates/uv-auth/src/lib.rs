@@ -15,6 +15,7 @@ mod credentials;
 mod index;
 mod keyring;
 mod middleware;
+mod providers;
 mod realm;
 
 // TODO(zanieb): Consider passing a cache explicitly throughout

@@ -60,9 +60,9 @@ url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-http-body-util = { version = "0.1.2" }
-hyper = { version = "1.4.1", features = ["server", "http1"] }
-hyper-util = { version = "0.1.8", features = ["tokio"] }
-insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+insta = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }

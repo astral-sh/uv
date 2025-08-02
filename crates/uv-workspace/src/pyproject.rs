@@ -17,7 +17,8 @@ use std::str::FromStr;
 use glob::Pattern;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
+use serde::de::{IntoDeserializer, SeqAccess};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use uv_build_backend::BuildBackendSettings;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
@@ -49,6 +50,55 @@ pub enum PyprojectTomlError {
     MissingVersion,
 }
 
+/// Helper function to deserialize a map while ensuring all keys are unique.
+fn deserialize_unique_map<'de, D, K, V, F>(
+    deserializer: D,
+    error_msg: F,
+) -> Result<BTreeMap<K, V>, D::Error>
+where
+    D: Deserializer<'de>,
+    K: Deserialize<'de> + Ord + std::fmt::Display,
+    V: Deserialize<'de>,
+    F: FnOnce(&K) -> String,
+{
+    struct Visitor<K, V, F>(F, std::marker::PhantomData<(K, V)>);
+
+    impl<'de, K, V, F> serde::de::Visitor<'de> for Visitor<K, V, F>
+    where
+        K: Deserialize<'de> + Ord + std::fmt::Display,
+        V: Deserialize<'de>,
+        F: FnOnce(&K) -> String,
+    {
+        type Value = BTreeMap<K, V>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a map with unique keys")
+        }
+
+        fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+        where
+            M: serde::de::MapAccess<'de>,
+        {
+            use std::collections::btree_map::Entry;
+
+            let mut map = BTreeMap::new();
+            while let Some((key, value)) = access.next_entry::<K, V>()? {
+                match map.entry(key) {
+                    Entry::Occupied(entry) => {
+                        return Err(serde::de::Error::custom((self.0)(entry.key())));
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(value);
+                    }
+                }
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_map(Visitor(error_msg, std::marker::PhantomData))
+}
+
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(test, derive(Serialize))]
@@ -66,14 +116,14 @@ pub struct PyProjectToml {
 
     /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    build_system: Option<serde::de::IgnoredAny>,
+    pub build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
-        let pyproject: toml_edit::ImDocument<_> =
-            toml_edit::ImDocument::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
+        let pyproject =
+            toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
         let pyproject = PyProjectToml::deserialize(pyproject.into_deserializer())
             .map_err(PyprojectTomlError::TomlSchema)?;
         Ok(PyProjectToml { raw, ..pyproject })
@@ -81,19 +131,22 @@ impl PyProjectToml {
 
     /// Returns `true` if the project should be considered a Python package, as opposed to a
     /// non-package ("virtual") project.
-    pub fn is_package(&self) -> bool {
+    pub fn is_package(&self, require_build_system: bool) -> bool {
         // If `tool.uv.package` is set, defer to that explicit setting.
-        if let Some(is_package) = self
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.package)
-        {
+        if let Some(is_package) = self.tool_uv_package() {
             return is_package;
         }
 
         // Otherwise, a project is assumed to be a package if `build-system` is present.
-        self.build_system.is_some()
+        self.build_system.is_some() || !require_build_system
+    }
+
+    /// Returns the value of `tool.uv.package` if set.
+    fn tool_uv_package(&self) -> Option<bool> {
+        self.tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.package)
     }
 
     /// Returns `true` if the project uses a dynamic version.
@@ -374,6 +427,21 @@ pub struct ToolUv {
     )]
     pub dependency_groups: Option<ToolUvDependencyGroups>,
 
+    /// Additional build dependencies for packages.
+    ///
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages, like,
+    /// `pip`, and do not declare them as build dependencies.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [tool.uv.extra-build-dependencies]
+            pytest = ["pip"]
+        "#
+    )]
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+
     /// The project's development dependencies.
     ///
     /// Development dependencies will be installed by default in `uv run` and `uv sync`, but will
@@ -639,38 +707,10 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
     where
         D: Deserializer<'de>,
     {
-        struct SourcesVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
-            type Value = ToolUvSources;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a map with unique keys")
-            }
-
-            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-            where
-                M: serde::de::MapAccess<'de>,
-            {
-                let mut sources = BTreeMap::new();
-                while let Some((key, value)) = access.next_entry::<PackageName, Sources>()? {
-                    match sources.entry(key) {
-                        std::collections::btree_map::Entry::Occupied(entry) => {
-                            return Err(serde::de::Error::custom(format!(
-                                "duplicate sources for package `{}`",
-                                entry.key()
-                            )));
-                        }
-                        std::collections::btree_map::Entry::Vacant(entry) => {
-                            entry.insert(value);
-                        }
-                    }
-                }
-                Ok(ToolUvSources(sources))
-            }
-        }
-
-        deserializer.deserialize_map(SourcesVisitor)
+        deserialize_unique_map(deserializer, |key: &PackageName| {
+            format!("duplicate sources for package `{key}`")
+        })
+        .map(ToolUvSources)
     }
 }
 
@@ -698,40 +738,10 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
     where
         D: Deserializer<'de>,
     {
-        struct SourcesVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for SourcesVisitor {
-            type Value = ToolUvDependencyGroups;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a map with unique keys")
-            }
-
-            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-            where
-                M: serde::de::MapAccess<'de>,
-            {
-                let mut groups = BTreeMap::new();
-                while let Some((key, value)) =
-                    access.next_entry::<GroupName, DependencyGroupSettings>()?
-                {
-                    match groups.entry(key) {
-                        std::collections::btree_map::Entry::Occupied(entry) => {
-                            return Err(serde::de::Error::custom(format!(
-                                "duplicate settings for dependency group `{}`",
-                                entry.key()
-                            )));
-                        }
-                        std::collections::btree_map::Entry::Vacant(entry) => {
-                            entry.insert(value);
-                        }
-                    }
-                }
-                Ok(ToolUvDependencyGroups(groups))
-            }
-        }
-
-        deserializer.deserialize_map(SourcesVisitor)
+        deserialize_unique_map(deserializer, |key: &GroupName| {
+            format!("duplicate settings for dependency group `{key}`")
+        })
+        .map(ToolUvDependencyGroups)
     }
 }
 
@@ -743,6 +753,51 @@ pub struct DependencyGroupSettings {
     /// Version of python to require when installing this group
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
     pub requires_python: Option<VersionSpecifiers>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ExtraBuildDependencies(
+    BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+);
+
+impl std::ops::Deref for ExtraBuildDependencies {
+    type Target = BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for ExtraBuildDependencies {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl IntoIterator for ExtraBuildDependencies {
+    type Item = (PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>);
+    type IntoIter = std::collections::btree_map::IntoIter<
+        PackageName,
+        Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for ExtraBuildDependencies {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_unique_map(deserializer, |key: &PackageName| {
+            format!("duplicate extra-build-dependencies for `{key}`")
+        })
+        .map(ExtraBuildDependencies)
+    }
 }
 
 #[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]

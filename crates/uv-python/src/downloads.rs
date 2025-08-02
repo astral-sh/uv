@@ -25,6 +25,7 @@ use uv_client::{BaseClient, WrappedReqwestError, is_extended_transient_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
+use uv_platform::{self as platform, Arch, Libc, Os};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
@@ -34,9 +35,7 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::PythonInstallationKey;
-use crate::libc::LibcDetectionError;
 use crate::managed::ManagedPythonInstallation;
-use crate::platform::{self, Arch, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
@@ -98,7 +97,7 @@ pub enum Error {
     #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {0}")]
     Mirror(&'static str, &'static str),
     #[error("Failed to determine the libc used on the current platform")]
-    LibcDetection(#[from] LibcDetectionError),
+    LibcDetection(#[from] platform::LibcDetectionError),
     #[error("Remote Python downloads JSON is not yet supported, please use a local path")]
     RemoteJSONNotSupported,
     #[error("The JSON of the python downloads is invalid: {0}")]
@@ -988,7 +987,11 @@ impl ManagedPythonDownload {
             archive_writer.flush().await?;
         }
         // Move the completed file into place, invalidating the `File` instance.
-        fs_err::rename(&temp_file, target_cache_file)?;
+        match rename_with_retry(&temp_file, target_cache_file).await {
+            Ok(()) => {}
+            Err(_) if target_cache_file.is_file() => {}
+            Err(err) => return Err(err.into()),
+        }
         Ok(())
     }
 

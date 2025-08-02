@@ -7,6 +7,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
 use tracing::{debug, trace, warn};
 
+use crate::providers::HuggingFaceProvider;
 use crate::{
     CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
@@ -457,9 +458,8 @@ impl AuthMiddleware {
             Some(credentials)
         };
 
-        return self
-            .complete_request(credentials, request, extensions, next, auth_policy)
-            .await;
+        self.complete_request(credentials, request, extensions, next, auth_policy)
+            .await
     }
 
     /// Fetch credentials for a URL.
@@ -501,6 +501,13 @@ impl AuthMiddleware {
             }
 
             return credentials;
+        }
+
+        // Support for known providers, like Hugging Face.
+        if let Some(credentials) = HuggingFaceProvider::credentials_for(url).map(Arc::new) {
+            debug!("Found Hugging Face credentials for {url}");
+            self.cache().fetches.done(key, Some(credentials.clone()));
+            return Some(credentials);
         }
 
         // Netrc support based on: <https://github.com/gribouille/netrc>.

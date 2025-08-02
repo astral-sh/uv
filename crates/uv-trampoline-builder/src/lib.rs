@@ -41,6 +41,7 @@ const MAGIC_NUMBER_SIZE: usize = 4;
 pub struct Launcher {
     pub kind: LauncherKind,
     pub python_path: PathBuf,
+    payload: Vec<u8>,
 }
 
 impl Launcher {
@@ -109,10 +110,68 @@ impl Launcher {
             String::from_utf8(buffer).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
         );
 
+        #[allow(clippy::cast_possible_truncation)]
+        let file_size = {
+            let raw_length = file
+                .seek(io::SeekFrom::End(0))
+                .map_err(|e| Error::InvalidLauncherSeek("size probe".into(), 0, e))?;
+
+            if raw_length > usize::MAX as u64 {
+                return Err(Error::InvalidDataLength(raw_length));
+            }
+
+            // SAFETY: Above we guarantee the length is less than uszie
+            raw_length as usize
+        };
+
+        // Read the payload
+        file.seek(io::SeekFrom::Start(0))
+            .map_err(|e| Error::InvalidLauncherSeek("rewind".into(), 0, e))?;
+        let payload_len =
+            file_size.saturating_sub(MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE + path_length);
+        let mut buffer = vec![0u8; payload_len];
+        file.read_exact(&mut buffer)
+            .map_err(|err| Error::InvalidLauncherRead("payload".into(), err))?;
+
         Ok(Some(Self {
             kind,
+            payload: buffer,
             python_path: path,
         }))
+    }
+
+    pub fn write_to_file(self, file: &mut File) -> Result<(), Error> {
+        let python_path = self.python_path.simplified_display().to_string();
+
+        if python_path.len() > MAX_PATH_LENGTH as usize {
+            return Err(Error::InvalidPathLength(
+                u32::try_from(python_path.len()).expect("path length already checked"),
+            ));
+        }
+
+        let mut launcher: Vec<u8> = Vec::with_capacity(
+            self.payload.len() + python_path.len() + PATH_LENGTH_SIZE + MAGIC_NUMBER_SIZE,
+        );
+        launcher.extend_from_slice(&self.payload);
+        launcher.extend_from_slice(python_path.as_bytes());
+        launcher.extend_from_slice(
+            &u32::try_from(python_path.len())
+                .expect("file path should be smaller than 4GB")
+                .to_le_bytes(),
+        );
+        launcher.extend_from_slice(self.kind.magic_number());
+
+        file.write_all(&launcher)?;
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn with_python_path(self, path: PathBuf) -> Self {
+        Self {
+            kind: self.kind,
+            payload: self.payload,
+            python_path: path,
+        }
     }
 }
 
@@ -177,6 +236,8 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("Only paths with a length up to 32KB are supported but found a length of {0} bytes")]
     InvalidPathLength(u32),
+    #[error("Only data with a length up to usize is supported but found a length of {0} bytes")]
+    InvalidDataLength(u64),
     #[error("Failed to parse executable path")]
     InvalidPath(#[source] Utf8Error),
     #[error("Failed to seek to {0} at offset {1}")]

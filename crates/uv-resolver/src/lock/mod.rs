@@ -60,7 +60,8 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
+    ExcludeNewer, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse, PrereleaseMode,
+    ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -72,7 +73,7 @@ mod tree;
 pub const VERSION: u32 = 1;
 
 /// The current revision of the lockfile format.
-const REVISION: u32 = 2;
+const REVISION: u32 = 3;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -84,6 +85,10 @@ static WINDOWS_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 });
 static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ANDROID_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("sys_platform == 'android'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
@@ -104,6 +109,66 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     )
     .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static LINUX_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static LINUX_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static LINUX_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static WINDOWS_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static WINDOWS_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static WINDOWS_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static MAC_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static MAC_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static MAC_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static ANDROID_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static ANDROID_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
 });
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -278,11 +343,23 @@ impl Lock {
         }
 
         let packages = packages.into_values().collect();
+        let (exclude_newer, exclude_newer_package) = {
+            let exclude_newer = &resolution.options.exclude_newer;
+            let global_exclude_newer = exclude_newer.global;
+            let package_exclude_newer = if exclude_newer.package.is_empty() {
+                None
+            } else {
+                Some(exclude_newer.package.clone().into_inner())
+            };
+            (global_exclude_newer, package_exclude_newer)
+        };
+
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
             fork_strategy: resolution.options.fork_strategy,
-            exclude_newer: resolution.options.exclude_newer,
+            exclude_newer,
+            exclude_newer_package,
         };
         let lock = Self::new(
             VERSION,
@@ -323,14 +400,61 @@ impl Lock {
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
             let platform_tags = wheel.filename.platform_tags();
+
+            if platform_tags.iter().all(PlatformTag::is_any) {
+                return true;
+            }
+
             if platform_tags.iter().all(PlatformTag::is_linux) {
-                if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
                     return false;
                 }
             }
 
             if platform_tags.iter().all(PlatformTag::is_windows) {
-                if graph.graph[node_index]
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)
                 {
@@ -339,7 +463,58 @@ impl Lock {
             }
 
             if platform_tags.iter().all(PlatformTag::is_macos) {
-                if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_android) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ANDROID_MARKERS)
+                {
                     return false;
                 }
             }
@@ -643,8 +818,8 @@ impl Lock {
     }
 
     /// Returns the exclude newer setting used to generate this lock.
-    pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
-        self.options.exclude_newer
+    pub fn exclude_newer(&self) -> ExcludeNewer {
+        self.options.exclude_newer()
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
@@ -890,8 +1065,21 @@ impl Lock {
                     value(self.options.fork_strategy.to_string()),
                 );
             }
-            if let Some(exclude_newer) = self.options.exclude_newer {
-                options_table.insert("exclude-newer", value(exclude_newer.to_string()));
+            let exclude_newer = &self.options.exclude_newer();
+            if !exclude_newer.is_empty() {
+                // Always serialize global exclude-newer as a string
+                if let Some(global) = exclude_newer.global {
+                    options_table.insert("exclude-newer", value(global.to_string()));
+                }
+
+                // Serialize package-specific exclusions as a separate field
+                if !exclude_newer.package.is_empty() {
+                    let mut package_table = toml_edit::Table::new();
+                    for (name, timestamp) in &exclude_newer.package {
+                        package_table.insert(name.as_ref(), value(timestamp.to_string()));
+                    }
+                    options_table.insert("exclude-newer-package", Item::Table(package_table));
+                }
             }
 
             if !options_table.is_empty() {
@@ -1255,6 +1443,7 @@ impl Lock {
         root: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
+        required_members: &BTreeSet<PackageName>,
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
@@ -1282,7 +1471,10 @@ impl Lock {
         // Validate that the member sources have not changed (e.g., that they've switched from
         // virtual to non-virtual or vice versa).
         for (name, member) in packages {
-            let expected = !member.pyproject_toml().is_package();
+            // We don't require a build system, if the workspace member is a dependency
+            let expected = !member
+                .pyproject_toml()
+                .is_package(!required_members.contains(name));
             let actual = self
                 .find_by_name(name)
                 .ok()
@@ -1427,7 +1619,7 @@ impl Lock {
         }
 
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
-        let remotes = indexes.map(|locations| {
+        let mut remotes = indexes.map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1440,7 +1632,7 @@ impl Lock {
                 .collect::<BTreeSet<_>>()
         });
 
-        let locals = indexes.map(|locations| {
+        let mut locals = indexes.map(|locations| {
             locations
                 .allowed_indexes()
                 .into_iter()
@@ -1478,11 +1670,9 @@ impl Lock {
             if let Source::Registry(index) = &package.id.source {
                 match index {
                     RegistrySource::Url(url) => {
-                        // Normalize URL before validating.
-                        let url = url.without_trailing_slash();
                         if remotes
                             .as_ref()
-                            .is_some_and(|remotes| !remotes.contains(&url))
+                            .is_some_and(|remotes| !remotes.contains(url))
                         {
                             let name = &package.id.name;
                             let version = &package
@@ -1490,11 +1680,7 @@ impl Lock {
                                 .version
                                 .as_ref()
                                 .expect("version for registry source");
-                            return Ok(SatisfiesResult::MissingRemoteIndex(
-                                name,
-                                version,
-                                url.into_owned(),
-                            ));
+                            return Ok(SatisfiesResult::MissingRemoteIndex(name, version, url));
                         }
                     }
                     RegistrySource::Path(path) => {
@@ -1719,6 +1905,38 @@ impl Lock {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
             }
 
+            // Add any explicit indexes to the list of known locals or remotes. These indexes may
+            // not be available as top-level configuration (i.e., if they're defined within a
+            // workspace member), but we already validated that the dependencies are up-to-date, so
+            // we can consider them "available".
+            for requirement in &package.metadata.requires_dist {
+                if let RequirementSource::Registry {
+                    index: Some(index), ..
+                } = &requirement.source
+                {
+                    match &index.url {
+                        IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                            if let Some(remotes) = remotes.as_mut() {
+                                remotes.insert(UrlString::from(
+                                    index.url().without_credentials().as_ref(),
+                                ));
+                            }
+                        }
+                        IndexUrl::Path(url) => {
+                            if let Some(locals) = locals.as_mut() {
+                                if let Some(path) = url.to_file_path().ok().and_then(|path| {
+                                    relative_to(&path, root)
+                                        .or_else(|_| std::path::absolute(path))
+                                        .ok()
+                                }) {
+                                    locals.insert(path.into_boxed_path());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Recurse.
             for dep in &package.dependencies {
                 if seen.insert(&dep.package_id) {
@@ -1799,7 +2017,7 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile is missing a workspace member.
     MissingRoot(PackageName),
     /// The lockfile referenced a remote index that was not provided
-    MissingRemoteIndex(&'lock PackageName, &'lock Version, UrlString),
+    MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
@@ -1840,8 +2058,25 @@ struct ResolverOptions {
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
-    /// The [`ExcludeNewer`] used to generate this lock.
-    exclude_newer: Option<ExcludeNewer>,
+    /// The global [`ExcludeNewer`] timestamp.
+    exclude_newer: Option<ExcludeNewerTimestamp>,
+    /// Package-specific [`ExcludeNewer`] timestamps.
+    exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+}
+
+impl ResolverOptions {
+    /// Get the combined exclude-newer configuration.
+    fn exclude_newer(&self) -> ExcludeNewer {
+        ExcludeNewer::from_args(
+            self.exclude_newer,
+            self.exclude_newer_package
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        )
+    }
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
@@ -2402,8 +2637,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: false,
-                    r#virtual: false,
+                    editable: Some(false),
+                    r#virtual: Some(false),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -2413,8 +2648,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: true,
-                    r#virtual: false,
+                    editable: Some(true),
+                    r#virtual: Some(false),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -2424,8 +2659,8 @@ impl Package {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path: install_path.into_boxed_path(),
-                    editable: false,
-                    r#virtual: true,
+                    editable: Some(false),
+                    r#virtual: Some(true),
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
@@ -3256,9 +3491,9 @@ impl Source {
         let path = relative_to(&directory_dist.install_path, root)
             .or_else(|_| std::path::absolute(&directory_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        if directory_dist.editable {
+        if directory_dist.editable.unwrap_or(false) {
             Ok(Source::Editable(path.into_boxed_path()))
-        } else if directory_dist.r#virtual {
+        } else if directory_dist.r#virtual.unwrap_or(false) {
             Ok(Source::Virtual(path.into_boxed_path()))
         } else {
             Ok(Source::Directory(path.into_boxed_path()))
@@ -4161,27 +4396,12 @@ impl Wheel {
     }
 
     fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
-        let filename = wheel.filename.clone();
-        match &wheel.index {
+        let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&wheel.file.url)
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
-                let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-                let size = wheel.file.size;
-                let upload_time = wheel
-                    .file
-                    .upload_time_utc_ms
-                    .map(Timestamp::from_millisecond)
-                    .transpose()
-                    .map_err(LockErrorKind::InvalidTimestamp)?;
-                Ok(Wheel {
-                    url: WheelWireSource::Url { url },
-                    hash,
-                    size,
-                    filename,
-                    upload_time,
-                })
+                WheelWireSource::Url { url }
             }
             IndexUrl::Path(path) => {
                 let index_path = path
@@ -4197,35 +4417,31 @@ impl Wheel {
                         .or_else(|_| std::path::absolute(&wheel_path))
                         .map_err(LockErrorKind::DistributionRelativePath)?
                         .into_boxed_path();
-                    Ok(Wheel {
-                        url: WheelWireSource::Path { path },
-                        hash: None,
-                        size: None,
-                        upload_time: None,
-                        filename,
-                    })
+                    WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
-                    let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-                    let size = wheel.file.size;
-                    let upload_time = wheel
-                        .file
-                        .upload_time_utc_ms
-                        .map(Timestamp::from_millisecond)
-                        .transpose()
-                        .map_err(LockErrorKind::InvalidTimestamp)?;
-                    Ok(Wheel {
-                        url: WheelWireSource::Url { url },
-                        hash,
-                        size,
-                        filename,
-                        upload_time,
-                    })
+                    WheelWireSource::Url { url }
                 }
             }
-        }
+        };
+        let filename = wheel.filename.clone();
+        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+        let size = wheel.file.size;
+        let upload_time = wheel
+            .file
+            .upload_time_utc_ms
+            .map(Timestamp::from_millisecond)
+            .transpose()
+            .map_err(LockErrorKind::InvalidTimestamp)?;
+        Ok(Wheel {
+            url,
+            hash,
+            size,
+            upload_time,
+            filename,
+        })
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
@@ -4806,8 +5022,8 @@ fn normalize_requirement(
                 marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Directory {
                     install_path,
-                    editable,
-                    r#virtual,
+                    editable: Some(editable.unwrap_or(false)),
+                    r#virtual: Some(r#virtual.unwrap_or(false)),
                     url,
                 },
                 origin: None,

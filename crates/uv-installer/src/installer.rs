@@ -107,10 +107,10 @@ impl<'a> Installer<'a> {
         rayon::spawn(move || {
             let result = install(
                 wheels,
-                layout,
-                installer_name,
+                &layout,
+                installer_name.as_ref(),
                 link_mode,
-                reporter,
+                reporter.as_ref(),
                 relocatable,
                 installer_metadata,
             );
@@ -137,10 +137,10 @@ impl<'a> Installer<'a> {
 
         install(
             wheels,
-            self.venv.interpreter().layout(),
-            self.name,
+            &self.venv.interpreter().layout(),
+            self.name.as_ref(),
             self.link_mode,
-            self.reporter,
+            self.reporter.as_ref(),
             self.venv.relocatable(),
             self.metadata,
         )
@@ -151,10 +151,10 @@ impl<'a> Installer<'a> {
 #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
 fn install(
     wheels: Vec<CachedDist>,
-    layout: Layout,
-    installer_name: Option<String>,
+    layout: &Layout,
+    installer_name: Option<&String>,
     link_mode: LinkMode,
-    reporter: Option<Arc<dyn Reporter>>,
+    reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
 ) -> Result<Vec<CachedDist>> {
@@ -163,7 +163,7 @@ fn install(
     let locks = uv_install_wheel::Locks::default();
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::install_wheel(
-            &layout,
+            layout,
             relocatable,
             wheel.path(),
             wheel.filename(),
@@ -176,7 +176,7 @@ fn install(
             } else {
                 Some(wheel.cache_info())
             },
-            installer_name.as_deref(),
+            installer_name.map(String::as_str),
             installer_metadata,
             link_mode,
             &locks,

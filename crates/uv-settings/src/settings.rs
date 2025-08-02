@@ -4,23 +4,27 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion,
-    TargetTriple, TrustedHost, TrustedPublishing,
+    ConfigSettings, IndexStrategy, KeyringProviderType, PackageConfigSettings,
+    PackageNameSpecifier, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
     Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
+
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
+    PrereleaseMode, ResolutionMode,
+};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
-use uv_workspace::pyproject_mut::AddBoundsKind;
+use uv_workspace::{pyproject::ExtraBuildDependencies, pyproject_mut::AddBoundsKind};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -103,7 +107,7 @@ pub struct Options {
             cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
         "#
     )]
-    cache_keys: Option<Vec<CacheKey>>,
+    pub cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -333,7 +337,7 @@ pub struct InstallerOptions {
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub config_settings: Option<ConfigSettings>,
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub reinstall: Option<bool>,
@@ -361,7 +365,8 @@ pub struct ResolverOptions {
     pub fork_strategy: Option<ForkStrategy>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub config_settings_package: Option<PackageConfigSettings>,
+    pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
     pub upgrade: Option<bool>,
     pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
@@ -371,6 +376,7 @@ pub struct ResolverOptions {
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub no_sources: Option<bool>,
 }
 
@@ -587,6 +593,18 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
+    /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+    /// specified as `KEY=VALUE` pairs.
+    ///
+    /// Accepts a map from package names to string key-value pairs.
+    #[option(
+        default = "{}",
+        value_type = "dict",
+        example = r#"
+            config-settings-package = { numpy = { editable_mode = "compat" } }
+        "#
+    )]
+    pub config_settings_package: Option<PackageConfigSettings>,
     /// Disable isolation when building source distributions.
     ///
     /// Assumes that build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -611,6 +629,20 @@ pub struct ResolverInstallerOptions {
     "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    /// Additional build dependencies for packages.
+    ///
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages like
+    /// `pip`, and do not declare them as build dependencies.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+        [extra-build-dependencies] 
+        pytest = ["setuptools"]
+    "#
+    )]
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Limit candidate packages to those that were uploaded prior to a given point in time.
     ///
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
@@ -623,7 +655,18 @@ pub struct ResolverInstallerOptions {
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in a dictionary format.
+    #[option(
+        default = "None",
+        value_type = "dict",
+        example = r#"
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+        "#
+    )]
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
     /// The method to use when installing packages from the global cache.
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
@@ -1107,6 +1150,20 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation_package: Option<Vec<PackageName>>,
+    /// Additional build dependencies for packages.
+    ///
+    /// This allows extending the PEP 517 build environment for the project's dependencies with
+    /// additional packages. This is useful for packages that assume the presence of packages like
+    /// `pip`, and do not declare them as build dependencies.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [extra-build-dependencies]
+            pytest = ["setuptools"]
+        "#
+    )]
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[option(
@@ -1333,6 +1390,16 @@ pub struct PipOptions {
         "#
     )]
     pub config_settings: Option<ConfigSettings>,
+    /// Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+    /// specified as `KEY=VALUE` pairs.
+    #[option(
+        default = "{}",
+        value_type = "dict",
+        example = r#"
+            config-settings-package = { numpy = { editable_mode = "compat" } }
+        "#
+    )]
+    pub config_settings_package: Option<PackageConfigSettings>,
     /// The minimum Python version that should be supported by the resolved requirements (e.g.,
     /// `3.8` or `3.8.17`).
     ///
@@ -1386,7 +1453,18 @@ pub struct PipOptions {
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in a dictionary format.
+    #[option(
+        default = "None",
+        value_type = "dict",
+        example = r#"
+            exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+        "#
+    )]
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
     /// Specify a package to omit from the output resolution. Its dependencies will still be
     /// included in the resolution. Equivalent to pip-compile's `--unsafe-package` option.
     #[option(
@@ -1651,7 +1729,16 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
-            exclude_newer: value.exclude_newer,
+            config_settings_package: value.config_settings_package,
+            exclude_newer: ExcludeNewer::from_args(
+                value.exclude_newer,
+                value
+                    .exclude_newer_package
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
             link_mode: value.link_mode,
             upgrade: value.upgrade,
             upgrade_package: value.upgrade_package,
@@ -1661,6 +1748,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             no_binary_package: value.no_binary_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             no_sources: value.no_sources,
         }
     }
@@ -1677,7 +1765,16 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             config_settings: value.config_settings,
-            exclude_newer: value.exclude_newer,
+            exclude_newer: ExcludeNewer::from_args(
+                value.exclude_newer,
+                value
+                    .exclude_newer_package
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            )
+            .global,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             reinstall: value.reinstall,
@@ -1714,9 +1811,12 @@ pub struct ToolOptions {
     pub fork_strategy: Option<ForkStrategy>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
+    pub config_settings_package: Option<PackageConfigSettings>,
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
@@ -1741,9 +1841,12 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             exclude_newer: value.exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
@@ -1770,9 +1873,12 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             fork_strategy: value.fork_strategy,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
+            config_settings_package: value.config_settings_package,
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
+            extra_build_dependencies: value.extra_build_dependencies,
             exclude_newer: value.exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
@@ -1822,9 +1928,12 @@ pub struct OptionsWire {
     fork_strategy: Option<ForkStrategy>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
+    config_settings_package: Option<PackageConfigSettings>,
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
-    exclude_newer: Option<ExcludeNewer>,
+    extra_build_dependencies: Option<ExtraBuildDependencies>,
+    exclude_newer: Option<ExcludeNewerTimestamp>,
+    exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
     no_sources: Option<bool>,
@@ -1911,9 +2020,11 @@ impl From<OptionsWire> for Options {
             fork_strategy,
             dependency_metadata,
             config_settings,
+            config_settings_package,
             no_build_isolation,
             no_build_isolation_package,
             exclude_newer,
+            exclude_newer_package,
             link_mode,
             compile_bytecode,
             no_sources,
@@ -1940,6 +2051,7 @@ impl From<OptionsWire> for Options {
             sources,
             default_groups,
             dependency_groups,
+            extra_build_dependencies,
             dev_dependencies,
             managed,
             package,
@@ -1977,9 +2089,12 @@ impl From<OptionsWire> for Options {
                 fork_strategy,
                 dependency_metadata,
                 config_settings,
+                config_settings_package,
                 no_build_isolation,
                 no_build_isolation_package,
+                extra_build_dependencies,
                 exclude_newer,
+                exclude_newer_package,
                 link_mode,
                 compile_bytecode,
                 no_sources,

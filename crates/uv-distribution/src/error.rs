@@ -25,8 +25,6 @@ pub enum Error {
     RelativePath(PathBuf),
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
-    #[error(transparent)]
-    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(DisplaySafeUrl),
     #[error(transparent)]
