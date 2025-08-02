@@ -76,23 +76,23 @@ fn python_install() {
     "###);
 
     // Should be a no-op when already installed
-    uv_snapshot!(context.filters(), context.python_install(), @r###"
+    uv_snapshot!(context.filters(), context.python_install(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Python is already installed. Use `uv python install <request>` to install another version.
-    "###);
+    ");
 
     // Similarly, when a requested version is already installed
-    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    ");
 
     // You can opt-in to a reinstall
     uv_snapshot!(context.filters(), context.python_install().arg("3.13").arg("--reinstall"), @r"
@@ -254,14 +254,14 @@ fn python_install_automatic() {
     // Otherwise, we should fetch the latest Python version
     uv_snapshot!(context.filters(), context.run()
         .env_remove("VIRTUAL_ENV")
-        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     (3, 13)
 
     ----- stderr -----
-    "###);
+    ");
 
     // Subsequently, we can use the interpreter even with downloads disabled
     uv_snapshot!(context.filters(), context.run()
@@ -280,14 +280,14 @@ fn python_install_automatic() {
     uv_snapshot!(context.filters(), context.run()
     .env_remove("VIRTUAL_ENV")
     .arg("-p").arg("3.12")
-    .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+    .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     (3, 12)
 
     ----- stderr -----
-    "###);
+    ");
 
     // But some requests cannot be mapped to a download
     uv_snapshot!(context.filters(), context.run()
@@ -326,14 +326,14 @@ fn python_install_automatic() {
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
             .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str())
             .arg("-p").arg("3.11")
-            .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
+            .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r"
         success: true
         exit_code: 0
         ----- stdout -----
         (3, 11)
 
         ----- stderr -----
-        "###);
+        ");
     }
 }
 
@@ -363,14 +363,13 @@ fn regression_cpython() {
     uv_snapshot!(context.filters(), context.run()
         .env_remove("VIRTUAL_ENV")
         .arg("-p").arg("3.12")
-        .arg("mre.py"), @r###"
+        .arg("mre.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-
-    "###);
+    ");
 }
 
 #[test]
@@ -939,7 +938,7 @@ fn python_install_preview_upgrade() {
     }
 
     // Installing 3.12.4 should not replace the executable, but also shouldn't fail
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -947,7 +946,7 @@ fn python_install_preview_upgrade() {
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
      + cpython-3.12.4-[PLATFORM]
-    "###);
+    ");
 
     if cfg!(unix) {
         insta::with_settings!({
@@ -968,7 +967,7 @@ fn python_install_preview_upgrade() {
     }
 
     // Using `--reinstall` is not sufficient to replace it either
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4").arg("--reinstall"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4").arg("--reinstall"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -976,7 +975,7 @@ fn python_install_preview_upgrade() {
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
      ~ cpython-3.12.4-[PLATFORM]
-    "###);
+    ");
 
     if cfg!(unix) {
         insta::with_settings!({
@@ -997,7 +996,7 @@ fn python_install_preview_upgrade() {
     }
 
     // But `--force` is
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4").arg("--force"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4").arg("--force"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1005,7 +1004,7 @@ fn python_install_preview_upgrade() {
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
      + cpython-3.12.4-[PLATFORM] (python3.12)
-    "###);
+    ");
 
     if cfg!(unix) {
         insta::with_settings!({
@@ -1026,7 +1025,7 @@ fn python_install_preview_upgrade() {
     }
 
     // But installing 3.12.6 should upgrade automatically
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.6"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.6"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1034,7 +1033,7 @@ fn python_install_preview_upgrade() {
     ----- stderr -----
     Installed Python 3.12.6 in [TIME]
      + cpython-3.12.6-[PLATFORM] (python3.12)
-    "###);
+    ");
 
     if cfg!(unix) {
         insta::with_settings!({
@@ -2046,7 +2045,7 @@ fn python_install_patch_dylib() {
     let mut cmd = std::process::Command::new("otool");
     cmd.arg("-D").arg(dylib.as_ref());
 
-    uv_snapshot!(context.filters(), cmd, @r###"
+    uv_snapshot!(context.filters(), cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2054,7 +2053,7 @@ fn python_install_patch_dylib() {
     [TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/lib/libpython3.13.dylib
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
@@ -2191,14 +2190,14 @@ fn python_install_cached() {
     // Should be a no-op when already installed
     uv_snapshot!(context.filters(), context
         .python_install()
-        .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @r###"
+        .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Python is already installed. Use `uv python install <request>` to install another version.
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r"
     success: true
