@@ -256,11 +256,20 @@ pub async fn bin_install(
     }
 
     // Find the binary in the extracted files
-    // The archive contains a directory with the platform name
-    let extracted_binary = temp_dir
-        .path()
-        .join(format!("{}-{platform_name}", binary.name()))
-        .join(binary.executable());
+    let extracted_binary = match ext {
+        SourceDistExtension::Zip => {
+            // Windows ZIP archives contain the binary directly in the root
+            temp_dir.path().join(binary.executable())
+        }
+        SourceDistExtension::TarGz | SourceDistExtension::Tgz => {
+            // tar.gz archives contain the binary in a subdirectory
+            temp_dir
+                .path()
+                .join(format!("{}-{platform_name}", binary.name()))
+                .join(binary.executable())
+        }
+        _ => unreachable!("Unsupported archive format"),
+    };
 
     uv_fs::rename_with_retry(&extracted_binary, cache_entry.path()).await?;
 
