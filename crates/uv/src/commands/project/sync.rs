@@ -19,7 +19,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
+    AnnotatedBuildRequirement, DirectorySourceDist, Dist, ExtraBuildRequirement,
+    ExtraBuildRequires, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::SitePackages;
@@ -713,6 +714,9 @@ pub(super) async fn do_sync(
     // If necessary, convert editable to non-editable distributions.
     let resolution = apply_editable_mode(resolution, editable);
 
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let extra_build_requires = apply_match_runtime(extra_build_requires, &resolution)?;
+
     index_locations.cache_index_credentials();
 
     // Populate credentials from the target.
@@ -807,6 +811,54 @@ pub(super) async fn do_sync(
     .await?;
 
     Ok(())
+}
+
+/// Apply runtime constraints to the extra build requirements.
+#[allow(clippy::result_large_err)]
+fn apply_match_runtime(
+    extra_build_requires: ExtraBuildRequires,
+    resolution: &Resolution,
+) -> Result<ExtraBuildRequires, ProjectError> {
+    extra_build_requires
+        .into_iter()
+        .map(|(name, requirements)| {
+            let requirements = requirements
+                .into_iter()
+                .map(|requirement| match requirement {
+                    ExtraBuildRequirement::Annotated(AnnotatedBuildRequirement {
+                        requirement,
+                        match_runtime: true,
+                    }) => {
+                        let dist = resolution
+                            .distributions()
+                            .find(|dist| dist.name() == &requirement.name)
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "`{name}` was declared as an extra build dependency with `match-runtime = true`, but no version of `{name}` was found in the lockfile",
+                                name = requirement.name,
+                            ))?;
+                        let source = dist
+                            .as_source()
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "`{name}` was declared as an extra build dependency with `match-runtime = true`, but could not be converted to a requirement",
+                                name = requirement.name,
+                            ))?;
+                        let requirement = Requirement {
+                            source,
+                            ..requirement
+                        };
+                        Ok::<_, ProjectError>(ExtraBuildRequirement::Annotated(
+                            AnnotatedBuildRequirement {
+                                requirement,
+                                match_runtime: false,
+                            },
+                        ))
+                    }
+                    requirement => Ok(requirement),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok::<_, ProjectError>((name, requirements))
+        })
+        .collect::<Result<ExtraBuildRequires, _>>()
 }
 
 /// Filter out any virtual workspace members.

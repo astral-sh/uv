@@ -4670,6 +4670,7 @@ dependencies = [
  "ctrlc",
  "dotenvy",
  "dunce",
+ "either",
  "filetime",
  "flate2",
  "fs-err",

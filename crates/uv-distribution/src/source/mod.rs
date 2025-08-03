@@ -32,8 +32,8 @@ use uv_client::{
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl,
-    Requirement, SourceDist, SourceUrl,
+    BuildableSource, DirectorySourceUrl, ExtraBuildRequirement, GitSourceUrl, HashPolicy, Hashed,
+    IndexUrl, PathSourceUrl, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
@@ -405,7 +405,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Determine the extra build dependencies for the given package name.
-    fn extra_build_dependencies_for(&self, name: Option<&PackageName>) -> &[Requirement] {
+    fn extra_build_dependencies_for(&self, name: Option<&PackageName>) -> &[ExtraBuildRequirement] {
         name.and_then(|name| {
             self.build_context
                 .extra_build_requires()

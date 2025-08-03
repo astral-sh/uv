@@ -755,14 +755,37 @@ pub struct DependencyGroupSettings {
     pub requires_python: Option<VersionSpecifiers>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct AnnotatedBuildDependency {
+    pub requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+    pub match_runtime: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum ExtraBuildDependency {
+    Unannotated(uv_pep508::Requirement<VerbatimParsedUrl>),
+    Annotated(AnnotatedBuildDependency),
+}
+
+impl From<ExtraBuildDependency> for uv_pep508::Requirement<VerbatimParsedUrl> {
+    fn from(dep: ExtraBuildDependency) -> Self {
+        match dep {
+            ExtraBuildDependency::Unannotated(requirement) => requirement,
+            ExtraBuildDependency::Annotated(annotated) => annotated.requirement,
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ExtraBuildDependencies(
-    BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-);
+pub struct ExtraBuildDependencies(BTreeMap<PackageName, Vec<ExtraBuildDependency>>);
 
 impl std::ops::Deref for ExtraBuildDependencies {
-    type Target = BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>;
+    type Target = BTreeMap<PackageName, Vec<ExtraBuildDependency>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -776,14 +799,19 @@ impl std::ops::DerefMut for ExtraBuildDependencies {
 }
 
 impl IntoIterator for ExtraBuildDependencies {
-    type Item = (PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>);
-    type IntoIter = std::collections::btree_map::IntoIter<
-        PackageName,
-        Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    >;
+    type Item = (PackageName, Vec<ExtraBuildDependency>);
+    type IntoIter = std::collections::btree_map::IntoIter<PackageName, Vec<ExtraBuildDependency>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl FromIterator<(PackageName, Vec<ExtraBuildDependency>)> for ExtraBuildDependencies {
+    fn from_iter<T: IntoIterator<Item = (PackageName, Vec<ExtraBuildDependency>)>>(
+        iter: T,
+    ) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 

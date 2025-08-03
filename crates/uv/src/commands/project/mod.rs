@@ -4,6 +4,7 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use either::Either;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
@@ -18,8 +19,8 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    AnnotatedBuildRequirement, ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement,
+    RequiresPython, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -47,6 +48,7 @@ use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
+use uv_workspace::pyproject::{AnnotatedBuildDependency, ExtraBuildDependency};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -2647,15 +2649,37 @@ pub(crate) fn script_extra_build_requires(
         let lowered_requirements: Vec<_> = requirements
             .iter()
             .cloned()
-            .flat_map(|requirement| {
-                LoweredRequirement::from_non_workspace_requirement(
+            .flat_map(|entry| match entry {
+                ExtraBuildDependency::Unannotated(requirement) => Either::Left(
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                    )
+                    .map_ok(move |requirement| {
+                        ExtraBuildRequirement::Unannotated(requirement.into_inner())
+                    }),
+                ),
+                ExtraBuildDependency::Annotated(AnnotatedBuildDependency {
                     requirement,
-                    script_dir.as_ref(),
-                    script_sources,
-                    script_indexes,
-                    &settings.index_locations,
-                )
-                .map_ok(uv_distribution::LoweredRequirement::into_inner)
+                    match_runtime,
+                }) => Either::Right(
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                    )
+                    .map_ok(move |requirement| {
+                        ExtraBuildRequirement::Annotated(AnnotatedBuildRequirement {
+                            requirement: requirement.into_inner(),
+                            match_runtime,
+                        })
+                    }),
+                ),
             })
             .collect::<Result<Vec<_>, _>>()?;
         extra_build_requires.insert(name.clone(), lowered_requirements);
