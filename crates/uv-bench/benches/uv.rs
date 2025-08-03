@@ -91,7 +91,9 @@ mod resolver {
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
-    use uv_distribution_types::{DependencyMetadata, IndexLocations, RequiresPython};
+    use uv_distribution_types::{
+        DependencyMetadata, ExtraBuildRequires, IndexLocations, RequiresPython,
+    };
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
@@ -141,7 +143,7 @@ mod resolver {
         universal: bool,
     ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
-        let extra_build_requires = uv_distribution::ExtraBuildRequires::default();
+        let extra_build_requires = ExtraBuildRequires::default();
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();

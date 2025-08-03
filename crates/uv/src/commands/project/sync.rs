@@ -17,6 +17,7 @@ use uv_configuration::{
     Preview, PreviewFeatures, TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
@@ -227,7 +228,7 @@ pub(crate) async fn sync(
             // Parse the requirements from the script.
             let spec = script_specification(script.into(), &settings.resolver)?.unwrap_or_default();
             let script_extra_build_requires =
-                script_extra_build_requires(script.into(), &settings.resolver)?;
+                script_extra_build_requires(script.into(), &settings.resolver)?.into_inner();
 
             // Parse the build constraints from the script.
             let build_constraints = script
@@ -602,12 +603,12 @@ pub(super) async fn do_sync(
         );
     }
 
-    // Lower the extra build dependencies with source resolution
+    // Lower the extra build dependencies with source resolution.
     let extra_build_requires = match &target {
         InstallTarget::Workspace { workspace, .. }
         | InstallTarget::Project { workspace, .. }
         | InstallTarget::NonProjectWorkspace { workspace, .. } => {
-            uv_distribution::ExtraBuildRequires::from_workspace(
+            LoweredExtraBuildDependencies::from_workspace(
                 extra_build_dependencies.clone(),
                 workspace,
                 index_locations,
@@ -637,7 +638,8 @@ pub(super) async fn do_sync(
             };
             script_extra_build_requires((*script).into(), &resolver_settings)?
         }
-    };
+    }
+    .into_inner();
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?

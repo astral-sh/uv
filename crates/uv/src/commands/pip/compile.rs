@@ -19,6 +19,7 @@ use uv_configuration::{
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     Origin, Requirement, RequiresPython, UnresolvedRequirementSpecification, Verbatim,
@@ -480,8 +481,12 @@ pub(crate) async fn pip_compile(
             .map(|constraint| constraint.requirement.clone()),
     );
 
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,

@@ -10,15 +10,14 @@ use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
 use uv_distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, Hashed, IndexLocations, InstalledDist,
-    Name, RequirementSource, Resolution, ResolvedDist, SourceDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, ExtraBuildRequires, Hashed,
+    IndexLocations, InstalledDist, Name, RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_platform_tags::Tags;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
-use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::SitePackages;
 use crate::satisfies::RequirementSatisfaction;
@@ -55,7 +54,7 @@ impl<'a> Planner<'a> {
         index_locations: &IndexLocations,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
-        extra_build_dependencies: &ExtraBuildDependencies,
+        extra_build_requires: &ExtraBuildRequires,
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
@@ -69,7 +68,7 @@ impl<'a> Planner<'a> {
             hasher,
             config_settings,
             config_settings_package,
-            extra_build_dependencies,
+            extra_build_requires,
         );
 
         let mut cached = vec![];

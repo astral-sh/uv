@@ -5,12 +5,12 @@ use uv_cache_info::CacheInfo;
 use uv_cache_key::cache_digest;
 use uv_configuration::{ConfigSettings, PackageConfigSettings};
 use uv_distribution_types::{
-    DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
+    DirectUrlSourceDist, DirectorySourceDist, ExtraBuildRequires, GitSourceDist, Hashed,
+    PathSourceDist, Requirement,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
-use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::Error;
 use crate::index::cached_wheel::CachedWheel;
@@ -24,7 +24,7 @@ pub struct BuiltWheelIndex<'a> {
     hasher: &'a HashStrategy,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
-    extra_build_dependencies: &'a ExtraBuildDependencies,
+    extra_build_requires: &'a ExtraBuildRequires,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
@@ -35,7 +35,7 @@ impl<'a> BuiltWheelIndex<'a> {
         hasher: &'a HashStrategy,
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
-        extra_build_dependencies: &'a ExtraBuildDependencies,
+        extra_build_requires: &'a ExtraBuildRequires,
     ) -> Self {
         Self {
             cache,
@@ -43,7 +43,7 @@ impl<'a> BuiltWheelIndex<'a> {
             hasher,
             config_settings,
             config_settings_package,
-            extra_build_dependencies,
+            extra_build_requires,
         }
     }
 
@@ -74,7 +74,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let extra_build_deps = self.extra_build_dependencies_for(&source_dist.name);
+        let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
@@ -113,7 +113,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let extra_build_deps = self.extra_build_dependencies_for(&source_dist.name);
+        let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
@@ -163,7 +163,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let extra_build_deps = self.extra_build_dependencies_for(&source_dist.name);
+        let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
@@ -191,7 +191,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let extra_build_deps = self.extra_build_dependencies_for(&source_dist.name);
+        let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
@@ -268,11 +268,8 @@ impl<'a> BuiltWheelIndex<'a> {
     }
 
     /// Determine the extra build dependencies for the given package name.
-    fn extra_build_dependencies_for(
-        &self,
-        name: &PackageName,
-    ) -> &[uv_pep508::Requirement<uv_pypi_types::VerbatimParsedUrl>] {
-        self.extra_build_dependencies
+    fn extra_build_requires_for(&self, name: &PackageName) -> &[Requirement] {
+        self.extra_build_requires
             .get(name)
             .map(Vec::as_slice)
             .unwrap_or(&[])

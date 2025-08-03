@@ -33,7 +33,7 @@ use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl,
-    SourceDist, SourceUrl,
+    Requirement, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
@@ -405,13 +405,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Determine the extra build dependencies for the given package name.
-    fn extra_build_dependencies_for(
-        &self,
-        name: Option<&PackageName>,
-    ) -> &[uv_pep508::Requirement<uv_pypi_types::VerbatimParsedUrl>] {
+    fn extra_build_dependencies_for(&self, name: Option<&PackageName>) -> &[Requirement] {
         name.and_then(|name| {
             self.build_context
-                .extra_build_dependencies()
+                .extra_build_requires()
                 .get(name)
                 .map(Vec::as_slice)
         })

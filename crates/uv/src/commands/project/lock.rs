@@ -16,7 +16,7 @@ use uv_configuration::{
     PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     Requirement, RequiresPython, UnresolvedRequirementSpecification,
@@ -673,9 +673,9 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies.
     let extra_build_requires = match &target {
-        LockTarget::Workspace(workspace) => uv_distribution::ExtraBuildRequires::from_workspace(
+        LockTarget::Workspace(workspace) => LoweredExtraBuildDependencies::from_workspace(
             extra_build_dependencies.clone(),
             workspace,
             index_locations,
@@ -685,7 +685,10 @@ async fn do_lock(
             // Try to get extra build dependencies from the script metadata
             script_extra_build_requires((*script).into(), settings)?
         }
-    };
+    }
+    .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
