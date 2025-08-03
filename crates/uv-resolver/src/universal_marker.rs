@@ -303,7 +303,7 @@ impl UniversalMarker {
             .evaluate(env, &extras.chain(groups).collect::<Vec<ExtraName>>())
     }
 
-    /// Returns true if the marker always evaluates to ture if the given set of extras is activated.
+    /// Returns true if the marker always evaluates to true if the given set of extras is activated.
     pub(crate) fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
     where
         P: Borrow<PackageName>,
