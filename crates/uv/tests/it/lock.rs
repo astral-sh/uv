@@ -3671,7 +3671,7 @@ fn lock_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (python_full_version >= '3.7' and python_full_version < '3.7.9'):
+      × No solution found when resolving dependencies for split (markers: python_full_version >= '3.7' and python_full_version < '3.7.9'):
       ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
           And because only the following versions of pygls are available:
               pygls<=1.1.0
@@ -28520,7 +28520,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (python_full_version >= '3.11'):
+      × No solution found when resolving dependencies for split (markers: python_full_version >= '3.11'):
       ╰─▶ Because only the following versions of numpy{python_full_version >= '3.10'} are available:
               numpy{python_full_version >= '3.10'}<=1.21.0
               numpy{python_full_version >= '3.10'}==1.21.1
@@ -28774,7 +28774,7 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (sys_platform == 'exotic'):
+      × No solution found when resolving dependencies for split (markers: sys_platform == 'exotic'):
       ╰─▶ Because only the following versions of numpy{sys_platform == 'exotic'} are available:
               numpy{sys_platform == 'exotic'}<=1.24.0
               numpy{sys_platform == 'exotic'}==1.24.1

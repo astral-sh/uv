@@ -708,12 +708,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 resolutions.len()
             );
         }
-        for resolution in &resolutions {
-            if let Some(env) = resolution.env.end_user_fork_display() {
-                debug!(
-                    "Distinct solution for {env} with {} packages",
-                    resolution.nodes.len()
-                );
+        if tracing::enabled!(Level::DEBUG) {
+            for resolution in &resolutions {
+                if let Some(env) = resolution.env.end_user_fork_display() {
+                    let packages: FxHashSet<_> = resolution
+                        .nodes
+                        .keys()
+                        .map(|package| &package.name)
+                        .collect();
+                    debug!(
+                        "Distinct solution for {env} with {} package(s)",
+                        packages.len()
+                    );
+                }
             }
         }
         for resolution in &resolutions {

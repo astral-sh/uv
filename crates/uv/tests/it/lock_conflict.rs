@@ -546,16 +546,16 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         project4 = ["sortedcontainers==2.4.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: project[extra2], project[project3]; excluded: project[extra1], project[project4]):
       ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
           And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    ");
 
     // One could try to declare all pairs of conflicting extras as
     // conflicting, but this doesn't quite work either. For example,
@@ -703,16 +703,16 @@ fn extra_multiple_independent() -> Result<()> {
         project4 = ["anyio==4.2.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: project[project4]; excluded: project[project3]):
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    ");
 
     // Once we declare ALL our conflicting extras, resolution succeeds.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1551,20 +1551,20 @@ fn extra_nested_across_workspace() -> Result<()> {
     // `dummy[extra1]` conflicts with `dummysub[extra2]` and that
     // `dummy[extra2]` conflicts with `dummysub[extra1]`. So we end
     // up with a resolution failure.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: dummy[extra2], dummysub[extra1]; excluded: dummy[extra1], dummysub[extra2]):
       ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
 
           Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
           And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
           And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
           And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
-    "###);
+    ");
 
     // Now let's write out the full set of conflicts, taking
     // advantage of the optional `package` key.
@@ -1696,7 +1696,7 @@ fn extra_depends_on_conflicting_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: example[foo]; excluded: example[bar]):
       ╰─▶ Because example[foo] depends on sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that example[foo]'s requirements are unsatisfiable.
           And because your project requires example[foo], we can conclude that your project's requirements are unsatisfiable.
     ");

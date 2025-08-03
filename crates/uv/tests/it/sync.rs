@@ -666,7 +666,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
@@ -681,7 +681,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
@@ -810,7 +810,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
@@ -826,7 +826,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
