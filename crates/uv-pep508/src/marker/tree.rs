@@ -1161,6 +1161,32 @@ impl MarkerTree {
         }
     }
 
+    /// Returns true if this marker simplifies to true if the given set of extras is activated.
+    pub fn evaluate_only_extras(self, extras: &[ExtraName]) -> bool {
+        match self.kind() {
+            MarkerTreeKind::True => true,
+            MarkerTreeKind::False => false,
+            MarkerTreeKind::Version(marker) => {
+                marker.edges().all(|(_, tree)| tree.evaluate_extras(extras))
+            }
+            MarkerTreeKind::String(marker) => marker
+                .children()
+                .all(|(_, tree)| tree.evaluate_extras(extras)),
+            MarkerTreeKind::In(marker) => marker
+                .children()
+                .all(|(_, tree)| tree.evaluate_extras(extras)),
+            MarkerTreeKind::Contains(marker) => marker
+                .children()
+                .all(|(_, tree)| tree.evaluate_extras(extras)),
+            MarkerTreeKind::List(marker) => marker
+                .children()
+                .all(|(_, tree)| tree.evaluate_extras(extras)),
+            MarkerTreeKind::Extra(marker) => marker
+                .edge(extras.contains(marker.name().extra()))
+                .evaluate_extras(extras),
+        }
+    }
+
     /// Find a top level `extra == "..."` expression.
     ///
     /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
