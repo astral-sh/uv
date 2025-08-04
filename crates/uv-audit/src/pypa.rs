@@ -9,13 +9,13 @@ use std::str::FromStr;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
-/// PyPA Advisory Database YAML record
+/// `PyPA` Advisory Database YAML record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PypaAdvisory {
     /// Unique vulnerability identifier
     pub id: String,
 
-    /// Detailed description (PyPA uses 'details' instead of 'summary')
+    /// Detailed description (`PyPA` uses 'details' instead of 'summary')
     pub details: String,
 
     /// Affected packages and versions
@@ -38,7 +38,7 @@ pub struct PypaAdvisory {
     #[serde(default)]
     pub withdrawn: Option<String>,
 
-    /// Summary (optional, some PyPA records may have it)
+    /// Summary (optional, some `PyPA` records may have it)
     pub summary: Option<String>,
 
     /// Additional severity information
@@ -50,7 +50,7 @@ pub struct PypaAdvisory {
     pub database_specific: Option<serde_json::Value>,
 }
 
-/// Affected package information in PyPA format
+/// Affected package information in `PyPA` format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PypaAffected {
     /// Package information
@@ -72,7 +72,7 @@ pub struct PypaAffected {
     pub ecosystem_specific: Option<serde_json::Value>,
 }
 
-/// Package information in PyPA format
+/// Package information in `PyPA` format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PypaPackage {
     /// Package ecosystem (e.g., "PyPI")
@@ -85,7 +85,7 @@ pub struct PypaPackage {
     pub purl: Option<String>,
 }
 
-/// Version range specification in PyPA format
+/// Version range specification in `PyPA` format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PypaRange {
     /// Range type (e.g., "ECOSYSTEM")
@@ -103,7 +103,7 @@ pub struct PypaRange {
     pub database_specific: Option<serde_json::Value>,
 }
 
-/// A version event in a PyPA range
+/// A version event in a `PyPA` range
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PypaEvent {
     /// Version where event occurs
@@ -119,7 +119,7 @@ pub struct PypaEvent {
     pub limit: Option<String>,
 }
 
-/// Reference information in PyPA format
+/// Reference information in `PyPA` format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PypaReference {
     /// Reference type (e.g., "ADVISORY", "FIX", "WEB", "ARTICLE")
@@ -130,10 +130,10 @@ pub struct PypaReference {
     pub url: String,
 }
 
-/// Severity information in PyPA format
+/// Severity information in `PyPA` format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PypaSeverity {
-    /// Severity type (e.g., "CVSS_V3")
+    /// Severity type (e.g., `CVSS_V3`)
     #[serde(rename = "type")]
     pub severity_type: String,
 
@@ -141,23 +141,23 @@ pub struct PypaSeverity {
     pub score: String,
 }
 
-/// Parser for PyPA advisory database YAML files
+/// Parser for `PyPA` advisory database YAML files
 pub struct PypaParser;
 
 impl PypaParser {
-    /// Parse a PyPA YAML advisory from string content
+    /// Parse a `PyPA` YAML advisory from string content
     pub fn parse_advisory(content: &str) -> Result<PypaAdvisory> {
         serde_yaml::from_str(content)
             .map_err(|e| AuditError::PypaAdvisoryParse("PyPA YAML parse error".to_string(), e))
     }
 
-    /// Convert PyPA advisory to OSV format for compatibility
+    /// Convert `PyPA` advisory to OSV format for compatibility
     pub fn to_osv(pypa: &PypaAdvisory) -> Result<OsvAdvisory> {
         let affected = pypa
             .affected
             .iter()
-            .map(|pypa_affected| Self::convert_affected(pypa_affected))
-            .collect::<Result<Vec<_>>>()?;
+            .map(Self::convert_affected)
+            .collect::<Vec<_>>();
 
         let references = pypa
             .references
@@ -191,7 +191,7 @@ impl PypaParser {
         })
     }
 
-    /// Convert PyPA advisory directly to internal Vulnerability format
+    /// Convert `PyPA` advisory directly to internal Vulnerability format
     pub fn to_vulnerability(
         pypa: &PypaAdvisory,
         package_name: &PackageName,
@@ -244,8 +244,8 @@ impl PypaParser {
         })
     }
 
-    /// Convert PyPA affected to OSV affected
-    fn convert_affected(pypa_affected: &PypaAffected) -> Result<OsvAffected> {
+    /// Convert `PyPA` affected to OSV affected
+    fn convert_affected(pypa_affected: &PypaAffected) -> OsvAffected {
         let package = OsvPackage {
             ecosystem: pypa_affected.package.ecosystem.clone(),
             name: pypa_affected.package.name.clone(),
@@ -255,19 +255,19 @@ impl PypaParser {
         let ranges = pypa_affected
             .ranges
             .iter()
-            .map(|pypa_range| Self::convert_range(pypa_range))
+            .map(Self::convert_range)
             .collect();
 
-        Ok(OsvAffected {
+        OsvAffected {
             package,
             ranges,
             versions: pypa_affected.versions.clone(),
             database_specific: pypa_affected.database_specific.clone(),
             ecosystem_specific: pypa_affected.ecosystem_specific.clone(),
-        })
+        }
     }
 
-    /// Convert PyPA range to OSV range
+    /// Convert `PyPA` range to OSV range
     fn convert_range(pypa_range: &PypaRange) -> OsvRange {
         let events = pypa_range
             .events
@@ -288,7 +288,7 @@ impl PypaParser {
         }
     }
 
-    /// Determine severity level from PyPA advisory
+    /// Determine severity level from `PyPA` advisory
     fn determine_severity(pypa: &PypaAdvisory) -> Severity {
         // Check for CVSS score first
         if let Some(cvss_score) = Self::extract_cvss_score(pypa) {
@@ -324,7 +324,7 @@ impl PypaParser {
         }
     }
 
-    /// Extract CVSS score from PyPA advisory
+    /// Extract CVSS score from `PyPA` advisory
     fn extract_cvss_score(pypa: &PypaAdvisory) -> Option<f32> {
         pypa.severity
             .iter()
@@ -341,7 +341,7 @@ impl PypaParser {
             })
     }
 
-    /// Extract version ranges from PyPA advisory for a specific package
+    /// Extract version ranges from `PyPA` advisory for a specific package
     fn extract_version_ranges(
         pypa: &PypaAdvisory,
         package_name: &PackageName,
@@ -373,7 +373,7 @@ impl PypaParser {
                         ranges.push(VersionRange {
                             min: Some(version.clone()),
                             max: Some(version.clone()),
-                            constraint: format!("=={}", version),
+                            constraint: format!("=={version}"),
                         });
                     }
                 }
@@ -382,7 +382,7 @@ impl PypaParser {
             // Process version ranges
             for range in &affected.ranges {
                 if range.range_type == "ECOSYSTEM" {
-                    let version_range = Self::parse_pypa_range(range)?;
+                    let version_range = Self::parse_pypa_range(range);
                     ranges.push(version_range);
                 }
             }
@@ -391,8 +391,8 @@ impl PypaParser {
         Ok(ranges)
     }
 
-    /// Parse a PyPA range into our internal format
-    fn parse_pypa_range(range: &PypaRange) -> Result<VersionRange> {
+    /// Parse a `PyPA` range into our internal format
+    fn parse_pypa_range(range: &PypaRange) -> VersionRange {
         let mut min_version: Option<Version> = None;
         let mut max_version: Option<Version> = None;
 
@@ -414,20 +414,20 @@ impl PypaParser {
 
         // Build constraint string
         let constraint = match (&min_version, &max_version) {
-            (Some(min), Some(max)) => format!(">={},<{}", min, max),
-            (Some(min), None) => format!(">={}", min),
-            (None, Some(max)) => format!("<{}", max),
+            (Some(min), Some(max)) => format!(">={min},<{max}"),
+            (Some(min), None) => format!(">={min}"),
+            (None, Some(max)) => format!("<{max}"),
             (None, None) => "*".to_string(),
         };
 
-        Ok(VersionRange {
+        VersionRange {
             min: min_version,
             max: max_version,
             constraint,
-        })
+        }
     }
 
-    /// Extract fixed versions from PyPA advisory for a specific package
+    /// Extract fixed versions from `PyPA` advisory for a specific package
     fn extract_fixed_versions(
         pypa: &PypaAdvisory,
         package_name: &PackageName,
@@ -470,7 +470,7 @@ impl PypaParser {
         Ok(fixed_versions)
     }
 
-    /// Extract package names from PyPA advisory
+    /// Extract package names from `PyPA` advisory
     pub fn extract_package_names(pypa: &PypaAdvisory) -> Vec<PackageName> {
         pypa.affected
             .iter()
@@ -484,7 +484,7 @@ impl PypaParser {
             .collect()
     }
 
-    /// Check if PyPA advisory affects a specific package
+    /// Check if `PyPA` advisory affects a specific package
     pub fn affects_package(pypa: &PypaAdvisory, package_name: &PackageName) -> bool {
         pypa.affected.iter().any(|affected| {
             affected.package.ecosystem == "PyPI"
@@ -576,7 +576,7 @@ published: "2025-01-14T19:15:32Z"
 
     #[test]
     fn test_package_name_extraction() {
-        let yaml = r#"
+        let yaml = r"
 id: TEST-1
 details: Test
 affected:
@@ -590,7 +590,7 @@ affected:
     ecosystem: PyPI
     name: flask
 references: []
-"#;
+";
 
         let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
         let package_names = PypaParser::extract_package_names(&pypa_advisory);
@@ -602,7 +602,7 @@ references: []
 
     #[test]
     fn test_package_name_extraction_with_invalid_names() {
-        let yaml = r#"
+        let yaml = r"
 id: TEST-INVALID
 details: Test with invalid package names
 affected:
@@ -616,7 +616,7 @@ affected:
     ecosystem: PyPI
     name: another-valid-package
 references: []
-"#;
+";
 
         let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
         let package_names = PypaParser::extract_package_names(&pypa_advisory);
@@ -629,7 +629,7 @@ references: []
 
     #[test]
     fn test_package_name_extraction_filters_non_pypi() {
-        let yaml = r#"
+        let yaml = r"
 id: TEST-ECOSYSTEMS
 details: Test with multiple ecosystems
 affected:
@@ -649,7 +649,7 @@ affected:
     ecosystem: Maven
     name: org.springframework:spring-core
 references: []
-"#;
+";
 
         let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
         let package_names = PypaParser::extract_package_names(&pypa_advisory);
@@ -662,7 +662,7 @@ references: []
 
     #[test]
     fn test_osv_conversion_preserves_package_info() {
-        let yaml = r#"
+        let yaml = "
 id: PYSEC-2025-TEST
 details: Test vulnerability conversion
 affected:
@@ -672,22 +672,22 @@ affected:
   ranges:
   - type: ECOSYSTEM
     events:
-    - introduced: "2.0.0"
-    - fixed: "2.31.0"
+    - introduced: \"2.0.0\"
+    - fixed: \"2.31.0\"
 - package:
     ecosystem: PyPI
     name: urllib3
   versions:
-  - "1.26.0"
-  - "1.26.1"
+  - \"1.26.0\"
+  - \"1.26.1\"
 references:
 - type: ADVISORY
   url: https://example.com/advisory
 aliases:
 - CVE-2024-12345
-modified: "2025-01-14T21:22:18.665005Z"
-published: "2025-01-14T19:15:32Z"
-"#;
+modified: \"2025-01-14T21:22:18.665005Z\"
+published: \"2025-01-14T19:15:32Z\"
+";
 
         let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
         let osv_advisory = PypaParser::to_osv(&pypa_advisory).unwrap();

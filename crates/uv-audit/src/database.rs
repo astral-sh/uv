@@ -5,29 +5,49 @@ use crate::{AuditCache, AuditError, DatabaseMetadata, Result};
 use async_zip::tokio::read::fs::ZipFileReader;
 use futures::io::AsyncReadExt;
 use jiff::Timestamp;
-use serde_json;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tracing::{debug, info, warn};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
+type VulnerabilityConversionResult = (Vec<Vulnerability>, HashMap<usize, Vec<PackageName>>);
+
 pub struct DatabaseManager {
     cache: AuditCache,
     client: OsvClient,
+    test_mode: bool,
 }
 
 impl DatabaseManager {
     pub fn new(cache: AuditCache) -> Self {
+        let test_mode = std::env::var("UV_AUDIT_TEST_MODE").is_ok() || cfg!(test);
         Self {
             cache,
             client: OsvClient::new(),
+            test_mode,
+        }
+    }
+
+    /// Create a new DatabaseManager in test mode (uses fixtures instead of network)
+    #[cfg(test)]
+    pub fn new_test_mode(cache: AuditCache) -> Self {
+        Self {
+            cache,
+            client: OsvClient::new(),
+            test_mode: true,
         }
     }
 
     /// Get or refresh the vulnerability database
     pub async fn get_database(&self, force_refresh: bool) -> Result<VulnerabilityDatabase> {
-        debug!("get_database called with force_refresh={}", force_refresh);
+        debug!("get_database called with force_refresh={}, test_mode={}", force_refresh, self.test_mode);
+
+        // In test mode, use fixtures instead of network requests
+        if self.test_mode {
+            debug!("Test mode enabled, using fixture database");
+            return self.load_test_database().await;
+        }
 
         // First try to load from cache if it exists and we don't need to force refresh
         if !force_refresh {
@@ -84,12 +104,12 @@ impl DatabaseManager {
         info!("Parsed {} advisories", advisories.len());
 
         // Convert OSV advisories to our internal format
-        let (vulnerabilities, package_mapping) = self.convert_osv_advisories(advisories)?;
+        let (vulnerabilities, package_mapping) = Self::convert_osv_advisories(advisories)?;
 
         info!("Converted {} vulnerabilities", vulnerabilities.len());
 
         // Build the database with index using the package mapping
-        let database = self.build_database_with_mapping(vulnerabilities, package_mapping)?;
+        let database = Self::build_database_with_mapping(vulnerabilities, &package_mapping);
 
         // Save to cache
         self.save_database(&database).await?;
@@ -99,7 +119,7 @@ impl DatabaseManager {
         Ok(())
     }
 
-    /// Extract PyPA advisories from the downloaded ZIP file
+    /// Extract `PyPA` advisories from the downloaded ZIP file
     async fn extract_advisories_from_zip(&self, zip_data: &[u8]) -> Result<Vec<OsvAdvisory>> {
         // Write ZIP data to temporary file for processing
         let temp_dir = tempfile::tempdir()?;
@@ -132,14 +152,24 @@ impl DatabaseManager {
                 sample_files.push(filename.to_string());
             }
 
-            if filename.ends_with(".yaml") || filename.ends_with(".yml") {
+            if std::path::Path::new(filename)
+                .extension()
+                .is_some_and(|ext| {
+                    ext.eq_ignore_ascii_case("yaml") || ext.eq_ignore_ascii_case("yml")
+                })
+            {
                 yaml_files_count += 1;
             }
 
             // PyPA structure: advisory-database-main/vulns/PACKAGE_NAME/ADVISORY_ID.yaml
-            let is_vulnerability_file = (filename.ends_with(".yaml") || filename.ends_with(".yml"))
-                && (filename.starts_with("advisory-database-main/vulns/")
-                    || filename.contains("/vulns/"));
+            let is_vulnerability_file =
+                std::path::Path::new(filename)
+                    .extension()
+                    .is_some_and(|ext| {
+                        ext.eq_ignore_ascii_case("yaml") || ext.eq_ignore_ascii_case("yml")
+                    })
+                    && (filename.starts_with("advisory-database-main/vulns/")
+                        || filename.contains("/vulns/"));
 
             if is_vulnerability_file {
                 vulns_dir_count += 1;
@@ -173,7 +203,7 @@ impl DatabaseManager {
                                     error_count += 1;
                                     if sample_errors.len() < 5 {
                                         sample_errors
-                                            .push(format!("{}: conversion error: {}", filename, e));
+                                            .push(format!("{filename}: conversion error: {e}"));
                                     }
                                     warn!(
                                         "Failed to convert PyPA advisory from {}: {}",
@@ -186,7 +216,7 @@ impl DatabaseManager {
                     Err(e) => {
                         error_count += 1;
                         if sample_errors.len() < 5 {
-                            sample_errors.push(format!("{}: parse error: {}", filename, e));
+                            sample_errors.push(format!("{filename}: parse error: {e}"));
                         }
                         // Only warn for the first few errors to avoid spam
                         if error_count <= 10 {
@@ -209,8 +239,7 @@ impl DatabaseManager {
 
         if parsed_count == 0 {
             return Err(AuditError::EmptyDatabase(format!(
-                "Processed {} files but none were successfully parsed",
-                vulns_dir_count
+                "Processed {vulns_dir_count} files but none were successfully parsed"
             )));
         }
 
@@ -220,12 +249,10 @@ impl DatabaseManager {
     /// Convert OSV advisories to our internal vulnerability format
     /// Returns both vulnerabilities and a mapping from vulnerability index to affected package names
     fn convert_osv_advisories(
-        &self,
         osv_advisories: Vec<OsvAdvisory>,
-    ) -> Result<(Vec<Vulnerability>, HashMap<usize, Vec<PackageName>>)> {
+    ) -> Result<VulnerabilityConversionResult> {
         let mut vulnerabilities = Vec::new();
         let mut package_mapping = HashMap::new();
-        let mut conversion_errors = 0;
         let mut package_mapping_failures = 0;
 
         for osv in osv_advisories {
@@ -257,25 +284,17 @@ impl DatabaseManager {
                 continue;
             }
 
-            match self.convert_osv_advisory(&osv) {
-                Ok(vulnerability) => {
-                    let vuln_index = vulnerabilities.len();
-                    vulnerabilities.push(vulnerability);
+            let vulnerability = Self::convert_osv_advisory(&osv);
+            let vuln_index = vulnerabilities.len();
+            vulnerabilities.push(vulnerability);
 
-                    // Store the package mapping - we know it's not empty from the check above
-                    package_mapping.insert(vuln_index, affected_packages);
-                }
-                Err(e) => {
-                    warn!("Failed to convert advisory {}: {}", osv.id, e);
-                    conversion_errors += 1;
-                }
-            }
+            // Store the package mapping - we know it's not empty from the check above
+            package_mapping.insert(vuln_index, affected_packages);
         }
 
         info!(
-            "Advisory conversion complete: {} vulnerabilities processed, {} conversion errors, {} package mapping failures",
+            "Advisory conversion complete: {} vulnerabilities processed, {} package mapping failures",
             vulnerabilities.len(),
-            conversion_errors,
             package_mapping_failures
         );
 
@@ -283,8 +302,8 @@ impl DatabaseManager {
         for (i, vulnerability) in vulnerabilities.iter().enumerate() {
             if !package_mapping.contains_key(&i) {
                 return Err(AuditError::DatabaseIntegrity(format!(
-                    "Vulnerability {} at index {} has no package mapping",
-                    vulnerability.id, i
+                    "Vulnerability {} at index {i} has no package mapping",
+                    vulnerability.id
                 )));
             }
         }
@@ -305,15 +324,15 @@ impl DatabaseManager {
     }
 
     /// Convert a single OSV advisory to our internal format
-    fn convert_osv_advisory(&self, osv: &OsvAdvisory) -> Result<Vulnerability> {
+    fn convert_osv_advisory(osv: &OsvAdvisory) -> Vulnerability {
         // Determine severity from CVSS score or other indicators
-        let severity = self.determine_severity(osv);
+        let severity = Self::determine_severity(osv);
 
         // Extract affected version ranges
-        let affected_versions = self.extract_version_ranges(osv)?;
+        let affected_versions = Self::extract_version_ranges(osv);
 
         // Extract fixed versions
-        let fixed_versions = self.extract_fixed_versions(osv)?;
+        let fixed_versions = Self::extract_fixed_versions(osv);
 
         // Extract reference URLs
         let references = osv.references.iter().map(|r| r.url.clone()).collect();
@@ -329,7 +348,7 @@ impl DatabaseManager {
             .as_ref()
             .and_then(|s| Timestamp::from_str(s).ok());
 
-        Ok(Vulnerability {
+        Vulnerability {
             id: osv.id.clone(),
             summary: osv.summary.clone(),
             description: osv.details.clone(),
@@ -340,11 +359,11 @@ impl DatabaseManager {
             cvss_score: osv.max_cvss_score(),
             published,
             modified,
-        })
+        }
     }
 
     /// Determine severity level from OSV advisory
-    fn determine_severity(&self, osv: &OsvAdvisory) -> Severity {
+    fn determine_severity(osv: &OsvAdvisory) -> Severity {
         // Check for CVSS score first
         if let Some(cvss_score) = osv.max_cvss_score() {
             return match cvss_score {
@@ -380,7 +399,7 @@ impl DatabaseManager {
     }
 
     /// Extract version ranges from OSV advisory
-    fn extract_version_ranges(&self, osv: &OsvAdvisory) -> Result<Vec<VersionRange>> {
+    fn extract_version_ranges(osv: &OsvAdvisory) -> Vec<VersionRange> {
         let mut ranges = Vec::new();
 
         for affected in osv.pypi_packages() {
@@ -391,7 +410,7 @@ impl DatabaseManager {
                         ranges.push(VersionRange {
                             min: Some(version.clone()),
                             max: Some(version.clone()),
-                            constraint: format!("=={}", version),
+                            constraint: format!("=={version}"),
                         });
                     }
                 }
@@ -400,17 +419,17 @@ impl DatabaseManager {
             // Process version ranges
             for range in &affected.ranges {
                 if range.range_type == "ECOSYSTEM" {
-                    let version_range = self.parse_osv_range(range)?;
+                    let version_range = Self::parse_osv_range(range);
                     ranges.push(version_range);
                 }
             }
         }
 
-        Ok(ranges)
+        ranges
     }
 
     /// Parse an OSV range into our internal format
-    fn parse_osv_range(&self, range: &crate::osv::OsvRange) -> Result<VersionRange> {
+    fn parse_osv_range(range: &crate::osv::OsvRange) -> VersionRange {
         let mut min_version: Option<Version> = None;
         let mut max_version: Option<Version> = None;
 
@@ -432,21 +451,21 @@ impl DatabaseManager {
 
         // Build constraint string
         let constraint = match (&min_version, &max_version) {
-            (Some(min), Some(max)) => format!(">={},<{}", min, max),
-            (Some(min), None) => format!(">={}", min),
-            (None, Some(max)) => format!("<{}", max),
+            (Some(min), Some(max)) => format!(">={min},<{max}"),
+            (Some(min), None) => format!(">={min}"),
+            (None, Some(max)) => format!("<{max}"),
             (None, None) => "*".to_string(),
         };
 
-        Ok(VersionRange {
+        VersionRange {
             min: min_version,
             max: max_version,
             constraint,
-        })
+        }
     }
 
     /// Extract fixed versions from OSV advisory
-    fn extract_fixed_versions(&self, osv: &OsvAdvisory) -> Result<Vec<Version>> {
+    fn extract_fixed_versions(osv: &OsvAdvisory) -> Vec<Version> {
         let mut fixed_versions = Vec::new();
 
         for affected in osv.pypi_packages() {
@@ -465,15 +484,14 @@ impl DatabaseManager {
         fixed_versions.sort();
         fixed_versions.dedup();
 
-        Ok(fixed_versions)
+        fixed_versions
     }
 
     /// Build the vulnerability database with index using package mapping
     fn build_database_with_mapping(
-        &self,
         vulnerabilities: Vec<Vulnerability>,
-        package_mapping: HashMap<usize, Vec<PackageName>>,
-    ) -> Result<VulnerabilityDatabase> {
+        package_mapping: &HashMap<usize, Vec<PackageName>>,
+    ) -> VulnerabilityDatabase {
         let mut package_index: HashMap<PackageName, Vec<usize>> = HashMap::new();
         let mut vulnerabilities_without_packages = Vec::new();
 
@@ -513,16 +531,16 @@ impl DatabaseManager {
             );
         }
 
-        Ok(VulnerabilityDatabase {
+        VulnerabilityDatabase {
             advisories: vulnerabilities,
             package_index,
-        })
+        }
     }
 
     /// Build the vulnerability database with index (fallback method)
     #[allow(dead_code)]
-    fn build_database(&self, vulnerabilities: Vec<Vulnerability>) -> Result<VulnerabilityDatabase> {
-        self.build_database_with_mapping(vulnerabilities, HashMap::new())
+    fn build_database(vulnerabilities: Vec<Vulnerability>) -> VulnerabilityDatabase {
+        Self::build_database_with_mapping(vulnerabilities, &HashMap::new())
     }
 
     /// Extract package names that this vulnerability affects
@@ -534,10 +552,7 @@ impl DatabaseManager {
         note = "Use preserved package mappings from PyPA data instead of heuristic extraction"
     )]
     #[allow(deprecated)]
-    fn extract_package_names_from_vulnerability(
-        &self,
-        vulnerability: &Vulnerability,
-    ) -> Vec<PackageName> {
+    fn extract_package_names_from_vulnerability(vulnerability: &Vulnerability) -> Vec<PackageName> {
         warn!(
             "Using deprecated heuristic package extraction for vulnerability {} - this indicates a bug in the data pipeline",
             vulnerability.id
@@ -546,13 +561,13 @@ impl DatabaseManager {
         let mut package_names = Vec::new();
 
         // Try to extract from the vulnerability ID if it follows certain patterns
-        if let Some(package_name) = self.guess_package_name_from_id(&vulnerability.id) {
+        if let Some(package_name) = Self::guess_package_name_from_id(&vulnerability.id) {
             package_names.push(package_name);
         }
 
         // For PYSEC IDs, try extracting package name from the description
         if vulnerability.id.starts_with("PYSEC-") {
-            if let Some(package_name) = self.extract_package_from_description(vulnerability) {
+            if let Some(package_name) = Self::extract_package_from_description(vulnerability) {
                 if !package_names.contains(&package_name) {
                     package_names.push(package_name);
                 }
@@ -574,7 +589,7 @@ impl DatabaseManager {
     ///
     /// DEPRECATED: This heuristic is unreliable and should not be used in the main pipeline.
     #[deprecated(note = "Use preserved package mappings from PyPA data instead")]
-    fn guess_package_name_from_id(&self, id: &str) -> Option<PackageName> {
+    fn guess_package_name_from_id(id: &str) -> Option<PackageName> {
         // This is a very basic heuristic that often fails
         if id.starts_with("PYSEC-") {
             // PyPI Security Advisory format sometimes includes package names
@@ -594,10 +609,7 @@ impl DatabaseManager {
     ///
     /// DEPRECATED: This heuristic is extremely unreliable and produces many false positives/negatives.
     #[deprecated(note = "Use preserved package mappings from PyPA data instead")]
-    fn extract_package_from_description(
-        &self,
-        vulnerability: &Vulnerability,
-    ) -> Option<PackageName> {
+    fn extract_package_from_description(vulnerability: &Vulnerability) -> Option<PackageName> {
         // This is a very unreliable heuristic that often fails or gives wrong results
         let text = format!(
             "{} {}",
@@ -719,7 +731,7 @@ impl DatabaseManager {
         } else {
             // Rebuild index if missing
             debug!("Package index missing, rebuilding...");
-            self.build_package_index(&advisories)
+            Self::build_package_index(&advisories)
         };
 
         let database = VulnerabilityDatabase {
@@ -734,14 +746,11 @@ impl DatabaseManager {
 
     /// Rebuild package index from advisories
     #[allow(deprecated)]
-    fn build_package_index(
-        &self,
-        advisories: &[Vulnerability],
-    ) -> HashMap<PackageName, Vec<usize>> {
+    fn build_package_index(advisories: &[Vulnerability]) -> HashMap<PackageName, Vec<usize>> {
         let mut package_index: HashMap<PackageName, Vec<usize>> = HashMap::new();
 
         for (i, vulnerability) in advisories.iter().enumerate() {
-            let package_names = self.extract_package_names_from_vulnerability(vulnerability);
+            let package_names = Self::extract_package_names_from_vulnerability(vulnerability);
 
             for package_name in package_names {
                 package_index.entry(package_name).or_default().push(i);
@@ -752,8 +761,60 @@ impl DatabaseManager {
     }
 
     /// Get database statistics
-    pub async fn get_stats(&self) -> Result<Option<DatabaseMetadata>> {
+    pub fn get_stats(&self) -> Result<Option<DatabaseMetadata>> {
         self.cache.load_metadata().map_err(AuditError::from)
+    }
+
+    /// Load test database from fixtures (used in test mode)
+    async fn load_test_database(&self) -> Result<VulnerabilityDatabase> {
+        debug!("Loading test database from fixtures...");
+
+        // Find the fixtures directory relative to the current crate
+        let fixtures_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures");
+
+        if !fixtures_dir.exists() {
+            return Err(AuditError::CacheNotFound(
+                format!("Test fixtures directory not found at: {}", fixtures_dir.display())
+            ));
+        }
+
+        // Allow tests to specify which fixture set to use
+        let fixture_set = std::env::var("UV_AUDIT_TEST_FIXTURE")
+            .unwrap_or_else(|_| "test".to_string());
+
+        // Load test database file
+        let db_filename = format!("{}_database.json", fixture_set);
+        let db_path = fixtures_dir.join(&db_filename);
+        if !db_path.exists() {
+            return Err(AuditError::CacheNotFound(
+                format!("Test database fixture not found at: {}", db_path.display())
+            ));
+        }
+
+        let db_content = fs_err::tokio::read_to_string(&db_path).await?;
+        let advisories: Vec<Vulnerability> = serde_json::from_str(&db_content)?;
+
+        // Load test index file
+        let index_filename = format!("{}_index.json", fixture_set);
+        let index_path = fixtures_dir.join(&index_filename);
+        let package_index = if index_path.exists() {
+            let index_content = fs_err::tokio::read_to_string(&index_path).await?;
+            serde_json::from_str(&index_content)?
+        } else {
+            // Build index from advisories if not available
+            debug!("Test index not found, building from advisories...");
+            Self::build_package_index(&advisories)
+        };
+
+        let database = VulnerabilityDatabase {
+            advisories,
+            package_index,
+        };
+
+        debug!("Loaded {} test advisories from fixtures (fixture_set: {})", database.advisories.len(), fixture_set);
+
+        Ok(database)
     }
 }
 
@@ -778,7 +839,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let cache = Cache::from_path(temp_dir.path()).init().unwrap();
         let audit_cache = AuditCache::new(cache);
-        let manager = DatabaseManager::new(audit_cache);
+        let _manager = DatabaseManager::new(audit_cache);
 
         let mut osv = OsvAdvisory {
             id: "test".to_string(),
@@ -792,11 +853,11 @@ mod tests {
             database_specific: None,
         };
 
-        let severity = manager.determine_severity(&osv);
+        let severity = DatabaseManager::determine_severity(&osv);
         assert_eq!(severity, Severity::Critical);
 
         osv.summary = "Medium severity vulnerability".to_string();
-        let severity = manager.determine_severity(&osv);
+        let severity = DatabaseManager::determine_severity(&osv);
         assert_eq!(severity, Severity::Medium);
     }
 
@@ -805,7 +866,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let cache = Cache::from_path(temp_dir.path()).init().unwrap();
         let audit_cache = AuditCache::new(cache);
-        let manager = DatabaseManager::new(audit_cache);
+        let _manager = DatabaseManager::new(audit_cache);
 
         // Create test OSV advisories with explicit package information
         let osv_advisories = vec![
@@ -877,7 +938,7 @@ mod tests {
         ];
 
         // Test conversion process
-        let result = manager.convert_osv_advisories(osv_advisories).unwrap();
+        let result = DatabaseManager::convert_osv_advisories(osv_advisories).unwrap();
         let (vulnerabilities, package_mapping) = result;
 
         // Verify we have the expected number of vulnerabilities
@@ -887,21 +948,20 @@ mod tests {
         assert_eq!(package_mapping.len(), 2);
 
         // Check first vulnerability (Django)
-        let vuln_0_packages = package_mapping.get(&0).unwrap();
+        let vuln_0_packages = &package_mapping[&0];
         assert_eq!(vuln_0_packages.len(), 1);
         assert_eq!(vuln_0_packages[0].to_string(), "django");
 
         // Check second vulnerability (Flask + Jinja2)
-        let vuln_1_packages = package_mapping.get(&1).unwrap();
+        let vuln_1_packages = &package_mapping[&1];
         assert_eq!(vuln_1_packages.len(), 2);
-        let package_names: Vec<String> = vuln_1_packages.iter().map(|p| p.to_string()).collect();
+        let package_names: Vec<String> = vuln_1_packages.iter().map(ToString::to_string).collect();
         assert!(package_names.contains(&"flask".to_string()));
         assert!(package_names.contains(&"jinja2".to_string()));
 
         // Test database building with mapping
-        let database = manager
-            .build_database_with_mapping(vulnerabilities, package_mapping)
-            .unwrap();
+        let database =
+            DatabaseManager::build_database_with_mapping(vulnerabilities, &package_mapping);
 
         // Verify package index is built correctly
         assert!(
@@ -921,25 +981,16 @@ mod tests {
         );
 
         // Verify Django points to first vulnerability
-        let django_vulns = database
-            .package_index
-            .get(&PackageName::from_str("django").unwrap())
-            .unwrap();
+        let django_vulns = &database.package_index[&PackageName::from_str("django").unwrap()];
         assert_eq!(django_vulns.len(), 1);
         assert_eq!(django_vulns[0], 0);
 
         // Verify Flask and Jinja2 point to second vulnerability
-        let flask_vulns = database
-            .package_index
-            .get(&PackageName::from_str("flask").unwrap())
-            .unwrap();
+        let flask_vulns = &database.package_index[&PackageName::from_str("flask").unwrap()];
         assert_eq!(flask_vulns.len(), 1);
         assert_eq!(flask_vulns[0], 1);
 
-        let jinja2_vulns = database
-            .package_index
-            .get(&PackageName::from_str("jinja2").unwrap())
-            .unwrap();
+        let jinja2_vulns = &database.package_index[&PackageName::from_str("jinja2").unwrap()];
         assert_eq!(jinja2_vulns.len(), 1);
         assert_eq!(jinja2_vulns[0], 1);
     }
@@ -949,7 +1000,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let cache = Cache::from_path(temp_dir.path()).init().unwrap();
         let audit_cache = AuditCache::new(cache);
-        let manager = DatabaseManager::new(audit_cache);
+        let _manager = DatabaseManager::new(audit_cache);
 
         // Create OSV advisory with no PyPI packages
         let osv_advisories = vec![OsvAdvisory {
@@ -965,7 +1016,7 @@ mod tests {
         }];
 
         // Conversion should result in empty database error
-        let result = manager.convert_osv_advisories(osv_advisories);
+        let result = DatabaseManager::convert_osv_advisories(osv_advisories);
         match result {
             Err(AuditError::EmptyDatabase(_)) => {
                 // Expected
@@ -979,7 +1030,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let cache = Cache::from_path(temp_dir.path()).init().unwrap();
         let audit_cache = AuditCache::new(cache);
-        let manager = DatabaseManager::new(audit_cache);
+        let _manager = DatabaseManager::new(audit_cache);
 
         // Create OSV advisory with invalid package name
         let osv_advisories = vec![OsvAdvisory {
@@ -1005,7 +1056,7 @@ mod tests {
         }];
 
         // Conversion should result in empty database error since no valid packages
-        let result = manager.convert_osv_advisories(osv_advisories);
+        let result = DatabaseManager::convert_osv_advisories(osv_advisories);
         match result {
             Err(AuditError::EmptyDatabase(_)) => {
                 // Expected - invalid package names are filtered out
@@ -1019,7 +1070,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let cache = Cache::from_path(temp_dir.path()).init().unwrap();
         let audit_cache = AuditCache::new(cache);
-        let manager = DatabaseManager::new(audit_cache);
+        let _manager = DatabaseManager::new(audit_cache);
 
         // Create vulnerability without corresponding package mapping (simulating a bug)
         let vulnerabilities = vec![Vulnerability {
@@ -1038,10 +1089,8 @@ mod tests {
         let package_mapping = HashMap::new(); // Empty mapping
 
         // Database building should succeed but log warnings about unmapped vulnerabilities
-        let result = manager.build_database_with_mapping(vulnerabilities, package_mapping);
-        assert!(result.is_ok());
-
-        let database = result.unwrap();
+        let database =
+            DatabaseManager::build_database_with_mapping(vulnerabilities, &package_mapping);
 
         // Verify that the vulnerability exists but has no package index entries
         assert_eq!(database.advisories.len(), 1);

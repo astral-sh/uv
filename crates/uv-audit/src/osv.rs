@@ -8,7 +8,7 @@ use uv_pep440::Version;
 /// The OSV API base URL for fetching vulnerability data
 const OSV_API_BASE: &str = "https://api.osv.dev/v1";
 
-/// URL for downloading the PyPA advisory database
+/// URL for downloading the `PyPA` advisory database
 const PYPA_ADVISORY_DB_URL: &str = "https://github.com/pypa/advisory-database/archive/main.zip";
 
 /// An OSV (Open Source Vulnerabilities) advisory record
@@ -121,7 +121,7 @@ pub struct OsvReference {
 /// Severity information in OSV format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OsvSeverity {
-    /// Severity type (e.g., "CVSS_V3")
+    /// Severity type (e.g., `CVSS_V3`)
     #[serde(rename = "type")]
     pub severity_type: String,
 
@@ -146,7 +146,7 @@ impl OsvClient {
         Self { client }
     }
 
-    /// Download the PyPA advisory database ZIP file
+    /// Download the `PyPA` advisory database ZIP file
     pub async fn download_advisory_database(&self) -> Result<Vec<u8>> {
         debug!(
             "Downloading PyPA advisory database from {}",
@@ -156,9 +156,9 @@ impl OsvClient {
         let response = self.client.get(PYPA_ADVISORY_DB_URL).send().await?;
 
         if !response.status().is_success() {
-            return Err(AuditError::DatabaseDownload(reqwest::Error::from(
+            return Err(AuditError::DatabaseDownload(
                 response.error_for_status().unwrap_err(),
-            )));
+            ));
         }
 
         let bytes = response.bytes().await?;
@@ -172,12 +172,11 @@ impl OsvClient {
         &self,
         packages: &[(PackageName, Version)],
     ) -> Result<Vec<OsvAdvisory>> {
+        const BATCH_SIZE: usize = 10;
+
         debug!("Querying OSV API for {} packages", packages.len());
 
         let mut all_advisories = Vec::new();
-
-        // Query in batches to avoid overwhelming the API
-        const BATCH_SIZE: usize = 10;
 
         for batch in packages.chunks(BATCH_SIZE) {
             let mut batch_advisories = Vec::new();
@@ -221,15 +220,15 @@ impl OsvClient {
 
         let response = self
             .client
-            .post(&format!("{}/query", OSV_API_BASE))
+            .post(format!("{OSV_API_BASE}/query"))
             .json(&query)
             .send()
             .await?;
 
         if !response.status().is_success() {
-            return Err(AuditError::DatabaseDownload(reqwest::Error::from(
+            return Err(AuditError::DatabaseDownload(
                 response.error_for_status().unwrap_err(),
-            )));
+            ));
         }
 
         let result: serde_json::Value = response.json().await?;
@@ -315,7 +314,7 @@ impl OsvAdvisory {
 
             // Check if version falls within any affected range
             for range in &affected.ranges {
-                if self.version_in_range(version, range) {
+                if Self::version_in_range(version, range) {
                     return true;
                 }
             }
@@ -325,7 +324,7 @@ impl OsvAdvisory {
     }
 
     /// Check if a version falls within an OSV range
-    fn version_in_range(&self, version: &Version, range: &OsvRange) -> bool {
+    fn version_in_range(version: &Version, range: &OsvRange) -> bool {
         if range.range_type != "ECOSYSTEM" {
             return false;
         }
@@ -350,8 +349,8 @@ impl OsvAdvisory {
         }
 
         // Check if version is within the vulnerable range
-        let after_introduced = introduced.map_or(true, |intro| version >= &intro);
-        let before_fixed = fixed.map_or(true, |fix| version < &fix);
+        let after_introduced = introduced.is_none_or(|intro| version >= &intro);
+        let before_fixed = fixed.is_none_or(|fix| version < &fix);
 
         after_introduced && before_fixed
     }

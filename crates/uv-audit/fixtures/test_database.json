@@ -1,0 +1,47 @@
+[
+  {
+    "id": "PYSEC-2024-230",
+    "summary": "Certifi is a curated collection of Root Certificates for validating the trustworthiness of SSL certificates while verifying the identity of TLS hosts. Certifi starting in 2021.05.30 and prior to 2024.07.4 recognized root certificates from `GLOBALTRUST`. Certifi 2024.07.04 removes root certificates from `GLOBALTRUST` from the root store. These are in the process of being removed from Mozilla's trust store. `GLOBALTRUST`'s root certificates are being removed pursuant to an investigation which identified \"long-running and unresolved compliance issues.\"",
+    "description": "Certifi is a curated collection of Root Certificates for validating the trustworthiness of SSL certificates while verifying the identity of TLS hosts. Certifi starting in 2021.05.30 and prior to 2024.07.4 recognized root certificates from `GLOBALTRUST`. Certifi 2024.07.04 removes root certificates from `GLOBALTRUST` from the root store. These are in the process of being removed from Mozilla's trust store. `GLOBALTRUST`'s root certificates are being removed pursuant to an investigation which identified \"long-running and unresolved compliance issues.\"",
+    "severity": "Low",
+    "affected_versions": [
+      {
+        "min": "2021.5.30",
+        "max": "2024.7.4",
+        "constraint": ">=2021.5.30,<2024.7.4"
+      }
+    ],
+    "fixed_versions": ["2024.7.4"],
+    "references": [
+      "https://github.com/certifi/python-certifi/security/advisories/GHSA-248v-346w-9cwc",
+      "https://security.netapp.com/advisory/ntap-20241206-0001/",
+      "https://groups.google.com/a/mozilla.org/g/dev-security-policy/c/XpknYMPO8dI",
+      "https://github.com/certifi/python-certifi/commit/bd8153872e9c6fc98f4023df9c2deaffea2fa463"
+    ],
+    "cvss_score": null,
+    "published": null,
+    "modified": null
+  },
+  {
+    "id": "PYSEC-2024-60",
+    "summary": "A vulnerability was identified in the kjd/idna library, specifically within the `idna.encode()` function, affecting version 3.6. The issue arises from the function's handling of crafted input strings, which can lead to quadratic complexity and consequently, a denial of service condition. This vulnerability is triggered by a crafted input that causes the `idna.encode()` function to process the input with considerable computational load, significantly increasing the processing time in a quadratic manner relative to the input size.",
+    "description": "A vulnerability was identified in the kjd/idna library, specifically within the `idna.encode()` function, affecting version 3.6. The issue arises from the function's handling of crafted input strings, which can lead to quadratic complexity and consequently, a denial of service condition. This vulnerability is triggered by a crafted input that causes the `idna.encode()` function to process the input with considerable computational load, significantly increasing the processing time in a quadratic manner relative to the input size.",
+    "severity": "Low",
+    "affected_versions": [
+      {
+        "min": "3.6",
+        "max": "3.7",
+        "constraint": "==3.6"
+      }
+    ],
+    "fixed_versions": ["3.7"],
+    "references": [
+      "https://huntr.com/bounties/93d78d07-d791-4b39-a845-cbfabc44aadb",
+      "https://huntr.com/bounties/93d78d07-d791-4b39-a845-cbfabc44aadb",
+      "https://github.com/kjd/idna/commit/1d365e17e10d72d0b7876316fc7b9ca0eebdd38d"
+    ],
+    "cvss_score": null,
+    "published": null,
+    "modified": null
+  }
+]

@@ -15,6 +15,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Audit Python packages for known security vulnerabilities.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn audit(
     path: Option<&Path>,
     format: AuditFormat,
@@ -41,12 +42,7 @@ pub(crate) async fn audit(
     if matches!(printer, Printer::Verbose) {
         writeln!(
             printer.stderr(),
-            "Configuration: format={:?}, severity={:?}, dev={}, optional={}, direct_only={}",
-            format,
-            severity,
-            dev,
-            optional,
-            direct_only
+            "Configuration: format={format:?}, severity={severity:?}, dev={dev}, optional={optional}, direct_only={direct_only}"
         )?;
 
         if !ignore_ids.is_empty() {
@@ -74,12 +70,12 @@ pub(crate) async fn audit(
     let report = match audit_result {
         Ok(report) => report,
         Err(e) => {
-            return handle_audit_error(uv_audit::AuditError::Anyhow(e), &printer).await;
+            return handle_audit_error(&uv_audit::AuditError::Anyhow(e), printer);
         }
     };
 
     let report_output = ReportGenerator::generate(&report, format, Some(project_dir))
-        .map_err(|e| anyhow::anyhow!("Failed to generate report: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to generate report: {e}"))?;
 
     if let Some(output_path) = output {
         fs_err::write(output_path, &report_output)?;
@@ -89,7 +85,7 @@ pub(crate) async fn audit(
             output_path.display()
         )?;
     } else {
-        writeln!(printer.stdout(), "{}", report_output)?;
+        writeln!(printer.stdout(), "{report_output}")?;
     }
 
     if report.has_vulnerabilities() {
@@ -99,6 +95,7 @@ pub(crate) async fn audit(
     }
 }
 
+#[allow(clippy::fn_params_excessive_bools)]
 async fn perform_audit(
     project_dir: &Path,
     severity: SeverityLevel,
@@ -119,7 +116,7 @@ async fn perform_audit(
     let database = db_manager.get_database(no_cache).await?;
 
     if matches!(printer, Printer::Verbose) {
-        let db_stats = db_manager.get_stats().await?;
+        let db_stats = db_manager.get_stats()?;
         if let Some(metadata) = db_stats {
             writeln!(
                 printer.stderr(),
@@ -137,12 +134,12 @@ async fn perform_audit(
     let dependency_stats = scanner.get_stats(&dependencies);
 
     if matches!(printer, Printer::Verbose) {
-        writeln!(printer.stderr(), "{}", dependency_stats)?;
+        writeln!(printer.stderr(), "{dependency_stats}")?;
     }
 
     let warnings = scanner.validate_dependencies(&dependencies);
     for warning in &warnings {
-        writeln!(printer.stderr(), "Warning: {}", warning)?;
+        writeln!(printer.stderr(), "Warning: {warning}")?;
     }
 
     writeln!(
@@ -178,7 +175,7 @@ async fn perform_audit(
 }
 
 /// Handle audit errors gracefully
-async fn handle_audit_error(error: AuditError, printer: &Printer) -> Result<ExitStatus> {
+fn handle_audit_error(error: &AuditError, printer: Printer) -> Result<ExitStatus> {
     match error {
         AuditError::NoDependencyInfo => {
             writeln!(printer.stderr(), "Error: No dependency information found.")?;
@@ -188,11 +185,10 @@ async fn handle_audit_error(error: AuditError, printer: &Printer) -> Result<Exit
             )?;
             Ok(ExitStatus::Failure)
         }
-        AuditError::DatabaseDownload(ref e) => {
+        AuditError::DatabaseDownload(e) => {
             writeln!(
                 printer.stderr(),
-                "Error: Failed to download vulnerability database: {}",
-                e
+                "Error: Failed to download vulnerability database: {e}"
             )?;
             writeln!(
                 printer.stderr(),
@@ -200,11 +196,10 @@ async fn handle_audit_error(error: AuditError, printer: &Printer) -> Result<Exit
             )?;
             Ok(ExitStatus::Failure)
         }
-        AuditError::DependencyRead(ref e) => {
+        AuditError::DependencyRead(e) => {
             writeln!(
                 printer.stderr(),
-                "Error: Failed to read project dependencies: {}",
-                e
+                "Error: Failed to read project dependencies: {e}"
             )?;
             writeln!(
                 printer.stderr(),
@@ -212,16 +207,16 @@ async fn handle_audit_error(error: AuditError, printer: &Printer) -> Result<Exit
             )?;
             Ok(ExitStatus::Failure)
         }
-        AuditError::LockFileParse(ref e) => {
-            writeln!(printer.stderr(), "Error: Failed to parse lock file: {}", e)?;
+        AuditError::LockFileParse(e) => {
+            writeln!(printer.stderr(), "Error: Failed to parse lock file: {e}")?;
             writeln!(
                 printer.stderr(),
                 "Try running 'uv lock' to regenerate the lock file."
             )?;
             Ok(ExitStatus::Failure)
         }
-        AuditError::Anyhow(ref e) => {
-            writeln!(printer.stderr(), "Error: Audit failed: {}", e)?;
+        AuditError::Anyhow(e) => {
+            writeln!(printer.stderr(), "Error: Audit failed: {e}")?;
             writeln!(
                 printer.stderr(),
                 "This may be due to a missing or corrupted vulnerability database cache."
@@ -233,7 +228,7 @@ async fn handle_audit_error(error: AuditError, printer: &Printer) -> Result<Exit
             Ok(ExitStatus::Failure)
         }
         _ => {
-            writeln!(printer.stderr(), "Error: Audit failed: {}", error)?;
+            writeln!(printer.stderr(), "Error: Audit failed: {error}")?;
             Ok(ExitStatus::Failure)
         }
     }

@@ -39,13 +39,10 @@ impl AuditCache {
 
         fs_err::create_dir_all(meta_entry.dir())?;
 
-        let freshness = match self.cache.freshness(&meta_entry, None, None) {
-            Ok(freshness) => freshness,
-            Err(_) => {
-                // If freshness check fails (e.g., due to permission/directory issues),
-                // treat as missing/stale and refresh
-                return Ok(true);
-            }
+        let Ok(freshness) = self.cache.freshness(&meta_entry, None, None) else {
+            // If freshness check fails (e.g., due to permission/directory issues),
+            // treat as missing/stale and refresh
+            return Ok(true);
         };
 
         match freshness {
@@ -55,7 +52,7 @@ impl AuditCache {
                     if let Ok(meta) = serde_json::from_str::<DatabaseMetadata>(&metadata_content) {
                         let now = Timestamp::now();
                         let age = now.duration_since(meta.last_updated);
-                        return Ok(age.as_hours() > ttl_hours as i64);
+                        return Ok(age.as_hours() > i64::try_from(ttl_hours).unwrap_or(i64::MAX));
                     }
                 }
                 Ok(false)

@@ -61,27 +61,26 @@ impl SarifGenerator {
         );
 
         // Pre-process locations for better mapping
-        self.preprocess_locations(matches)?;
+        self.preprocess_locations(matches);
 
         // Generate rules for each unique vulnerability
-        self.generate_rules(matches)?;
+        self.generate_rules(matches);
 
         // Create SARIF results
-        let results = self.create_sarif_results(matches, fix_suggestions)?;
+        let results = self.create_sarif_results(matches, fix_suggestions);
 
         // Build the complete SARIF document
-        let sarif =
-            self.build_sarif_document(results, dependency_stats, database_stats, warnings)?;
+        let sarif = self.build_sarif_document(&results, dependency_stats, database_stats, warnings);
 
         // Serialize to JSON
-        let json = serde_json::to_string_pretty(&sarif).map_err(|e| AuditError::Json(e))?;
+        let json = serde_json::to_string_pretty(&sarif).map_err(AuditError::Json)?;
 
         info!("SARIF report generated successfully");
         Ok(json)
     }
 
     /// Pre-process file locations for better mapping
-    fn preprocess_locations(&mut self, matches: &[VulnerabilityMatch]) -> Result<()> {
+    fn preprocess_locations(&mut self, matches: &[VulnerabilityMatch]) {
         let mut packages_to_locate: HashSet<PackageName> = HashSet::new();
 
         for m in matches {
@@ -97,7 +96,7 @@ impl SarifGenerator {
         if let Ok(locations) = self.parse_pyproject_locations(&packages_to_locate) {
             for (package, locs) in locations {
                 self.location_cache
-                    .insert(format!("pyproject.toml:{}", package), locs);
+                    .insert(format!("pyproject.toml:{package}"), locs);
             }
         }
 
@@ -105,11 +104,9 @@ impl SarifGenerator {
         if let Ok(locations) = self.parse_lock_locations(&packages_to_locate) {
             for (package, locs) in locations {
                 self.location_cache
-                    .insert(format!("uv.lock:{}", package), locs);
+                    .insert(format!("uv.lock:{package}"), locs);
             }
         }
-
-        Ok(())
     }
 
     /// Parse pyproject.toml to find dependency locations
@@ -122,7 +119,7 @@ impl SarifGenerator {
             return Ok(HashMap::new());
         }
 
-        let content = std::fs::read_to_string(&pyproject_path).map_err(|e| AuditError::Cache(e))?;
+        let content = fs_err::read_to_string(&pyproject_path).map_err(AuditError::Cache)?;
 
         let mut locations = HashMap::new();
         let lines: Vec<&str> = content.lines().collect();
@@ -133,7 +130,7 @@ impl SarifGenerator {
         let mut current_section = None;
 
         for (line_idx, line) in lines.iter().enumerate() {
-            let line_num = (line_idx + 1) as u32;
+            let line_num = u32::try_from(line_idx + 1).unwrap_or(0);
             let trimmed = line.trim();
 
             // Track TOML sections
@@ -180,7 +177,7 @@ impl SarifGenerator {
                             let location = LocationInfo {
                                 file_path: "pyproject.toml".to_string(),
                                 line: Some(line_num),
-                                column: Some((col + 1) as u32),
+                                column: Some(u32::try_from(col + 1).unwrap_or(0)),
                                 context: Some(format!(
                                     "Dependency declaration in {}",
                                     current_section.as_deref().unwrap_or("unknown section")
@@ -214,7 +211,7 @@ impl SarifGenerator {
             return Ok(HashMap::new());
         }
 
-        let content = std::fs::read_to_string(&lock_path).map_err(|e| AuditError::Cache(e))?;
+        let content = fs_err::read_to_string(&lock_path).map_err(AuditError::Cache)?;
 
         let mut locations = HashMap::new();
         let lines: Vec<&str> = content.lines().collect();
@@ -222,7 +219,7 @@ impl SarifGenerator {
         // Parse the lock file format to find package declarations
 
         for (line_idx, line) in lines.iter().enumerate() {
-            let line_num = (line_idx + 1) as u32;
+            let line_num = u32::try_from(line_idx + 1).unwrap_or(0);
             let trimmed = line.trim();
 
             // Look for package declarations in lock file
@@ -236,7 +233,7 @@ impl SarifGenerator {
                             let location = LocationInfo {
                                 file_path: "uv.lock".to_string(),
                                 line: Some(line_num),
-                                column: Some((name_start + 8 + 1) as u32),
+                                column: Some(u32::try_from(name_start + 8 + 1).unwrap_or(0)),
                                 context: Some("Package declaration in lock file".to_string()),
                             };
 
@@ -248,7 +245,6 @@ impl SarifGenerator {
                     }
                 }
             }
-
         }
 
         debug!("Found {} package locations in uv.lock", locations.len());
@@ -256,7 +252,7 @@ impl SarifGenerator {
     }
 
     /// Generate rule definitions for vulnerabilities
-    fn generate_rules(&mut self, matches: &[VulnerabilityMatch]) -> Result<()> {
+    fn generate_rules(&mut self, matches: &[VulnerabilityMatch]) {
         let mut seen_rules = HashSet::new();
 
         for m in matches {
@@ -270,15 +266,15 @@ impl SarifGenerator {
             // Create rule with comprehensive metadata
             let mut rule = json!({
                 "id": rule_id,
-                "name": format!("Security vulnerability {}", rule_id),
+                "name": format!("Security vulnerability {rule_id}"),
                 "shortDescription": {
                     "text": m.vulnerability.summary
                 },
                 "defaultConfiguration": {
-                    "level": self.severity_to_sarif_level(m.vulnerability.severity)
+                    "level": Self::severity_to_sarif_level(m.vulnerability.severity)
                 },
                 "properties": {
-                    "security-severity": self.get_security_severity_score(m.vulnerability.severity),
+                    "security-severity": Self::get_security_severity_score(m.vulnerability.severity),
                     "vulnerability_id": m.vulnerability.id,
                     "severity": format!("{:?}", m.vulnerability.severity),
                     "tags": ["security", "vulnerability", format!("{:?}", m.vulnerability.severity).to_lowercase()]
@@ -294,12 +290,13 @@ impl SarifGenerator {
 
             // Add help message
             rule["help"] = json!({
-                "text": self.create_help_text(&m.vulnerability),
-                "markdown": self.create_help_text(&m.vulnerability)
+                "text": Self::create_help_text(&m.vulnerability),
+                "markdown": Self::create_help_text(&m.vulnerability)
             });
 
             // Add help URI if available
-            if let Some(primary_ref) = self.extract_primary_reference(&m.vulnerability.references) {
+            if let Some(primary_ref) = Self::extract_primary_reference(&m.vulnerability.references)
+            {
                 rule["helpUri"] = json!(primary_ref);
             }
 
@@ -320,25 +317,25 @@ impl SarifGenerator {
         }
 
         debug!("Generated {} SARIF rules", self.rules.len());
-        Ok(())
     }
 
     /// Create help text for a vulnerability
-    fn create_help_text(&self, vulnerability: &crate::vulnerability::Vulnerability) -> String {
+    fn create_help_text(vulnerability: &crate::vulnerability::Vulnerability) -> String {
+        use std::fmt::Write;
         let mut help_text = format!("## {}\n\n", vulnerability.summary);
 
         if let Some(description) = &vulnerability.description {
-            help_text.push_str(&format!("**Description:** {}\n\n", description));
+            write!(help_text, "**Description:** {description}\n\n").unwrap();
         }
 
         if let Some(cvss) = vulnerability.cvss_score {
-            help_text.push_str(&format!("**CVSS Score:** {:.1}\n\n", cvss));
+            write!(help_text, "**CVSS Score:** {cvss:.1}\n\n").unwrap();
         }
 
         if !vulnerability.fixed_versions.is_empty() {
             help_text.push_str("**Fixed Versions:**\n");
             for version in &vulnerability.fixed_versions {
-                help_text.push_str(&format!("- {}\n", version));
+                writeln!(help_text, "- {version}").unwrap();
             }
             help_text.push('\n');
         }
@@ -346,7 +343,7 @@ impl SarifGenerator {
         if !vulnerability.references.is_empty() {
             help_text.push_str("**References:**\n");
             for reference in &vulnerability.references {
-                help_text.push_str(&format!("- {}\n", reference));
+                writeln!(help_text, "- {reference}").unwrap();
             }
         }
 
@@ -354,7 +351,7 @@ impl SarifGenerator {
     }
 
     /// Extract primary reference URL
-    fn extract_primary_reference(&self, references: &[String]) -> Option<String> {
+    fn extract_primary_reference(references: &[String]) -> Option<String> {
         // Prefer GHSA or CVE URLs, then any HTTPS URL
         references
             .iter()
@@ -364,7 +361,7 @@ impl SarifGenerator {
     }
 
     /// Convert severity to SARIF level
-    fn severity_to_sarif_level(&self, severity: Severity) -> &'static str {
+    fn severity_to_sarif_level(severity: Severity) -> &'static str {
         match severity {
             Severity::Critical => "error",
             Severity::High => "error",
@@ -374,7 +371,7 @@ impl SarifGenerator {
     }
 
     /// Get security severity score for GitHub integration
-    fn get_security_severity_score(&self, severity: Severity) -> &'static str {
+    fn get_security_severity_score(severity: Severity) -> &'static str {
         match severity {
             Severity::Critical => "10.0",
             Severity::High => "8.0",
@@ -388,7 +385,7 @@ impl SarifGenerator {
         &self,
         matches: &[VulnerabilityMatch],
         fix_suggestions: &[FixSuggestion],
-    ) -> Result<Vec<Value>> {
+    ) -> Vec<Value> {
         let mut results = Vec::new();
 
         // Create a map of package names to fix suggestions for quick lookup
@@ -410,8 +407,8 @@ impl SarifGenerator {
                         m.vulnerability.summary
                     )
                 },
-                "level": self.severity_to_sarif_level(m.vulnerability.severity),
-                "locations": self.create_locations_for_match(m)?,
+                "level": Self::severity_to_sarif_level(m.vulnerability.severity),
+                "locations": self.create_locations_for_match(m),
                 "properties": {
                     "package_name": m.package_name.to_string(),
                     "installed_version": m.installed_version.to_string(),
@@ -431,7 +428,7 @@ impl SarifGenerator {
                     .vulnerability
                     .fixed_versions
                     .iter()
-                    .map(|v| v.to_string())
+                    .map(ToString::to_string)
                     .collect();
                 result["properties"]["fixed_versions"] = json!(fixed_versions);
             }
@@ -455,7 +452,7 @@ impl SarifGenerator {
         }
 
         debug!("Created {} SARIF results", results.len());
-        Ok(results)
+        results
     }
 
     /// Find rule index by ID
@@ -464,7 +461,7 @@ impl SarifGenerator {
     }
 
     /// Create locations for a vulnerability match
-    fn create_locations_for_match(&self, m: &VulnerabilityMatch) -> Result<Vec<Value>> {
+    fn create_locations_for_match(&self, m: &VulnerabilityMatch) -> Vec<Value> {
         let mut locations = Vec::new();
 
         // Try to find specific locations from cache
@@ -473,20 +470,17 @@ impl SarifGenerator {
         // Check pyproject.toml first (for direct dependencies)
         if let Some(pyproject_locations) = self
             .location_cache
-            .get(&format!("pyproject.toml:{}", package_name))
+            .get(&format!("pyproject.toml:{package_name}"))
         {
             for loc_info in pyproject_locations {
-                locations.push(self.create_location_from_info(loc_info, m)?);
+                locations.push(Self::create_location_from_info(loc_info, m));
             }
         }
 
         // Add uv.lock location (for all dependencies)
-        if let Some(lock_locations) = self
-            .location_cache
-            .get(&format!("uv.lock:{}", package_name))
-        {
+        if let Some(lock_locations) = self.location_cache.get(&format!("uv.lock:{package_name}")) {
             for loc_info in lock_locations {
-                locations.push(self.create_location_from_info(loc_info, m)?);
+                locations.push(Self::create_location_from_info(loc_info, m));
             }
         }
 
@@ -512,15 +506,11 @@ impl SarifGenerator {
             }));
         }
 
-        Ok(locations)
+        locations
     }
 
     /// Create location from location info
-    fn create_location_from_info(
-        &self,
-        loc_info: &LocationInfo,
-        m: &VulnerabilityMatch,
-    ) -> Result<Value> {
+    fn create_location_from_info(loc_info: &LocationInfo, m: &VulnerabilityMatch) -> Value {
         let mut location = json!({
             "physicalLocation": {
                 "artifactLocation": {
@@ -539,7 +529,7 @@ impl SarifGenerator {
                 "startLine": line,
                 "startColumn": column,
                 "endLine": line,
-                "endColumn": column + m.package_name.to_string().len() as u32
+                "endColumn": column + u32::try_from(m.package_name.to_string().len()).unwrap_or(0)
             });
         }
 
@@ -550,17 +540,17 @@ impl SarifGenerator {
             });
         }
 
-        Ok(location)
+        location
     }
 
     /// Build complete SARIF document
     fn build_sarif_document(
         &self,
-        results: Vec<Value>,
+        results: &[Value],
         dependency_stats: &DependencyStats,
         database_stats: &DatabaseStats,
         warnings: &[String],
-    ) -> Result<Value> {
+    ) -> Value {
         let sarif = json!({
             "version": "2.1.0",
             "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
@@ -594,7 +584,7 @@ impl SarifGenerator {
                     "commandLine": "uv audit",
                     "startTimeUtc": jiff::Timestamp::now().to_string(),
                     "executionSuccessful": true,
-                    "exitCode": if results.is_empty() { 0 } else { 1 }
+                    "exitCode": i32::from(!results.is_empty())
                 }],
                 "properties": {
                     "project_root": self.project_root.to_string_lossy(),
@@ -604,7 +594,7 @@ impl SarifGenerator {
             }]
         });
 
-        Ok(sarif)
+        sarif
     }
 }
 
@@ -656,35 +646,47 @@ mod tests {
     #[test]
     fn test_severity_to_sarif_level() {
         let temp_dir = TempDir::new().unwrap();
-        let generator = SarifGenerator::new(temp_dir.path());
+        let _generator = SarifGenerator::new(temp_dir.path());
 
         assert_eq!(
-            generator.severity_to_sarif_level(Severity::Critical),
+            SarifGenerator::severity_to_sarif_level(Severity::Critical),
             "error"
         );
-        assert_eq!(generator.severity_to_sarif_level(Severity::High), "error");
         assert_eq!(
-            generator.severity_to_sarif_level(Severity::Medium),
+            SarifGenerator::severity_to_sarif_level(Severity::High),
+            "error"
+        );
+        assert_eq!(
+            SarifGenerator::severity_to_sarif_level(Severity::Medium),
             "warning"
         );
-        assert_eq!(generator.severity_to_sarif_level(Severity::Low), "note");
+        assert_eq!(
+            SarifGenerator::severity_to_sarif_level(Severity::Low),
+            "note"
+        );
     }
 
     #[test]
     fn test_security_severity_score() {
         let temp_dir = TempDir::new().unwrap();
-        let generator = SarifGenerator::new(temp_dir.path());
+        let _generator = SarifGenerator::new(temp_dir.path());
 
         assert_eq!(
-            generator.get_security_severity_score(Severity::Critical),
+            SarifGenerator::get_security_severity_score(Severity::Critical),
             "10.0"
         );
-        assert_eq!(generator.get_security_severity_score(Severity::High), "8.0");
         assert_eq!(
-            generator.get_security_severity_score(Severity::Medium),
+            SarifGenerator::get_security_severity_score(Severity::High),
+            "8.0"
+        );
+        assert_eq!(
+            SarifGenerator::get_security_severity_score(Severity::Medium),
             "5.0"
         );
-        assert_eq!(generator.get_security_severity_score(Severity::Low), "2.0");
+        assert_eq!(
+            SarifGenerator::get_security_severity_score(Severity::Low),
+            "2.0"
+        );
     }
 
     #[test]
@@ -693,7 +695,7 @@ mod tests {
         let mut generator = SarifGenerator::new(temp_dir.path());
 
         let matches = vec![create_test_match()];
-        generator.generate_rules(&matches).unwrap();
+        generator.generate_rules(&matches);
 
         assert_eq!(generator.rules.len(), 1);
         assert_eq!(generator.rules[0]["id"], "GHSA-test-1234");
@@ -704,7 +706,7 @@ mod tests {
     #[test]
     fn test_extract_primary_reference() {
         let temp_dir = TempDir::new().unwrap();
-        let generator = SarifGenerator::new(temp_dir.path());
+        let _generator = SarifGenerator::new(temp_dir.path());
 
         let references = vec![
             "https://example.com/advisory".to_string(),
@@ -712,7 +714,7 @@ mod tests {
             "https://nvd.nist.gov/vuln/detail/CVE-2023-1234".to_string(),
         ];
 
-        let primary = generator.extract_primary_reference(&references);
+        let primary = SarifGenerator::extract_primary_reference(&references);
         assert_eq!(
             primary,
             Some("https://github.com/advisories/GHSA-1234".to_string())
@@ -767,7 +769,7 @@ mod tests {
         let pyproject_path = temp_dir.path().join("pyproject.toml");
 
         // Create a test pyproject.toml with proper dependencies section
-        std::fs::write(
+        fs_err::write(
             &pyproject_path,
             r#"[project]
 name = "test-project"

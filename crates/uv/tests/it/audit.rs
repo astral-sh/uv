@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
@@ -8,10 +9,7 @@ fn create_lock_file_toml(packages: &[(&str, &str)]) -> String {
     let mut content = String::from("version = 1\nrevision = 3\nrequires-python = \">=3.8\"\n\n");
     
     for (name, version) in packages {
-        content.push_str(&format!(
-            "[[package]]\nname = \"{}\"\nversion = \"{}\"\nsource = {{ registry = \"https://pypi.org/simple\" }}\n\n",
-            name, version
-        ));
+        write!(content, "[[package]]\nname = \"{name}\"\nversion = \"{version}\"\nsource = {{ registry = \"https://pypi.org/simple\" }}\n\n").unwrap();
     }
     
     content
@@ -40,7 +38,7 @@ dependencies = ["requests==2.31.0"]
     let lock_content = create_lock_file_toml(&[("requests", "2.31.0")]);
     context.temp_dir.child("uv.lock").write_str(&lock_content)?;
 
-    uv_snapshot!(context.audit(), @r"
+    uv_snapshot!(context.filters(), context.audit(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -85,7 +83,7 @@ dependencies = ["click==8.1.7", "colorama==0.4.6"]
     let lock_content = create_lock_file_toml(&[("click", "8.1.7"), ("colorama", "0.4.6")]);
     context.temp_dir.child("uv.lock").write_str(&lock_content)?;
 
-    uv_snapshot!(context.audit(), @r"
+    uv_snapshot!(context.filters(), context.audit(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -117,10 +115,10 @@ dependencies = ["click==8.1.7", "colorama==0.4.6"]
 // =============================================================================
 
 #[test]
-fn test_audit_help_and_usage() -> Result<()> {
+fn test_audit_help_and_usage() {
     let context = TestContext::new("3.12").with_filtered_audit_timestamps();
 
-    uv_snapshot!(context.audit().arg("--help"), @r#"
+    uv_snapshot!(context.filters(), context.audit().arg("--help"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -180,16 +178,14 @@ fn test_audit_help_and_usage() -> Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 #[test]
-fn test_audit_error_handling() -> Result<()> {
+fn test_audit_error_handling() {
     let context = TestContext::new("3.12").with_filtered_audit_timestamps();
 
     // Test with missing project files
-    uv_snapshot!(context.audit(), @r"
+    uv_snapshot!(context.filters(), context.audit(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -202,8 +198,6 @@ fn test_audit_error_handling() -> Result<()> {
     This may be due to a missing or corrupted vulnerability database cache.
     Try running 'uv audit --no-cache' to force a fresh download.
     ");
-
-    Ok(())
 }
 
 #[test]
@@ -222,7 +216,7 @@ dependencies = []
     let lock_content = create_lock_file_toml(&[]); // Empty packages array
     context.temp_dir.child("uv.lock").write_str(&lock_content)?;
 
-    uv_snapshot!(context.audit(), @r"
+    uv_snapshot!(context.filters(), context.audit(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -298,7 +292,7 @@ source = { registry = "https://pypi.org/simple" }
     
     context.temp_dir.child("uv.lock").write_str(lock_content)?;
 
-    uv_snapshot!(context.audit(), @r#"
+    uv_snapshot!(context.filters(), context.audit(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -368,7 +362,7 @@ testing = ["coverage==7.2.7"]
 "#,
     )?;
 
-    uv_snapshot!(context.audit(), @r"
+    uv_snapshot!(context.filters(), context.audit(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -414,7 +408,7 @@ dependencies = []
     let lock_content = create_lock_file_toml(&[]); // Empty packages for JSON format test
     context.temp_dir.child("uv.lock").write_str(&lock_content)?;
 
-    uv_snapshot!(context.audit().arg("--format").arg("json"), @r#"
+    uv_snapshot!(context.filters(), context.audit().arg("--format").arg("json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -462,7 +456,7 @@ dependencies = []
     context.temp_dir.child("uv.lock").write_str(&lock_content)?;
 
     // First run should work
-    uv_snapshot!(context.audit(), @r"
+    uv_snapshot!(context.filters(), context.audit(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -522,7 +516,7 @@ dependencies = ["requests>=2.25.0"]
     ");
 
     // Then audit the locked dependencies
-    uv_snapshot!(context.audit(), @r#"
+    uv_snapshot!(context.filters(), context.audit(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -624,7 +618,7 @@ dependencies = ["click==8.1.7"]
     ");
 
     // Now audit the synced environment
-    uv_snapshot!(context.audit(), @r"
+    uv_snapshot!(context.filters(), context.audit(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

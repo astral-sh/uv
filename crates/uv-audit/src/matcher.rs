@@ -86,8 +86,8 @@ impl VulnerabilityMatcher {
                 continue;
             }
 
-            let dependency_matches = self.find_vulnerabilities_for_dependency(dependency)?;
-            stats.vulnerable_packages += if dependency_matches.is_empty() { 0 } else { 1 };
+            let dependency_matches = self.find_vulnerabilities_for_dependency(dependency);
+            stats.vulnerable_packages += usize::from(!dependency_matches.is_empty());
             stats.total_vulnerabilities += dependency_matches.len();
 
             matches.extend(dependency_matches);
@@ -107,7 +107,7 @@ impl VulnerabilityMatcher {
     fn find_vulnerabilities_for_dependency(
         &self,
         dependency: &ScannedDependency,
-    ) -> Result<Vec<VulnerabilityMatch>> {
+    ) -> Vec<VulnerabilityMatch> {
         let mut matches = Vec::new();
 
         // Get potential vulnerabilities for this package
@@ -125,7 +125,7 @@ impl VulnerabilityMatcher {
                     }
 
                     // Check if the installed version is affected
-                    if self.is_version_affected(&dependency.version, vulnerability)? {
+                    if Self::is_version_affected(&dependency.version, vulnerability) {
                         matches.push(VulnerabilityMatch {
                             package_name: dependency.name.clone(),
                             installed_version: dependency.version.clone(),
@@ -137,42 +137,38 @@ impl VulnerabilityMatcher {
             }
         }
 
-        Ok(matches)
+        matches
     }
 
     /// Check if a specific version is affected by a vulnerability
-    fn is_version_affected(
-        &self,
-        version: &Version,
-        vulnerability: &Vulnerability,
-    ) -> Result<bool> {
+    fn is_version_affected(version: &Version, vulnerability: &Vulnerability) -> bool {
         // Check each affected version range
         for range in &vulnerability.affected_versions {
-            if self.version_in_range(version, range)? {
-                return Ok(true);
+            if Self::version_in_range(version, range) {
+                return true;
             }
         }
 
-        Ok(false)
+        false
     }
 
     /// Check if a version falls within a vulnerability range
-    fn version_in_range(&self, version: &Version, range: &VersionRange) -> Result<bool> {
+    fn version_in_range(version: &Version, range: &VersionRange) -> bool {
         // Check minimum version constraint
         if let Some(min_version) = &range.min {
             if version < min_version {
-                return Ok(false);
+                return false;
             }
         }
 
         // Check maximum version constraint (exclusive)
         if let Some(max_version) = &range.max {
             if version >= max_version {
-                return Ok(false);
+                return false;
             }
         }
 
-        Ok(true)
+        true
     }
 
     /// Get vulnerability statistics
@@ -192,13 +188,12 @@ impl VulnerabilityMatcher {
             total_vulnerabilities: self.database.advisories.len(),
             total_packages: self.database.package_index.len(),
             severity_counts,
-            packages_with_most_vulns: self.get_top_vulnerable_packages(&package_counts, 10),
+            packages_with_most_vulns: Self::get_top_vulnerable_packages(&package_counts, 10),
         }
     }
 
     /// Get packages with the most vulnerabilities
     fn get_top_vulnerable_packages(
-        &self,
         package_counts: &HashMap<PackageName, usize>,
         limit: usize,
     ) -> Vec<(PackageName, usize)> {
@@ -313,7 +308,7 @@ impl std::fmt::Display for DatabaseStats {
                 if !first {
                     write!(f, ", ")?;
                 }
-                write!(f, "{:?}: {}", severity, count)?;
+                write!(f, "{severity:?}: {count}")?;
                 first = false;
             }
             write!(f, ")")?;
@@ -451,25 +446,22 @@ mod tests {
         let vulnerability = &matcher.database.advisories[0];
 
         // Test vulnerable version
-        assert!(
-            matcher
-                .is_version_affected(&Version::from_str("1.2.0").unwrap(), vulnerability)
-                .unwrap()
-        );
+        assert!(VulnerabilityMatcher::is_version_affected(
+            &Version::from_str("1.2.0").unwrap(),
+            vulnerability
+        ));
 
         // Test safe version (before range)
-        assert!(
-            !matcher
-                .is_version_affected(&Version::from_str("0.9.0").unwrap(), vulnerability)
-                .unwrap()
-        );
+        assert!(!VulnerabilityMatcher::is_version_affected(
+            &Version::from_str("0.9.0").unwrap(),
+            vulnerability
+        ));
 
         // Test safe version (after fix)
-        assert!(
-            !matcher
-                .is_version_affected(&Version::from_str("1.5.0").unwrap(), vulnerability)
-                .unwrap()
-        );
+        assert!(!VulnerabilityMatcher::is_version_affected(
+            &Version::from_str("1.5.0").unwrap(),
+            vulnerability
+        ));
     }
 
     #[test]

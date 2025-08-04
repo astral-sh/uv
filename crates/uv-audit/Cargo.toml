@@ -20,12 +20,10 @@ workspace = true
 # UV dependencies
 uv-cache = { workspace = true }
 uv-cli = { workspace = true }
-uv-client = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-resolver = { workspace = true }
 uv-workspace = { workspace = true }
-uv-fs = { workspace = true, features = ["tokio"] }
 
 # Core dependencies
 anyhow = { workspace = true }
@@ -49,9 +47,7 @@ flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 tempfile = { workspace = true }
 
-# Collections
-indexmap = { workspace = true }
-rustc-hash = { workspace = true }
+# Collections (none currently used - using std collections)
 
 # HTTP
 reqwest = { workspace = true }

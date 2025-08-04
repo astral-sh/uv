@@ -144,7 +144,7 @@ impl ReportGenerator {
                         Severity::Medium => "🟡",
                         Severity::Low => "🟢",
                     };
-                    writeln!(output, "├─ {} {:?}: {}", icon, severity, count)?;
+                    writeln!(output, "├─ {icon} {severity:?}: {count}")?;
                 }
             }
             writeln!(output)?;
@@ -162,7 +162,7 @@ impl ReportGenerator {
         if !report.warnings.is_empty() {
             writeln!(output, "⚠️  Warnings")?;
             for warning in &report.warnings {
-                writeln!(output, "├─ {}", warning)?;
+                writeln!(output, "├─ {warning}")?;
             }
             writeln!(output)?;
         }
@@ -196,13 +196,13 @@ impl ReportGenerator {
                 writeln!(output, "   Severity: {:?}", m.vulnerability.severity)?;
 
                 if let Some(cvss) = m.vulnerability.cvss_score {
-                    writeln!(output, "   CVSS Score: {:.1}", cvss)?;
+                    writeln!(output, "   CVSS Score: {cvss:.1}")?;
                 }
 
                 writeln!(output, "   Summary: {}", m.vulnerability.summary)?;
 
                 if let Some(description) = &m.vulnerability.description {
-                    writeln!(output, "   Description: {}", description)?;
+                    writeln!(output, "   Description: {description}")?;
                 }
 
                 if !m.vulnerability.fixed_versions.is_empty() {
@@ -212,7 +212,7 @@ impl ReportGenerator {
                         m.vulnerability
                             .fixed_versions
                             .iter()
-                            .map(|v| v.to_string())
+                            .map(ToString::to_string)
                             .collect::<Vec<_>>()
                             .join(", ")
                     )?;
@@ -221,7 +221,7 @@ impl ReportGenerator {
                 if !m.vulnerability.references.is_empty() {
                     writeln!(output, "   References:")?;
                     for ref_url in &m.vulnerability.references {
-                        writeln!(output, "     - {}", ref_url)?;
+                        writeln!(output, "     - {ref_url}")?;
                     }
                 }
 
@@ -238,7 +238,7 @@ impl ReportGenerator {
             writeln!(output)?;
 
             for suggestion in &report.fix_analysis.fix_suggestions {
-                writeln!(output, "• {}", suggestion)?;
+                writeln!(output, "• {suggestion}")?;
             }
             writeln!(output)?;
         }
@@ -280,7 +280,7 @@ impl ReportGenerator {
                         .vulnerability
                         .fixed_versions
                         .iter()
-                        .map(|v| v.to_string())
+                        .map(ToString::to_string)
                         .collect(),
                     references: m.vulnerability.references.clone(),
                     is_direct: m.is_direct,
@@ -303,7 +303,7 @@ impl ReportGenerator {
         Ok(serde_json::to_string_pretty(&json_report)?)
     }
 
-    /// Generate a SARIF report using the comprehensive SarifGenerator
+    /// Generate a SARIF report using the comprehensive `SarifGenerator`
     fn generate_sarif_report(
         report: &AuditReport,
         project_root: Option<&Path>,

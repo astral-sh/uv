@@ -61,9 +61,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // Timestamps
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
-    // Audit datetime timestamps  
-    (r"Scan completed at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC", "Scan completed at [DATETIME]"),
-    (r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z", "[DATETIME]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.)", "/$1"),
     (r"uv\.exe", "uv"),
@@ -1195,6 +1192,20 @@ impl TestContext {
     pub fn audit(&self) -> Command {
         let mut command = self.new_command();
         command.arg("audit");
+        // Enable test mode to use fixtures instead of network requests
+        command.env("UV_AUDIT_TEST_MODE", "1");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv audit` command with a specific test fixture set.
+    pub fn audit_with_fixture(&self, fixture_set: &str) -> Command {
+        let mut command = self.new_command();
+        command.arg("audit");
+        // Enable test mode to use fixtures instead of network requests
+        command.env("UV_AUDIT_TEST_MODE", "1");
+        // Specify which fixture set to use
+        command.env("UV_AUDIT_TEST_FIXTURE", fixture_set);
         self.add_shared_options(&mut command, false);
         command
     }

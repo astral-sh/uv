@@ -26,6 +26,7 @@ uv [OPTIONS] <COMMAND>
 <dt><a href="#uv-pip"><code>uv pip</code></a></dt><dd><p>Manage Python packages with a pip-compatible interface</p></dd>
 <dt><a href="#uv-venv"><code>uv venv</code></a></dt><dd><p>Create a virtual environment</p></dd>
 <dt><a href="#uv-build"><code>uv build</code></a></dt><dd><p>Build Python packages into source distributions and wheels</p></dd>
+<dt><a href="#uv-audit"><code>uv audit</code></a></dt><dd><p>Audit Python packages for known security vulnerabilities</p></dd>
 <dt><a href="#uv-publish"><code>uv publish</code></a></dt><dd><p>Upload distributions to an index</p></dd>
 <dt><a href="#uv-cache"><code>uv cache</code></a></dt><dd><p>Manage uv's cache</p></dd>
 <dt><a href="#uv-self"><code>uv self</code></a></dt><dd><p>Manage the uv executable</p></dd>
@@ -5051,6 +5052,85 @@ the platform.</p>
 </dd><dt id="uv-build--verbose"><a href="#uv-build--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd><dt id="uv-build--wheel"><a href="#uv-build--wheel"><code>--wheel</code></a></dt><dd><p>Build a binary distribution (&quot;wheel&quot;) from the given directory</p>
+</dd></dl>
+
+## uv audit
+
+Audit Python packages for known security vulnerabilities
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv audit [OPTIONS] [PATH]
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-audit--path"><a href="#uv-audit--path"<code>PATH</code></a></dt><dd><p>Path to the project directory</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-audit--allow-insecure-host"><a href="#uv-audit--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<p>Can be provided multiple times.</p>
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+<p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-audit--cache-dir"><a href="#uv-audit--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Custom cache directory</p>
+</dd><dt id="uv-audit--color"><a href="#uv-audit--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="uv-audit--config-file"><a href="#uv-audit--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-audit--dev"><a href="#uv-audit--dev"><code>--dev</code></a></dt><dd><p>Include development dependencies</p>
+</dd><dt id="uv-audit--direct-only"><a href="#uv-audit--direct-only"><code>--direct-only</code></a></dt><dd><p>Only check direct dependencies</p>
+</dd><dt id="uv-audit--directory"><a href="#uv-audit--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>Relative paths are resolved with the given directory as the base.</p>
+<p>See <code>--project</code> to only change the project root directory.</p>
+</dd><dt id="uv-audit--format"><a href="#uv-audit--format"><code>--format</code></a> <i>format</i></dt><dd><p>Output format</p>
+<p>[default: human]</p><p>Possible values:</p>
+<ul>
+<li><code>human</code>:  Display the audit results in a human-readable format</li>
+<li><code>json</code>:  Display the audit results in JSON format</li>
+<li><code>sarif</code>:  Display the audit results in SARIF format</li>
+</ul></dd><dt id="uv-audit--help"><a href="#uv-audit--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-audit--ignore"><a href="#uv-audit--ignore"><code>--ignore</code></a> <i>ignore</i></dt><dd><p>Vulnerability IDs to ignore</p>
+</dd><dt id="uv-audit--managed-python"><a href="#uv-audit--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-audit--native-tls"><a href="#uv-audit--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+<p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-audit--no-cache"><a href="#uv-audit--no-cache"><code>--no-cache</code></a></dt><dd><p>Disable vulnerability database caching</p>
+</dd><dt id="uv-audit--no-config"><a href="#uv-audit--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-audit--no-managed-python"><a href="#uv-audit--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-audit--no-progress"><a href="#uv-audit--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-audit--no-python-downloads"><a href="#uv-audit--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-audit--offline"><a href="#uv-audit--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-audit--optional"><a href="#uv-audit--optional"><code>--optional</code></a></dt><dd><p>Include optional dependencies</p>
+</dd><dt id="uv-audit--output"><a href="#uv-audit--output"><code>--output</code></a>, <code>-o</code> <i>output</i></dt><dd><p>Output file path</p>
+</dd><dt id="uv-audit--project"><a href="#uv-audit--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-audit--quiet"><a href="#uv-audit--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-audit--severity"><a href="#uv-audit--severity"><code>--severity</code></a> <i>severity</i></dt><dd><p>Minimum severity level to report</p>
+<p>[default: low]</p><p>Possible values:</p>
+<ul>
+<li><code>low</code>:  Include all vulnerabilities</li>
+<li><code>medium</code>:  Include medium, high, and critical vulnerabilities</li>
+<li><code>high</code>:  Include high and critical vulnerabilities</li>
+<li><code>critical</code>:  Include only critical vulnerabilities</li>
+</ul></dd><dt id="uv-audit--verbose"><a href="#uv-audit--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
 
 ## uv publish
