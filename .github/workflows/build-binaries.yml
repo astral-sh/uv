@@ -877,7 +877,7 @@ jobs:
         uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
         with:
           image: alpine:3.12
-          options: -v ${{ github.workspace }}:/io -w /io
+          options: -v ${GITHUB_WORKSPACE}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME
           run: |
             apk add python3
             python3 -m venv .venv
@@ -925,7 +925,7 @@ jobs:
         uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
         with:
           image: alpine:3.12
-          options: -v ${{ github.workspace }}:/io -w /io
+          options: -v ${GITHUB_WORKSPACE}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME
           run: |
             apk add python3
             python3 -m venv .venv
