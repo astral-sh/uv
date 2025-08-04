@@ -3,7 +3,7 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::SourceStrategy;
+use uv_configuration::NoSources;
 use uv_distribution_types::{GitSourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -87,7 +87,7 @@ impl Metadata {
         install_path: &Path,
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
-        sources: SourceStrategy,
+        sources: NoSources,
         cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.

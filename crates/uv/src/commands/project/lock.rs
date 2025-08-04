@@ -464,14 +464,14 @@ async fn do_lock(
     let source_trees = vec![];
 
     // If necessary, lower the overrides and constraints.
-    let requirements = target.lower(requirements, index_locations, *sources)?;
-    let overrides = target.lower(overrides, index_locations, *sources)?;
-    let constraints = target.lower(constraints, index_locations, *sources)?;
-    let build_constraints = target.lower(build_constraints, index_locations, *sources)?;
+    let requirements = target.lower(requirements, index_locations, sources)?;
+    let overrides = target.lower(overrides, index_locations, sources)?;
+    let constraints = target.lower(constraints, index_locations, sources)?;
+    let build_constraints = target.lower(build_constraints, index_locations, sources)?;
     let dependency_groups = dependency_groups
         .into_iter()
         .map(|(name, group)| {
-            let requirements = target.lower(group.requirements, index_locations, *sources)?;
+            let requirements = target.lower(group.requirements, index_locations, sources)?;
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
@@ -679,7 +679,7 @@ async fn do_lock(
             extra_build_dependencies.clone(),
             workspace,
             index_locations,
-            *sources,
+            sources,
         )?,
         LockTarget::Script(script) => {
             // Try to get extra build dependencies from the script metadata
@@ -704,7 +704,7 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,

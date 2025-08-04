@@ -231,7 +231,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -428,7 +428,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -626,7 +626,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -856,7 +856,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -1021,7 +1021,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -1232,7 +1232,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -1487,7 +1487,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -1754,7 +1754,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -1976,7 +1976,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -2163,7 +2163,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -2410,7 +2410,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -2640,7 +2640,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -2826,7 +2826,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -2996,7 +2996,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -3166,7 +3166,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -3338,7 +3338,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -3464,6 +3464,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             ),
             compile_bytecode: None,
             no_sources: None,
+            no_sources_package: None,
             upgrade: None,
             upgrade_package: None,
             reinstall: None,
@@ -3510,7 +3511,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: LowestDirect,
-                sources: Enabled,
+                sources: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -3713,7 +3714,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -3951,7 +3952,7 @@ fn resolve_both() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -4193,7 +4194,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -4514,7 +4515,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -4555,7 +4556,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4777,7 +4778,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -4950,7 +4951,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -5142,7 +5143,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -5395,7 +5396,7 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -5627,7 +5628,7 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -5865,7 +5866,7 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -6098,7 +6099,7 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -6338,7 +6339,7 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -6571,7 +6572,7 @@ fn index_priority() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -6748,7 +6749,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -6911,7 +6912,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: None,
             upgrade: None,
             reinstall: None,
@@ -7072,7 +7073,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Require,
             ),
@@ -7235,7 +7236,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: None,
             upgrade: None,
             reinstall: None,
@@ -7396,7 +7397,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: None,
             upgrade: None,
             reinstall: None,
@@ -7558,7 +7559,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             annotation_style: Split,
             link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
+            sources: None,
             hash_checking: Some(
                 Verify,
             ),
@@ -7687,7 +7688,7 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
+                sources: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -7797,7 +7798,7 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
+                sources: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -7907,7 +7908,7 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
+                sources: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8017,7 +8018,7 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
+                sources: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8127,7 +8128,7 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
+                sources: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8239,7 +8240,7 @@ fn preview_features() {
                 ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
-                sources: Enabled,
+                sources: None,
                 upgrade: None,
             },
             compile_bytecode: false,

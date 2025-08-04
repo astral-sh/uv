@@ -18,8 +18,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, Preview,
-    PreviewFeatures, SourceStrategy,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, NoSources,
+    Preview, PreviewFeatures,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -393,7 +393,7 @@ pub(crate) async fn add(
             let build_constraints = Constraints::default();
             let build_hasher = HashStrategy::default();
             let hasher = HashStrategy::default();
-            let sources = SourceStrategy::Enabled;
+            let sources = NoSources::None;
 
             settings.resolver.index_locations.cache_index_credentials();
 
@@ -442,7 +442,7 @@ pub(crate) async fn add(
                     settings.resolver.extra_build_dependencies.clone(),
                     project.workspace(),
                     &settings.resolver.index_locations,
-                    settings.resolver.sources,
+                    &settings.resolver.sources,
                 )?
             } else {
                 uv_distribution::ExtraBuildRequires::from_lowered(
