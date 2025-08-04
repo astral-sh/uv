@@ -315,7 +315,7 @@ impl PythonDownloadRequest {
                 prereleases: Some(true), // Explicitly allow pre-releases for PythonRequest::Any
                 ..Self::default()
             }),
-            PythonRequest::Default => Some(Self::default()),
+            PythonRequest::Default | PythonRequest::Latest => Some(Self::default()),
             // We can't download a managed installation for these request kinds
             PythonRequest::Directory(_)
             | PythonRequest::ExecutableName(_)
