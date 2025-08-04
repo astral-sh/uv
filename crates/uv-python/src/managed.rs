@@ -9,7 +9,6 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use itertools::Itertools;
-use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
 use uv_configuration::{Preview, PreviewFeatures};
@@ -21,7 +20,6 @@ use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{Launcher, windows_python_launcher};
 
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
@@ -94,6 +92,7 @@ pub enum Error {
     },
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
+    #[cfg(windows)]
     #[error(transparent)]
     LauncherError(#[from] uv_trampoline_builder::Error),
     #[error("Failed to read managed Python directory name: {0}")]
@@ -620,13 +619,17 @@ impl ManagedPythonInstallation {
     /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
     /// [`create_bin_link`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
-        if cfg!(unix) {
-            is_same_file(path, self.executable(false)).unwrap_or_default()
-        } else if cfg!(windows) {
+        #[cfg(unix)]
+        {
+            same_file::is_same_file(path, self.executable(false)).unwrap_or_default()
+        }
+        #[cfg(windows)]
+        {
+            use uv_trampoline_builder::{Launcher, LauncherKind};
             let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
                 return false;
             };
-            if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
+            if !matches!(launcher.kind, LauncherKind::Python) {
                 return false;
             }
             // We canonicalize the target path of the launcher in case it includes a minor version
@@ -634,7 +637,9 @@ impl ManagedPythonInstallation {
             // directly.
             dunce::canonicalize(&launcher.python_path).unwrap_or(launcher.python_path)
                 == self.executable(false)
-        } else {
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
             unreachable!("Only Windows and Unix are supported")
         }
     }
@@ -877,7 +882,8 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
         err,
     })?;
 
-    if cfg!(unix) {
+    #[cfg(unix)]
+    {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
         match symlink_or_copy_file(executable, link) {
             Ok(()) => Ok(()),
@@ -890,7 +896,11 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
                 err,
             }),
         }
-    } else if cfg!(windows) {
+    }
+    #[cfg(windows)]
+    {
+        use uv_trampoline_builder::windows_python_launcher;
+
         // TODO(zanieb): Install GUI launchers as well
         let launcher = windows_python_launcher(executable, false)?;
 
@@ -906,7 +916,9 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
                     err,
                 })
         }
-    } else {
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
         unimplemented!("Only Windows and Unix systems are supported.")
     }
 }

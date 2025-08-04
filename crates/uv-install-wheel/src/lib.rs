@@ -80,6 +80,7 @@ pub enum Error {
     MismatchedVersion(Version, Version),
     #[error("Invalid egg-link")]
     InvalidEggLink(PathBuf),
+    #[cfg(windows)]
     #[error(transparent)]
     LauncherError(#[from] uv_trampoline_builder::Error),
     #[error("Scripts must not use the reserved name {0}")]

@@ -1,8 +1,7 @@
-use std::io::{self, Cursor, Read, Seek, Write};
+use std::io::{self, Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::str::Utf8Error;
 
-use fs_err::File;
 use thiserror::Error;
 use uv_fs::Simplified;
 use zip::ZipWriter;
@@ -32,16 +31,23 @@ const LAUNCHER_AARCH64_GUI: &[u8] =
 const LAUNCHER_AARCH64_CONSOLE: &[u8] =
     include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-console.exe");
 
-// See `uv-trampoline::bounce`. These numbers must match.
-const PATH_LENGTH_SIZE: usize = size_of::<u32>();
-const MAX_PATH_LENGTH: u32 = 32 * 1024;
-const MAGIC_NUMBER_SIZE: usize = 4;
+// https://learn.microsoft.com/en-us/windows/win32/menurc/resource-types
+#[cfg(windows)]
+const RT_RCDATA: u16 = 10;
+
+// Resource IDs matching uv-trampoline
+const RESOURCE_TRAMPOLINE_KIND: &str = "UV_TRAMPOLINE_KIND\0";
+const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH\0";
+// Note: This does not need to be looked up as a resource, as we rely on `zipimport`
+// to do the loading work. Still, keeping the content under a resource means that it
+// sits nicely under the PE format.
+const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA\0";
 
 #[derive(Debug)]
 pub struct Launcher {
     pub kind: LauncherKind,
     pub python_path: PathBuf,
-    payload: Vec<u8>,
+    pub script_data: Option<Vec<u8>>,
 }
 
 impl Launcher {
@@ -49,119 +55,90 @@ impl Launcher {
     ///
     /// Returns `Ok(None)` if the file is not a trampoline executable.
     /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
-    ///
-    /// Expects the following metadata to be at the end of the file:
-    ///
-    /// ```text
-    /// - file path (no greater than 32KB)
-    /// - file path length (u32)
-    /// - magic number(4 bytes)
-    /// ```
-    ///
-    /// This should only be used on Windows, but should just return `Ok(None)` on other platforms.
-    ///
-    /// This is an implementation of [`uv-trampoline::bounce::read_trampoline_metadata`] that
-    /// returns errors instead of panicking. Unlike the utility there, we don't assume that the
-    /// file we are reading is a trampoline.
-    #[allow(clippy::cast_possible_wrap)]
+    #[allow(unused_variables)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        let mut file = File::open(path)?;
+        #[cfg(not(windows))]
+        {
+            Err(Error::NotWindows)
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            use windows::Win32::System::LibraryLoader::LOAD_LIBRARY_AS_DATAFILE;
+            use windows::Win32::System::LibraryLoader::LoadLibraryExW;
 
-        // Read the magic number
-        let Some(kind) = LauncherKind::try_from_file(&mut file)? else {
-            return Ok(None);
-        };
+            let mut path_str = path.as_os_str().encode_wide().collect::<Vec<_>>();
+            path_str.push(0);
 
-        // Seek to the start of the path length.
-        let path_length_offset = (MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE) as i64;
-        file.seek(io::SeekFrom::End(-path_length_offset))
-            .map_err(|err| {
-                Error::InvalidLauncherSeek("path length".to_string(), path_length_offset, err)
-            })?;
+            #[allow(unsafe_code)]
+            let Some(module) = (unsafe {
+                LoadLibraryExW(
+                    windows::core::PCWSTR(path_str.as_ptr()),
+                    None,
+                    LOAD_LIBRARY_AS_DATAFILE,
+                )
+                .ok()
+            }) else {
+                return Ok(None);
+            };
 
-        // Read the path length
-        let mut buffer = [0; PATH_LENGTH_SIZE];
-        file.read_exact(&mut buffer)
-            .map_err(|err| Error::InvalidLauncherRead("path length".to_string(), err))?;
+            let result = (|| {
+                let Some(kind_data) = read_resource(module, RESOURCE_TRAMPOLINE_KIND) else {
+                    return Ok(None);
+                };
+                let Some(kind) = LauncherKind::from_resource_value(kind_data[0]) else {
+                    return Err(Error::UnprocessableMetadata);
+                };
 
-        let path_length = {
-            let raw_length = u32::from_le_bytes(buffer);
+                let Some(path_data) = read_resource(module, RESOURCE_PYTHON_PATH) else {
+                    return Ok(None);
+                };
+                let python_path = PathBuf::from(
+                    String::from_utf8(path_data)
+                        .map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+                );
 
-            if raw_length > MAX_PATH_LENGTH {
-                return Err(Error::InvalidPathLength(raw_length));
-            }
+                let script_data = read_resource(module, RESOURCE_SCRIPT_DATA);
 
-            // SAFETY: Above we guarantee the length is less than 32KB
-            raw_length as usize
-        };
+                Ok(Some(Self {
+                    kind,
+                    python_path,
+                    script_data,
+                }))
+            })();
 
-        // Seek to the start of the path
-        let path_offset = (MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE + path_length) as i64;
-        file.seek(io::SeekFrom::End(-path_offset)).map_err(|err| {
-            Error::InvalidLauncherSeek("executable path".to_string(), path_offset, err)
-        })?;
+            #[allow(unsafe_code)]
+            unsafe {
+                windows::Win32::Foundation::FreeLibrary(module)
+                    .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+            };
 
-        // Read the path
-        let mut buffer = vec![0u8; path_length];
-        file.read_exact(&mut buffer)
-            .map_err(|err| Error::InvalidLauncherRead("executable path".to_string(), err))?;
-
-        let path = PathBuf::from(
-            String::from_utf8(buffer).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
-        );
-
-        #[allow(clippy::cast_possible_truncation)]
-        let file_size = {
-            let raw_length = file
-                .seek(io::SeekFrom::End(0))
-                .map_err(|e| Error::InvalidLauncherSeek("size probe".into(), 0, e))?;
-
-            if raw_length > usize::MAX as u64 {
-                return Err(Error::InvalidDataLength(raw_length));
-            }
-
-            // SAFETY: Above we guarantee the length is less than uszie
-            raw_length as usize
-        };
-
-        // Read the payload
-        file.seek(io::SeekFrom::Start(0))
-            .map_err(|e| Error::InvalidLauncherSeek("rewind".into(), 0, e))?;
-        let payload_len =
-            file_size.saturating_sub(MAGIC_NUMBER_SIZE + PATH_LENGTH_SIZE + path_length);
-        let mut buffer = vec![0u8; payload_len];
-        file.read_exact(&mut buffer)
-            .map_err(|err| Error::InvalidLauncherRead("payload".into(), err))?;
-
-        Ok(Some(Self {
-            kind,
-            payload: buffer,
-            python_path: path,
-        }))
+            result
+        }
     }
 
-    pub fn write_to_file(self, file: &mut File) -> Result<(), Error> {
+    pub fn write_to_file(self, file_path: &Path, is_gui: bool) -> Result<(), Error> {
         let python_path = self.python_path.simplified_display().to_string();
 
-        if python_path.len() > MAX_PATH_LENGTH as usize {
-            return Err(Error::InvalidPathLength(
-                u32::try_from(python_path.len()).expect("path length already checked"),
-            ));
+        // Write the launcher binary
+        fs_err::write(file_path, get_launcher_bin(is_gui)?)?;
+
+        // Write resources
+        let resources = &[
+            (
+                RESOURCE_TRAMPOLINE_KIND,
+                &[self.kind.to_resource_value()][..],
+            ),
+            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+        ];
+        if let Some(script_data) = self.script_data {
+            let mut all_resources = resources.to_vec();
+            all_resources.push((RESOURCE_SCRIPT_DATA, &script_data));
+            write_resources(file_path, &all_resources)?;
+        } else {
+            write_resources(file_path, resources)?;
         }
 
-        let mut launcher: Vec<u8> = Vec::with_capacity(
-            self.payload.len() + python_path.len() + PATH_LENGTH_SIZE + MAGIC_NUMBER_SIZE,
-        );
-        launcher.extend_from_slice(&self.payload);
-        launcher.extend_from_slice(python_path.as_bytes());
-        launcher.extend_from_slice(
-            &u32::try_from(python_path.len())
-                .expect("file path should be smaller than 4GB")
-                .to_le_bytes(),
-        );
-        launcher.extend_from_slice(self.kind.magic_number());
-
-        file.write_all(&launcher)?;
         Ok(())
     }
 
@@ -169,8 +146,8 @@ impl Launcher {
     pub fn with_python_path(self, path: PathBuf) -> Self {
         Self {
             kind: self.kind,
-            payload: self.payload,
             python_path: path,
+            script_data: self.script_data,
         }
     }
 }
@@ -187,45 +164,20 @@ pub enum LauncherKind {
 }
 
 impl LauncherKind {
-    /// Return the magic number for this [`LauncherKind`].
-    const fn magic_number(self) -> &'static [u8; 4] {
+    fn to_resource_value(self) -> u8 {
         match self {
-            Self::Script => b"UVSC",
-            Self::Python => b"UVPY",
+            Self::Script => 1,
+            Self::Python => 2,
         }
     }
 
-    /// Read a [`LauncherKind`] from 4 byte buffer.
-    ///
-    /// If the buffer does not contain a matching magic number, `None` is returned.
-    fn try_from_bytes(bytes: [u8; MAGIC_NUMBER_SIZE]) -> Option<Self> {
-        if &bytes == Self::Script.magic_number() {
-            return Some(Self::Script);
+    #[cfg(windows)]
+    fn from_resource_value(value: u8) -> Option<Self> {
+        match value {
+            1 => Some(Self::Script),
+            2 => Some(Self::Python),
+            _ => None,
         }
-        if &bytes == Self::Python.magic_number() {
-            return Some(Self::Python);
-        }
-        None
-    }
-
-    /// Read a [`LauncherKind`] from a file handle, based on the magic number.
-    ///
-    /// This will mutate the file handle, seeking to the end of the file.
-    ///
-    /// If the file cannot be read, an [`io::Error`] is returned. If the path is not a launcher,
-    /// `None` is returned.
-    #[allow(clippy::cast_possible_wrap)]
-    pub fn try_from_file(file: &mut File) -> Result<Option<Self>, Error> {
-        // If the file is less than four bytes, it's not a launcher.
-        let Ok(_) = file.seek(io::SeekFrom::End(-(MAGIC_NUMBER_SIZE as i64))) else {
-            return Ok(None);
-        };
-
-        let mut buffer = [0; MAGIC_NUMBER_SIZE];
-        file.read_exact(&mut buffer)
-            .map_err(|err| Error::InvalidLauncherRead("magic number".to_string(), err))?;
-
-        Ok(Self::try_from_bytes(buffer))
     }
 }
 
@@ -234,22 +186,18 @@ impl LauncherKind {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Only paths with a length up to 32KB are supported but found a length of {0} bytes")]
-    InvalidPathLength(u32),
-    #[error("Only data with a length up to usize is supported but found a length of {0} bytes")]
-    InvalidDataLength(u64),
     #[error("Failed to parse executable path")]
     InvalidPath(#[source] Utf8Error),
-    #[error("Failed to seek to {0} at offset {1}")]
-    InvalidLauncherSeek(String, i64, #[source] io::Error),
-    #[error("Failed to read launcher {0}")]
-    InvalidLauncherRead(String, #[source] io::Error),
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]
     UnsupportedWindowsArch(&'static str),
     #[error("Unable to create Windows launcher on non-Windows platform")]
     NotWindows,
+    #[error("Cannot process launcher metadata from resource")]
+    UnprocessableMetadata,
+    #[error("Resources over 2^32 bytes are not supported")]
+    ResourceTooLarge,
 }
 
 #[allow(clippy::unnecessary_wraps, unused_variables)]
@@ -286,6 +234,75 @@ fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
         #[cfg(not(windows))]
         _ => &[],
     })
+}
+
+/// Helper to write Windows PE resources
+#[allow(unused_variables)]
+fn write_resources(path: &Path, resources: &[(&str, &[u8])]) -> Result<(), Error> {
+    #[cfg(not(windows))]
+    {
+        Err(Error::NotWindows)
+    }
+    #[cfg(windows)]
+    {
+        #[allow(unsafe_code)]
+        unsafe {
+            use std::os::windows::ffi::OsStrExt;
+            use windows::Win32::System::LibraryLoader::{
+                BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
+            };
+
+            let mut path_str = path.as_os_str().encode_wide().collect::<Vec<_>>();
+            path_str.push(0);
+            let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_str.as_ptr()), false)
+                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+
+            for (name, data) in resources {
+                let mut name_null_term = name.encode_utf16().collect::<Vec<_>>();
+                name_null_term.push(0);
+                UpdateResourceW(
+                    handle,
+                    windows::core::PCWSTR(RT_RCDATA as *const _),
+                    windows::core::PCWSTR(name_null_term.as_ptr()),
+                    0,
+                    Some(data.as_ptr().cast()),
+                    u32::try_from(data.len()).map_err(|_| Error::ResourceTooLarge)?,
+                )
+                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+            }
+
+            EndUpdateResourceW(handle, false)
+                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+/// Safely reads a resource from a PE file
+fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Option<Vec<u8>> {
+    #[allow(unsafe_code)]
+    unsafe {
+        use windows::Win32::System::LibraryLoader::{
+            FindResourceW, LoadResource, LockResource, SizeofResource,
+        };
+        // Find the resource
+        let resource = FindResourceW(
+            Some(handle),
+            windows::core::PCWSTR(name.encode_utf16().collect::<Vec<_>>().as_ptr()),
+            windows::core::PCWSTR(RT_RCDATA as *const _),
+        );
+
+        // Get resource size and data
+        let size = SizeofResource(Some(handle), resource);
+        let data = LoadResource(Some(handle), resource).ok()?;
+        let ptr = LockResource(data);
+        let ptr = ptr.cast::<u8>();
+
+        // Copy the resource data into a Vec
+        Some(std::slice::from_raw_parts(ptr, size as usize).to_vec())
+    }
 }
 
 /// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
@@ -325,16 +342,28 @@ pub fn windows_script_launcher(
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();
 
-    let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
-    launcher.extend_from_slice(launcher_bin);
-    launcher.extend_from_slice(&payload);
-    launcher.extend_from_slice(python_path.as_bytes());
-    launcher.extend_from_slice(
-        &u32::try_from(python_path.len())
-            .expect("file path should be smaller than 4GB")
-            .to_le_bytes(),
-    );
-    launcher.extend_from_slice(LauncherKind::Script.magic_number());
+    // Start with base launcher binary
+    // Create temporary file for the launcher
+    let temp_dir = tempfile::tempdir()?;
+    let temp_file = temp_dir
+        .path()
+        .join(format!("uv-trampoline-{}.exe", std::process::id()));
+    fs_err::write(&temp_file, launcher_bin)?;
+
+    // Write resources
+    let resources = &[
+        (
+            RESOURCE_TRAMPOLINE_KIND,
+            &[LauncherKind::Script.to_resource_value()][..],
+        ),
+        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+        (RESOURCE_SCRIPT_DATA, &payload),
+    ];
+    write_resources(&temp_file, resources)?;
+
+    // Read back the complete file
+    let launcher = fs_err::read(&temp_file)?;
+    fs_err::remove_file(temp_file)?;
 
     Ok(launcher)
 }
@@ -358,15 +387,26 @@ pub fn windows_python_launcher(
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();
 
-    let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len());
-    launcher.extend_from_slice(launcher_bin);
-    launcher.extend_from_slice(python_path.as_bytes());
-    launcher.extend_from_slice(
-        &u32::try_from(python_path.len())
-            .expect("file path should be smaller than 4GB")
-            .to_le_bytes(),
-    );
-    launcher.extend_from_slice(LauncherKind::Python.magic_number());
+    // Create temporary file for the launcher
+    let temp_dir = tempfile::tempdir()?;
+    let temp_file = temp_dir
+        .path()
+        .join(format!("uv-trampoline-{}.exe", std::process::id()));
+    fs_err::write(&temp_file, launcher_bin)?;
+
+    // Write resources
+    let resources = &[
+        (
+            RESOURCE_TRAMPOLINE_KIND,
+            &[LauncherKind::Python.to_resource_value()][..],
+        ),
+        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+    ];
+    write_resources(&temp_file, resources)?;
+
+    // Read back the complete file
+    let launcher = fs_err::read(&temp_file)?;
+    fs_err::remove_file(temp_file)?;
 
     Ok(launcher)
 }
@@ -376,6 +416,7 @@ pub fn windows_python_launcher(
 mod test {
     use std::io::Write;
     use std::path::Path;
+    use std::path::PathBuf;
     use std::process::Command;
 
     use anyhow::Result;
@@ -486,6 +527,66 @@ if __name__ == "__main__":
         format!("#!{executable}")
     }
 
+    /// Creates a self-signed certificate and returns its path.
+    fn create_temp_certificate(temp_dir: &tempfile::TempDir) -> Result<PathBuf> {
+        use p12::PFX;
+        use rcgen::{CertificateParams, KeyPair};
+
+        let signing_key = KeyPair::generate()?;
+        let mut cert_params = CertificateParams::new(vec!["UvTrampolineTest".to_string()])?;
+        cert_params.insert_extended_key_usage(rcgen::ExtendedKeyUsagePurpose::CodeSigning);
+        let cert = cert_params.self_signed(&signing_key)?;
+
+        // Create PKCS#12 archive
+        let pfx = PFX::new(
+            cert.der(),
+            &signing_key.serialize_der(),
+            None,
+            "",
+            "UvTrampolineTest",
+        )
+        .expect("Failed to create PFX archive");
+
+        // Create temp file
+        let temp_pfx = temp_dir.path().join("uv-trampoline-test.pfx");
+        fs_err::write(&temp_pfx, pfx.to_der())?;
+
+        println!(
+            "Wrote testing code-signing certificate in {}",
+            temp_pfx.display()
+        );
+        Ok(temp_pfx)
+    }
+
+    /// Signs the given binary using `PowerShell`'s `Set-AuthenticodeSignature` with a temporary certificate.
+    fn sign_authenticode(bin_path: impl AsRef<Path>) {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
+        let temp_pfx =
+            create_temp_certificate(&temp_dir).expect("Failed to create self-signed certificate");
+
+        Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                &format!(
+                    r"
+                    $ErrorActionPreference = 'Stop'
+                    Import-Module Microsoft.PowerShell.Security
+                    $pfx = Get-PfxCertificate -FilePath '{}';
+                    Set-AuthenticodeSignature -FilePath '{}' -Certificate $pfx;
+                    ",
+                    temp_pfx.display().to_string().replace('\'', "''"),
+                    bin_path.as_ref().display().to_string().replace('\'', "''"),
+                ),
+            ])
+            .env_remove("PSModulePath")
+            .assert()
+            .success();
+
+        println!("Signed binary: {}", bin_path.as_ref().display());
+    }
+
     #[test]
     fn console_script_launcher() -> Result<()> {
         // Create Temp Dirs
@@ -540,6 +641,17 @@ if __name__ == "__main__":
         assert!(launcher.kind == LauncherKind::Script);
         assert!(launcher.python_path == python_executable_path);
 
+        // Now code-sign the launcher and verify that it still works.
+        sign_authenticode(console_bin_path.path());
+
+        let stdout_predicate = "Hello from uv-trampoline-console.exe\r\n";
+        let stderr_predicate = "Hello from uv-trampoline-console.exe\r\n";
+        Command::new(console_bin_path.path())
+            .assert()
+            .success()
+            .stdout(stdout_predicate)
+            .stderr(stderr_predicate);
+
         Ok(())
     }
 
@@ -556,7 +668,9 @@ if __name__ == "__main__":
         let console_launcher = windows_python_launcher(&python_executable_path, false)?;
 
         // Create Launcher
-        File::create(console_bin_path.path())?.write_all(console_launcher.as_ref())?;
+        {
+            File::create(console_bin_path.path())?.write_all(console_launcher.as_ref())?;
+        }
 
         println!(
             "Wrote Python Launcher in {}",
@@ -577,6 +691,15 @@ if __name__ == "__main__":
 
         assert!(launcher.kind == LauncherKind::Python);
         assert!(launcher.python_path == python_executable_path);
+
+        // Now code-sign the launcher and verify that it still works.
+        sign_authenticode(console_bin_path.path());
+        Command::new(console_bin_path.path())
+            .arg("-c")
+            .arg("print('Hello from Python Launcher')")
+            .assert()
+            .success()
+            .stdout("Hello from Python Launcher\r\n");
 
         Ok(())
     }
@@ -600,7 +723,9 @@ if __name__ == "__main__":
             windows_script_launcher(&launcher_gui_script, true, &pythonw_executable_path)?;
 
         // Create Launcher
-        File::create(gui_bin_path.path())?.write_all(gui_launcher.as_ref())?;
+        {
+            File::create(gui_bin_path.path())?.write_all(gui_launcher.as_ref())?;
+        }
 
         println!("Wrote GUI Launcher in {}", gui_bin_path.path().display());
 
