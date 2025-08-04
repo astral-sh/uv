@@ -92,24 +92,16 @@ arbitrary Python scripts, and when invoked it bounces to invoking `python <the s
 Basically, this looks up `python.exe` (for console programs) and invokes
 `python.exe path\to\the\<the .exe>`.
 
-The intended use is:
+It uses PE resources to store/load the information required to do this:
 
-- take your Python script, name it `__main__.py`, and pack it into a `.zip` file. Then concatenate
-  that `.zip` file onto the end of one of our prebuilt `.exe`s.
-- After the zip file content, write the path to the Python executable that the script uses to run
-  the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit little-endian
-  integer.
-- At the very end, write the magic number `UVUV` in bytes.
+|       Resource name        |                         Contains                          |
+| :------------------------: | :-------------------------------------------------------: |
+| `RESOURCE_TRAMPOLINE_KIND` |           `1` (script) or `2` (Python launcher)           |
+|   `RESOURCE_PYTHON_PATH`   |                   Path to `python.exe`                    |
+|   `RESOURCE_SCRIPT_DATA`   | Zip file, containing a Python script called `__main__.py` |
 
-|       `launcher.exe`        |
-| :-------------------------: |
-|  `<zipped python script>`   |
-|   `<path to python.exe>`    |
-| `<len(path to python.exe)>` |
-| `<b'U', b'V', b'U', b'V'>`  |
-
-Then when you run `python` on the `.exe`, it will see the `.zip` trailer at the end of the `.exe`,
-and automagically look inside to find and execute `__main__.py`. Easy-peasy.
+This works because when you run `python` on the `.exe`, the `zipimport` mechanism will see the
+embedded `.zip` file, and automagically look inside to find and execute `__main__.py`. Easy-peasy.
 
 ### Why does this exist?
 
