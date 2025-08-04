@@ -916,6 +916,7 @@ fn help_unknown_subcommand() {
         pip
         venv
         build
+        audit
         publish
         cache
         self

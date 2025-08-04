@@ -29,7 +29,7 @@ impl DatabaseManager {
         }
     }
 
-    /// Create a new DatabaseManager in test mode (uses fixtures instead of network)
+    /// Create a new `DatabaseManager` in test mode (uses fixtures instead of network)
     #[cfg(test)]
     pub fn new_test_mode(cache: AuditCache) -> Self {
         Self {
@@ -787,7 +787,7 @@ impl DatabaseManager {
             std::env::var("UV_AUDIT_TEST_FIXTURE").unwrap_or_else(|_| "test".to_string());
 
         // Load test database file
-        let db_filename = format!("{}_database.json", fixture_set);
+        let db_filename = format!("{fixture_set}_database.json");
         let db_path = fixtures_dir.join(&db_filename);
         if !db_path.exists() {
             return Err(AuditError::CacheNotFound(format!(
@@ -800,7 +800,7 @@ impl DatabaseManager {
         let advisories: Vec<Vulnerability> = serde_json::from_str(&db_content)?;
 
         // Load test index file
-        let index_filename = format!("{}_index.json", fixture_set);
+        let index_filename = format!("{fixture_set}_index.json");
         let index_path = fixtures_dir.join(&index_filename);
         let package_index = if index_path.exists() {
             let index_content = fs_err::tokio::read_to_string(&index_path).await?;
