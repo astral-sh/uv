@@ -71,6 +71,30 @@ pub enum ListFormat {
     Json,
 }
 
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum AuditFormat {
+    /// Display the audit results in a human-readable format.
+    #[default]
+    Human,
+    /// Display the audit results in JSON format.
+    Json,
+    /// Display the audit results in SARIF format.
+    Sarif,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum SeverityLevel {
+    /// Include all vulnerabilities.
+    #[default]
+    Low,
+    /// Include medium, high, and critical vulnerabilities.
+    Medium,
+    /// Include high and critical vulnerabilities.
+    High,
+    /// Include only critical vulnerabilities.
+    Critical,
+}
+
 fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
     ExtraName::from_str(arg).map_err(|_err| {
         anyhow!(
@@ -501,6 +525,12 @@ pub enum Commands {
         after_long_help = ""
     )]
     Build(BuildArgs),
+    /// Audit Python packages for known security vulnerabilities.
+    #[command(
+        after_help = "Use `uv help audit` for more details.",
+        after_long_help = ""
+    )]
+    Audit(AuditArgs),
     /// Upload distributions to an index.
     Publish(PublishArgs),
     /// The implementation of the build backend.
@@ -2610,6 +2640,50 @@ pub struct BuildArgs {
 
     #[command(flatten)]
     pub refresh: RefreshArgs,
+}
+
+#[derive(Args)]
+#[command(group = clap::ArgGroup::new("operation"))]
+pub struct AuditArgs {
+    /// Path to the project directory
+    #[arg(value_name = "PATH")]
+    pub path: Option<PathBuf>,
+
+    /// Output format
+    #[arg(long, value_enum, default_value = "human")]
+    pub format: AuditFormat,
+
+    /// Minimum severity level to report
+    #[arg(long, value_enum, default_value = "low")]
+    pub severity: SeverityLevel,
+
+    /// Vulnerability IDs to ignore
+    #[arg(long, value_delimiter = ',')]
+    pub ignore: Vec<String>,
+
+    /// Output file path
+    #[arg(long, short = 'o')]
+    pub output: Option<PathBuf>,
+
+    /// Include development dependencies
+    #[arg(long)]
+    pub dev: bool,
+
+    /// Include optional dependencies
+    #[arg(long)]
+    pub optional: bool,
+
+    /// Only check direct dependencies
+    #[arg(long)]
+    pub direct_only: bool,
+
+    /// Disable vulnerability database caching
+    #[arg(long)]
+    pub no_cache: bool,
+
+    /// Custom cache directory
+    #[arg(long)]
+    pub cache_dir: Option<PathBuf>,
 }
 
 #[derive(Args)]

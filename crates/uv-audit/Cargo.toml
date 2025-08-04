@@ -1,0 +1,63 @@
+[package]
+name = "uv-audit"
+version = "0.0.1"
+description = "Security vulnerability auditing for Python packages."
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# UV dependencies
+uv-cache = { workspace = true }
+uv-cli = { workspace = true }
+uv-client = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-resolver = { workspace = true }
+uv-workspace = { workspace = true }
+uv-fs = { workspace = true, features = ["tokio"] }
+
+# Core dependencies
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+toml = { workspace = true }
+
+# Date/time
+jiff = { workspace = true }
+
+# Archive handling
+async_zip = { workspace = true, features = ["tokio-fs"] }
+flate2 = { workspace = true }
+
+# File system
+fs-err = { workspace = true, features = ["tokio"] }
+tempfile = { workspace = true }
+
+# Collections
+indexmap = { workspace = true }
+rustc-hash = { workspace = true }
+
+# HTTP
+reqwest = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Async
+futures = { workspace = true }

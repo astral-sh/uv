@@ -987,6 +987,13 @@ pub enum CacheBucket {
     Environments,
     /// Cached Python downloads
     Python,
+    /// Vulnerability database cache
+    /// 
+    /// Cache structure:
+    /// * `vulnerability-db-v0/osv-database.json` - Complete OSV database
+    /// * `vulnerability-db-v0/meta.json` - Database metadata
+    /// * `vulnerability-db-v0/index.json` - Package-to-advisory index
+    VulnerabilityDatabase,
 }
 
 impl CacheBucket {
@@ -1010,6 +1017,7 @@ impl CacheBucket {
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
+            Self::VulnerabilityDatabase => "vulnerability-db-v0",
         }
     }
 
@@ -1116,7 +1124,8 @@ impl CacheBucket {
             | Self::Archive
             | Self::Builds
             | Self::Environments
-            | Self::Python => {
+            | Self::Python
+            | Self::VulnerabilityDatabase => {
                 // Nothing to do.
             }
         }
@@ -1135,6 +1144,8 @@ impl CacheBucket {
             Self::Archive,
             Self::Builds,
             Self::Environments,
+            Self::Python,
+            Self::VulnerabilityDatabase,
         ]
         .iter()
         .copied()

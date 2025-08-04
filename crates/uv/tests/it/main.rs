@@ -3,6 +3,9 @@
 
 pub(crate) mod common;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod audit;
+
 mod branching_urls;
 
 #[cfg(all(feature = "python", feature = "pypi"))]

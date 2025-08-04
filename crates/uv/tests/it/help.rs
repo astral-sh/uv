@@ -30,6 +30,7 @@ fn help() {
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
+      audit                      Audit Python packages for known security vulnerabilities
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
@@ -110,6 +111,7 @@ fn help_flag() {
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
       build    Build Python packages into source distributions and wheels
+      audit    Audit Python packages for known security vulnerabilities
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
@@ -188,6 +190,7 @@ fn help_short_flag() {
       pip      Manage Python packages with a pip-compatible interface
       venv     Create a virtual environment
       build    Build Python packages into source distributions and wheels
+      audit    Audit Python packages for known security vulnerabilities
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
@@ -885,6 +888,7 @@ fn help_unknown_subcommand() {
         pip
         venv
         build
+        audit
         publish
         cache
         self
@@ -968,6 +972,7 @@ fn help_with_global_option() {
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
+      audit                      Audit Python packages for known security vulnerabilities
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
@@ -1089,6 +1094,7 @@ fn help_with_no_pager() {
       pip                        Manage Python packages with a pip-compatible interface
       venv                       Create a virtual environment
       build                      Build Python packages into source distributions and wheels
+      audit                      Audit Python packages for known security vulnerabilities
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable

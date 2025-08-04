@@ -14,6 +14,7 @@ default-run = "uv"
 workspace = true
 
 [dependencies]
+uv-audit = { workspace = true }
 uv-auth = { workspace = true }
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }

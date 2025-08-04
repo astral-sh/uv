@@ -7,11 +7,11 @@ use std::str::FromStr;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
+    AddArgs, AuditArgs, AuditFormat, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
+    SeverityLevel, SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
     ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
@@ -3448,6 +3448,39 @@ where
         val.parse()
             .unwrap_or_else(|_| parse_failure(name, expected)),
     )
+}
+
+/// The resolved settings to use for an `audit` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct AuditSettings {
+    pub(crate) path: Option<PathBuf>,
+    pub(crate) format: AuditFormat,
+    pub(crate) severity: SeverityLevel,
+    pub(crate) ignore: Vec<String>,
+    pub(crate) output: Option<PathBuf>,
+    pub(crate) dev: bool,
+    pub(crate) optional: bool,
+    pub(crate) direct_only: bool,
+    pub(crate) no_cache: bool,
+    pub(crate) cache_dir: Option<PathBuf>,
+}
+
+impl AuditSettings {
+    /// Resolve the [`AuditSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: AuditArgs, _filesystem: Option<&FilesystemOptions>) -> Self {
+        Self {
+            path: args.path,
+            format: args.format,
+            severity: args.severity,
+            ignore: args.ignore,
+            output: args.output,
+            dev: args.dev,
+            optional: args.optional,
+            direct_only: args.direct_only,
+            no_cache: args.no_cache,
+            cache_dir: args.cache_dir,
+        }
+    }
 }
 
 /// Prints a parse error and exits the process.

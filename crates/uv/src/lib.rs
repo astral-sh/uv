@@ -46,7 +46,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
-    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
+    AuditSettings, CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
     PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
     PublishSettings,
 };
@@ -1009,6 +1009,31 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,
+                &cache,
+                printer,
+                globals.preview,
+            )
+            .await
+        }
+        Commands::Audit(args) => {
+            // Resolve the settings from the command-line arguments and filesystem configuration.
+            let args = AuditSettings::resolve(args, filesystem.as_ref());
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            commands::audit(
+                args.path.as_deref(),
+                args.format,
+                args.severity,
+                &args.ignore,
+                args.output.as_deref(),
+                args.dev,
+                args.optional,
+                args.direct_only,
+                args.no_cache,
+                args.cache_dir.as_deref(),
                 &cache,
                 printer,
                 globals.preview,

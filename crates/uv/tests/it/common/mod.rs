@@ -61,6 +61,9 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // Timestamps
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
+    // Audit datetime timestamps  
+    (r"Scan completed at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC", "Scan completed at [DATETIME]"),
+    (r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z", "[DATETIME]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.)", "/$1"),
     (r"uv\.exe", "uv"),
@@ -368,6 +371,24 @@ impl TestContext {
         };
         self.filters
             .push((pattern.to_string(), "[PERMISSION DENIED]".to_string()));
+        self
+    }
+
+    /// Adds filters for datetime timestamps in audit output.
+    #[inline]
+    pub fn with_filtered_audit_timestamps(mut self) -> Self {
+        // Filter human-readable datetime: "Scan completed at 2025-08-03 22:17:57 UTC"
+        self.filters.push((
+            r"Scan completed at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC".to_string(),
+            "Scan completed at [DATETIME]".to_string(),
+        ));
+        
+        // Filter ISO datetime in JSON: "2025-08-03T22:16:39.037Z"
+        self.filters.push((
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z".to_string(),
+            "[DATETIME]".to_string(),
+        ));
+        
         self
     }
 
@@ -1166,6 +1187,14 @@ impl TestContext {
     pub fn build_backend(&self) -> Command {
         let mut command = self.new_command();
         command.arg("build-backend");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv audit` command with options shared across scenarios.
+    pub fn audit(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("audit");
         self.add_shared_options(&mut command, false);
         command
     }
