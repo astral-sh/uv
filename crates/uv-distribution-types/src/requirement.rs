@@ -4,7 +4,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use thiserror::Error;
-
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_distribution_filename::DistExtension;
 use uv_fs::{CWD, PortablePath, PortablePathBuf, relative_to};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
@@ -362,6 +362,107 @@ impl Display for Requirement {
             write!(f, " ; {marker}")?;
         }
         Ok(())
+    }
+}
+
+impl CacheKey for Requirement {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.name.as_str().cache_key(state);
+
+        self.groups.len().cache_key(state);
+        for group in &self.groups {
+            group.as_str().cache_key(state);
+        }
+
+        self.extras.len().cache_key(state);
+        for extra in &self.extras {
+            extra.as_str().cache_key(state);
+        }
+
+        if let Some(marker) = self.marker.contents() {
+            1u8.cache_key(state);
+            marker.to_string().cache_key(state);
+        } else {
+            0u8.cache_key(state);
+        }
+
+        match &self.source {
+            RequirementSource::Registry {
+                specifier,
+                index,
+                conflict: _,
+            } => {
+                0u8.cache_key(state);
+                specifier.len().cache_key(state);
+                for spec in specifier.iter() {
+                    spec.operator().as_str().cache_key(state);
+                    spec.version().cache_key(state);
+                }
+                if let Some(index) = index {
+                    1u8.cache_key(state);
+                    index.url.cache_key(state);
+                } else {
+                    0u8.cache_key(state);
+                }
+                // `conflict` is intentionally omitted
+            }
+            RequirementSource::Url {
+                location,
+                subdirectory,
+                ext,
+                url,
+            } => {
+                1u8.cache_key(state);
+                location.cache_key(state);
+                if let Some(subdirectory) = subdirectory {
+                    1u8.cache_key(state);
+                    subdirectory.display().to_string().cache_key(state);
+                } else {
+                    0u8.cache_key(state);
+                }
+                ext.name().cache_key(state);
+                url.cache_key(state);
+            }
+            RequirementSource::Git {
+                git,
+                subdirectory,
+                url,
+            } => {
+                2u8.cache_key(state);
+                git.to_string().cache_key(state);
+                if let Some(subdirectory) = subdirectory {
+                    1u8.cache_key(state);
+                    subdirectory.display().to_string().cache_key(state);
+                } else {
+                    0u8.cache_key(state);
+                }
+                url.cache_key(state);
+            }
+            RequirementSource::Path {
+                install_path,
+                ext,
+                url,
+            } => {
+                3u8.cache_key(state);
+                install_path.cache_key(state);
+                ext.name().cache_key(state);
+                url.cache_key(state);
+            }
+            RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                url,
+            } => {
+                4u8.cache_key(state);
+                install_path.cache_key(state);
+                editable.cache_key(state);
+                r#virtual.cache_key(state);
+                url.cache_key(state);
+            }
+        }
+
+        // `origin` is intentionally omitted
     }
 }
 

@@ -16,9 +16,9 @@ use uv_configuration::{
     PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::{DistributionDatabase, LoweredRequirement};
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    Index, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
+    ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, Simplified};
@@ -46,7 +46,6 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
@@ -1741,9 +1740,12 @@ pub(crate) async fn resolve_names(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -1953,9 +1955,12 @@ pub(crate) async fn resolve_environment(
 
     let workspace_cache = WorkspaceCache::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -2095,9 +2100,12 @@ pub(crate) async fn sync_environment(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
@@ -2174,7 +2182,7 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     modifications: Modifications,
     build_constraints: Constraints,
-    extra_build_requires: uv_distribution::ExtraBuildRequires,
+    extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     state: &SharedState,
@@ -2618,7 +2626,7 @@ pub(crate) fn script_specification(
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
-) -> Result<uv_distribution::ExtraBuildRequires, ProjectError> {
+) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
     let script_indexes = script.indexes(settings.sources);
     let script_sources = script.sources(settings.sources);
@@ -2633,8 +2641,8 @@ pub(crate) fn script_extra_build_requires(
         .and_then(|uv| uv.extra_build_dependencies.as_ref())
         .unwrap_or(&empty);
 
-    // Lower the extra build dependencies
-    let mut extra_build_dependencies = ExtraBuildDependencies::default();
+    // Lower the extra build dependencies.
+    let mut extra_build_requires = ExtraBuildRequires::default();
     for (name, requirements) in script_extra_build_dependencies {
         let lowered_requirements: Vec<_> = requirements
             .iter()
@@ -2647,14 +2655,14 @@ pub(crate) fn script_extra_build_requires(
                     script_indexes,
                     &settings.index_locations,
                 )
-                .map_ok(|req| req.into_inner().into())
+                .map_ok(uv_distribution::LoweredRequirement::into_inner)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        extra_build_dependencies.insert(name.clone(), lowered_requirements);
+        extra_build_requires.insert(name.clone(), lowered_requirements);
     }
 
-    Ok(uv_distribution::ExtraBuildRequires::from_lowered(
-        extra_build_dependencies,
+    Ok(LoweredExtraBuildDependencies::from_lowered(
+        extra_build_requires,
     ))
 }
 

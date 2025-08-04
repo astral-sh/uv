@@ -29,6 +29,11 @@ impl GroupName {
     pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_ref(&name).map(Self)
     }
+
+    /// Return the underlying group name as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl FromStr for GroupName {
