@@ -457,6 +457,9 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -506,6 +509,9 @@ jobs:
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME}_build --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -561,6 +567,9 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -610,6 +619,9 @@ jobs:
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME}-build --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -675,6 +687,9 @@ jobs:
       #       #(konsti) TODO: Enable this test on all platforms,currently `find_uv_bin` is failingto discover uv here.
       #       # python -m ${MODULE_NAME} --helppython -m ${MODULE_NAME} --help
       #       uvx --help
+      #     env: |
+      #       PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+      #       MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -769,6 +784,9 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -818,6 +836,9 @@ jobs:
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME}-build --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -965,6 +986,9 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${MODULE_NAME} --help
             .venv/bin/uvx --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
@@ -981,6 +1005,9 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME} --help
             uvx --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -1030,6 +1057,9 @@ jobs:
             .venv/bin/${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${MODULE_NAME}_build --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
@@ -1045,6 +1075,9 @@ jobs:
             ${MODULE_NAME}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${MODULE_NAME}_build --help
+          env: |
+            PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+            MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
