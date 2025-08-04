@@ -517,7 +517,7 @@ impl CachedClient {
             BeforeRequest::NoMatch => {
                 // This shouldn't happen; if it does, we'll override the cache.
                 warn!(
-                    "Cached request doesn't match current request for: {}",
+                    "Cached response doesn't match current request for: {}",
                     req.url()
                 );
                 let (response, cache_policy) = self.fresh_request(req, cache_control).await?;
