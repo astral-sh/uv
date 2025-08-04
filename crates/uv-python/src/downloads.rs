@@ -94,7 +94,7 @@ pub enum Error {
     InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
-    #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {0}")]
+    #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {1}")]
     Mirror(&'static str, &'static str),
     #[error("Failed to determine the libc used on the current platform")]
     LibcDetection(#[from] platform::LibcDetectionError),
