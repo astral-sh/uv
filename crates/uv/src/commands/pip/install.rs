@@ -193,7 +193,7 @@ pub(crate) async fn pip_install(
                 .map(PythonRequest::parse)
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, false),
-            python_preference,
+            python_preference.with_system_flag(system),
             &cache,
             preview,
         )?;
@@ -206,6 +206,7 @@ pub(crate) async fn pip_install(
                 .map(PythonRequest::parse)
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
+            PythonPreference::default().with_system_flag(system),
             &cache,
             preview,
         )?;

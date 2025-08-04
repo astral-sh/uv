@@ -283,6 +283,7 @@ pub(crate) async fn pip_compile(
 
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
+    let python_preference = python_preference.with_system_flag(system);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
         PythonInstallation::find(
