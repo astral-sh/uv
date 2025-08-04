@@ -93,6 +93,15 @@ impl Arch {
             return true;
         }
 
+        if other
+            == (Arch {
+                family: target_lexicon::Architecture::Wasm32,
+                variant: None,
+            })
+        {
+            return true;
+        }
+
         // TODO: Implement `variant` support checks
 
         // Windows ARM64 runs emulated x86_64 binaries transparently
