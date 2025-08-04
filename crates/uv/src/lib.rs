@@ -46,9 +46,9 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
-    AuditSettings, CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
-    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings,
+    AuditSettings, CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings,
+    PipFreezeSettings, PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings,
+    PipUninstallSettings, PublishSettings,
 };
 
 pub(crate) mod child;

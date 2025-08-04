@@ -988,7 +988,7 @@ pub enum CacheBucket {
     /// Cached Python downloads
     Python,
     /// Vulnerability database cache
-    /// 
+    ///
     /// Cache structure:
     /// * `vulnerability-db-v0/osv-database.json` - Complete OSV database
     /// * `vulnerability-db-v0/meta.json` - Database metadata

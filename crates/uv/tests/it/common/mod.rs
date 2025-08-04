@@ -379,13 +379,13 @@ impl TestContext {
             r"Scan completed at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC".to_string(),
             "Scan completed at [DATETIME]".to_string(),
         ));
-        
+
         // Filter ISO datetime in JSON: "2025-08-03T22:16:39.037Z"
         self.filters.push((
             r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z".to_string(),
             "[DATETIME]".to_string(),
         ));
-        
+
         self
     }
 

@@ -1,17 +1,17 @@
-use std::fmt::Write;
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use std::fmt::Write;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 // Helper function to create proper TOML lock file content
 fn create_lock_file_toml(packages: &[(&str, &str)]) -> String {
     let mut content = String::from("version = 1\nrevision = 3\nrequires-python = \">=3.8\"\n\n");
-    
+
     for (name, version) in packages {
         write!(content, "[[package]]\nname = \"{name}\"\nversion = \"{version}\"\nsource = {{ registry = \"https://pypi.org/simple\" }}\n\n").unwrap();
     }
-    
+
     content
 }
 
@@ -67,7 +67,9 @@ dependencies = ["requests==2.31.0"]
 
 #[test]
 fn test_audit_no_vulnerabilities() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts().with_filtered_audit_timestamps();
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_audit_timestamps();
 
     context.temp_dir.child("pyproject.toml").write_str(
         r#"[project]
@@ -212,7 +214,7 @@ version = "0.1.0"
 dependencies = []
 "#,
     )?;
-    
+
     let lock_content = create_lock_file_toml(&[]); // Empty packages array
     context.temp_dir.child("uv.lock").write_str(&lock_content)?;
 
@@ -253,7 +255,9 @@ dependencies = []
 
 #[test]
 fn test_audit_lock_file_scanning() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts().with_filtered_audit_timestamps();
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_audit_timestamps();
 
     // Create project file
     context.temp_dir.child("pyproject.toml").write_str(
@@ -289,7 +293,7 @@ name = "certifi"
 version = "2024.2.2"
 source = { registry = "https://pypi.org/simple" }
 "#;
-    
+
     context.temp_dir.child("uv.lock").write_str(lock_content)?;
 
     uv_snapshot!(context.filters(), context.audit(), @r#"
@@ -488,10 +492,10 @@ dependencies = []
 }
 
 // =============================================================================
-// INTEGRATION WITH UV ECOSYSTEM TESTS  
+// INTEGRATION WITH UV ECOSYSTEM TESTS
 // =============================================================================
 
-#[test] 
+#[test]
 fn test_audit_after_lock_update() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_audit_timestamps();
 

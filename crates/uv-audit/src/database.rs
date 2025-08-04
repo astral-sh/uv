@@ -41,7 +41,10 @@ impl DatabaseManager {
 
     /// Get or refresh the vulnerability database
     pub async fn get_database(&self, force_refresh: bool) -> Result<VulnerabilityDatabase> {
-        debug!("get_database called with force_refresh={}, test_mode={}", force_refresh, self.test_mode);
+        debug!(
+            "get_database called with force_refresh={}, test_mode={}",
+            force_refresh, self.test_mode
+        );
 
         // In test mode, use fixtures instead of network requests
         if self.test_mode {
@@ -770,26 +773,27 @@ impl DatabaseManager {
         debug!("Loading test database from fixtures...");
 
         // Find the fixtures directory relative to the current crate
-        let fixtures_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures");
+        let fixtures_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
 
         if !fixtures_dir.exists() {
-            return Err(AuditError::CacheNotFound(
-                format!("Test fixtures directory not found at: {}", fixtures_dir.display())
-            ));
+            return Err(AuditError::CacheNotFound(format!(
+                "Test fixtures directory not found at: {}",
+                fixtures_dir.display()
+            )));
         }
 
         // Allow tests to specify which fixture set to use
-        let fixture_set = std::env::var("UV_AUDIT_TEST_FIXTURE")
-            .unwrap_or_else(|_| "test".to_string());
+        let fixture_set =
+            std::env::var("UV_AUDIT_TEST_FIXTURE").unwrap_or_else(|_| "test".to_string());
 
         // Load test database file
         let db_filename = format!("{}_database.json", fixture_set);
         let db_path = fixtures_dir.join(&db_filename);
         if !db_path.exists() {
-            return Err(AuditError::CacheNotFound(
-                format!("Test database fixture not found at: {}", db_path.display())
-            ));
+            return Err(AuditError::CacheNotFound(format!(
+                "Test database fixture not found at: {}",
+                db_path.display()
+            )));
         }
 
         let db_content = fs_err::tokio::read_to_string(&db_path).await?;
@@ -812,7 +816,11 @@ impl DatabaseManager {
             package_index,
         };
 
-        debug!("Loaded {} test advisories from fixtures (fixture_set: {})", database.advisories.len(), fixture_set);
+        debug!(
+            "Loaded {} test advisories from fixtures (fixture_set: {})",
+            database.advisories.len(),
+            fixture_set
+        );
 
         Ok(database)
     }

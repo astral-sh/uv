@@ -7,12 +7,13 @@ use std::str::FromStr;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, AuditArgs, AuditFormat, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
-    PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
-    SeverityLevel, SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
+    AddArgs, AuditArgs, AuditFormat, ColorChoice, ExternalCommand, GlobalArgs, InitArgs,
+    ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs,
+    PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs,
+    PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs,
+    PythonUpgradeArgs, RemoveArgs, RunArgs, SeverityLevel, SyncArgs, SyncFormat, ToolDirArgs,
+    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs,
+    VersionBump, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
