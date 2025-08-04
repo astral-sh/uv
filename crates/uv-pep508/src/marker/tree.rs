@@ -1166,24 +1166,24 @@ impl MarkerTree {
         match self.kind() {
             MarkerTreeKind::True => true,
             MarkerTreeKind::False => false,
-            MarkerTreeKind::Version(marker) => {
-                marker.edges().all(|(_, tree)| tree.evaluate_extras(extras))
-            }
+            MarkerTreeKind::Version(marker) => marker
+                .edges()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::String(marker) => marker
                 .children()
-                .all(|(_, tree)| tree.evaluate_extras(extras)),
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::In(marker) => marker
                 .children()
-                .all(|(_, tree)| tree.evaluate_extras(extras)),
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::Contains(marker) => marker
                 .children()
-                .all(|(_, tree)| tree.evaluate_extras(extras)),
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::List(marker) => marker
                 .children()
-                .all(|(_, tree)| tree.evaluate_extras(extras)),
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
             MarkerTreeKind::Extra(marker) => marker
                 .edge(extras.contains(marker.name().extra()))
-                .evaluate_extras(extras),
+                .evaluate_only_extras(extras),
         }
     }
 
@@ -3692,5 +3692,28 @@ mod test {
         let left = left_tree.try_to_string().unwrap();
         let right = "python_full_version == '3.10.*'";
         assert_eq!(left, right, "{left} != {right}");
+    }
+
+    #[test]
+    fn evaluate_only_extras() {
+        let a = ExtraName::from_str("a").unwrap();
+        let b = ExtraName::from_str("b").unwrap();
+
+        let marker = m("extra == 'a' and extra == 'b'");
+        assert!(!marker.evaluate_only_extras(&[a.clone()]));
+        assert!(!marker.evaluate_only_extras(&[b.clone()]));
+        assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
+
+        let marker = m("(platform_machine == 'inapplicable' and extra == 'b') or extra == 'a'");
+        assert!(marker.evaluate_only_extras(&[a.clone()]));
+        assert!(!marker.evaluate_only_extras(&[b.clone()]));
+        assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
+
+        let marker = m(
+            "(platform_machine == 'inapplicable' and extra == 'a') or (platform_machine != 'inapplicable' and extra == 'b')",
+        );
+        assert!(!marker.evaluate_only_extras(&[a.clone()]));
+        assert!(!marker.evaluate_only_extras(&[b.clone()]));
+        assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
     }
 }
