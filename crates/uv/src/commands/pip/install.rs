@@ -511,7 +511,7 @@ pub(crate) async fn pip_install(
             .resolution_mode(resolution_mode)
             .prerelease_mode(prerelease_mode)
             .dependency_mode(dependency_mode)
-            .exclude_newer(exclude_newer)
+            .exclude_newer(exclude_newer.clone())
             .index_strategy(index_strategy)
             .torch_backend(torch_backend)
             .build_options(build_options.clone())
@@ -558,6 +558,34 @@ pub(crate) async fn pip_install(
 
         (resolution, hasher)
     };
+
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        &cache,
+        &build_constraints,
+        interpreter,
+        &index_locations,
+        &flat_index,
+        &dependency_metadata,
+        state.clone(),
+        index_strategy,
+        config_settings,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        link_mode,
+        &build_options,
+        &hasher,
+        exclude_newer.clone(),
+        sources,
+        WorkspaceCache::default(),
+        concurrency,
+        preview,
+    );
 
     // Sync the environment.
     match operations::install(
