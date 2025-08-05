@@ -161,20 +161,20 @@ pub(crate) struct GitRepository {
 
 impl GitRepository {
     /// Opens an existing Git repository at `path`.
-    pub(crate) fn open(path: &Path) -> Result<GitRepository> {
+    pub(crate) fn open(path: &Path) -> Result<Self> {
         // Make sure there is a Git repository at the specified path.
         ProcessBuilder::new(GIT.as_ref()?)
             .arg("rev-parse")
             .cwd(path)
             .exec_with_output()?;
 
-        Ok(GitRepository {
+        Ok(Self {
             path: path.to_path_buf(),
         })
     }
 
     /// Initializes a Git repository at `path`.
-    fn init(path: &Path) -> Result<GitRepository> {
+    fn init(path: &Path) -> Result<Self> {
         // TODO(ibraheem): see if this still necessary now that we no longer use libgit2
         // Skip anything related to templates, they just call all sorts of issues as
         // we really don't want to use them yet they insist on being used. See #6240
@@ -187,7 +187,7 @@ impl GitRepository {
             .cwd(path)
             .exec_with_output()?;
 
-        Ok(GitRepository {
+        Ok(Self {
             path: path.to_path_buf(),
         })
     }
@@ -392,7 +392,7 @@ impl GitCheckout {
         }
 
         let repo = GitRepository::open(into)?;
-        let checkout = GitCheckout::new(revision, repo);
+        let checkout = Self::new(revision, repo);
         checkout.reset()?;
         Ok(checkout)
     }

@@ -98,8 +98,8 @@ pub enum RedirectPolicy {
 impl RedirectPolicy {
     pub fn reqwest_policy(self) -> reqwest::redirect::Policy {
         match self {
-            RedirectPolicy::BypassMiddleware => reqwest::redirect::Policy::default(),
-            RedirectPolicy::RetriggerMiddleware => reqwest::redirect::Policy::none(),
+            Self::BypassMiddleware => reqwest::redirect::Policy::default(),
+            Self::RetriggerMiddleware => reqwest::redirect::Policy::none(),
         }
     }
 }
@@ -640,7 +640,7 @@ impl RedirectClientWithMiddleware {
 }
 
 impl From<RedirectClientWithMiddleware> for ClientWithMiddleware {
-    fn from(item: RedirectClientWithMiddleware) -> ClientWithMiddleware {
+    fn from(item: RedirectClientWithMiddleware) -> Self {
         item.client
     }
 }

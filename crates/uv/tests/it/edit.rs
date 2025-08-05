@@ -6595,14 +6595,14 @@ fn add_remove_script_lock() -> Result<()> {
     "#})?;
 
     // Explicitly lock the script.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 

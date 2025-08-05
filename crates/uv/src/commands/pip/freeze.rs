@@ -9,6 +9,7 @@ use uv_cache::Cache;
 use uv_configuration::Preview;
 use uv_distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_installer::SitePackages;
+use uv_python::PythonPreference;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
 use crate::commands::ExitStatus;
@@ -30,6 +31,7 @@ pub(crate) fn pip_freeze(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
         preview,
     )?;

@@ -125,9 +125,9 @@ impl Display for Libc {
 impl From<&uv_platform_tags::Os> for Libc {
     fn from(value: &uv_platform_tags::Os) -> Self {
         match value {
-            uv_platform_tags::Os::Manylinux { .. } => Libc::Some(target_lexicon::Environment::Gnu),
-            uv_platform_tags::Os::Musllinux { .. } => Libc::Some(target_lexicon::Environment::Musl),
-            _ => Libc::None,
+            uv_platform_tags::Os::Manylinux { .. } => Self::Some(target_lexicon::Environment::Gnu),
+            uv_platform_tags::Os::Musllinux { .. } => Self::Some(target_lexicon::Environment::Musl),
+            _ => Self::None,
         }
     }
 }

@@ -11,7 +11,7 @@ pub struct SupportedEnvironments(Vec<MarkerTree>);
 impl SupportedEnvironments {
     /// Create a new [`SupportedEnvironments`] struct from a list of marker trees.
     pub fn from_markers(markers: Vec<MarkerTree>) -> Self {
-        SupportedEnvironments(markers)
+        Self(markers)
     }
 
     /// Return the list of marker trees.
@@ -56,7 +56,7 @@ impl serde::Serialize for SupportedEnvironments {
 
 /// Deserialize a marker string or list of marker strings into a [`SupportedEnvironments`] struct.
 impl<'de> serde::Deserialize<'de> for SupportedEnvironments {
-    fn deserialize<D>(deserializer: D) -> Result<SupportedEnvironments, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {

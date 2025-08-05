@@ -107,7 +107,7 @@ impl PubGrubDependency {
                 url,
             } = pubgrub_requirement;
             match &*package {
-                PubGrubPackageInner::Package { .. } => PubGrubDependency {
+                PubGrubPackageInner::Package { .. } => Self {
                     package,
                     version,
                     parent: if is_normal_parent {
@@ -117,7 +117,7 @@ impl PubGrubDependency {
                     },
                     url,
                 },
-                PubGrubPackageInner::Marker { .. } => PubGrubDependency {
+                PubGrubPackageInner::Marker { .. } => Self {
                     package,
                     version,
                     parent: if is_normal_parent {
@@ -134,7 +134,7 @@ impl PubGrubDependency {
                             "extras not flattened for {name}"
                         );
                     }
-                    PubGrubDependency {
+                    Self {
                         package,
                         version,
                         parent: None,
@@ -148,7 +148,7 @@ impl PubGrubDependency {
                             "group not flattened for {name}"
                         );
                     }
-                    PubGrubDependency {
+                    Self {
                         package,
                         version,
                         parent: None,
@@ -263,7 +263,7 @@ impl PubGrubRequirement {
         extra: Option<ExtraName>,
         group: Option<GroupName>,
         requirement: &Requirement,
-    ) -> PubGrubRequirement {
+    ) -> Self {
         Self {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),

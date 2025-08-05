@@ -298,30 +298,30 @@ pub(crate) trait Reachable<T> {
     fn marker(&self) -> T;
 }
 
-impl Reachable<MarkerTree> for MarkerTree {
-    fn true_marker() -> MarkerTree {
-        MarkerTree::TRUE
+impl Reachable<Self> for MarkerTree {
+    fn true_marker() -> Self {
+        Self::TRUE
     }
 
-    fn false_marker() -> MarkerTree {
-        MarkerTree::FALSE
+    fn false_marker() -> Self {
+        Self::FALSE
     }
 
-    fn marker(&self) -> MarkerTree {
+    fn marker(&self) -> Self {
         *self
     }
 }
 
-impl Reachable<UniversalMarker> for UniversalMarker {
-    fn true_marker() -> UniversalMarker {
-        UniversalMarker::TRUE
+impl Reachable<Self> for UniversalMarker {
+    fn true_marker() -> Self {
+        Self::TRUE
     }
 
-    fn false_marker() -> UniversalMarker {
-        UniversalMarker::FALSE
+    fn false_marker() -> Self {
+        Self::FALSE
     }
 
-    fn marker(&self) -> UniversalMarker {
+    fn marker(&self) -> Self {
         *self
     }
 }

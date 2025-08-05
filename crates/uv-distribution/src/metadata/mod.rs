@@ -11,7 +11,7 @@ use uv_pypi_types::{HashDigests, ResolutionMetadata};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{WorkspaceCache, WorkspaceError};
 
-pub use crate::metadata::build_requires::{BuildRequires, ExtraBuildRequires};
+pub use crate::metadata::build_requires::{BuildRequires, LoweredExtraBuildDependencies};
 pub use crate::metadata::dependency_groups::SourcedDependencyGroups;
 pub use crate::metadata::lowering::LoweredRequirement;
 pub use crate::metadata::lowering::LoweringError;

@@ -13,7 +13,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -47,6 +47,7 @@ pub(crate) fn pip_show(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
         preview,
     )?;

@@ -263,7 +263,7 @@ impl ManagedPythonInstallations {
         let arch = Arch::from_env();
         let libc = Libc::from_env()?;
 
-        let iter = ManagedPythonInstallations::from_settings(None)?
+        let iter = Self::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
                 installation.key.os == os
@@ -627,7 +627,7 @@ impl ManagedPythonInstallation {
     }
 
     /// Returns `true` if self is a suitable upgrade of other.
-    pub fn is_upgrade_of(&self, other: &ManagedPythonInstallation) -> bool {
+    pub fn is_upgrade_of(&self, other: &Self) -> bool {
         // Require matching implementation
         if self.key.implementation != other.key.implementation {
             return false;
@@ -764,7 +764,7 @@ impl PythonMinorVersionLink {
         installation: &ManagedPythonInstallation,
         preview: Preview,
     ) -> Option<Self> {
-        PythonMinorVersionLink::from_executable(
+        Self::from_executable(
             installation.executable(false).as_path(),
             installation.key(),
             preview,

@@ -32,7 +32,7 @@ use uv_cache_key::cache_digest;
 use uv_configuration::Preview;
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
-use uv_distribution_types::{IndexLocations, Requirement, Resolution};
+use uv_distribution_types::{ExtraBuildRequires, IndexLocations, Requirement, Resolution};
 use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
@@ -43,7 +43,6 @@ use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
-use uv_workspace::pyproject::ExtraBuildDependencies;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -283,7 +282,7 @@ impl SourceBuild {
         workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
-        extra_build_dependencies: &ExtraBuildDependencies,
+        extra_build_requires: &ExtraBuildRequires,
         build_stack: &BuildStack,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
@@ -326,7 +325,7 @@ impl SourceBuild {
 
         let extra_build_dependencies: Vec<Requirement> = package_name
             .as_ref()
-            .and_then(|name| extra_build_dependencies.get(name).cloned())
+            .and_then(|name| extra_build_requires.get(name).cloned())
             .unwrap_or_default()
             .into_iter()
             .map(Requirement::from)

@@ -173,7 +173,7 @@ where
     PylockTomlErrorKind: From<E>,
 {
     fn from(err: E) -> Self {
-        PylockTomlError {
+        Self {
             kind: Box::new(PylockTomlErrorKind::from(err)),
             hint: None,
         }
@@ -601,7 +601,7 @@ impl<'lock> PylockToml {
         packages.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
 
         // Return the constructed `pylock.toml`.
-        Ok(PylockToml {
+        Ok(Self {
             lock_version,
             created_by,
             requires_python: Some(requires_python),

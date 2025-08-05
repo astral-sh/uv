@@ -68,7 +68,7 @@ impl IndexStatusCodeStrategy {
         capabilities: &IndexCapabilities,
     ) -> IndexStatusCodeDecision {
         match self {
-            IndexStatusCodeStrategy::Default => match status_code {
+            Self::Default => match status_code {
                 StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
                 StatusCode::UNAUTHORIZED => {
                     capabilities.set_unauthorized(index_url.clone());
@@ -80,15 +80,11 @@ impl IndexStatusCodeStrategy {
                 }
                 _ => IndexStatusCodeDecision::Fail(status_code),
             },
-            IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes } => {
+            Self::IgnoreErrorCodes { status_codes } => {
                 if status_codes.contains(&status_code) {
                     IndexStatusCodeDecision::Ignore
                 } else {
-                    IndexStatusCodeStrategy::Default.handle_status_code(
-                        status_code,
-                        index_url,
-                        capabilities,
-                    )
+                    Self::Default.handle_status_code(status_code, index_url, capabilities)
                 }
             }
         }
