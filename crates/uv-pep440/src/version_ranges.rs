@@ -14,7 +14,7 @@ impl From<VersionSpecifiers> for Ranges<Version> {
     /// Convert [`VersionSpecifiers`] to a PubGrub-compatible version range, using PEP 440
     /// semantics.
     fn from(specifiers: VersionSpecifiers) -> Self {
-        let mut range = Ranges::full();
+        let mut range = Self::full();
         for specifier in specifiers {
             range = range.intersection(&Self::from(specifier));
         }
@@ -32,15 +32,15 @@ impl From<VersionSpecifier> for Ranges<Version> {
                 LocalVersionSlice::Segments(&[]) => {
                     let low = version;
                     let high = low.clone().with_local(LocalVersion::Max);
-                    Ranges::between(low, high)
+                    Self::between(low, high)
                 }
-                LocalVersionSlice::Segments(_) => Ranges::singleton(version),
+                LocalVersionSlice::Segments(_) => Self::singleton(version),
                 LocalVersionSlice::Max => unreachable!(
                     "found `LocalVersionSlice::Sentinel`, which should be an internal-only value"
                 ),
             },
-            Operator::ExactEqual => Ranges::singleton(version),
-            Operator::NotEqual => Ranges::from(VersionSpecifier {
+            Operator::ExactEqual => Self::singleton(version),
+            Operator::NotEqual => Self::from(VersionSpecifier {
                 operator: Operator::Equal,
                 version,
             })
@@ -54,32 +54,32 @@ impl From<VersionSpecifier> for Ranges<Version> {
                     .with_epoch(version.epoch())
                     .with_dev(Some(0));
 
-                Ranges::from_range_bounds(version..upper)
+                Self::from_range_bounds(version..upper)
             }
             Operator::LessThan => {
                 if version.any_prerelease() {
-                    Ranges::strictly_lower_than(version)
+                    Self::strictly_lower_than(version)
                 } else {
                     // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
                     // pre-release of the specified version unless the specified version is itself a
                     // pre-release."
-                    Ranges::strictly_lower_than(version.with_min(Some(0)))
+                    Self::strictly_lower_than(version.with_min(Some(0)))
                 }
             }
-            Operator::LessThanEqual => Ranges::lower_than(version.with_local(LocalVersion::Max)),
+            Operator::LessThanEqual => Self::lower_than(version.with_local(LocalVersion::Max)),
             Operator::GreaterThan => {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
                 // the given version unless V itself is a post release."
 
                 if let Some(dev) = version.dev() {
-                    Ranges::higher_than(version.with_dev(Some(dev + 1)))
+                    Self::higher_than(version.with_dev(Some(dev + 1)))
                 } else if let Some(post) = version.post() {
-                    Ranges::higher_than(version.with_post(Some(post + 1)))
+                    Self::higher_than(version.with_post(Some(post + 1)))
                 } else {
-                    Ranges::strictly_higher_than(version.with_max(Some(0)))
+                    Self::strictly_higher_than(version.with_max(Some(0)))
                 }
             }
-            Operator::GreaterThanEqual => Ranges::higher_than(version),
+            Operator::GreaterThanEqual => Self::higher_than(version),
             Operator::EqualStar => {
                 let low = version.with_dev(Some(0));
                 let mut high = low.clone();
@@ -95,7 +95,7 @@ impl From<VersionSpecifier> for Ranges<Version> {
                     *release.last_mut().unwrap() += 1;
                     high = high.with_release(release);
                 }
-                Ranges::from_range_bounds(low..high)
+                Self::from_range_bounds(low..high)
             }
             Operator::NotEqualStar => {
                 let low = version.with_dev(Some(0));
@@ -112,7 +112,7 @@ impl From<VersionSpecifier> for Ranges<Version> {
                     *release.last_mut().unwrap() += 1;
                     high = high.with_release(release);
                 }
-                Ranges::from_range_bounds(low..high).complement()
+                Self::from_range_bounds(low..high).complement()
             }
         }
     }
