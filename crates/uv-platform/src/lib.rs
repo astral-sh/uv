@@ -151,8 +151,8 @@ impl Ord for Platform {
                     other.arch.family == preferred.family,
                 ) {
                     (true, true) => unreachable!(),
-                    (true, false) => cmp::Ordering::Less,
-                    (false, true) => cmp::Ordering::Greater,
+                    (true, false) => cmp::Ordering::Greater,
+                    (false, true) => cmp::Ordering::Less,
                     (false, false) => {
                         // Both non-preferred, fallback to lexicographic order
                         self.arch
