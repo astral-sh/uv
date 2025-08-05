@@ -3,6 +3,39 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.5
+
+### Enhancements
+
+- Enable `uv run` with a GitHub Gist ([#15058](https://github.com/astral-sh/uv/pull/15058))
+- Improve HTTP response caching log messages ([#15067](https://github.com/astral-sh/uv/pull/15067))
+- Show wheel tag hints in install plan ([#15066](https://github.com/astral-sh/uv/pull/15066))
+- Support installing additional executables in `uv tool install` ([#14014](https://github.com/astral-sh/uv/pull/14014))
+
+### Preview features
+
+- Enable extra build dependencies to 'match runtime' versions ([#15036](https://github.com/astral-sh/uv/pull/15036))
+- Remove duplicate `extra-build-dependencies` warnings for `uv pip` ([#15088](https://github.com/astral-sh/uv/pull/15088))
+- Use "option" instead of "setting" in `pylock` warning ([#15089](https://github.com/astral-sh/uv/pull/15089))
+- Respect extra build requires when reading from wheel cache ([#15030](https://github.com/astral-sh/uv/pull/15030))
+- Preserve lowered extra build dependencies ([#15038](https://github.com/astral-sh/uv/pull/15038))
+
+### Bug fixes
+
+- Add Python versions to markers implied from wheels ([#14913](https://github.com/astral-sh/uv/pull/14913))
+- Ensure consistent indentation when adding dependencies ([#14991](https://github.com/astral-sh/uv/pull/14991))
+- Fix handling of `python-preference = system` when managed interpreters are on the PATH ([#15059](https://github.com/astral-sh/uv/pull/15059))
+- Fix symlink preservation in virtual environment creation ([#14933](https://github.com/astral-sh/uv/pull/14933))
+- Gracefully handle entrypoint permission errors ([#15026](https://github.com/astral-sh/uv/pull/15026))
+- Include wheel hashes from local Simple indexes ([#14993](https://github.com/astral-sh/uv/pull/14993))
+- Prefer system Python installations over managed ones when `--system` is used ([#15061](https://github.com/astral-sh/uv/pull/15061))
+- Remove retry wrapper when matching on error kind ([#14996](https://github.com/astral-sh/uv/pull/14996))
+- Revert `h2` upgrade ([#15079](https://github.com/astral-sh/uv/pull/15079))
+
+### Documentation
+
+- Improve visibility of copy and line separator in dark mode ([#14987](https://github.com/astral-sh/uv/pull/14987))
+
 ## 0.8.4
 
 ### Enhancements
