@@ -51,7 +51,7 @@ impl Reinstall {
 
     /// Returns `true` if the specified package should be reinstalled.
     pub fn contains_package(&self, package_name: &PackageName) -> bool {
-        match &self {
+        match self {
             Self::None => false,
             Self::All => true,
             Self::Packages(packages, ..) => packages.contains(package_name),
@@ -60,7 +60,7 @@ impl Reinstall {
 
     /// Returns `true` if the specified path should be reinstalled.
     pub fn contains_path(&self, path: &Path) -> bool {
-        match &self {
+        match self {
             Self::None => false,
             Self::All => true,
             Self::Packages(.., paths) => paths
@@ -194,7 +194,7 @@ impl Upgrade {
 
     /// Returns `true` if the specified package should be upgraded.
     pub fn contains(&self, package_name: &PackageName) -> bool {
-        match &self {
+        match self {
             Self::None => false,
             Self::All => true,
             Self::Packages(packages) => packages.contains_key(package_name),

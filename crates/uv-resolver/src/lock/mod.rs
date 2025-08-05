@@ -3540,7 +3540,7 @@ impl Source {
 
     /// Returns `true` if the source is that of a wheel.
     fn is_wheel(&self) -> bool {
-        match &self {
+        match self {
             Self::Path(path) => {
                 matches!(
                     DistExtension::from_path(path).ok(),
@@ -3579,8 +3579,8 @@ impl Source {
 
     fn to_toml(&self, table: &mut Table) {
         let mut source_table = InlineTable::new();
-        match *self {
-            Self::Registry(ref source) => match source {
+        match self {
+            Self::Registry(source) => match source {
                 RegistrySource::Url(url) => {
                     source_table.insert("registry", Value::from(url.as_ref()));
                 }
@@ -3591,10 +3591,10 @@ impl Source {
                     );
                 }
             },
-            Self::Git(ref url, _) => {
+            Self::Git(url, _) => {
                 source_table.insert("git", Value::from(url.as_ref()));
             }
-            Self::Direct(ref url, DirectSource { ref subdirectory }) => {
+            Self::Direct(url, DirectSource { subdirectory }) => {
                 source_table.insert("url", Value::from(url.as_ref()));
                 if let Some(ref subdirectory) = *subdirectory {
                     source_table.insert(
@@ -3603,22 +3603,22 @@ impl Source {
                     );
                 }
             }
-            Self::Path(ref path) => {
+            Self::Path(path) => {
                 source_table.insert("path", Value::from(PortablePath::from(path).to_string()));
             }
-            Self::Directory(ref path) => {
+            Self::Directory(path) => {
                 source_table.insert(
                     "directory",
                     Value::from(PortablePath::from(path).to_string()),
                 );
             }
-            Self::Editable(ref path) => {
+            Self::Editable(path) => {
                 source_table.insert(
                     "editable",
                     Value::from(PortablePath::from(path).to_string()),
                 );
             }
-            Self::Virtual(ref path) => {
+            Self::Virtual(path) => {
                 source_table.insert("virtual", Value::from(PortablePath::from(path).to_string()));
             }
         }
@@ -3645,7 +3645,7 @@ impl Display for Source {
 
 impl Source {
     fn name(&self) -> &str {
-        match *self {
+        match self {
             Self::Registry(..) => "registry",
             Self::Git(..) => "git",
             Self::Direct(..) => "direct",
@@ -3664,7 +3664,7 @@ impl Source {
     ///
     /// Returns `None` to indicate that the source kind _may_ include a hash.
     fn requires_hash(&self) -> Option<bool> {
-        match *self {
+        match self {
             Self::Registry(..) => None,
             Self::Direct(..) | Self::Path(..) => Some(true),
             Self::Git(..) | Self::Directory(..) | Self::Editable(..) | Self::Virtual(..) => {
@@ -3927,7 +3927,7 @@ impl SourceDist {
     }
 
     fn url(&self) -> Option<&UrlString> {
-        match &self {
+        match self {
             Self::Metadata { .. } => None,
             Self::Url { url, .. } => Some(url),
             Self::Path { .. } => None,
@@ -3935,7 +3935,7 @@ impl SourceDist {
     }
 
     pub(crate) fn hash(&self) -> Option<&Hash> {
-        match &self {
+        match self {
             Self::Metadata { metadata } => metadata.hash.as_ref(),
             Self::Url { metadata, .. } => metadata.hash.as_ref(),
             Self::Path { metadata, .. } => metadata.hash.as_ref(),
@@ -3943,7 +3943,7 @@ impl SourceDist {
     }
 
     pub(crate) fn size(&self) -> Option<u64> {
-        match &self {
+        match self {
             Self::Metadata { metadata } => metadata.size,
             Self::Url { metadata, .. } => metadata.size,
             Self::Path { metadata, .. } => metadata.size,
@@ -3951,7 +3951,7 @@ impl SourceDist {
     }
 
     pub(crate) fn upload_time(&self) -> Option<Timestamp> {
-        match &self {
+        match self {
             Self::Metadata { metadata } => metadata.upload_time,
             Self::Url { metadata, .. } => metadata.upload_time,
             Self::Path { metadata, .. } => metadata.upload_time,
@@ -4169,7 +4169,7 @@ impl SourceDist {
     /// Returns the TOML representation of this source distribution.
     fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
         let mut table = InlineTable::new();
-        match &self {
+        match self {
             Self::Metadata { .. } => {}
             Self::Url { url, .. } => {
                 table.insert("url", Value::from(url.as_ref()));

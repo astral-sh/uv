@@ -164,7 +164,7 @@ impl PortableGlobParser {
                 }
                 start_or_slash = false;
             } else if c == '\\' {
-                match *self {
+                match self {
                     Self::Pep639 => {
                         return Err(PortableGlobError::InvalidBackslash {
                             glob: glob.to_string(),
@@ -194,7 +194,7 @@ impl PortableGlobParser {
                     }
                 }
             } else {
-                let err = match *self {
+                let err = match self {
                     Self::Pep639 => PortableGlobError::InvalidCharacter {
                         glob: glob.to_string(),
                         pos,

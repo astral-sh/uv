@@ -450,8 +450,8 @@ impl ConflictPackage {
     /// If this conflict corresponds to an extra, then return the
     /// extra name.
     pub fn extra(&self) -> Option<&ExtraName> {
-        match *self {
-            Self::Extra(ref extra) => Some(extra),
+        match self {
+            Self::Extra(extra) => Some(extra),
             Self::Group(_) => None,
         }
     }
@@ -459,17 +459,17 @@ impl ConflictPackage {
     /// If this conflict corresponds to a group, then return the
     /// group name.
     pub fn group(&self) -> Option<&GroupName> {
-        match *self {
-            Self::Group(ref group) => Some(group),
+        match self {
+            Self::Group(group) => Some(group),
             Self::Extra(_) => None,
         }
     }
 
     /// Returns this conflict as a new type with its fields borrowed.
     pub fn as_ref(&self) -> ConflictPackageRef<'_> {
-        match *self {
-            Self::Extra(ref extra) => ConflictPackageRef::Extra(extra),
-            Self::Group(ref group) => ConflictPackageRef::Group(group),
+        match self {
+            Self::Extra(extra) => ConflictPackageRef::Extra(extra),
+            Self::Group(group) => ConflictPackageRef::Group(group),
         }
     }
 }
@@ -487,39 +487,39 @@ impl<'a> ConflictPackageRef<'a> {
     /// If this conflict corresponds to an extra, then return the
     /// extra name.
     pub fn extra(&self) -> Option<&'a ExtraName> {
-        match *self {
-            ConflictPackageRef::Extra(extra) => Some(extra),
-            ConflictPackageRef::Group(_) => None,
+        match self {
+            Self::Extra(extra) => Some(extra),
+            Self::Group(_) => None,
         }
     }
 
     /// If this conflict corresponds to a group, then return the
     /// group name.
     pub fn group(&self) -> Option<&'a GroupName> {
-        match *self {
-            ConflictPackageRef::Group(group) => Some(group),
-            ConflictPackageRef::Extra(_) => None,
+        match self {
+            Self::Group(group) => Some(group),
+            Self::Extra(_) => None,
         }
     }
 
     /// Converts this borrowed conflict to its owned variant.
     pub fn to_owned(&self) -> ConflictPackage {
         match *self {
-            ConflictPackageRef::Extra(extra) => ConflictPackage::Extra(extra.clone()),
-            ConflictPackageRef::Group(group) => ConflictPackage::Group(group.clone()),
+            Self::Extra(extra) => ConflictPackage::Extra(extra.clone()),
+            Self::Group(group) => ConflictPackage::Group(group.clone()),
         }
     }
 }
 
 impl<'a> From<&'a ExtraName> for ConflictPackageRef<'a> {
     fn from(extra: &'a ExtraName) -> Self {
-        ConflictPackageRef::Extra(extra)
+        Self::Extra(extra)
     }
 }
 
 impl<'a> From<&'a GroupName> for ConflictPackageRef<'a> {
     fn from(group: &'a GroupName) -> Self {
-        ConflictPackageRef::Group(group)
+        Self::Group(group)
     }
 }
 
