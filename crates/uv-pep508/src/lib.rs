@@ -342,7 +342,7 @@ impl Pep508Url for Url {
     type Err = url::ParseError;
 
     fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
-        Url::parse(url)
+        Self::parse(url)
     }
 
     fn displayable_with_credentials(&self) -> impl Display {

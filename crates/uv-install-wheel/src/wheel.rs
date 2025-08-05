@@ -904,7 +904,7 @@ impl RenameOrCopy {
             Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
                 Ok(()) => {}
                 Err(err) => {
-                    *self = RenameOrCopy::Copy;
+                    *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
                     fs_err::copy(from.as_ref(), to.as_ref())?;
                 }

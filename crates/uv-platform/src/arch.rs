@@ -23,6 +23,53 @@ pub struct Arch {
     pub(crate) variant: Option<ArchVariant>,
 }
 
+impl Ord for Arch {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.family == other.family {
+            return self.variant.cmp(&other.variant);
+        }
+
+        // For the time being, manually make aarch64 windows disfavored
+        // on its own host platform, because most packages don't have wheels for
+        // aarch64 windows, making emulation more useful than native execution!
+        //
+        // The reason we do this in "sorting" and not "supports" is so that we don't
+        // *refuse* to use an aarch64 windows pythons if they happen to be installed
+        // and nothing else is available.
+        //
+        // Similarly if someone manually requests an aarch64 windows install, we
+        // should respect that request (this is the way users should "override"
+        // this behaviour).
+        let preferred = if cfg!(all(windows, target_arch = "aarch64")) {
+            Self {
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            }
+        } else {
+            // Prefer native architectures
+            Self::from_env()
+        };
+
+        match (
+            self.family == preferred.family,
+            other.family == preferred.family,
+        ) {
+            (true, true) => unreachable!(),
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (false, false) => {
+                // Both non-preferred, fallback to lexicographic order
+                self.family.to_string().cmp(&other.family.to_string())
+            }
+        }
+    }
+}
+
+impl PartialOrd for Arch {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 impl Arch {
     pub fn new(family: target_lexicon::Architecture, variant: Option<ArchVariant>) -> Self {
         Self { family, variant }
@@ -157,45 +204,45 @@ impl Display for ArchVariant {
 impl From<&uv_platform_tags::Arch> for Arch {
     fn from(value: &uv_platform_tags::Arch) -> Self {
         match value {
-            uv_platform_tags::Arch::Aarch64 => Arch::new(
+            uv_platform_tags::Arch::Aarch64 => Self::new(
                 target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 None,
             ),
-            uv_platform_tags::Arch::Armv5TEL => Arch::new(
+            uv_platform_tags::Arch::Armv5TEL => Self::new(
                 target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv5te),
                 None,
             ),
-            uv_platform_tags::Arch::Armv6L => Arch::new(
+            uv_platform_tags::Arch::Armv6L => Self::new(
                 target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv6),
                 None,
             ),
-            uv_platform_tags::Arch::Armv7L => Arch::new(
+            uv_platform_tags::Arch::Armv7L => Self::new(
                 target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
                 None,
             ),
-            uv_platform_tags::Arch::S390X => Arch::new(target_lexicon::Architecture::S390x, None),
+            uv_platform_tags::Arch::S390X => Self::new(target_lexicon::Architecture::S390x, None),
             uv_platform_tags::Arch::Powerpc => {
-                Arch::new(target_lexicon::Architecture::Powerpc, None)
+                Self::new(target_lexicon::Architecture::Powerpc, None)
             }
             uv_platform_tags::Arch::Powerpc64 => {
-                Arch::new(target_lexicon::Architecture::Powerpc64, None)
+                Self::new(target_lexicon::Architecture::Powerpc64, None)
             }
             uv_platform_tags::Arch::Powerpc64Le => {
-                Arch::new(target_lexicon::Architecture::Powerpc64le, None)
+                Self::new(target_lexicon::Architecture::Powerpc64le, None)
             }
-            uv_platform_tags::Arch::X86 => Arch::new(
+            uv_platform_tags::Arch::X86 => Self::new(
                 target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 None,
             ),
-            uv_platform_tags::Arch::X86_64 => Arch::new(target_lexicon::Architecture::X86_64, None),
+            uv_platform_tags::Arch::X86_64 => Self::new(target_lexicon::Architecture::X86_64, None),
             uv_platform_tags::Arch::LoongArch64 => {
-                Arch::new(target_lexicon::Architecture::LoongArch64, None)
+                Self::new(target_lexicon::Architecture::LoongArch64, None)
             }
-            uv_platform_tags::Arch::Riscv64 => Arch::new(
+            uv_platform_tags::Arch::Riscv64 => Self::new(
                 target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64),
                 None,
             ),
-            uv_platform_tags::Arch::Wasm32 => Arch::new(target_lexicon::Architecture::Wasm32, None),
+            uv_platform_tags::Arch::Wasm32 => Self::new(target_lexicon::Architecture::Wasm32, None),
         }
     }
 }

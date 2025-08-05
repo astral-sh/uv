@@ -22,7 +22,7 @@ impl LockedRequirements {
     pub fn from_preferences(preferences: Vec<Preference>) -> Self {
         Self {
             preferences,
-            ..LockedRequirements::default()
+            ..Self::default()
         }
     }
 }

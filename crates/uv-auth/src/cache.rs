@@ -177,8 +177,8 @@ struct TrieState {
 }
 
 impl UrlTrie {
-    fn new() -> UrlTrie {
-        let mut trie = UrlTrie { states: vec![] };
+    fn new() -> Self {
+        let mut trie = Self { states: vec![] };
         trie.alloc();
         trie
     }

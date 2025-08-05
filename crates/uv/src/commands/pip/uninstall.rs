@@ -13,8 +13,8 @@ use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
+use uv_python::{EnvironmentPreference, PythonPreference};
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -58,6 +58,7 @@ pub(crate) async fn pip_uninstall(
             .map(PythonRequest::parse)
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
+        PythonPreference::default().with_system_flag(system),
         &cache,
         preview,
     )?;

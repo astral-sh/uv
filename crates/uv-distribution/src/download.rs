@@ -55,8 +55,8 @@ impl Hashed for LocalWheel {
 
 /// Convert a [`LocalWheel`] into a [`CachedDist`].
 impl From<LocalWheel> for CachedDist {
-    fn from(wheel: LocalWheel) -> CachedDist {
-        CachedDist::from_remote(
+    fn from(wheel: LocalWheel) -> Self {
+        Self::from_remote(
             wheel.dist,
             wheel.filename,
             wheel.hashes,

@@ -1067,7 +1067,7 @@ impl Variable {
     /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
     /// never be true at the same time.
     fn is_conflicting_variable(&self) -> bool {
-        let Variable::String(marker) = self else {
+        let Self::String(marker) = self else {
             return false;
         };
         marker.is_conflicting()
@@ -1086,8 +1086,8 @@ pub(crate) struct Node {
 
 impl Node {
     /// Return the complement of this node, flipping all children IDs.
-    fn not(self) -> Node {
-        Node {
+    fn not(self) -> Self {
+        Self {
             var: self.var,
             children: self.children.not(),
         }
@@ -1102,16 +1102,16 @@ pub(crate) struct NodeId(usize);
 
 impl NodeId {
     // The terminal node representing `true`, or a trivially `true` node.
-    pub(crate) const TRUE: NodeId = NodeId(0);
+    pub(crate) const TRUE: Self = Self(0);
 
     // The terminal node representing `false`, or an unsatisifable node.
-    pub(crate) const FALSE: NodeId = NodeId(1);
+    pub(crate) const FALSE: Self = Self(1);
 
     /// Create a new, optionally complemented, [`NodeId`] with the given index.
-    fn new(index: usize, complement: bool) -> NodeId {
+    fn new(index: usize, complement: bool) -> Self {
         // Ensure the index does not interfere with the lowest complement bit.
         let index = (index + 1) << 1;
-        NodeId(index | usize::from(complement))
+        Self(index | usize::from(complement))
     }
 
     /// Returns the index of this ID, ignoring the complemented edge.
@@ -1127,16 +1127,16 @@ impl NodeId {
     }
 
     /// Returns the complement of this node.
-    pub(crate) fn not(self) -> NodeId {
+    pub(crate) fn not(self) -> Self {
         // Toggle the lowest bit.
-        NodeId(self.0 ^ 1)
+        Self(self.0 ^ 1)
     }
 
     /// Returns the complement of this node, if it's parent is complemented.
     ///
     /// This method is useful to restore the complemented state of children nodes
     /// when traversing the tree.
-    pub(crate) fn negate(self, parent: NodeId) -> NodeId {
+    pub(crate) fn negate(self, parent: Self) -> Self {
         if parent.is_complement() {
             self.not()
         } else {
@@ -1146,12 +1146,12 @@ impl NodeId {
 
     /// Returns `true` if this node represents an unsatisfiable node.
     pub(crate) fn is_false(self) -> bool {
-        self == NodeId::FALSE
+        self == Self::FALSE
     }
 
     /// Returns `true` if this node represents a trivially `true` node.
     pub(crate) fn is_true(self) -> bool {
-        self == NodeId::TRUE
+        self == Self::TRUE
     }
 }
 
@@ -1189,14 +1189,14 @@ pub(crate) enum Edges {
 
 impl Edges {
     /// Returns the [`Edges`] for a boolean variable.
-    fn from_bool(complemented: bool) -> Edges {
+    fn from_bool(complemented: bool) -> Self {
         if complemented {
-            Edges::Boolean {
+            Self::Boolean {
                 high: NodeId::TRUE,
                 low: NodeId::FALSE,
             }
         } else {
-            Edges::Boolean {
+            Self::Boolean {
                 high: NodeId::FALSE,
                 low: NodeId::TRUE,
             }
@@ -1207,7 +1207,7 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: ArcStr) -> Edges {
+    fn from_string(operator: MarkerOperator, value: ArcStr) -> Self {
         let range: Ranges<ArcStr> = match operator {
             MarkerOperator::Equal => Ranges::singleton(value),
             MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
@@ -1219,16 +1219,16 @@ impl Edges {
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
 
-        Edges::String {
-            edges: Edges::from_range(&range),
+        Self::String {
+            edges: Self::from_range(&range),
         }
     }
 
     /// Returns the [`Edges`] for a version specifier.
-    fn from_specifier(specifier: VersionSpecifier) -> Edges {
+    fn from_specifier(specifier: VersionSpecifier) -> Self {
         let specifier = release_specifier_to_range(specifier.only_release(), true);
-        Edges::Version {
-            edges: Edges::from_range(&specifier),
+        Self::Version {
+            edges: Self::from_range(&specifier),
         }
     }
 
@@ -1238,7 +1238,7 @@ impl Edges {
     fn from_python_versions(
         versions: Vec<Version>,
         operator: ContainerOperator,
-    ) -> Result<Edges, NodeId> {
+    ) -> Result<Self, NodeId> {
         let mut range: Ranges<Version> = versions
             .into_iter()
             .map(|version| {
@@ -1253,13 +1253,13 @@ impl Edges {
             range = range.complement();
         }
 
-        Ok(Edges::Version {
-            edges: Edges::from_range(&range),
+        Ok(Self::Version {
+            edges: Self::from_range(&range),
         })
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &[Version], operator: ContainerOperator) -> Edges {
+    fn from_versions(versions: &[Version], operator: ContainerOperator) -> Self {
         let mut range: Ranges<Version> = versions
             .iter()
             .map(|version| {
@@ -1274,8 +1274,8 @@ impl Edges {
             range = range.complement();
         }
 
-        Edges::Version {
-            edges: Edges::from_range(&range),
+        Self::Version {
+            edges: Self::from_range(&range),
         }
     }
 
@@ -1323,26 +1323,26 @@ impl Edges {
     fn apply(
         &self,
         parent: NodeId,
-        right_edges: &Edges,
+        right_edges: &Self,
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> Edges {
+    ) -> Self {
         match (self, right_edges) {
             // For version or string variables, we have to split and merge the overlapping ranges.
-            (Edges::Version { edges }, Edges::Version { edges: right_edges }) => Edges::Version {
-                edges: Edges::apply_ranges(edges, parent, right_edges, right_parent, apply),
+            (Self::Version { edges }, Self::Version { edges: right_edges }) => Self::Version {
+                edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
-            (Edges::String { edges }, Edges::String { edges: right_edges }) => Edges::String {
-                edges: Edges::apply_ranges(edges, parent, right_edges, right_parent, apply),
+            (Self::String { edges }, Self::String { edges: right_edges }) => Self::String {
+                edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
             // For boolean variables, we simply merge the low and high edges.
             (
-                Edges::Boolean { high, low },
-                Edges::Boolean {
+                Self::Boolean { high, low },
+                Self::Boolean {
                     high: right_high,
                     low: right_low,
                 },
-            ) => Edges::Boolean {
+            ) => Self::Boolean {
                 high: apply(high.negate(parent), right_high.negate(right_parent)),
                 low: apply(low.negate(parent), right_low.negate(right_parent)),
             },
@@ -1422,22 +1422,22 @@ impl Edges {
     fn is_disjoint(
         &self,
         parent: NodeId,
-        right_edges: &Edges,
+        right_edges: &Self,
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
     ) -> bool {
         match (self, right_edges) {
             // For version or string variables, we have to split and check the overlapping ranges.
-            (Edges::Version { edges }, Edges::Version { edges: right_edges }) => {
-                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            (Self::Version { edges }, Self::Version { edges: right_edges }) => {
+                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
             }
-            (Edges::String { edges }, Edges::String { edges: right_edges }) => {
-                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            (Self::String { edges }, Self::String { edges: right_edges }) => {
+                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
             }
             // For boolean variables, we simply check the low and high edges.
             (
-                Edges::Boolean { high, low },
-                Edges::Boolean {
+                Self::Boolean { high, low },
+                Self::Boolean {
                     high: right_high,
                     low: right_low,
                 },
@@ -1482,23 +1482,23 @@ impl Edges {
     }
 
     // Apply the given function to all direct children of this node.
-    fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> Edges {
+    fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> Self {
         match self {
-            Edges::Version { edges: map } => Edges::Version {
+            Self::Version { edges: map } => Self::Version {
                 edges: map
                     .iter()
                     .cloned()
                     .map(|(range, node)| (range, f(node.negate(parent))))
                     .collect(),
             },
-            Edges::String { edges: map } => Edges::String {
+            Self::String { edges: map } => Self::String {
                 edges: map
                     .iter()
                     .cloned()
                     .map(|(range, node)| (range, f(node.negate(parent))))
                     .collect(),
             },
-            Edges::Boolean { high, low } => Edges::Boolean {
+            Self::Boolean { high, low } => Self::Boolean {
                 low: f(low.negate(parent)),
                 high: f(high.negate(parent)),
             },
@@ -1508,32 +1508,32 @@ impl Edges {
     // Returns an iterator over all direct children of this node.
     fn nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
         match self {
-            Edges::Version { edges: map } => {
+            Self::Version { edges: map } => {
                 Either::Left(Either::Left(map.iter().map(|(_, node)| *node)))
             }
-            Edges::String { edges: map } => {
+            Self::String { edges: map } => {
                 Either::Left(Either::Right(map.iter().map(|(_, node)| *node)))
             }
-            Edges::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
+            Self::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
         }
     }
 
     // Returns the complement of this [`Edges`].
-    fn not(self) -> Edges {
+    fn not(self) -> Self {
         match self {
-            Edges::Version { edges: map } => Edges::Version {
+            Self::Version { edges: map } => Self::Version {
                 edges: map
                     .into_iter()
                     .map(|(range, node)| (range, node.not()))
                     .collect(),
             },
-            Edges::String { edges: map } => Edges::String {
+            Self::String { edges: map } => Self::String {
                 edges: map
                     .into_iter()
                     .map(|(range, node)| (range, node.not()))
                     .collect(),
             },
-            Edges::Boolean { high, low } => Edges::Boolean {
+            Self::Boolean { high, low } => Self::Boolean {
                 high: high.not(),
                 low: low.not(),
             },

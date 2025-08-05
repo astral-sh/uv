@@ -227,7 +227,7 @@ impl PythonVersionFile {
 
     /// Returns `true` if the version file is a global version file.
     pub fn is_global(&self) -> bool {
-        PythonVersionFile::global().is_some_and(|global| self.path() == global.path())
+        Self::global().is_some_and(|global| self.path() == global.path())
     }
 
     /// Return the first request declared in the file, if any.

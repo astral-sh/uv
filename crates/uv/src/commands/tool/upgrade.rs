@@ -9,7 +9,7 @@ use tracing::{debug, trace};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, Preview};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{ExtraBuildRequires, Requirement};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_python::{
@@ -20,7 +20,7 @@ use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::write_error_chain;
-use uv_workspace::{WorkspaceCache, pyproject::ExtraBuildDependencies};
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
@@ -339,7 +339,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             build_constraints,
-            uv_distribution::ExtraBuildRequires::from_lowered(ExtraBuildDependencies::default()),
+            ExtraBuildRequires::default(),
             &settings,
             network_settings,
             &state,

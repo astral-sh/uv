@@ -21,6 +21,7 @@ uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-git-types = { workspace = true }
@@ -35,12 +36,12 @@ uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
-uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 async-channel = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
+owo-colors = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }

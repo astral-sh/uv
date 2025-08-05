@@ -45,7 +45,7 @@ impl std::fmt::Display for SystemDependency {
 
 impl From<SystemDependency> for PubGrubDependency {
     fn from(value: SystemDependency) -> Self {
-        PubGrubDependency {
+        Self {
             package: PubGrubPackage::from(PubGrubPackageInner::System(value.name)),
             version: Ranges::singleton(value.version),
             url: None,

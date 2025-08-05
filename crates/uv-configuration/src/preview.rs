@@ -40,7 +40,7 @@ impl Display for PreviewFeatures {
         if self.is_empty() {
             write!(f, "none")
         } else {
-            let features: Vec<&str> = self.iter().map(PreviewFeatures::flag_as_str).collect();
+            let features: Vec<&str> = self.iter().map(Self::flag_as_str).collect();
             write!(f, "{}", features.join(","))
         }
     }
@@ -56,7 +56,7 @@ impl FromStr for PreviewFeatures {
     type Err = PreviewFeaturesParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut flags = PreviewFeatures::empty();
+        let mut flags = Self::empty();
 
         for part in s.split(',') {
             let part = part.trim();

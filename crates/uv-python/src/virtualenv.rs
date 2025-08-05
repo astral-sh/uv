@@ -85,22 +85,22 @@ impl CondaEnvironmentKind {
     fn from_prefix_path(path: &Path) -> Self {
         // If we cannot read `CONDA_DEFAULT_ENV`, there's no way to know if the base environment
         let Ok(default_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
-            return CondaEnvironmentKind::Child;
+            return Self::Child;
         };
 
         // These are the expected names for the base environment
         if default_env != "base" && default_env != "root" {
-            return CondaEnvironmentKind::Child;
+            return Self::Child;
         }
 
         let Some(name) = path.file_name() else {
-            return CondaEnvironmentKind::Child;
+            return Self::Child;
         };
 
         if name.to_str().is_some_and(|name| name == default_env) {
-            CondaEnvironmentKind::Base
+            Self::Base
         } else {
-            CondaEnvironmentKind::Child
+            Self::Child
         }
     }
 }

@@ -67,8 +67,8 @@ enum ConfigSettingValue {
 impl serde::Serialize for ConfigSettingValue {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            ConfigSettingValue::String(value) => serializer.serialize_str(value),
-            ConfigSettingValue::List(values) => serializer.collect_seq(values.iter()),
+            Self::String(value) => serializer.serialize_str(value),
+            Self::List(values) => serializer.collect_seq(values.iter()),
         }
     }
 }
@@ -153,7 +153,7 @@ impl ConfigSettings {
 
     /// Merge two sets of config settings, with the values in `self` taking precedence.
     #[must_use]
-    pub fn merge(self, other: ConfigSettings) -> ConfigSettings {
+    pub fn merge(self, other: Self) -> Self {
         let mut config = self.0;
         for (key, value) in other.0 {
             match config.entry(key) {
@@ -277,7 +277,7 @@ impl PackageConfigSettings {
 
     /// Merge two sets of package config settings, with the values in `self` taking precedence.
     #[must_use]
-    pub fn merge(mut self, other: PackageConfigSettings) -> PackageConfigSettings {
+    pub fn merge(mut self, other: Self) -> Self {
         for (package, settings) in other.0 {
             match self.0.entry(package) {
                 Entry::Vacant(vacant) => {
