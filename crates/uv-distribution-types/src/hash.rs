@@ -25,12 +25,12 @@ impl HashPolicy<'_> {
     /// Returns `true` if the hash policy indicates that hashes should be generated.
     pub fn is_generate(&self, dist: &crate::BuiltDist) -> bool {
         match self {
-            HashPolicy::Generate(HashGeneration::Url) => dist.file().is_none(),
-            HashPolicy::Generate(HashGeneration::All) => {
+            Self::Generate(HashGeneration::Url) => dist.file().is_none(),
+            Self::Generate(HashGeneration::All) => {
                 dist.file().is_none_or(|file| file.hashes.is_empty())
             }
-            HashPolicy::Validate(_) => false,
-            HashPolicy::None => false,
+            Self::Validate(_) => false,
+            Self::None => false,
         }
     }
 

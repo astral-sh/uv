@@ -42,9 +42,9 @@ pub enum AuthPolicy {
 impl Display for AuthPolicy {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            AuthPolicy::Auto => write!(f, "auto"),
-            AuthPolicy::Always => write!(f, "always"),
-            AuthPolicy::Never => write!(f, "never"),
+            Self::Auto => write!(f, "auto"),
+            Self::Always => write!(f, "always"),
+            Self::Never => write!(f, "never"),
         }
     }
 }

@@ -124,9 +124,9 @@ impl PyProjectToml {
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
         let pyproject =
             toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
-        let pyproject = PyProjectToml::deserialize(pyproject.into_deserializer())
+        let pyproject = Self::deserialize(pyproject.into_deserializer())
             .map_err(PyprojectTomlError::TomlSchema)?;
-        Ok(PyProjectToml { raw, ..pyproject })
+        Ok(Self { raw, ..pyproject })
     }
 
     /// Returns `true` if the project should be considered a Python package, as opposed to a
@@ -255,7 +255,7 @@ impl TryFrom<ProjectWire> for Project {
             return Err(PyprojectTomlError::MissingVersion);
         }
 
-        Ok(Project {
+        Ok(Self {
             name,
             version: value.version,
             requires_python: value.requires_python,
@@ -1612,7 +1612,7 @@ impl Source {
         branch: Option<String>,
         root: &Path,
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
-    ) -> Result<Option<Source>, SourceError> {
+    ) -> Result<Option<Self>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(source, RequirementSource::Git { .. })
             && (branch.is_some() || tag.is_some() || rev.is_some())
@@ -1620,7 +1620,7 @@ impl Source {
             if let Some(sources) = existing_sources {
                 if let Some(package_sources) = sources.get(name) {
                     for existing_source in package_sources.iter() {
-                        if let Source::Git {
+                        if let Self::Git {
                             git,
                             subdirectory,
                             marker,
@@ -1629,7 +1629,7 @@ impl Source {
                             ..
                         } = existing_source
                         {
-                            return Ok(Some(Source::Git {
+                            return Ok(Some(Self::Git {
                                 git: git.clone(),
                                 subdirectory: subdirectory.clone(),
                                 rev,
@@ -1672,7 +1672,7 @@ impl Source {
         if workspace {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
-                    Ok(Some(Source::Workspace {
+                    Ok(Some(Self::Workspace {
                         workspace: true,
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1697,7 +1697,7 @@ impl Source {
             }
             RequirementSource::Registry { index: None, .. } => {
                 if let Some(index) = index {
-                    Source::Registry {
+                    Self::Registry {
                         index,
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1708,7 +1708,7 @@ impl Source {
                 }
             }
             RequirementSource::Path { install_path, .. }
-            | RequirementSource::Directory { install_path, .. } => Source::Path {
+            | RequirementSource::Directory { install_path, .. } => Self::Path {
                 editable,
                 package: None,
                 path: PortablePathBuf::from(
@@ -1725,7 +1725,7 @@ impl Source {
                 location,
                 subdirectory,
                 ..
-            } => Source::Url {
+            } => Self::Url {
                 url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
@@ -1744,7 +1744,7 @@ impl Source {
                         GitReference::NamedRef(rev) => Some(rev),
                         GitReference::DefaultBranch => None,
                     };
-                    Source::Git {
+                    Self::Git {
                         rev: rev.cloned(),
                         tag,
                         branch,
@@ -1755,7 +1755,7 @@ impl Source {
                         group: None,
                     }
                 } else {
-                    Source::Git {
+                    Self::Git {
                         rev,
                         tag,
                         branch,
@@ -1775,33 +1775,33 @@ impl Source {
     /// Return the [`MarkerTree`] for the source.
     pub fn marker(&self) -> MarkerTree {
         match self {
-            Source::Git { marker, .. } => *marker,
-            Source::Url { marker, .. } => *marker,
-            Source::Path { marker, .. } => *marker,
-            Source::Registry { marker, .. } => *marker,
-            Source::Workspace { marker, .. } => *marker,
+            Self::Git { marker, .. } => *marker,
+            Self::Url { marker, .. } => *marker,
+            Self::Path { marker, .. } => *marker,
+            Self::Registry { marker, .. } => *marker,
+            Self::Workspace { marker, .. } => *marker,
         }
     }
 
     /// Return the extra name for the source.
     pub fn extra(&self) -> Option<&ExtraName> {
         match self {
-            Source::Git { extra, .. } => extra.as_ref(),
-            Source::Url { extra, .. } => extra.as_ref(),
-            Source::Path { extra, .. } => extra.as_ref(),
-            Source::Registry { extra, .. } => extra.as_ref(),
-            Source::Workspace { extra, .. } => extra.as_ref(),
+            Self::Git { extra, .. } => extra.as_ref(),
+            Self::Url { extra, .. } => extra.as_ref(),
+            Self::Path { extra, .. } => extra.as_ref(),
+            Self::Registry { extra, .. } => extra.as_ref(),
+            Self::Workspace { extra, .. } => extra.as_ref(),
         }
     }
 
     /// Return the dependency group name for the source.
     pub fn group(&self) -> Option<&GroupName> {
         match self {
-            Source::Git { group, .. } => group.as_ref(),
-            Source::Url { group, .. } => group.as_ref(),
-            Source::Path { group, .. } => group.as_ref(),
-            Source::Registry { group, .. } => group.as_ref(),
-            Source::Workspace { group, .. } => group.as_ref(),
+            Self::Git { group, .. } => group.as_ref(),
+            Self::Url { group, .. } => group.as_ref(),
+            Self::Path { group, .. } => group.as_ref(),
+            Self::Registry { group, .. } => group.as_ref(),
+            Self::Workspace { group, .. } => group.as_ref(),
         }
     }
 }
@@ -1828,7 +1828,7 @@ impl<'de> Deserialize<'de> for BuildBackendSettingsSchema {
     where
         D: Deserializer<'de>,
     {
-        Ok(BuildBackendSettingsSchema)
+        Ok(Self)
     }
 }
 

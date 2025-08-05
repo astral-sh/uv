@@ -253,7 +253,7 @@ impl DependencyGroupsHistory {
     /// [`DependencyGroups::is_empty`][] when there aren't any defaults set.
     /// When there are defaults the two will disagree, and rightfully so!
     pub fn as_flags_pretty(&self) -> Vec<Cow<str>> {
-        let DependencyGroupsHistory {
+        let Self {
             dev_mode,
             group,
             only_group,
@@ -362,26 +362,26 @@ impl IncludeGroups {
     /// Returns `true` if the specification includes the given group.
     pub fn contains(&self, group: &GroupName) -> bool {
         match self {
-            IncludeGroups::Some(groups) => groups.contains(group),
-            IncludeGroups::All => true,
+            Self::Some(groups) => groups.contains(group),
+            Self::All => true,
         }
     }
 
     /// Returns `true` if the specification will have no effect.
     pub fn is_empty(&self) -> bool {
         match self {
-            IncludeGroups::Some(groups) => groups.is_empty(),
+            Self::Some(groups) => groups.is_empty(),
             // Although technically this is a noop if they have no groups,
             // conceptually they're *trying* to have an effect, so treat it as one.
-            IncludeGroups::All => false,
+            Self::All => false,
         }
     }
 
     /// Iterate over all groups referenced in the [`IncludeGroups`].
     pub fn names(&self) -> std::slice::Iter<GroupName> {
         match self {
-            IncludeGroups::Some(groups) => groups.iter(),
-            IncludeGroups::All => [].iter(),
+            Self::Some(groups) => groups.iter(),
+            Self::All => [].iter(),
         }
     }
 }

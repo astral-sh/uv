@@ -97,7 +97,7 @@ impl From<ResolverArgs> for PipOptions {
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
-            ..PipOptions::from(index_args)
+            ..Self::from(index_args)
         }
     }
 }
@@ -141,7 +141,7 @@ impl From<InstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
-            ..PipOptions::from(index_args)
+            ..Self::from(index_args)
         }
     }
 }
@@ -203,7 +203,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
-            ..PipOptions::from(index_args)
+            ..Self::from(index_args)
         }
     }
 }
@@ -221,7 +221,7 @@ impl From<FetchArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             exclude_newer,
-            ..PipOptions::from(index_args)
+            ..Self::from(index_args)
         }
     }
 }
@@ -262,7 +262,7 @@ impl From<IndexArgs> for PipOptions {
                     .filter_map(Maybe::into_option)
                     .collect()
             }),
-            ..PipOptions::default()
+            ..Self::default()
         }
     }
 }

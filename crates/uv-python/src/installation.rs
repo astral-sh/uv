@@ -690,6 +690,6 @@ impl Hash for PythonInstallationMinorVersionKey {
 
 impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
     fn from(key: PythonInstallationKey) -> Self {
-        PythonInstallationMinorVersionKey(key)
+        Self(key)
     }
 }

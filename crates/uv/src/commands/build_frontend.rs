@@ -1176,11 +1176,11 @@ impl BuildMessage {
     /// The normalized filename of the wheel or source distribution.
     fn normalized_filename(&self) -> &DistFilename {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 normalized_filename: name,
                 ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 normalized_filename: name,
                 ..
             } => name,
@@ -1190,10 +1190,10 @@ impl BuildMessage {
     /// The filename of the wheel or source distribution before normalization.
     fn raw_filename(&self) -> &str {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename: name, ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 raw_filename: name, ..
             } => name,
         }
@@ -1201,7 +1201,7 @@ impl BuildMessage {
 
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename,
                 output_dir,
                 ..
@@ -1212,7 +1212,7 @@ impl BuildMessage {
                     output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
-            BuildMessage::List {
+            Self::List {
                 raw_filename,
                 file_list,
                 source_tree,

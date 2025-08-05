@@ -176,8 +176,8 @@ impl serde::Serialize for DefaultGroups {
         S: serde::Serializer,
     {
         match self {
-            DefaultGroups::All => serializer.serialize_str("all"),
-            DefaultGroups::List(groups) => {
+            Self::All => serializer.serialize_str("all"),
+            Self::List(groups) => {
                 let mut seq = serializer.serialize_seq(Some(groups.len()))?;
                 for group in groups {
                     seq.serialize_element(&group)?;
@@ -190,7 +190,7 @@ impl serde::Serialize for DefaultGroups {
 
 /// Deserialize a "all" or list of [`GroupName`] into a [`DefaultGroups`] enum.
 impl<'de> serde::Deserialize<'de> for DefaultGroups {
-    fn deserialize<D>(deserializer: D) -> Result<DefaultGroups, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -236,7 +236,7 @@ impl<'de> serde::Deserialize<'de> for DefaultGroups {
 impl Default for DefaultGroups {
     /// Note this is an "empty" default unlike other contexts where `["dev"]` is the default
     fn default() -> Self {
-        DefaultGroups::List(Vec::new())
+        Self::List(Vec::new())
     }
 }
 

@@ -570,7 +570,7 @@ impl Default for RequiresPythonRange {
 
 impl From<RequiresPythonRange> for Ranges<Version> {
     fn from(value: RequiresPythonRange) -> Self {
-        Ranges::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
+        Self::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
             value.0.into(),
             value.1.into(),
         ))
@@ -590,8 +590,8 @@ pub struct SimplifiedMarkerTree(MarkerTree);
 impl SimplifiedMarkerTree {
     /// Simplifies the given markers by assuming the given `requires-python`
     /// bound is true.
-    pub fn new(requires_python: &RequiresPython, marker: MarkerTree) -> SimplifiedMarkerTree {
-        SimplifiedMarkerTree(requires_python.simplify_markers(marker))
+    pub fn new(requires_python: &RequiresPython, marker: MarkerTree) -> Self {
+        Self(requires_python.simplify_markers(marker))
     }
 
     /// Complexifies the given markers by adding the given `requires-python` as

@@ -949,8 +949,8 @@ impl From<&VirtualProject> for ProjectReport {
 impl From<&SyncTarget> for TargetName {
     fn from(target: &SyncTarget) -> Self {
         match target {
-            SyncTarget::Project(_) => TargetName::Project,
-            SyncTarget::Script(_) => TargetName::Script,
+            SyncTarget::Project(_) => Self::Project,
+            SyncTarget::Script(_) => Self::Script,
         }
     }
 }
@@ -1016,8 +1016,8 @@ enum TargetName {
 impl std::fmt::Display for TargetName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TargetName::Project => write!(f, "project"),
-            TargetName::Script => write!(f, "script"),
+            Self::Project => write!(f, "project"),
+            Self::Script => write!(f, "script"),
         }
     }
 }
@@ -1039,16 +1039,16 @@ enum SyncAction {
 impl From<&SyncEnvironment> for SyncAction {
     fn from(env: &SyncEnvironment) -> Self {
         match &env {
-            SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => SyncAction::Check,
-            SyncEnvironment::Project(ProjectEnvironment::Created(..)) => SyncAction::Create,
-            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(..)) => SyncAction::Create,
-            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(..)) => SyncAction::Replace,
-            SyncEnvironment::Project(ProjectEnvironment::Replaced(..)) => SyncAction::Update,
-            SyncEnvironment::Script(ScriptEnvironment::Existing(..)) => SyncAction::Check,
-            SyncEnvironment::Script(ScriptEnvironment::Created(..)) => SyncAction::Create,
-            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(..)) => SyncAction::Create,
-            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(..)) => SyncAction::Replace,
-            SyncEnvironment::Script(ScriptEnvironment::Replaced(..)) => SyncAction::Update,
+            SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => Self::Check,
+            SyncEnvironment::Project(ProjectEnvironment::Created(..)) => Self::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(..)) => Self::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(..)) => Self::Replace,
+            SyncEnvironment::Project(ProjectEnvironment::Replaced(..)) => Self::Update,
+            SyncEnvironment::Script(ScriptEnvironment::Existing(..)) => Self::Check,
+            SyncEnvironment::Script(ScriptEnvironment::Created(..)) => Self::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(..)) => Self::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(..)) => Self::Replace,
+            SyncEnvironment::Script(ScriptEnvironment::Replaced(..)) => Self::Update,
         }
     }
 }
@@ -1057,22 +1057,22 @@ impl SyncAction {
     fn message(&self, target: TargetName, dry_run: bool) -> Option<&'static str> {
         let message = if dry_run {
             match self {
-                SyncAction::Check => "Would use",
-                SyncAction::Update => "Would update",
-                SyncAction::Replace => "Would replace",
-                SyncAction::Create => "Would create",
+                Self::Check => "Would use",
+                Self::Update => "Would update",
+                Self::Replace => "Would replace",
+                Self::Create => "Would create",
             }
         } else {
             // For projects, we omit some of these messages when we're not in dry-run mode
             let is_project = matches!(target, TargetName::Project);
             match self {
-                SyncAction::Check | SyncAction::Update | SyncAction::Create if is_project => {
+                Self::Check | Self::Update | Self::Create if is_project => {
                     return None;
                 }
-                SyncAction::Check => "Using",
-                SyncAction::Update => "Updating",
-                SyncAction::Replace => "Replacing",
-                SyncAction::Create => "Creating",
+                Self::Check => "Using",
+                Self::Update => "Updating",
+                Self::Replace => "Replacing",
+                Self::Create => "Creating",
             }
         };
         Some(message)
@@ -1097,10 +1097,10 @@ impl LockAction {
     fn message(&self, dry_run: bool) -> Option<&'static str> {
         let message = if dry_run {
             match self {
-                LockAction::Use => return None,
-                LockAction::Check => "Found up-to-date",
-                LockAction::Update => "Would update",
-                LockAction::Create => "Would create",
+                Self::Use => return None,
+                Self::Check => "Found up-to-date",
+                Self::Update => "Would update",
+                Self::Create => "Would create",
             }
         } else {
             return None;
@@ -1154,7 +1154,7 @@ impl From<&PythonEnvironment> for EnvironmentReport {
 
 impl From<&SyncEnvironment> for EnvironmentReport {
     fn from(env: &SyncEnvironment) -> Self {
-        let report = EnvironmentReport::from(&**env);
+        let report = Self::from(&**env);
         // Replace the path if necessary; we construct a temporary virtual environment during dry
         // run invocations and want to report the path we _would_ use.
         if let Some(path) = env.dry_run_target() {

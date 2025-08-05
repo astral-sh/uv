@@ -680,15 +680,15 @@ pub enum VersionBump {
 impl std::fmt::Display for VersionBump {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = match self {
-            VersionBump::Major => "major",
-            VersionBump::Minor => "minor",
-            VersionBump::Patch => "patch",
-            VersionBump::Stable => "stable",
-            VersionBump::Alpha => "alpha",
-            VersionBump::Beta => "beta",
-            VersionBump::Rc => "rc",
-            VersionBump::Post => "post",
-            VersionBump::Dev => "dev",
+            Self::Major => "major",
+            Self::Minor => "minor",
+            Self::Patch => "patch",
+            Self::Stable => "stable",
+            Self::Alpha => "alpha",
+            Self::Beta => "beta",
+            Self::Rc => "rc",
+            Self::Post => "post",
+            Self::Dev => "dev",
         };
         string.fmt(f)
     }
@@ -1017,13 +1017,13 @@ pub enum Maybe<T> {
 impl<T> Maybe<T> {
     pub fn into_option(self) -> Option<T> {
         match self {
-            Maybe::Some(value) => Some(value),
-            Maybe::None => None,
+            Self::Some(value) => Some(value),
+            Self::None => None,
         }
     }
 
     pub fn is_some(&self) -> bool {
-        matches!(self, Maybe::Some(_))
+        matches!(self, Self::Some(_))
     }
 }
 

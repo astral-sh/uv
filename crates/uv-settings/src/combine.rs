@@ -40,7 +40,7 @@ pub trait Combine {
 
 impl Combine for Option<FilesystemOptions> {
     /// Combine the options used in two [`FilesystemOptions`]s. Retains the root of `self`.
-    fn combine(self, other: Option<FilesystemOptions>) -> Option<FilesystemOptions> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(FilesystemOptions(
                 a.into_options().combine(b.into_options()),
@@ -52,7 +52,7 @@ impl Combine for Option<FilesystemOptions> {
 
 impl Combine for Option<Options> {
     /// Combine the options used in two [`Options`]s. Retains the root of `self`.
-    fn combine(self, other: Option<Options>) -> Option<Options> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
@@ -61,7 +61,7 @@ impl Combine for Option<Options> {
 }
 
 impl Combine for Option<PipOptions> {
-    fn combine(self, other: Option<PipOptions>) -> Option<PipOptions> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
@@ -114,7 +114,7 @@ impl_combine_or!(bool);
 impl<T> Combine for Option<Vec<T>> {
     /// Combine two vectors by extending the vector in `self` with the vector in `other`, if they're
     /// both `Some`.
-    fn combine(self, other: Option<Vec<T>>) -> Option<Vec<T>> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(mut a), Some(b)) => {
                 a.extend(b);
@@ -127,7 +127,7 @@ impl<T> Combine for Option<Vec<T>> {
 
 impl<K: Ord, T> Combine for Option<BTreeMap<K, Vec<T>>> {
     /// Combine two maps of vecs by combining their vecs
-    fn combine(self, other: Option<BTreeMap<K, Vec<T>>>) -> Option<BTreeMap<K, Vec<T>>> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(mut a), Some(b)) => {
                 for (key, value) in b {
@@ -142,7 +142,7 @@ impl<K: Ord, T> Combine for Option<BTreeMap<K, Vec<T>>> {
 
 impl Combine for Option<ExcludeNewerPackage> {
     /// Combine two [`ExcludeNewerPackage`] instances by merging them, with the values in `self` taking precedence.
-    fn combine(self, other: Option<ExcludeNewerPackage>) -> Option<ExcludeNewerPackage> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(mut a), Some(b)) => {
                 // Extend with values from b, but a takes precedence (we don't overwrite existing keys)
@@ -159,7 +159,7 @@ impl Combine for Option<ExcludeNewerPackage> {
 impl Combine for Option<ConfigSettings> {
     /// Combine two maps by merging the map in `self` with the map in `other`, if they're both
     /// `Some`.
-    fn combine(self, other: Option<ConfigSettings>) -> Option<ConfigSettings> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.merge(b)),
             (a, b) => a.or(b),
@@ -170,7 +170,7 @@ impl Combine for Option<ConfigSettings> {
 impl Combine for Option<PackageConfigSettings> {
     /// Combine two maps by merging the map in `self` with the map in `other`, if they're both
     /// `Some`.
-    fn combine(self, other: Option<PackageConfigSettings>) -> Option<PackageConfigSettings> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.merge(b)),
             (a, b) => a.or(b),
@@ -228,7 +228,7 @@ impl Combine for ExtraBuildDependencies {
 }
 
 impl Combine for Option<ExtraBuildDependencies> {
-    fn combine(self, other: Option<ExtraBuildDependencies>) -> Option<ExtraBuildDependencies> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),

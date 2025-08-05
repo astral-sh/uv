@@ -20,8 +20,8 @@ impl TrustedHost {
     /// Returns `true` if the [`Url`] matches this trusted host.
     pub fn matches(&self, url: &Url) -> bool {
         match self {
-            TrustedHost::Wildcard => true,
-            TrustedHost::Host { scheme, host, port } => {
+            Self::Wildcard => true,
+            Self::Host { scheme, host, port } => {
                 if scheme.as_ref().is_some_and(|scheme| scheme != url.scheme()) {
                     return false;
                 }
@@ -53,9 +53,9 @@ impl<'de> Deserialize<'de> for TrustedHost {
         }
 
         serde_untagged::UntaggedEnumVisitor::new()
-            .string(|string| TrustedHost::from_str(string).map_err(serde::de::Error::custom))
+            .string(|string| Self::from_str(string).map_err(serde::de::Error::custom))
             .map(|map| {
-                map.deserialize::<Inner>().map(|inner| TrustedHost::Host {
+                map.deserialize::<Inner>().map(|inner| Self::Host {
                     scheme: inner.scheme,
                     host: inner.host,
                     port: inner.port,
@@ -123,10 +123,10 @@ impl FromStr for TrustedHost {
 impl std::fmt::Display for TrustedHost {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            TrustedHost::Wildcard => {
+            Self::Wildcard => {
                 write!(f, "*")?;
             }
-            TrustedHost::Host { scheme, host, port } => {
+            Self::Host { scheme, host, port } => {
                 if let Some(scheme) = &scheme {
                     write!(f, "{scheme}://{host}")?;
                 } else {

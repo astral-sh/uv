@@ -22,8 +22,8 @@ impl Conflicts {
     /// Returns no conflicts.
     ///
     /// This results in no effect on resolution.
-    pub fn empty() -> Conflicts {
-        Conflicts::default()
+    pub fn empty() -> Self {
+        Self::default()
     }
 
     /// Push a single set of conflicts.
@@ -54,7 +54,7 @@ impl Conflicts {
 
     /// Appends the given conflicts to this one. This drains all sets from the
     /// conflicts given, such that after this call, it is empty.
-    pub fn append(&mut self, other: &mut Conflicts) {
+    pub fn append(&mut self, other: &mut Self) {
         self.0.append(&mut other.0);
     }
 
@@ -225,8 +225,8 @@ pub struct ConflictSet {
 
 impl ConflictSet {
     /// Create a pair of items that conflict with one another.
-    pub fn pair(item1: ConflictItem, item2: ConflictItem) -> ConflictSet {
-        ConflictSet {
+    pub fn pair(item1: ConflictItem, item2: ConflictItem) -> Self {
+        Self {
             set: BTreeSet::from_iter(vec![item1, item2]),
             is_inferred_conflict: false,
         }
@@ -287,7 +287,7 @@ impl ConflictSet {
 }
 
 impl<'de> serde::Deserialize<'de> for ConflictSet {
-    fn deserialize<D>(deserializer: D) -> Result<ConflictSet, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -299,13 +299,13 @@ impl<'de> serde::Deserialize<'de> for ConflictSet {
 impl TryFrom<Vec<ConflictItem>> for ConflictSet {
     type Error = ConflictError;
 
-    fn try_from(items: Vec<ConflictItem>) -> Result<ConflictSet, ConflictError> {
+    fn try_from(items: Vec<ConflictItem>) -> Result<Self, ConflictError> {
         match items.len() {
             0 => return Err(ConflictError::ZeroItems),
             1 => return Err(ConflictError::OneItem),
             _ => {}
         }
-        Ok(ConflictSet {
+        Ok(Self {
             set: BTreeSet::from_iter(items),
             is_inferred_conflict: false,
         })
@@ -362,16 +362,16 @@ impl ConflictItem {
 }
 
 impl From<(PackageName, ExtraName)> for ConflictItem {
-    fn from((package, extra): (PackageName, ExtraName)) -> ConflictItem {
+    fn from((package, extra): (PackageName, ExtraName)) -> Self {
         let conflict = ConflictPackage::Extra(extra);
-        ConflictItem { package, conflict }
+        Self { package, conflict }
     }
 }
 
 impl From<(PackageName, GroupName)> for ConflictItem {
-    fn from((package, group): (PackageName, GroupName)) -> ConflictItem {
+    fn from((package, group): (PackageName, GroupName)) -> Self {
         let conflict = ConflictPackage::Group(group);
-        ConflictItem { package, conflict }
+        Self { package, conflict }
     }
 }
 
@@ -418,14 +418,14 @@ impl<'a> ConflictItemRef<'a> {
 }
 
 impl<'a> From<(&'a PackageName, &'a ExtraName)> for ConflictItemRef<'a> {
-    fn from((package, extra): (&'a PackageName, &'a ExtraName)) -> ConflictItemRef<'a> {
+    fn from((package, extra): (&'a PackageName, &'a ExtraName)) -> Self {
         let conflict = ConflictPackageRef::Extra(extra);
         ConflictItemRef { package, conflict }
     }
 }
 
 impl<'a> From<(&'a PackageName, &'a GroupName)> for ConflictItemRef<'a> {
-    fn from((package, group): (&'a PackageName, &'a GroupName)) -> ConflictItemRef<'a> {
+    fn from((package, group): (&'a PackageName, &'a GroupName)) -> Self {
         let conflict = ConflictPackageRef::Group(group);
         ConflictItemRef { package, conflict }
     }
@@ -451,8 +451,8 @@ impl ConflictPackage {
     /// extra name.
     pub fn extra(&self) -> Option<&ExtraName> {
         match *self {
-            ConflictPackage::Extra(ref extra) => Some(extra),
-            ConflictPackage::Group(_) => None,
+            Self::Extra(ref extra) => Some(extra),
+            Self::Group(_) => None,
         }
     }
 
@@ -460,16 +460,16 @@ impl ConflictPackage {
     /// group name.
     pub fn group(&self) -> Option<&GroupName> {
         match *self {
-            ConflictPackage::Group(ref group) => Some(group),
-            ConflictPackage::Extra(_) => None,
+            Self::Group(ref group) => Some(group),
+            Self::Extra(_) => None,
         }
     }
 
     /// Returns this conflict as a new type with its fields borrowed.
     pub fn as_ref(&self) -> ConflictPackageRef<'_> {
         match *self {
-            ConflictPackage::Extra(ref extra) => ConflictPackageRef::Extra(extra),
-            ConflictPackage::Group(ref group) => ConflictPackageRef::Group(group),
+            Self::Extra(ref extra) => ConflictPackageRef::Extra(extra),
+            Self::Group(ref group) => ConflictPackageRef::Group(group),
         }
     }
 }
@@ -512,13 +512,13 @@ impl<'a> ConflictPackageRef<'a> {
 }
 
 impl<'a> From<&'a ExtraName> for ConflictPackageRef<'a> {
-    fn from(extra: &'a ExtraName) -> ConflictPackageRef<'a> {
+    fn from(extra: &'a ExtraName) -> Self {
         ConflictPackageRef::Extra(extra)
     }
 }
 
 impl<'a> From<&'a GroupName> for ConflictPackageRef<'a> {
-    fn from(group: &'a GroupName) -> ConflictPackageRef<'a> {
+    fn from(group: &'a GroupName) -> Self {
         ConflictPackageRef::Group(group)
     }
 }
@@ -650,7 +650,7 @@ impl schemars::JsonSchema for SchemaConflictItem {
 }
 
 impl<'de> serde::Deserialize<'de> for SchemaConflictSet {
-    fn deserialize<D>(deserializer: D) -> Result<SchemaConflictSet, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -662,13 +662,13 @@ impl<'de> serde::Deserialize<'de> for SchemaConflictSet {
 impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
     type Error = ConflictError;
 
-    fn try_from(items: Vec<SchemaConflictItem>) -> Result<SchemaConflictSet, ConflictError> {
+    fn try_from(items: Vec<SchemaConflictItem>) -> Result<Self, ConflictError> {
         match items.len() {
             0 => return Err(ConflictError::ZeroItems),
             1 => return Err(ConflictError::OneItem),
             _ => {}
         }
-        Ok(SchemaConflictSet(items))
+        Ok(Self(items))
     }
 }
 
@@ -690,28 +690,28 @@ struct ConflictItemWire {
 impl TryFrom<ConflictItemWire> for ConflictItem {
     type Error = ConflictError;
 
-    fn try_from(wire: ConflictItemWire) -> Result<ConflictItem, ConflictError> {
+    fn try_from(wire: ConflictItemWire) -> Result<Self, ConflictError> {
         let Some(package) = wire.package else {
             return Err(ConflictError::MissingPackage);
         };
         match (wire.extra, wire.group) {
             (None, None) => Err(ConflictError::MissingExtraAndGroup),
             (Some(_), Some(_)) => Err(ConflictError::FoundExtraAndGroup),
-            (Some(extra), None) => Ok(ConflictItem::from((package, extra))),
-            (None, Some(group)) => Ok(ConflictItem::from((package, group))),
+            (Some(extra), None) => Ok(Self::from((package, extra))),
+            (None, Some(group)) => Ok(Self::from((package, group))),
         }
     }
 }
 
 impl From<ConflictItem> for ConflictItemWire {
-    fn from(item: ConflictItem) -> ConflictItemWire {
+    fn from(item: ConflictItem) -> Self {
         match item.conflict {
-            ConflictPackage::Extra(extra) => ConflictItemWire {
+            ConflictPackage::Extra(extra) => Self {
                 package: Some(item.package),
                 extra: Some(extra),
                 group: None,
             },
-            ConflictPackage::Group(group) => ConflictItemWire {
+            ConflictPackage::Group(group) => Self {
                 package: Some(item.package),
                 extra: None,
                 group: Some(group),
@@ -723,16 +723,16 @@ impl From<ConflictItem> for ConflictItemWire {
 impl TryFrom<ConflictItemWire> for SchemaConflictItem {
     type Error = ConflictError;
 
-    fn try_from(wire: ConflictItemWire) -> Result<SchemaConflictItem, ConflictError> {
+    fn try_from(wire: ConflictItemWire) -> Result<Self, ConflictError> {
         let package = wire.package;
         match (wire.extra, wire.group) {
             (None, None) => Err(ConflictError::MissingExtraAndGroup),
             (Some(_), Some(_)) => Err(ConflictError::FoundExtraAndGroup),
-            (Some(extra), None) => Ok(SchemaConflictItem {
+            (Some(extra), None) => Ok(Self {
                 package,
                 conflict: ConflictPackage::Extra(extra),
             }),
-            (None, Some(group)) => Ok(SchemaConflictItem {
+            (None, Some(group)) => Ok(Self {
                 package,
                 conflict: ConflictPackage::Group(group),
             }),
@@ -741,14 +741,14 @@ impl TryFrom<ConflictItemWire> for SchemaConflictItem {
 }
 
 impl From<SchemaConflictItem> for ConflictItemWire {
-    fn from(item: SchemaConflictItem) -> ConflictItemWire {
+    fn from(item: SchemaConflictItem) -> Self {
         match item.conflict {
-            ConflictPackage::Extra(extra) => ConflictItemWire {
+            ConflictPackage::Extra(extra) => Self {
                 package: item.package,
                 extra: Some(extra),
                 group: None,
             },
-            ConflictPackage::Group(group) => ConflictItemWire {
+            ConflictPackage::Group(group) => Self {
                 package: item.package,
                 extra: None,
                 group: Some(group),

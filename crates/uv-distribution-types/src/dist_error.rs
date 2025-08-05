@@ -32,26 +32,24 @@ pub enum DistErrorKind {
 impl DistErrorKind {
     pub fn from_requested_dist(dist: &RequestedDist, err: &impl IsBuildBackendError) -> Self {
         match dist {
-            RequestedDist::Installed(_) => DistErrorKind::Read,
+            RequestedDist::Installed(_) => Self::Read,
             RequestedDist::Installable(dist) => Self::from_dist(dist, err),
         }
     }
 
     pub fn from_dist(dist: &Dist, err: &impl IsBuildBackendError) -> Self {
         if err.is_build_backend_error() {
-            DistErrorKind::BuildBackend
+            Self::BuildBackend
         } else {
             match dist {
-                Dist::Built(BuiltDist::Path(_)) => DistErrorKind::Read,
-                Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => {
-                    DistErrorKind::Build
-                }
-                Dist::Built(_) => DistErrorKind::Download,
+                Dist::Built(BuiltDist::Path(_)) => Self::Read,
+                Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => Self::Build,
+                Dist::Built(_) => Self::Download,
                 Dist::Source(source_dist) => {
                     if source_dist.is_local() {
-                        DistErrorKind::Build
+                        Self::Build
                     } else {
-                        DistErrorKind::DownloadAndBuild
+                        Self::DownloadAndBuild
                     }
                 }
             }
@@ -62,11 +60,11 @@ impl DistErrorKind {
 impl Display for DistErrorKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            DistErrorKind::Download => f.write_str("Failed to download"),
-            DistErrorKind::DownloadAndBuild => f.write_str("Failed to download and build"),
-            DistErrorKind::Build => f.write_str("Failed to build"),
-            DistErrorKind::BuildBackend => f.write_str("Failed to build"),
-            DistErrorKind::Read => f.write_str("Failed to read"),
+            Self::Download => f.write_str("Failed to download"),
+            Self::DownloadAndBuild => f.write_str("Failed to download and build"),
+            Self::Build => f.write_str("Failed to build"),
+            Self::BuildBackend => f.write_str("Failed to build"),
+            Self::Read => f.write_str("Failed to read"),
         }
     }
 }
@@ -87,10 +85,7 @@ impl DerivationChain {
     ///
     /// This is used to construct a derivation chain upon install failure in the `uv pip` context,
     /// where we don't have a lockfile describing the resolution.
-    pub fn from_resolution(
-        resolution: &Resolution,
-        target: DistRef<'_>,
-    ) -> Option<DerivationChain> {
+    pub fn from_resolution(resolution: &Resolution, target: DistRef<'_>) -> Option<Self> {
         // Find the target distribution in the resolution graph.
         let target = resolution.graph().node_indices().find(|node| {
             let Node::Dist {
@@ -117,7 +112,7 @@ impl DerivationChain {
                 Node::Root => {
                     path.reverse();
                     path.pop();
-                    return Some(DerivationChain::from_iter(path));
+                    return Some(Self::from_iter(path));
                 }
                 Node::Dist { dist, .. } => {
                     for edge in resolution.graph().edges_directed(node, Direction::Incoming) {

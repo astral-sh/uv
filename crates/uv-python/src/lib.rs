@@ -104,7 +104,7 @@ pub enum Error {
 impl Error {
     pub(crate) fn with_missing_python_hint(self, hint: String) -> Self {
         match self {
-            Error::MissingPython(err, _) => Error::MissingPython(err, Some(hint)),
+            Self::MissingPython(err, _) => Self::MissingPython(err, Some(hint)),
             _ => self,
         }
     }
@@ -112,7 +112,7 @@ impl Error {
 
 impl From<PythonNotFound> for Error {
     fn from(err: PythonNotFound) -> Self {
-        Error::MissingPython(err, None)
+        Self::MissingPython(err, None)
     }
 }
 
@@ -360,7 +360,7 @@ mod tests {
         ///
         /// Adds them to the test context search path.
         fn add_python_to_workdir(&self, name: &str, version: &str) -> Result<()> {
-            TestContext::create_mock_interpreter(
+            Self::create_mock_interpreter(
                 self.workdir.child(name).as_ref(),
                 &PythonVersion::from_str(version).expect("Test uses valid version"),
                 ImplementationName::default(),
@@ -419,7 +419,7 @@ mod tests {
                     .parent()
                     .expect("A Python executable path should always have a parent"),
             )?;
-            TestContext::create_mock_interpreter(
+            Self::create_mock_interpreter(
                 &executable,
                 &PythonVersion::from_str(version)
                     .expect("A valid Python version is used for tests"),
@@ -441,7 +441,7 @@ mod tests {
                     .parent()
                     .expect("A Python executable path should always have a parent"),
             )?;
-            TestContext::create_mock_interpreter(
+            Self::create_mock_interpreter(
                 &executable,
                 &PythonVersion::from_str(version)
                     .expect("A valid Python version is used for tests"),

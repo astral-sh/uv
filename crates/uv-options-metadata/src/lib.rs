@@ -59,8 +59,8 @@ pub enum OptionEntry {
 impl Display for OptionEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            OptionEntry::Set(set) => std::fmt::Display::fmt(set, f),
-            OptionEntry::Field(field) => std::fmt::Display::fmt(&field, f),
+            Self::Set(set) => std::fmt::Display::fmt(set, f),
+            Self::Field(field) => std::fmt::Display::fmt(&field, f),
         }
     }
 }

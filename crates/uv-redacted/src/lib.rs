@@ -60,7 +60,7 @@ impl DisplaySafeUrl {
     /// Parse a string as an URL, with this URL as the base URL.
     #[inline]
     pub fn join(&self, input: &str) -> Result<Self, url::ParseError> {
-        self.0.join(input).map(DisplaySafeUrl::from)
+        self.0.join(input).map(Self::from)
     }
 
     /// Serialize with Serde using the internal representation of the `Url` struct.
@@ -78,12 +78,12 @@ impl DisplaySafeUrl {
     where
         D: serde::Deserializer<'de>,
     {
-        Url::deserialize_internal(deserializer).map(DisplaySafeUrl::from)
+        Url::deserialize_internal(deserializer).map(Self::from)
     }
 
     #[allow(clippy::result_unit_err)]
-    pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<DisplaySafeUrl, ()> {
-        Url::from_file_path(path).map(DisplaySafeUrl::from)
+    pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
+        Url::from_file_path(path).map(Self::from)
     }
 
     /// Remove the credentials from a URL, allowing the generic `git` username (without a password)
@@ -177,7 +177,7 @@ impl Debug for DisplaySafeUrl {
 
 impl From<Url> for DisplaySafeUrl {
     fn from(url: Url) -> Self {
-        DisplaySafeUrl(url)
+        Self(url)
     }
 }
 

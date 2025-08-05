@@ -886,7 +886,7 @@ pub struct PythonInstallMirrors {
 
 impl Default for PythonInstallMirrors {
     fn default() -> Self {
-        PythonInstallMirrors::resolve(None, None, None)
+        Self::resolve(None, None, None)
     }
 }
 
@@ -900,7 +900,7 @@ impl PythonInstallMirrors {
         let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
         let python_downloads_json_url_env =
             std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok();
-        PythonInstallMirrors {
+        Self {
             python_install_mirror: python_mirror_env.or(python_mirror),
             pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
             python_downloads_json_url: python_downloads_json_url_env.or(python_downloads_json_url),

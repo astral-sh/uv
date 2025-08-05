@@ -21,15 +21,15 @@ pub struct OnceMap<K, V, S = RandomState> {
 
 impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
     /// Create a [`OnceMap`] with the specified hasher.
-    pub fn with_hasher(hasher: H) -> OnceMap<K, V, H> {
-        OnceMap {
+    pub fn with_hasher(hasher: H) -> Self {
+        Self {
             items: DashMap::with_hasher(hasher),
         }
     }
 
     /// Create a [`OnceMap`] with the specified capacity and hasher.
-    pub fn with_capacity_and_hasher(capacity: usize, hasher: H) -> OnceMap<K, V, H> {
-        OnceMap {
+    pub fn with_capacity_and_hasher(capacity: usize, hasher: H) -> Self {
+        Self {
             items: DashMap::with_capacity_and_hasher(capacity, hasher),
         }
     }
@@ -133,7 +133,7 @@ where
     H: Default + Clone + BuildHasher,
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
-        OnceMap {
+        Self {
             items: iter
                 .into_iter()
                 .map(|(k, v)| (k, Value::Filled(v)))
