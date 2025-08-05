@@ -2093,6 +2093,30 @@ impl PythonPreference {
             Self::Managed | Self::System | Self::OnlyManaged => true,
         }
     }
+
+    /// Returns a new preference when the `--system` flag is used.
+    ///
+    /// This will convert [`PythonPreference::Managed`] to [`PythonPreference::System`] when system
+    /// is set.
+    #[must_use]
+    pub fn with_system_flag(self, system: bool) -> Self {
+        match self {
+            // TODO(zanieb): It's not clear if we want to allow `--system` to override
+            // `--managed-python`. We should probably make this `from_system_flag` and refactor
+            // handling of the `PythonPreference` to use an `Option` so we can tell if the user
+            // provided it?
+            Self::OnlyManaged => self,
+            Self::Managed => {
+                if system {
+                    Self::System
+                } else {
+                    self
+                }
+            }
+            Self::System => self,
+            Self::OnlySystem => self,
+        }
+    }
 }
 
 impl PythonDownloads {
