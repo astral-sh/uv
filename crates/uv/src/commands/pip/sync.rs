@@ -140,7 +140,7 @@ pub(crate) async fn pip_sync(
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeatures::PYLOCK) {
             warn_user!(
-                "The `--pylock` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                "The `--pylock` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
                 PreviewFeatures::PYLOCK
             );
         }
