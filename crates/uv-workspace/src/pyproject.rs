@@ -821,8 +821,8 @@ impl TryFrom<ExtraBuildDependencyWire> for ExtraBuildDependency {
 }
 
 impl From<ExtraBuildDependency> for ExtraBuildDependencyWire {
-    fn from(item: ExtraBuildDependency) -> ExtraBuildDependencyWire {
-        ExtraBuildDependencyWire::Annotated {
+    fn from(item: ExtraBuildDependency) -> Self {
+        Self::Annotated {
             requirement: item.requirement,
             match_runtime: item.match_runtime,
         }

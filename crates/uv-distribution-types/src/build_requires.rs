@@ -71,10 +71,7 @@ impl CacheKey for ExtraBuildRequirement {
 
 impl ExtraBuildRequires {
     /// Apply runtime constraints from a resolution to the extra build requirements.
-    pub fn match_runtime(
-        self,
-        resolution: &Resolution,
-    ) -> Result<ExtraBuildRequires, ExtraBuildRequiresError> {
+    pub fn match_runtime(self, resolution: &Resolution) -> Result<Self, ExtraBuildRequiresError> {
         self.into_iter()
             .map(|(name, requirements)| {
                 let requirements = requirements
@@ -104,6 +101,6 @@ impl ExtraBuildRequires {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok::<_, ExtraBuildRequiresError>((name, requirements))
             })
-            .collect::<Result<ExtraBuildRequires, _>>()
+            .collect::<Result<Self, _>>()
     }
 }
