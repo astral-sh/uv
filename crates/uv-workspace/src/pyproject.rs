@@ -20,8 +20,9 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::de::{IntoDeserializer, SeqAccess};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
+
 use uv_build_backend::BuildBackendSettings;
-use uv_distribution_types::{Index, IndexName, RequirementSource};
+use uv_distribution_types::{ExtraBuildVariables, Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
@@ -441,6 +442,20 @@ pub struct ToolUv {
         "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+
+    /// Extra environment variables to set when building certain packages.
+    ///
+    /// Environment variables will be added to the environment when building the
+    /// specified packages.
+    #[option(
+        default = r#"{}"#,
+        value_type = r#"dict[str, dict[str, str]]"#,
+        example = r#"
+            [tool.uv.extra-build-variables]
+            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+        "#
+    )]
+    pub extra_build_variables: Option<ExtraBuildVariables>,
 
     /// The project's development dependencies.
     ///

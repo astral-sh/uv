@@ -15,7 +15,9 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, Origin, Resolution};
+use uv_distribution_types::{
+    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Origin, Resolution,
+};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::SitePackages;
@@ -70,6 +72,7 @@ pub(crate) async fn pip_sync(
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
@@ -380,6 +383,7 @@ pub(crate) async fn pip_sync(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         &build_options,
         &build_hasher,
@@ -514,6 +518,7 @@ pub(crate) async fn pip_sync(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         &build_options,
         &build_hasher,

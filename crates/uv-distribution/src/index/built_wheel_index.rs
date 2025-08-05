@@ -5,8 +5,8 @@ use uv_cache_info::CacheInfo;
 use uv_cache_key::cache_digest;
 use uv_configuration::{ConfigSettings, PackageConfigSettings};
 use uv_distribution_types::{
-    DirectUrlSourceDist, DirectorySourceDist, ExtraBuildRequirement, ExtraBuildRequires,
-    GitSourceDist, Hashed, PathSourceDist,
+    BuildVariables, DirectUrlSourceDist, DirectorySourceDist, ExtraBuildRequirement,
+    ExtraBuildRequires, ExtraBuildVariables, GitSourceDist, Hashed, PathSourceDist,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -25,6 +25,7 @@ pub struct BuiltWheelIndex<'a> {
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
     extra_build_requires: &'a ExtraBuildRequires,
+    extra_build_variables: &'a ExtraBuildVariables,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
@@ -36,6 +37,7 @@ impl<'a> BuiltWheelIndex<'a> {
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
         extra_build_requires: &'a ExtraBuildRequires,
+        extra_build_variables: &'a ExtraBuildVariables,
     ) -> Self {
         Self {
             cache,
@@ -44,6 +46,7 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings,
             config_settings_package,
             extra_build_requires,
+            extra_build_variables,
         }
     }
 
@@ -75,10 +78,18 @@ impl<'a> BuiltWheelIndex<'a> {
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
+        let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty()
+            && extra_build_deps.is_empty()
+            && extra_build_vars.is_none()
+        {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
+            cache_shard.shard(cache_digest(&(
+                &config_settings,
+                extra_build_deps,
+                extra_build_vars,
+            )))
         };
 
         Ok(self.find(&cache_shard))
@@ -114,10 +125,18 @@ impl<'a> BuiltWheelIndex<'a> {
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
+        let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty()
+            && extra_build_deps.is_empty()
+            && extra_build_vars.is_none()
+        {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
+            cache_shard.shard(cache_digest(&(
+                &config_settings,
+                extra_build_deps,
+                extra_build_vars,
+            )))
         };
 
         Ok(self
@@ -164,10 +183,18 @@ impl<'a> BuiltWheelIndex<'a> {
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
+        let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty()
+            && extra_build_deps.is_empty()
+            && extra_build_vars.is_none()
+        {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
+            cache_shard.shard(cache_digest(&(
+                &config_settings,
+                extra_build_deps,
+                extra_build_vars,
+            )))
         };
 
         Ok(self
@@ -192,10 +219,18 @@ impl<'a> BuiltWheelIndex<'a> {
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
+        let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
+        let cache_shard = if config_settings.is_empty()
+            && extra_build_deps.is_empty()
+            && extra_build_vars.is_none()
+        {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
+            cache_shard.shard(cache_digest(&(
+                &config_settings,
+                extra_build_deps,
+                extra_build_vars,
+            )))
         };
 
         self.find(&cache_shard)
@@ -273,5 +308,10 @@ impl<'a> BuiltWheelIndex<'a> {
             .get(name)
             .map(Vec::as_slice)
             .unwrap_or(&[])
+    }
+
+    /// Determine the extra build variables for the given package name.
+    fn extra_build_variables_for(&self, name: &PackageName) -> Option<&BuildVariables> {
+        self.extra_build_variables.get(name)
     }
 }
