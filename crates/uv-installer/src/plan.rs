@@ -13,7 +13,8 @@ use uv_distribution::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, ExtraBuildRequires, Hashed,
-    IndexLocations, InstalledDist, Name, RequirementSource, Resolution, ResolvedDist, SourceDist,
+    IndexLocations, InstalledDist, Name, RemoteSource, RequirementSource, Resolution, ResolvedDist,
+    SourceDist,
 };
 use uv_fs::Simplified;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
@@ -167,7 +168,10 @@ impl<'a> Planner<'a> {
                         }
                         Some(&entry.dist)
                     }) {
-                        debug!("Registry requirement already cached: {distribution}");
+                        debug!(
+                            "Registry requirement already cached: {distribution} ({})",
+                            wheel.best_wheel().filename
+                        );
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
@@ -449,7 +453,11 @@ impl<'a> Planner<'a> {
                 }
             }
 
-            debug!("Identified uncached distribution: {dist}");
+            if let Ok(filename) = dist.filename() {
+                debug!("Identified uncached distribution: {dist} ({filename})");
+            } else {
+                debug!("Identified uncached distribution: {dist}");
+            }
             remote.push(dist.clone());
         }
 

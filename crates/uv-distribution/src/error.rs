@@ -11,6 +11,7 @@ use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendErr
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::VariantNamespace;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
@@ -73,6 +74,15 @@ pub enum Error {
     WheelFilenameVersionMismatch {
         filename: Version,
         metadata: Version,
+    },
+    #[error(
+        "Package {name} has no matching wheel for the current platform, but has the following variants: {variants}"
+    )]
+    WheelVariantMismatch { name: PackageName, variants: String },
+    #[error("Provider plugin is declared to use namespace {declared} but uses namespace {actual}")]
+    WheelVariantNamespaceMismatch {
+        declared: VariantNamespace,
+        actual: VariantNamespace,
     },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
