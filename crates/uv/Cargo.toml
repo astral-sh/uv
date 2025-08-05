@@ -71,7 +71,6 @@ console = { workspace = true }
 ctrlc = { workspace = true }
 dotenvy = { workspace = true }
 dunce = { workspace = true }
-either = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }

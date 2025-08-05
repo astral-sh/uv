@@ -1,12 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use either::Either;
-
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{
-    AnnotatedBuildRequirement, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations,
-    Requirement,
+    ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
 };
 use uv_normalize::PackageName;
 use uv_workspace::pyproject::{
@@ -257,77 +254,44 @@ impl LoweredExtraBuildDependencies {
                 for (package_name, requirements) in extra_build_dependencies {
                     let lowered: Vec<ExtraBuildRequirement> = requirements
                         .into_iter()
-                        .flat_map(|requirement| match requirement {
-                            ExtraBuildDependency::Unannotated(requirement) => {
-                                let requirement_name = requirement.name.clone();
-                                let extra = requirement.marker.top_level_extra_name();
-                                let group = None;
-                                Either::Left(
-                                    LoweredRequirement::from_requirement(
-                                        requirement,
-                                        None,
-                                        workspace.install_path(),
-                                        project_sources,
-                                        project_indexes,
-                                        extra.as_deref(),
-                                        group,
-                                        index_locations,
-                                        workspace,
-                                        None,
-                                    )
-                                    .map(move |requirement| {
-                                        match requirement {
-                                            Ok(requirement) => {
-                                                Ok(ExtraBuildRequirement::Unannotated(
-                                                    requirement.into_inner(),
-                                                ))
-                                            }
-                                            Err(err) => Err(MetadataError::LoweringError(
-                                                requirement_name.clone(),
-                                                Box::new(err),
-                                            )),
-                                        }
-                                    }),
-                                )
-                            }
-                            ExtraBuildDependency::Annotated(AnnotatedBuildDependency {
+                        .flat_map(|requirement| {
+                            let (requirement, match_runtime) = match requirement {
+                                ExtraBuildDependency::Unannotated(requirement) => {
+                                    (requirement, false)
+                                }
+                                ExtraBuildDependency::Annotated(AnnotatedBuildDependency {
+                                    requirement,
+                                    match_runtime,
+                                }) => (requirement, match_runtime),
+                            };
+
+                            let requirement_name = requirement.name.clone();
+                            let extra = requirement.marker.top_level_extra_name();
+                            let group = None;
+                            LoweredRequirement::from_requirement(
                                 requirement,
-                                match_runtime,
-                            }) => {
-                                let requirement_name = requirement.name.clone();
-                                let extra = requirement.marker.top_level_extra_name();
-                                let group = None;
-                                Either::Right(
-                                    LoweredRequirement::from_requirement(
-                                        requirement,
-                                        None,
-                                        workspace.install_path(),
-                                        project_sources,
-                                        project_indexes,
-                                        extra.as_deref(),
-                                        group,
-                                        index_locations,
-                                        workspace,
-                                        None,
-                                    )
-                                    .map(move |requirement| {
-                                        match requirement {
-                                            Ok(requirement) => {
-                                                Ok(ExtraBuildRequirement::Annotated(
-                                                    AnnotatedBuildRequirement {
-                                                        requirement: requirement.into_inner(),
-                                                        match_runtime,
-                                                    },
-                                                ))
-                                            }
-                                            Err(err) => Err(MetadataError::LoweringError(
-                                                requirement_name.clone(),
-                                                Box::new(err),
-                                            )),
-                                        }
+                                None,
+                                workspace.install_path(),
+                                project_sources,
+                                project_indexes,
+                                extra.as_deref(),
+                                group,
+                                index_locations,
+                                workspace,
+                                None,
+                            )
+                            .map(
+                                move |requirement| match requirement {
+                                    Ok(requirement) => Ok(ExtraBuildRequirement {
+                                        requirement: requirement.into_inner(),
+                                        match_runtime,
                                     }),
-                                )
-                            }
+                                    Err(err) => Err(MetadataError::LoweringError(
+                                        requirement_name.clone(),
+                                        Box::new(err),
+                                    )),
+                                },
+                            )
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     build_requires.insert(package_name, lowered);
@@ -353,17 +317,20 @@ impl LoweredExtraBuildDependencies {
                         name,
                         requirements
                             .into_iter()
-                            .map(|requirement| match requirement {
-                                ExtraBuildDependency::Unannotated(requirement) => {
-                                    ExtraBuildRequirement::Unannotated(requirement.into())
-                                }
-                                ExtraBuildDependency::Annotated(AnnotatedBuildDependency {
-                                    requirement,
-                                    match_runtime,
-                                }) => ExtraBuildRequirement::Annotated(AnnotatedBuildRequirement {
+                            .map(|entry| {
+                                let (requirement, match_runtime) = match entry {
+                                    ExtraBuildDependency::Unannotated(requirement) => {
+                                        (requirement, false)
+                                    }
+                                    ExtraBuildDependency::Annotated(AnnotatedBuildDependency {
+                                        requirement,
+                                        match_runtime,
+                                    }) => (requirement, match_runtime),
+                                };
+                                ExtraBuildRequirement {
                                     requirement: requirement.into(),
                                     match_runtime,
-                                }),
+                                }
                             })
                             .collect::<Vec<_>>(),
                     )

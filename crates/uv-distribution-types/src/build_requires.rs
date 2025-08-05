@@ -3,7 +3,15 @@ use std::collections::BTreeMap;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_normalize::PackageName;
 
-use crate::Requirement;
+use crate::{Name, Requirement, RequirementSource, Resolution};
+
+#[derive(Debug, thiserror::Error)]
+pub enum ExtraBuildRequiresError {
+    #[error(
+        "`{0}` was declared as an extra build dependency with `match-runtime = true`, but was not found in the resolution"
+    )]
+    NotFound(PackageName),
+}
 
 /// Lowered extra build dependencies with source resolution applied.
 #[derive(Debug, Clone, Default)]
@@ -41,42 +49,61 @@ impl FromIterator<(PackageName, Vec<ExtraBuildRequirement>)> for ExtraBuildRequi
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AnnotatedBuildRequirement {
+pub struct ExtraBuildRequirement {
     /// The underlying [`Requirement`] for the build requirement.
     pub requirement: Requirement,
     /// Whether this build requirement should match the runtime environment.
     pub match_runtime: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExtraBuildRequirement {
-    /// An unannotated build requirement (i.e., a simple requirement).
-    Unannotated(Requirement),
-    /// An annotated build requirement, which includes a `match-runtime` flag.
-    Annotated(AnnotatedBuildRequirement),
-}
-
 impl From<ExtraBuildRequirement> for Requirement {
     fn from(value: ExtraBuildRequirement) -> Self {
-        match value {
-            ExtraBuildRequirement::Unannotated(requirement) => requirement,
-            ExtraBuildRequirement::Annotated(annotated) => annotated.requirement,
-        }
+        value.requirement
     }
 }
 
 impl CacheKey for ExtraBuildRequirement {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
-        match self {
-            ExtraBuildRequirement::Unannotated(req) => {
-                0u8.cache_key(state);
-                req.cache_key(state);
-            }
-            ExtraBuildRequirement::Annotated(annotated) => {
-                1u8.cache_key(state);
-                annotated.requirement.cache_key(state);
-                annotated.match_runtime.cache_key(state);
-            }
-        }
+        self.requirement.cache_key(state);
+        self.match_runtime.cache_key(state);
+    }
+}
+
+impl ExtraBuildRequires {
+    /// Apply runtime constraints from a resolution to the extra build requirements.
+    pub fn match_runtime(
+        self,
+        resolution: &Resolution,
+    ) -> Result<ExtraBuildRequires, ExtraBuildRequiresError> {
+        self.into_iter()
+            .map(|(name, requirements)| {
+                let requirements = requirements
+                    .into_iter()
+                    .map(|requirement| match requirement {
+                        ExtraBuildRequirement {
+                            requirement,
+                            match_runtime: true,
+                        } => {
+                            let dist = resolution
+                                .distributions()
+                                .find(|dist| dist.name() == &requirement.name)
+                                .ok_or_else(|| {
+                                    ExtraBuildRequiresError::NotFound(requirement.name.clone())
+                                })?;
+                            let requirement = Requirement {
+                                source: RequirementSource::from(dist),
+                                ..requirement
+                            };
+                            Ok::<_, ExtraBuildRequiresError>(ExtraBuildRequirement {
+                                requirement,
+                                match_runtime: true,
+                            })
+                        }
+                        requirement => Ok(requirement),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok::<_, ExtraBuildRequiresError>((name, requirements))
+            })
+            .collect::<Result<ExtraBuildRequires, _>>()
     }
 }

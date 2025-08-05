@@ -2,15 +2,14 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
 
-use uv_distribution_filename::DistExtension;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::Yanked;
 
 use crate::{
-    BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexMetadata, IndexUrl,
-    InstalledDist, Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist,
-    RequirementSource, ResourceId, SourceDist, VersionOrUrlRef,
+    BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
+    Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist,
+    VersionOrUrlRef,
 };
 
 /// A distribution that can be used for resolution and installation.
@@ -100,65 +99,6 @@ impl ResolvedDist {
         match self {
             Self::Installable { dist, .. } => dist.source_tree(),
             Self::Installed { .. } => None,
-        }
-    }
-
-    /// Return a [`RequirementSource`] to install the [`ResolvedDist`], if it is installable.
-    pub fn as_source(&self) -> Option<RequirementSource> {
-        let Self::Installable { dist, .. } = self else {
-            return None;
-        };
-        match dist.as_ref() {
-            Dist::Built(BuiltDist::Registry(dist)) => {
-                let wheel = dist.best_wheel();
-                Some(RequirementSource::Registry {
-                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                        wheel.filename.version.clone(),
-                    )),
-                    index: Some(IndexMetadata::from(wheel.index.clone())),
-                    conflict: None,
-                })
-            }
-            Dist::Built(BuiltDist::DirectUrl(dist)) => Some(RequirementSource::Url {
-                location: dist.url.to_url(),
-                subdirectory: None,
-                ext: DistExtension::Wheel,
-                url: dist.url.clone(),
-            }),
-            Dist::Built(BuiltDist::Path(dist)) => Some(RequirementSource::Path {
-                install_path: dist.install_path.clone(),
-                ext: DistExtension::Wheel,
-                url: dist.url.clone(),
-            }),
-            Dist::Source(SourceDist::Registry(dist)) => Some(RequirementSource::Registry {
-                specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                    dist.version.clone(),
-                )),
-                index: Some(IndexMetadata::from(dist.index.clone())),
-                conflict: None,
-            }),
-            Dist::Source(SourceDist::DirectUrl(dist)) => Some(RequirementSource::Url {
-                location: (*dist.location).clone(),
-                subdirectory: dist.subdirectory.clone(),
-                ext: DistExtension::Source(dist.ext),
-                url: dist.url.clone(),
-            }),
-            Dist::Source(SourceDist::Git(dist)) => Some(RequirementSource::Git {
-                git: (*dist.git).clone(),
-                subdirectory: dist.subdirectory.clone(),
-                url: dist.url.clone(),
-            }),
-            Dist::Source(SourceDist::Path(dist)) => Some(RequirementSource::Path {
-                install_path: dist.install_path.clone(),
-                ext: DistExtension::Source(dist.ext),
-                url: dist.url.clone(),
-            }),
-            Dist::Source(SourceDist::Directory(dist)) => Some(RequirementSource::Directory {
-                install_path: dist.install_path.clone(),
-                editable: dist.editable,
-                r#virtual: dist.r#virtual,
-                url: dist.url.clone(),
-            }),
         }
     }
 }
