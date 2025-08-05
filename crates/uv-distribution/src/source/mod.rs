@@ -413,7 +413,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context
                 .extra_build_dependencies()
                 .get(name)
-                .map(|v| v.as_slice())
+                .map(Vec::as_slice)
         })
         .unwrap_or(&[])
     }
@@ -629,15 +629,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
-
         // Otherwise, we either need to build the metadata.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
@@ -673,6 +664,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
+
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
+        };
 
         let task = self
             .reporter
