@@ -46,8 +46,8 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
+use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::pyproject::PyProjectToml;
-use uv_workspace::pyproject::{AnnotatedBuildDependency, ExtraBuildDependency};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -2651,26 +2651,24 @@ pub(crate) fn script_extra_build_requires(
         let lowered_requirements: Vec<_> = requirements
             .iter()
             .cloned()
-            .flat_map(|entry| {
-                let (requirement, match_runtime) = match entry {
-                    ExtraBuildDependency::Unannotated(requirement) => (requirement, false),
-                    ExtraBuildDependency::Annotated(AnnotatedBuildDependency {
+            .flat_map(
+                |ExtraBuildDependency {
+                     requirement,
+                     match_runtime,
+                 }| {
+                    LoweredRequirement::from_non_workspace_requirement(
                         requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                    )
+                    .map_ok(move |requirement| ExtraBuildRequirement {
+                        requirement: requirement.into_inner(),
                         match_runtime,
-                    }) => (requirement, match_runtime),
-                };
-                LoweredRequirement::from_non_workspace_requirement(
-                    requirement,
-                    script_dir.as_ref(),
-                    script_sources,
-                    script_indexes,
-                    &settings.index_locations,
-                )
-                .map_ok(move |requirement| ExtraBuildRequirement {
-                    requirement: requirement.into_inner(),
-                    match_runtime,
-                })
-            })
+                    })
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
         extra_build_requires.insert(name.clone(), lowered_requirements);
     }

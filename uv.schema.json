@@ -641,21 +641,6 @@
         }
       ]
     },
-    "AnnotatedBuildDependency": {
-      "type": "object",
-      "properties": {
-        "match-runtime": {
-          "type": "boolean"
-        },
-        "requirement": {
-          "$ref": "#/definitions/Requirement"
-        }
-      },
-      "required": [
-        "requirement",
-        "match-runtime"
-      ]
-    },
     "AnnotationStyle": {
       "description": "Indicate the style of annotation comments, used to indicate the dependencies that requested each\npackage.",
       "oneOf": [
@@ -914,7 +899,19 @@
           "$ref": "#/definitions/Requirement"
         },
         {
-          "$ref": "#/definitions/AnnotatedBuildDependency"
+          "type": "object",
+          "properties": {
+            "match-runtime": {
+              "type": "boolean"
+            },
+            "requirement": {
+              "$ref": "#/definitions/Requirement"
+            }
+          },
+          "required": [
+            "requirement",
+            "match-runtime"
+          ]
         }
       ]
     },

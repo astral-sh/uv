@@ -12728,5 +12728,41 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
     ");
 
+    // Adding a version specifier should also fail
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio>4", match-runtime = true }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 9
+         |
+      11 | child = [{ requirement = "anyio>4", match-runtime = true }]
+         |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Dependencies marked with `match-runtime = true` cannot include version specifiers
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 11, column 9
+       |
+    11 | child = [{ requirement = "anyio>4", match-runtime = true }]
+       |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Dependencies marked with `match-runtime = true` cannot include version specifiers
+    "#);
+
     Ok(())
 }
