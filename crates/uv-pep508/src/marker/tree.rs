@@ -581,7 +581,7 @@ impl ExtraOperator {
 
     /// Negates this operator.
     pub(crate) fn negate(&self) -> Self {
-        match *self {
+        match self {
             Self::Equal => Self::NotEqual,
             Self::NotEqual => Self::Equal,
         }

@@ -2405,9 +2405,9 @@ impl ReleaseNumbers {
 
     /// Returns the release components as a slice.
     fn as_slice(&self) -> &[u64] {
-        match *self {
-            Self::Inline { ref numbers, len } => &numbers[..len],
-            Self::Vec(ref vec) => vec,
+        match self {
+            Self::Inline { numbers, len } => &numbers[..*len],
+            Self::Vec(vec) => vec,
         }
     }
 }

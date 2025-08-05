@@ -571,7 +571,7 @@ impl RequirementSource {
 
     /// Convert the source to a [`VerbatimParsedUrl`], if it's a URL source.
     pub fn to_verbatim_parsed_url(&self) -> Option<VerbatimParsedUrl> {
-        match &self {
+        match self {
             Self::Registry { .. } => None,
             Self::Url {
                 location,

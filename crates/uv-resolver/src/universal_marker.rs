@@ -588,8 +588,8 @@ impl<'a> ParsedRawExtra<'a> {
                 name_error,
             }
         })?;
-        match *self {
-            ParsedRawExtra::Extra { extra, .. } => {
+        match self {
+            Self::Extra { extra, .. } => {
                 let extra = ExtraName::from_str(extra).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
                         kind: "extra",
@@ -598,7 +598,7 @@ impl<'a> ParsedRawExtra<'a> {
                 })?;
                 Ok(ConflictItem::from((package, extra)))
             }
-            ParsedRawExtra::Group { group, .. } => {
+            Self::Group { group, .. } => {
                 let group = GroupName::from_str(group).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
                         kind: "group",
@@ -611,9 +611,9 @@ impl<'a> ParsedRawExtra<'a> {
     }
 
     fn package(&self) -> &'a str {
-        match *self {
-            ParsedRawExtra::Extra { package, .. } => package,
-            ParsedRawExtra::Group { package, .. } => package,
+        match self {
+            Self::Extra { package, .. } => package,
+            Self::Group { package, .. } => package,
         }
     }
 }

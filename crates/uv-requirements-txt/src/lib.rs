@@ -1131,7 +1131,7 @@ impl Display for RequirementsTxtParserError {
 
 impl std::error::Error for RequirementsTxtParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self {
+        match self {
             Self::Io(err) => err.source(),
             Self::Url { source, .. } => Some(source),
             Self::FileUrl { .. } => None,
