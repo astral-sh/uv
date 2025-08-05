@@ -28,7 +28,7 @@ use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
@@ -755,14 +755,86 @@ pub struct DependencyGroupSettings {
     pub requires_python: Option<VersionSpecifiers>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum ExtraBuildDependencyWire {
+    Unannotated(uv_pep508::Requirement<VerbatimParsedUrl>),
+    #[serde(rename_all = "kebab-case")]
+    Annotated {
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        match_runtime: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    deny_unknown_fields,
+    try_from = "ExtraBuildDependencyWire",
+    into = "ExtraBuildDependencyWire"
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ExtraBuildDependency {
+    pub requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+    pub match_runtime: bool,
+}
+
+impl From<ExtraBuildDependency> for uv_pep508::Requirement<VerbatimParsedUrl> {
+    fn from(value: ExtraBuildDependency) -> Self {
+        value.requirement
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ExtraBuildDependencyError {
+    #[error("Dependencies marked with `match-runtime = true` cannot include version specifiers")]
+    VersionSpecifiersNotAllowed,
+    #[error("Dependencies marked with `match-runtime = true` cannot include URL constraints")]
+    UrlNotAllowed,
+}
+
+impl TryFrom<ExtraBuildDependencyWire> for ExtraBuildDependency {
+    type Error = ExtraBuildDependencyError;
+
+    fn try_from(wire: ExtraBuildDependencyWire) -> Result<Self, ExtraBuildDependencyError> {
+        match wire {
+            ExtraBuildDependencyWire::Unannotated(requirement) => Ok(Self {
+                requirement,
+                match_runtime: false,
+            }),
+            ExtraBuildDependencyWire::Annotated {
+                requirement,
+                match_runtime,
+            } => match requirement.version_or_url {
+                None => Ok(Self {
+                    requirement,
+                    match_runtime,
+                }),
+                // If `match-runtime = true`, reject additional constraints.
+                Some(VersionOrUrl::VersionSpecifier(..)) => {
+                    Err(ExtraBuildDependencyError::VersionSpecifiersNotAllowed)
+                }
+                Some(VersionOrUrl::Url(..)) => Err(ExtraBuildDependencyError::UrlNotAllowed),
+            },
+        }
+    }
+}
+
+impl From<ExtraBuildDependency> for ExtraBuildDependencyWire {
+    fn from(item: ExtraBuildDependency) -> ExtraBuildDependencyWire {
+        ExtraBuildDependencyWire::Annotated {
+            requirement: item.requirement,
+            match_runtime: item.match_runtime,
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ExtraBuildDependencies(
-    BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-);
+pub struct ExtraBuildDependencies(BTreeMap<PackageName, Vec<ExtraBuildDependency>>);
 
 impl std::ops::Deref for ExtraBuildDependencies {
-    type Target = BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>;
+    type Target = BTreeMap<PackageName, Vec<ExtraBuildDependency>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -776,14 +848,19 @@ impl std::ops::DerefMut for ExtraBuildDependencies {
 }
 
 impl IntoIterator for ExtraBuildDependencies {
-    type Item = (PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>);
-    type IntoIter = std::collections::btree_map::IntoIter<
-        PackageName,
-        Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    >;
+    type Item = (PackageName, Vec<ExtraBuildDependency>);
+    type IntoIter = std::collections::btree_map::IntoIter<PackageName, Vec<ExtraBuildDependency>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl FromIterator<(PackageName, Vec<ExtraBuildDependency>)> for ExtraBuildDependencies {
+    fn from_iter<T: IntoIterator<Item = (PackageName, Vec<ExtraBuildDependency>)>>(
+        iter: T,
+    ) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 
