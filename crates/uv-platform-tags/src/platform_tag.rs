@@ -105,6 +105,11 @@ impl PlatformTag {
 }
 
 impl PlatformTag {
+    /// Returns `true` if the platform is "any" (i.e., not specific to a platform).
+    pub fn is_any(&self) -> bool {
+        matches!(self, Self::Any)
+    }
+
     /// Returns `true` if the platform is manylinux-only.
     pub fn is_manylinux(&self) -> bool {
         matches!(
@@ -132,6 +137,11 @@ impl PlatformTag {
     /// Returns `true` if the platform is macOS-only.
     pub fn is_macos(&self) -> bool {
         matches!(self, Self::Macos { .. })
+    }
+
+    /// Returns `true` if the platform is Android-only.
+    pub fn is_android(&self) -> bool {
+        matches!(self, Self::Android { .. })
     }
 
     /// Returns `true` if the platform is Windows-only.

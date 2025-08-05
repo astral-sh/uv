@@ -14,8 +14,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, Preview, Reinstall, SourceStrategy,
-    Upgrade,
+    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
+    SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -44,8 +44,9 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
@@ -95,11 +96,12 @@ pub(crate) async fn pip_compile(
     config_settings_package: PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
+    extra_build_dependencies: &ExtraBuildDependencies,
     build_options: BuildOptions,
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
@@ -112,6 +114,15 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+        && !extra_build_dependencies.is_empty()
+    {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+        );
+    }
+
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
     if output_file
@@ -469,6 +480,8 @@ pub(crate) async fn pip_compile(
             .map(|constraint| constraint.requirement.clone()),
     );
 
+    let extra_build_requires =
+        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
@@ -482,10 +495,11 @@ pub(crate) async fn pip_compile(
         &config_settings,
         &config_settings_package,
         build_isolation,
+        &extra_build_requires,
         link_mode,
         &build_options,
         &build_hashes,
-        exclude_newer,
+        exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
         concurrency,
@@ -497,7 +511,7 @@ pub(crate) async fn pip_compile(
         .prerelease_mode(prerelease_mode)
         .fork_strategy(fork_strategy)
         .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
+        .exclude_newer(exclude_newer.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())

@@ -20,7 +20,10 @@ use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerTimestamp, ForkStrategy, PrereleaseMode,
+    ResolutionMode,
+};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -2749,7 +2752,16 @@ pub struct VenvArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for a specific package to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long)]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -4478,6 +4490,10 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
+    /// Install executables from the following packages.
+    #[arg(long)]
+    pub with_executables_from: Vec<comma::CommaSeparatedRequirements>,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -4777,7 +4793,16 @@ pub struct ToolUpgradeArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -5572,7 +5597,16 @@ pub struct InstallerArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -5773,7 +5807,16 @@ pub struct ResolverArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for a specific package to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -5970,7 +6013,16 @@ pub struct ResolverInstallerArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts package-date pairs in the format `PACKAGE=DATE`, where `DATE` is an RFC 3339 timestamp
+    /// (e.g., `2006-12-02T02:07:43Z`) or local date (e.g., `2006-12-02`) in your system's configured time zone.
+    ///
+    /// Can be provided multiple times for different packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub exclude_newer_package: Option<Vec<ExcludeNewerPackageEntry>>,
 
     /// The method to use when installing packages from the global cache.
     ///
@@ -6059,7 +6111,7 @@ pub struct FetchArgs {
     /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
     /// format (e.g., `2006-12-02`) in your system's configured time zone.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewer>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
 }
 
 #[derive(Args)]

@@ -408,9 +408,6 @@ impl<'a> IndexLocations {
         } else {
             let mut indexes = vec![];
 
-            // TODO(charlie): By only yielding the first default URL, we'll drop credentials if,
-            // e.g., an authenticated default URL is provided in a configuration file, but an
-            // unauthenticated default URL is present in the receipt.
             let mut seen = FxHashSet::default();
             let mut default = false;
             for index in {

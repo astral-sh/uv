@@ -15,6 +15,7 @@ bitflags::bitflags! {
         const PYLOCK = 1 << 3;
         const ADD_BOUNDS = 1 << 4;
         const PACKAGE_CONFLICTS = 1 << 5;
+        const EXTRA_BUILD_DEPENDENCIES = 1 << 6;
     }
 }
 
@@ -30,6 +31,7 @@ impl PreviewFeatures {
             Self::PYLOCK => "pylock",
             Self::ADD_BOUNDS => "add-bounds",
             Self::PACKAGE_CONFLICTS => "package-conflicts",
+            Self::EXTRA_BUILD_DEPENDENCIES => "extra-build-dependencies",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -73,6 +75,7 @@ impl FromStr for PreviewFeatures {
                 "pylock" => Self::PYLOCK,
                 "add-bounds" => Self::ADD_BOUNDS,
                 "package-conflicts" => Self::PACKAGE_CONFLICTS,
+                "extra-build-dependencies" => Self::EXTRA_BUILD_DEPENDENCIES,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -235,6 +238,14 @@ mod tests {
         assert_eq!(PreviewFeatures::JSON_OUTPUT.flag_as_str(), "json-output");
         assert_eq!(PreviewFeatures::PYLOCK.flag_as_str(), "pylock");
         assert_eq!(PreviewFeatures::ADD_BOUNDS.flag_as_str(), "add-bounds");
+        assert_eq!(
+            PreviewFeatures::PACKAGE_CONFLICTS.flag_as_str(),
+            "package-conflicts"
+        );
+        assert_eq!(
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES.flag_as_str(),
+            "extra-build-dependencies"
+        );
     }
 
     #[test]

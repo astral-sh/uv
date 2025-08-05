@@ -1,9 +1,10 @@
 use anyhow::Result;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
+use owo_colors::{AnsiColors, OwoColorize};
 use std::collections::BTreeMap;
 use std::fmt::Write;
-use tracing::debug;
+use std::str::FromStr;
+use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -18,7 +19,8 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
-use uv_workspace::WorkspaceCache;
+use uv_warnings::write_error_chain;
+use uv_workspace::{WorkspaceCache, pyproject::ExtraBuildDependencies};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
@@ -155,20 +157,14 @@ pub(crate) async fn upgrade(
             .into_iter()
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
-            writeln!(
+            trace!("Error trace: {err:?}");
+            write_error_chain(
+                err.context(format!("Failed to upgrade {}", name.green()))
+                    .as_ref(),
                 printer.stderr(),
-                "{}: Failed to upgrade {}",
-                "error".red().bold(),
-                name.green()
+                "error",
+                AnsiColors::Red,
             )?;
-            for err in err.chain() {
-                writeln!(
-                    printer.stderr(),
-                    "  {}: {}",
-                    "Caused by".red().bold(),
-                    err.to_string().trim()
-                )?;
-            }
         }
         return Ok(ExitStatus::Failure);
     }
@@ -343,6 +339,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             build_constraints,
+            uv_distribution::ExtraBuildRequires::from_lowered(ExtraBuildDependencies::default()),
             &settings,
             network_settings,
             &state,
@@ -377,12 +374,19 @@ async fn upgrade_tool(
         // existing executables.
         remove_entrypoints(&existing_tool_receipt);
 
+        let entrypoints: Vec<_> = existing_tool_receipt
+            .entrypoints()
+            .iter()
+            .filter_map(|entry| PackageName::from_str(entry.from.as_ref()?).ok())
+            .collect();
+
         // If we modified the target tool, reinstall the entrypoints.
         finalize_tool_install(
             &environment,
             name,
+            &entrypoints,
             installed_tools,
-            ToolOptions::from(options),
+            &ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
             existing_tool_receipt.requirements().to_vec(),

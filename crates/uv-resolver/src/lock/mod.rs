@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::convert::Infallible;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
@@ -60,7 +59,8 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, ResolutionMode, ResolverOutput,
+    ExcludeNewer, ExcludeNewerTimestamp, InMemoryIndex, MetadataResponse, PrereleaseMode,
+    ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -72,7 +72,7 @@ mod tree;
 pub const VERSION: u32 = 1;
 
 /// The current revision of the lockfile format.
-const REVISION: u32 = 2;
+const REVISION: u32 = 3;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -84,6 +84,10 @@ static WINDOWS_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 });
 static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ANDROID_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("sys_platform == 'android'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
@@ -104,6 +108,66 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     )
     .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static LINUX_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static LINUX_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static LINUX_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static WINDOWS_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static WINDOWS_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static WINDOWS_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *WINDOWS_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static MAC_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static MAC_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static MAC_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *MAC_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
+});
+static ANDROID_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
+    marker.and(*ARM_MARKERS);
+    marker
+});
+static ANDROID_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
+    marker.and(*X86_64_MARKERS);
+    marker
+});
+static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *ANDROID_MARKERS;
+    marker.and(*X86_MARKERS);
+    marker
 });
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -278,11 +342,23 @@ impl Lock {
         }
 
         let packages = packages.into_values().collect();
+        let (exclude_newer, exclude_newer_package) = {
+            let exclude_newer = &resolution.options.exclude_newer;
+            let global_exclude_newer = exclude_newer.global;
+            let package_exclude_newer = if exclude_newer.package.is_empty() {
+                None
+            } else {
+                Some(exclude_newer.package.clone().into_inner())
+            };
+            (global_exclude_newer, package_exclude_newer)
+        };
+
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
             fork_strategy: resolution.options.fork_strategy,
-            exclude_newer: resolution.options.exclude_newer,
+            exclude_newer,
+            exclude_newer_package,
         };
         let lock = Self::new(
             VERSION,
@@ -323,14 +399,61 @@ impl Lock {
             // a single disjointness check with the intersection is sufficient, so we have one
             // constant per platform.
             let platform_tags = wheel.filename.platform_tags();
+
+            if platform_tags.iter().all(PlatformTag::is_any) {
+                return true;
+            }
+
             if platform_tags.iter().all(PlatformTag::is_linux) {
-                if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
                     return false;
                 }
             }
 
             if platform_tags.iter().all(PlatformTag::is_windows) {
-                if graph.graph[node_index]
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*WINDOWS_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index]
                     .marker()
                     .is_disjoint(*WINDOWS_MARKERS)
                 {
@@ -339,7 +462,58 @@ impl Lock {
             }
 
             if platform_tags.iter().all(PlatformTag::is_macos) {
-                if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*MAC_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_android) {
+                if platform_tags.iter().all(PlatformTag::is_arm) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_ARM_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_X86_64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_x86) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*ANDROID_X86_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ANDROID_MARKERS)
+                {
                     return false;
                 }
             }
@@ -643,8 +817,8 @@ impl Lock {
     }
 
     /// Returns the exclude newer setting used to generate this lock.
-    pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
-        self.options.exclude_newer
+    pub fn exclude_newer(&self) -> ExcludeNewer {
+        self.options.exclude_newer()
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
@@ -891,8 +1065,21 @@ impl Lock {
                     value(self.options.fork_strategy.to_string()),
                 );
             }
-            if let Some(exclude_newer) = self.options.exclude_newer {
-                options_table.insert("exclude-newer", value(exclude_newer.to_string()));
+            let exclude_newer = &self.options.exclude_newer();
+            if !exclude_newer.is_empty() {
+                // Always serialize global exclude-newer as a string
+                if let Some(global) = exclude_newer.global {
+                    options_table.insert("exclude-newer", value(global.to_string()));
+                }
+
+                // Serialize package-specific exclusions as a separate field
+                if !exclude_newer.package.is_empty() {
+                    let mut package_table = toml_edit::Table::new();
+                    for (name, timestamp) in &exclude_newer.package {
+                        package_table.insert(name.as_ref(), value(timestamp.to_string()));
+                    }
+                    options_table.insert("exclude-newer-package", Item::Table(package_table));
+                }
             }
 
             if !options_table.is_empty() {
@@ -1871,8 +2058,25 @@ struct ResolverOptions {
     /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
     fork_strategy: ForkStrategy,
-    /// The [`ExcludeNewer`] used to generate this lock.
-    exclude_newer: Option<ExcludeNewer>,
+    /// The global [`ExcludeNewer`] timestamp.
+    exclude_newer: Option<ExcludeNewerTimestamp>,
+    /// Package-specific [`ExcludeNewer`] timestamps.
+    exclude_newer_package: Option<FxHashMap<PackageName, ExcludeNewerTimestamp>>,
+}
+
+impl ResolverOptions {
+    /// Get the combined exclude-newer configuration.
+    fn exclude_newer(&self) -> ExcludeNewer {
+        ExcludeNewer::from_args(
+            self.exclude_newer,
+            self.exclude_newer_package
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        )
+    }
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
@@ -3718,7 +3922,7 @@ struct SourceDistMetadata {
 /// future, so this should be treated as only a hint to where to look
 /// and/or recording where the source dist file originally came from.
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(try_from = "SourceDistWire")]
+#[serde(from = "SourceDistWire")]
 enum SourceDist {
     Url {
         url: UrlString,
@@ -4017,17 +4221,15 @@ impl SourceDist {
     }
 }
 
-impl TryFrom<SourceDistWire> for SourceDist {
-    type Error = Infallible;
-
-    fn try_from(wire: SourceDistWire) -> Result<SourceDist, Infallible> {
+impl From<SourceDistWire> for SourceDist {
+    fn from(wire: SourceDistWire) -> SourceDist {
         match wire {
-            SourceDistWire::Url { url, metadata } => Ok(SourceDist::Url { url, metadata }),
-            SourceDistWire::Path { path, metadata } => Ok(SourceDist::Path {
+            SourceDistWire::Url { url, metadata } => SourceDist::Url { url, metadata },
+            SourceDistWire::Path { path, metadata } => SourceDist::Path {
                 path: path.into(),
                 metadata,
-            }),
-            SourceDistWire::Metadata { metadata } => Ok(SourceDist::Metadata { metadata }),
+            },
+            SourceDistWire::Metadata { metadata } => SourceDist::Metadata { metadata },
         }
     }
 }
@@ -4207,27 +4409,12 @@ impl Wheel {
     }
 
     fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
-        let filename = wheel.filename.clone();
-        match &wheel.index {
+        let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&wheel.file.url)
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
-                let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-                let size = wheel.file.size;
-                let upload_time = wheel
-                    .file
-                    .upload_time_utc_ms
-                    .map(Timestamp::from_millisecond)
-                    .transpose()
-                    .map_err(LockErrorKind::InvalidTimestamp)?;
-                Ok(Wheel {
-                    url: WheelWireSource::Url { url },
-                    hash,
-                    size,
-                    filename,
-                    upload_time,
-                })
+                WheelWireSource::Url { url }
             }
             IndexUrl::Path(path) => {
                 let index_path = path
@@ -4243,35 +4430,31 @@ impl Wheel {
                         .or_else(|_| std::path::absolute(&wheel_path))
                         .map_err(LockErrorKind::DistributionRelativePath)?
                         .into_boxed_path();
-                    Ok(Wheel {
-                        url: WheelWireSource::Path { path },
-                        hash: None,
-                        size: None,
-                        upload_time: None,
-                        filename,
-                    })
+                    WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
-                    let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-                    let size = wheel.file.size;
-                    let upload_time = wheel
-                        .file
-                        .upload_time_utc_ms
-                        .map(Timestamp::from_millisecond)
-                        .transpose()
-                        .map_err(LockErrorKind::InvalidTimestamp)?;
-                    Ok(Wheel {
-                        url: WheelWireSource::Url { url },
-                        hash,
-                        size,
-                        filename,
-                        upload_time,
-                    })
+                    WheelWireSource::Url { url }
                 }
             }
-        }
+        };
+        let filename = wheel.filename.clone();
+        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+        let size = wheel.file.size;
+        let upload_time = wheel
+            .file
+            .upload_time_utc_ms
+            .map(Timestamp::from_millisecond)
+            .transpose()
+            .map_err(LockErrorKind::InvalidTimestamp)?;
+        Ok(Wheel {
+            url,
+            hash,
+            size,
+            upload_time,
+            filename,
+        })
     }
 
     fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {

@@ -35,6 +35,7 @@ uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 async-channel = { workspace = true }

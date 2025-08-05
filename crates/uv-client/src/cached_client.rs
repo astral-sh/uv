@@ -176,20 +176,12 @@ impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for
             CachedClientError::Client {
                 retries: Some(retries),
                 err,
-            } => ErrorKind::RequestWithRetries {
-                source: Box::new(err.into_kind()),
-                retries,
-            }
-            .into(),
+            } => Error::new(err.into_kind(), retries),
             CachedClientError::Client { retries: None, err } => err,
             CachedClientError::Callback {
                 retries: Some(retries),
                 err,
-            } => ErrorKind::RequestWithRetries {
-                source: Box::new(err.into().into_kind()),
-                retries,
-            }
-            .into(),
+            } => Error::new(err.into().into_kind(), retries),
             CachedClientError::Callback { retries: None, err } => err.into(),
         }
     }

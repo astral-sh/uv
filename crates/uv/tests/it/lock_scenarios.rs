@@ -137,7 +137,7 @@ fn wrong_backtracking_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]
@@ -319,7 +319,7 @@ fn wrong_backtracking_indirect() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]
@@ -466,7 +466,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -586,7 +586,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]
@@ -688,7 +688,7 @@ fn fork_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -991,7 +991,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -1174,7 +1174,7 @@ fn fork_upgrade() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]
@@ -1299,7 +1299,7 @@ fn fork_incomplete_markers() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "python_full_version >= '3.11'",
@@ -1456,7 +1456,7 @@ fn fork_marker_accrue() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]
@@ -1667,7 +1667,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
@@ -1853,7 +1853,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
@@ -2028,7 +2028,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
@@ -2194,7 +2194,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2348,7 +2348,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2508,7 +2508,7 @@ fn fork_marker_inherit() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2651,7 +2651,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2811,7 +2811,7 @@ fn fork_marker_selection() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2974,7 +2974,7 @@ fn fork_marker_track() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -3131,7 +3131,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]
@@ -3442,7 +3442,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "python_full_version >= '3.11'",
@@ -3626,7 +3626,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -4038,7 +4038,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -4332,7 +4332,7 @@ fn preferences_dependent_forking() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -4512,7 +4512,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "os_name == 'darwin' and sys_platform == 'illumos'",
@@ -4665,7 +4665,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.10"
 
         [[package]]
@@ -4750,7 +4750,7 @@ fn fork_requires_python_full() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.10"
 
         [[package]]
@@ -4839,7 +4839,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.10.1"
 
         [[package]]
@@ -4933,7 +4933,7 @@ fn fork_requires_python() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.10"
 
         [[package]]
@@ -5014,7 +5014,7 @@ fn requires_python_wheels() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.10"
 
         [[package]]
@@ -5113,7 +5113,7 @@ fn unreachable_package() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]
@@ -5218,7 +5218,7 @@ fn unreachable_wheels() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]
@@ -5352,7 +5352,7 @@ fn marker_variants_have_different_extras() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
         resolution-markers = [
             "platform_python_implementation != 'PyPy'",
@@ -5494,7 +5494,7 @@ fn virtual_package_extra_priorities() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.12"
 
         [[package]]
@@ -5618,7 +5618,7 @@ fn specific_architecture() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 2
+        revision = 3
         requires-python = ">=3.8"
 
         [[package]]

@@ -731,9 +731,15 @@ impl EnvVars {
     /// the installer from modifying shell profiles or environment variables.
     pub const UV_UNMANAGED_INSTALL: &'static str = "UV_UNMANAGED_INSTALL";
 
+    /// The URL from which to download uv using the standalone installer. By default, installs from
+    /// uv's GitHub Releases. `INSTALLER_DOWNLOAD_URL` is also supported as an alias, for backwards
+    /// compatibility.
+    pub const UV_DOWNLOAD_URL: &'static str = "UV_DOWNLOAD_URL";
+
     /// Avoid modifying the `PATH` environment variable when installing uv using the standalone
-    /// installer and `self update` feature.
-    pub const INSTALLER_NO_MODIFY_PATH: &'static str = "INSTALLER_NO_MODIFY_PATH";
+    /// installer and `self update` feature. `INSTALLER_NO_MODIFY_PATH` is also supported as an
+    /// alias, for backwards compatibility.
+    pub const UV_NO_MODIFY_PATH: &'static str = "UV_NO_MODIFY_PATH";
 
     /// Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
     pub const UV_NO_INSTALLER_METADATA: &'static str = "UV_NO_INSTALLER_METADATA";

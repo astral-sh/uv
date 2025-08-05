@@ -97,7 +97,10 @@ uv run [OPTIONS] [COMMAND]
 <p>When enabled, uv will remove any extraneous packages from the environment. By default, <code>uv run</code> will make the minimum necessary changes to satisfy the requirements.</p>
 </dd><dt id="uv-run--exclude-newer"><a href="#uv-run--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-run--extra"><a href="#uv-run--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-run--exclude-newer-package"><a href="#uv-run--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-run--extra"><a href="#uv-run--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 <p>May be provided more than once.</p>
 <p>Optional dependencies are defined via <code>project.optional-dependencies</code> in a <code>pyproject.toml</code>.</p>
 <p>This option is only available when running in a project.</p>
@@ -304,6 +307,7 @@ uv init [OPTIONS] [PATH]
 <p>Implicitly sets <code>--package</code>.</p>
 <p>May also be set with the <code>UV_INIT_BUILD_BACKEND</code> environment variable.</p><p>Possible values:</p>
 <ul>
+<li><code>uv</code>:  Use uv as the project build backend</li>
 <li><code>hatch</code>:  Use <a href="https://pypi.org/project/hatchling">hatchling</a> as the project build backend</li>
 <li><code>flit</code>:  Use <a href="https://pypi.org/project/flit-core">flit-core</a> as the project build backend</li>
 <li><code>pdm</code>:  Use <a href="https://pypi.org/project/pdm-backend">pdm-backend</a> as the project build backend</li>
@@ -458,7 +462,10 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt id="uv-add--editable"><a href="#uv-add--editable"><code>--editable</code></a></dt><dd><p>Add the requirements as editable</p>
 </dd><dt id="uv-add--exclude-newer"><a href="#uv-add--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-add--extra"><a href="#uv-add--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Extras to enable for the dependency.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-add--exclude-newer-package"><a href="#uv-add--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-add--extra"><a href="#uv-add--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Extras to enable for the dependency.</p>
 <p>May be provided more than once.</p>
 <p>To add this dependency to an optional extra instead, see <code>--optional</code>.</p>
 </dd><dt id="uv-add--extra-index-url"><a href="#uv-add--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
@@ -652,7 +659,10 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-remove--exclude-newer"><a href="#uv-remove--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-remove--extra-index-url"><a href="#uv-remove--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-remove--exclude-newer-package"><a href="#uv-remove--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-remove--extra-index-url"><a href="#uv-remove--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-remove--find-links"><a href="#uv-remove--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -831,7 +841,10 @@ uv version [OPTIONS] [VALUE]
 <p>Instead, the version will be displayed.</p>
 </dd><dt id="uv-version--exclude-newer"><a href="#uv-version--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-version--extra-index-url"><a href="#uv-version--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-version--exclude-newer-package"><a href="#uv-version--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-version--extra-index-url"><a href="#uv-version--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-version--find-links"><a href="#uv-version--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -1016,7 +1029,10 @@ uv sync [OPTIONS]
 <p>In dry-run mode, uv will resolve the project's dependencies and report on the resulting changes to both the lockfile and the project environment, but will not modify either.</p>
 </dd><dt id="uv-sync--exclude-newer"><a href="#uv-sync--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-sync--extra"><a href="#uv-sync--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-sync--exclude-newer-package"><a href="#uv-sync--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-sync--extra"><a href="#uv-sync--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 <p>May be provided more than once.</p>
 <p>When multiple extras or groups are specified that appear in <code>tool.uv.conflicts</code>, uv will report an error.</p>
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
@@ -1264,7 +1280,10 @@ uv lock [OPTIONS]
 <p>In dry-run mode, uv will resolve the project's dependencies and report on the resulting changes, but will not write the lockfile to disk.</p>
 </dd><dt id="uv-lock--exclude-newer"><a href="#uv-lock--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-lock--extra-index-url"><a href="#uv-lock--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-lock--exclude-newer-package"><a href="#uv-lock--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-lock--extra-index-url"><a href="#uv-lock--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-lock--find-links"><a href="#uv-lock--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -1426,7 +1445,10 @@ uv export [OPTIONS]
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-export--exclude-newer"><a href="#uv-export--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-export--extra"><a href="#uv-export--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-export--exclude-newer-package"><a href="#uv-export--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-export--extra"><a href="#uv-export--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 <p>May be provided more than once.</p>
 </dd><dt id="uv-export--extra-index-url"><a href="#uv-export--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -1622,7 +1644,10 @@ uv tree [OPTIONS]
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-tree--exclude-newer"><a href="#uv-tree--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tree--extra-index-url"><a href="#uv-tree--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tree--exclude-newer-package"><a href="#uv-tree--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-tree--extra-index-url"><a href="#uv-tree--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-tree--find-links"><a href="#uv-tree--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -1885,7 +1910,10 @@ uv tool run [OPTIONS] [COMMAND]
 <p>Can be provided multiple times, with subsequent files overriding values defined in previous files.</p>
 <p>May also be set with the <code>UV_ENV_FILE</code> environment variable.</p></dd><dt id="uv-tool-run--exclude-newer"><a href="#uv-tool-run--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tool-run--extra-index-url"><a href="#uv-tool-run--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tool-run--exclude-newer-package"><a href="#uv-tool-run--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-tool-run--extra-index-url"><a href="#uv-tool-run--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-tool-run--find-links"><a href="#uv-tool-run--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -2057,7 +2085,10 @@ uv tool install [OPTIONS] <PACKAGE>
 </dd><dt id="uv-tool-install--editable"><a href="#uv-tool-install--editable"><code>--editable</code></a>, <code>-e</code></dt><dd><p>Install the target package in editable mode, such that changes in the package's source directory are reflected without reinstallation</p>
 </dd><dt id="uv-tool-install--exclude-newer"><a href="#uv-tool-install--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tool-install--extra-index-url"><a href="#uv-tool-install--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tool-install--exclude-newer-package"><a href="#uv-tool-install--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-tool-install--extra-index-url"><a href="#uv-tool-install--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-tool-install--find-links"><a href="#uv-tool-install--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -2167,6 +2198,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a>, <code>-w</code> <i>with</i></dt><dd><p>Include the following additional requirements</p>
 </dd><dt id="uv-tool-install--with-editable"><a href="#uv-tool-install--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
+</dd><dt id="uv-tool-install--with-executables-from"><a href="#uv-tool-install--with-executables-from"><code>--with-executables-from</code></a> <i>with-executables-from</i></dt><dd><p>Install executables from the following packages</p>
 </dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Include all requirements listed in the given <code>requirements.txt</code> files</p>
 </dd></dl>
 
@@ -2221,7 +2253,10 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-tool-upgrade--exclude-newer"><a href="#uv-tool-upgrade--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tool-upgrade--extra-index-url"><a href="#uv-tool-upgrade--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-tool-upgrade--exclude-newer-package"><a href="#uv-tool-upgrade--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-tool-upgrade--extra-index-url"><a href="#uv-tool-upgrade--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-tool-upgrade--find-links"><a href="#uv-tool-upgrade--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -3376,7 +3411,10 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 </dd><dt id="uv-pip-compile--emit-index-url"><a href="#uv-pip-compile--emit-index-url"><code>--emit-index-url</code></a></dt><dd><p>Include <code>--index-url</code> and <code>--extra-index-url</code> entries in the generated output file</p>
 </dd><dt id="uv-pip-compile--exclude-newer"><a href="#uv-pip-compile--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-compile--extra"><a href="#uv-pip-compile--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-compile--exclude-newer-package"><a href="#uv-pip-compile--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-pip-compile--extra"><a href="#uv-pip-compile--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 </dd><dt id="uv-pip-compile--extra-index-url"><a href="#uv-pip-compile--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -3679,7 +3717,10 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </dd><dt id="uv-pip-sync--dry-run"><a href="#uv-pip-sync--dry-run"><code>--dry-run</code></a></dt><dd><p>Perform a dry run, i.e., don't actually install anything but resolve the dependencies and print the resulting plan</p>
 </dd><dt id="uv-pip-sync--exclude-newer"><a href="#uv-pip-sync--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-sync--extra"><a href="#uv-pip-sync--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-sync--exclude-newer-package"><a href="#uv-pip-sync--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-pip-sync--extra"><a href="#uv-pip-sync--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 <p>Only applies to <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 </dd><dt id="uv-pip-sync--extra-index-url"><a href="#uv-pip-sync--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -3938,7 +3979,10 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>By default, installing will make the minimum necessary changes to satisfy the requirements. When enabled, uv will update the environment to exactly match the requirements, removing packages that are not included in the requirements.</p>
 </dd><dt id="uv-pip-install--exclude-newer"><a href="#uv-pip-install--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-install--extra"><a href="#uv-pip-install--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-pip-install--exclude-newer-package"><a href="#uv-pip-install--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for specific packages to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-pip-install--extra"><a href="#uv-pip-install--extra"><code>--extra</code></a> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 <p>Only applies to <code>pylock.toml</code>, <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 </dd><dt id="uv-pip-install--extra-index-url"><a href="#uv-pip-install--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -4734,7 +4778,10 @@ uv venv [OPTIONS] [PATH]
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-venv--exclude-newer"><a href="#uv-venv--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-venv--extra-index-url"><a href="#uv-venv--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-venv--exclude-newer-package"><a href="#uv-venv--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-venv--extra-index-url"><a href="#uv-venv--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-venv--find-links"><a href="#uv-venv--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
@@ -4877,7 +4924,10 @@ uv build [OPTIONS] [SRC]
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-build--exclude-newer"><a href="#uv-build--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
-<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-build--extra-index-url"><a href="#uv-build--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p></dd><dt id="uv-build--exclude-newer-package"><a href="#uv-build--exclude-newer-package"><code>--exclude-newer-package</code></a> <i>exclude-newer-package</i></dt><dd><p>Limit candidate packages for a specific package to those that were uploaded prior to the given date.</p>
+<p>Accepts package-date pairs in the format <code>PACKAGE=DATE</code>, where <code>DATE</code> is an RFC 3339 timestamp (e.g., <code>2006-12-02T02:07:43Z</code>) or local date (e.g., <code>2006-12-02</code>) in your system's configured time zone.</p>
+<p>Can be provided multiple times for different packages.</p>
+</dd><dt id="uv-build--extra-index-url"><a href="#uv-build--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 <p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
 <p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p></dd><dt id="uv-build--find-links"><a href="#uv-build--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>

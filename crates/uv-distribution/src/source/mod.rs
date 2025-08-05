@@ -404,6 +404,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
     }
 
+    /// Determine the extra build dependencies for the given package name.
+    fn extra_build_dependencies_for(
+        &self,
+        name: Option<&PackageName>,
+    ) -> &[uv_pep508::Requirement<uv_pypi_types::VerbatimParsedUrl>] {
+        name.and_then(|name| {
+            self.build_context
+                .extra_build_dependencies()
+                .get(name)
+                .map(Vec::as_slice)
+        })
+        .unwrap_or(&[])
+    }
+
     /// Build a source distribution from a remote URL.
     async fn url<'data>(
         &self,
@@ -438,12 +452,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
-        // If there are build settings, we need to scope to a cache shard.
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -614,14 +629,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
-        // If there are build settings, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let cache_shard = if config_settings.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&config_settings))
-        };
-
         // Otherwise, we either need to build the metadata.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
@@ -657,6 +664,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
+
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
+            cache_shard
+        } else {
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
+        };
 
         let task = self
             .reporter
@@ -827,12 +843,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
         let source_entry = cache_shard.entry(SOURCE);
 
-        // If there are build settings, we need to scope to a cache shard.
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -989,12 +1006,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
-        // If there are build settings, we need to scope to a cache shard.
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         // Otherwise, we need to build a wheel.
@@ -1131,12 +1149,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
 
-        // If there are build settings, we need to scope to a cache shard.
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -1319,12 +1338,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             ));
         }
 
-        // If there are build settings, we need to scope to a cache shard.
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         // Otherwise, we need to build a wheel.
@@ -1524,12 +1544,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Acquire the advisory lock.
         let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
 
-        // If there are build settings, we need to scope to a cache shard.
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -1827,12 +1848,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             ));
         }
 
-        // If there are build settings, we need to scope to a cache shard.
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
-        let cache_shard = if config_settings.is_empty() {
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_digest(&config_settings))
+            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
         };
 
         // Otherwise, we need to build a wheel.
@@ -2364,11 +2386,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             let base_python = if cfg!(unix) {
                 self.build_context
                     .interpreter()
+                    .await
                     .find_base_python()
                     .map_err(Error::BaseInterpreter)?
             } else {
                 self.build_context
                     .interpreter()
+                    .await
                     .to_base_python()
                     .map_err(Error::BaseInterpreter)?
             };
@@ -2463,7 +2487,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Ensure that the _installed_ Python version is compatible with the `requires-python`
         // specifier.
         if let Some(requires_python) = source.requires_python() {
-            let installed = self.build_context.interpreter().python_version();
+            let installed = self.build_context.interpreter().await.python_version();
             let target = release_specifiers_to_ranges(requires_python.clone())
                 .bounding_range()
                 .map(|bounding_range| bounding_range.0.cloned())
@@ -2485,11 +2509,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let base_python = if cfg!(unix) {
             self.build_context
                 .interpreter()
+                .await
                 .find_base_python()
                 .map_err(Error::BaseInterpreter)?
         } else {
             self.build_context
                 .interpreter()
+                .await
                 .to_base_python()
                 .map_err(Error::BaseInterpreter)?
         };

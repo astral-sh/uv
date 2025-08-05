@@ -271,7 +271,6 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
             "environments",
         ));
     }
-
     if required_environments.is_some() {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
@@ -318,7 +317,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 config_settings_package,
                 no_build_isolation,
                 no_build_isolation_package,
+                extra_build_dependencies,
                 exclude_newer,
+                exclude_newer_package,
                 link_mode,
                 compile_bytecode,
                 no_sources,
@@ -445,8 +446,14 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if no_build_isolation_package.is_some() {
         masked_fields.push("no-build-isolation-package");
     }
+    if extra_build_dependencies.is_some() {
+        masked_fields.push("extra-build-dependencies");
+    }
     if exclude_newer.is_some() {
         masked_fields.push("exclude-newer");
+    }
+    if exclude_newer_package.is_some() {
+        masked_fields.push("exclude-newer-package");
     }
     if link_mode.is_some() {
         masked_fields.push("link-mode");

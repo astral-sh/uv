@@ -17,24 +17,28 @@ on:
         required: true
         type: string
 
+permissions: {}
+
 jobs:
   mkdocs:
     runs-on: ubuntu-latest
     env:
+      VERSION: ${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: 3.12
 
-      - name: "Set docs version"
+      - name: "Set docs display name"
         run: |
-          version="${{ (inputs.plan != '' && fromJson(inputs.plan).announcement_tag) || inputs.ref }}"
+          version="${VERSION}"
           # if version is missing, use 'latest'
           if [ -z "$version" ]; then
             echo "Using 'latest' as version"
@@ -44,21 +48,20 @@ jobs:
           # Use version as display name for now
           display_name="$version"
 
-          echo "version=$version" >> $GITHUB_ENV
-          echo "display_name=$display_name" >> $GITHUB_ENV
+          echo "DISPLAY_NAME=$display_name" >> $GITHUB_ENV
 
       - name: "Set branch name"
         run: |
-          version="${{ env.version }}"
-          display_name="${{ env.display_name }}"
+          version="${VERSION}"
+          display_name="${DISPLAY_NAME}"
           timestamp="$(date +%s)"
 
           # create branch_display_name from display_name by replacing all
           # characters disallowed in git branch names with hyphens
           branch_display_name="$(echo "$display_name" | tr -c '[:alnum:]._' '-' | tr -s '-')"
 
-          echo "branch_name=update-docs-$branch_display_name-$timestamp" >> $GITHUB_ENV
-          echo "timestamp=$timestamp" >> $GITHUB_ENV
+          echo "BRANCH_NAME=update-docs-$branch_display_name-$timestamp" >> $GITHUB_ENV
+          echo "TIMESTAMP=$timestamp" >> $GITHUB_ENV
 
       - name: "Add SSH key"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
@@ -84,8 +87,10 @@ jobs:
 
       - name: "Clone docs repo"
         run: |
-          version="${{ env.version }}"
-          git clone https://${{ secrets.ASTRAL_DOCS_PAT }}@github.com/astral-sh/docs.git astral-docs
+          version="${VERSION}"
+          git clone https://${ASTRAL_DOCS_PAT}@github.com/astral-sh/docs.git astral-docs
+        env:
+          ASTRAL_DOCS_PAT: ${{ secrets.ASTRAL_DOCS_PAT }}
 
       - name: "Copy docs"
         run: rm -rf astral-docs/site/uv && mkdir -p astral-docs/site && cp -r site/uv astral-docs/site/
@@ -93,7 +98,7 @@ jobs:
       - name: "Commit docs"
         working-directory: astral-docs
         run: |
-          branch_name="${{ env.branch_name }}"
+          branch_name="${BRANCH_NAME}"
 
           git config user.name "astral-docs-bot"
           git config user.email "176161322+astral-docs-bot@users.noreply.github.com"
@@ -107,9 +112,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ASTRAL_DOCS_PAT }}
         run: |
-          version="${{ env.version }}"
-          display_name="${{ env.display_name }}"
-          branch_name="${{ env.branch_name }}"
+          version="${VERSION}"
+          display_name="${DISPLAY_NAME}"
+          branch_name="${BRANCH_NAME}"
 
           # set the PR title
           pull_request_title="Update uv documentation for $display_name"
@@ -135,7 +140,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ASTRAL_DOCS_PAT }}
         run: |
-          branch_name="${{ env.branch_name }}"
+          branch_name="${BRANCH_NAME}"
 
           # auto-merge the PR if the build was triggered by a release. Manual builds should be reviewed by a human.
           # give the PR a few seconds to be created before trying to auto-merge it

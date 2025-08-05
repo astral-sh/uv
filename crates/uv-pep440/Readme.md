@@ -27,7 +27,7 @@ PEP 440 has a lot of unintuitive features, including:
 - An epoch that you can prefix the version with, e.g., `1!1.2.3`. Lower epoch always means lower
   version (`1.0 <=2!0.1`)
 - Post versions, which can be attached to both stable releases and pre-releases
-- Dev versions, which can be attached to sbpth table releases and pre-releases. When attached to a
+- Dev versions, which can be attached to both stable releases and pre-releases. When attached to a
   pre-release the dev version is ordered just below the normal pre-release, however when attached to
   a stable version, the dev version is sorted before a pre-releases
 - Pre-release handling is a mess: "Pre-releases of any kind, including developmental releases, are

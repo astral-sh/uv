@@ -29,19 +29,16 @@ pub use crate::version_files::{
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
-mod cpuinfo;
 mod discovery;
 pub mod downloads;
 mod environment;
 mod implementation;
 mod installation;
 mod interpreter;
-mod libc;
 pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
-pub mod platform;
 mod pointer_size;
 mod prefix;
 mod python_version;

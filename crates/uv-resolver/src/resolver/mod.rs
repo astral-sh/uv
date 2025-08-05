@@ -182,7 +182,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             python_requirement.target(),
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
-            options.exclude_newer,
+            options.exclude_newer.clone(),
             build_context.build_options(),
             build_context.capabilities(),
         );
@@ -366,7 +366,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_indexes,
                                     state.env,
                                     self.current_environment.clone(),
-                                    self.options.exclude_newer,
+                                    Some(&self.options.exclude_newer),
                                     &visited,
                                 ));
                             }
@@ -523,39 +523,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )?;
 
                     // Pick the next compatible version.
-                    let version = match decision {
-                        None => {
-                            debug!("No compatible version found for: {next_package}");
+                    let Some(version) = decision else {
+                        debug!("No compatible version found for: {next_package}");
 
-                            let term_intersection = state
-                                .pubgrub
-                                .partial_solution
-                                .term_intersection_for_package(next_id)
-                                .expect("a package was chosen but we don't have a term");
+                        let term_intersection = state
+                            .pubgrub
+                            .partial_solution
+                            .term_intersection_for_package(next_id)
+                            .expect("a package was chosen but we don't have a term");
 
-                            if let PubGrubPackageInner::Package { name, .. } = &**next_package {
-                                // Check if the decision was due to the package being unavailable
-                                if let Some(entry) = self.unavailable_packages.get(name) {
-                                    state.pubgrub.add_incompatibility(
-                                        Incompatibility::custom_term(
-                                            next_id,
-                                            term_intersection.clone(),
-                                            UnavailableReason::Package(entry.clone()),
-                                        ),
-                                    );
-                                    continue;
-                                }
+                        if let PubGrubPackageInner::Package { name, .. } = &**next_package {
+                            // Check if the decision was due to the package being unavailable
+                            if let Some(entry) = self.unavailable_packages.get(name) {
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::custom_term(
+                                        next_id,
+                                        term_intersection.clone(),
+                                        UnavailableReason::Package(entry.clone()),
+                                    ));
+                                continue;
                             }
-
-                            state
-                                .pubgrub
-                                .add_incompatibility(Incompatibility::no_versions(
-                                    next_id,
-                                    term_intersection.clone(),
-                                ));
-                            continue;
                         }
-                        Some(version) => version,
+
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::no_versions(
+                                next_id,
+                                term_intersection.clone(),
+                            ));
+                        continue;
                     };
 
                     let version = match version {
@@ -2541,7 +2538,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
-        exclude_newer: Option<ExcludeNewer>,
+        exclude_newer: Option<&ExcludeNewer>,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2600,7 +2597,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                         for (version, dists) in version_map.iter(&Ranges::full()) {
                             // Don't show versions removed by excluded-newer in hints.
-                            if let Some(exclude_newer) = exclude_newer {
+                            if let Some(exclude_newer) =
+                                exclude_newer.and_then(|en| en.exclude_newer_package(name))
+                            {
                                 let Some(prioritized_dist) = dists.prioritized_dist() else {
                                     continue;
                                 };

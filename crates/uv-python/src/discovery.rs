@@ -918,24 +918,7 @@ pub fn satisfies_python_preference(
         // If not "only" a kind, any interpreter is okay
         PythonPreference::Managed | PythonPreference::System => true,
         PythonPreference::OnlySystem => {
-            let is_system = match source {
-                // A managed interpreter is never a system interpreter
-                PythonSource::Managed => false,
-                // We can't be sure if this is a system interpreter without checking
-                PythonSource::ProvidedPath
-                | PythonSource::ParentInterpreter
-                | PythonSource::ActiveEnvironment
-                | PythonSource::CondaPrefix
-                | PythonSource::DiscoveredEnvironment
-                | PythonSource::SearchPath
-                | PythonSource::SearchPathFirst
-                | PythonSource::Registry
-                | PythonSource::BaseCondaPrefix => !interpreter.is_managed(),
-                // Managed interpreters should never be found in the store
-                PythonSource::MicrosoftStore => true,
-            };
-
-            if is_system {
+            if is_system_interpreter(source, interpreter) {
                 true
             } else {
                 if is_explicit {
@@ -953,6 +936,25 @@ pub fn satisfies_python_preference(
                 }
             }
         }
+    }
+}
+
+pub(crate) fn is_system_interpreter(source: PythonSource, interpreter: &Interpreter) -> bool {
+    match source {
+        // A managed interpreter is never a system interpreter
+        PythonSource::Managed => false,
+        // We can't be sure if this is a system interpreter without checking
+        PythonSource::ProvidedPath
+        | PythonSource::ParentInterpreter
+        | PythonSource::ActiveEnvironment
+        | PythonSource::CondaPrefix
+        | PythonSource::DiscoveredEnvironment
+        | PythonSource::SearchPath
+        | PythonSource::SearchPathFirst
+        | PythonSource::Registry
+        | PythonSource::BaseCondaPrefix => !interpreter.is_managed(),
+        // Managed interpreters should never be found in the store
+        PythonSource::MicrosoftStore => true,
     }
 }
 
@@ -1259,6 +1261,7 @@ pub(crate) fn find_python_installation(
     let installations =
         find_python_installations(request, environments, preference, cache, preview);
     let mut first_prerelease = None;
+    let mut first_managed = None;
     let mut first_error = None;
     for result in installations {
         // Iterate until the first critical error or happy result
@@ -1295,7 +1298,7 @@ pub(crate) fn find_python_installation(
             && !installation.source.allows_prereleases()
             && !has_default_executable_name
         {
-            debug!("Skipping pre-release {}", installation.key());
+            debug!("Skipping pre-release installation {}", installation.key());
             if first_prerelease.is_none() {
                 first_prerelease = Some(installation.clone());
             }
@@ -1315,12 +1318,41 @@ pub(crate) fn find_python_installation(
             continue;
         }
 
+        // If it's a managed Python installation, and system interpreters are preferred, skip it
+        // for now.
+        if matches!(preference, PythonPreference::System)
+            && !is_system_interpreter(installation.source, installation.interpreter())
+        {
+            debug!(
+                "Skipping managed installation {}: system installation preferred",
+                installation.key()
+            );
+            if first_managed.is_none() {
+                first_managed = Some(installation.clone());
+            }
+            continue;
+        }
+
         // If we didn't skip it, this is the installation to use
         return result;
     }
 
+    // If we only found managed installations, and the preference allows them, we should return
+    // the first one.
+    if let Some(installation) = first_managed {
+        debug!(
+            "Allowing managed installation {}: no system installations",
+            installation.key()
+        );
+        return Ok(Ok(installation));
+    }
+
     // If we only found pre-releases, they're implicitly allowed and we should return the first one.
     if let Some(installation) = first_prerelease {
+        debug!(
+            "Allowing pre-release installation {}: no stable installations",
+            installation.key()
+        );
         return Ok(Ok(installation));
     }
 
@@ -3066,8 +3098,8 @@ mod tests {
         discovery::{PythonRequest, VersionRequest},
         downloads::{ArchRequest, PythonDownloadRequest},
         implementation::ImplementationName,
-        platform::{Arch, Libc, Os},
     };
+    use uv_platform::{Arch, Libc, Os};
 
     use super::{Error, PythonVariant};
 
@@ -3154,11 +3186,11 @@ mod tests {
                     PythonVariant::Default
                 )),
                 implementation: Some(ImplementationName::CPython),
-                arch: Some(ArchRequest::Explicit(Arch {
-                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
-                    variant: None
-                })),
-                os: Some(Os(target_lexicon::OperatingSystem::Darwin(None))),
+                arch: Some(ArchRequest::Explicit(Arch::new(
+                    Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    None
+                ))),
+                os: Some(Os::new(target_lexicon::OperatingSystem::Darwin(None))),
                 libc: Some(Libc::None),
                 prereleases: None
             })
@@ -3189,10 +3221,10 @@ mod tests {
                     PythonVariant::Default
                 )),
                 implementation: None,
-                arch: Some(ArchRequest::Explicit(Arch {
-                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
-                    variant: None
-                })),
+                arch: Some(ArchRequest::Explicit(Arch::new(
+                    Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    None
+                ))),
                 os: None,
                 libc: None,
                 prereleases: None
