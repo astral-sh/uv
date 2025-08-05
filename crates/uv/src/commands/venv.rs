@@ -271,7 +271,7 @@ pub(crate) async fn venv(
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
-            build_constraints,
+            &build_constraints,
             interpreter,
             index_locations,
             &flat_index,
