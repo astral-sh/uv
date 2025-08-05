@@ -4723,6 +4723,7 @@ dependencies = [
  "uv-distribution",
  "uv-distribution-filename",
  "uv-distribution-types",
+ "uv-envy",
  "uv-extract",
  "uv-fs",
  "uv-git",
@@ -5274,6 +5275,16 @@ dependencies = [
  "uv-small-str",
  "uv-warnings",
  "version-ranges",
+]
+
+[[package]]
+name = "uv-envy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tempfile",
+ "tracing",
+ "walkdir",
 ]
 
 [[package]]
