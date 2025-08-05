@@ -84,20 +84,20 @@ impl CompatibleDist<'_> {
     /// Return the `requires-python` specifier for the distribution, if any.
     pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
         match self {
-            CompatibleDist::InstalledDist(_) => None,
-            CompatibleDist::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
-            CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
-            CompatibleDist::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
+            Self::InstalledDist(_) => None,
+            Self::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
+            Self::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
+            Self::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
         }
     }
 
     // For installable distributions, return the prioritized distribution it was derived from.
     pub fn prioritized(&self) -> Option<&PrioritizedDist> {
         match self {
-            CompatibleDist::InstalledDist(_) => None,
-            CompatibleDist::SourceDist { prioritized, .. }
-            | CompatibleDist::CompatibleWheel { prioritized, .. }
-            | CompatibleDist::IncompatibleWheel { prioritized, .. } => Some(prioritized),
+            Self::InstalledDist(_) => None,
+            Self::SourceDist { prioritized, .. }
+            | Self::CompatibleWheel { prioritized, .. }
+            | Self::IncompatibleWheel { prioritized, .. } => Some(prioritized),
         }
     }
 
@@ -654,10 +654,10 @@ impl<'a> CompatibleDist<'a> {
     /// wheel.
     pub fn wheel(&self) -> Option<&RegistryBuiltWheel> {
         match self {
-            CompatibleDist::InstalledDist(_) => None,
-            CompatibleDist::SourceDist { .. } => None,
-            CompatibleDist::CompatibleWheel { wheel, .. } => Some(wheel),
-            CompatibleDist::IncompatibleWheel { wheel, .. } => Some(wheel),
+            Self::InstalledDist(_) => None,
+            Self::SourceDist { .. } => None,
+            Self::CompatibleWheel { wheel, .. } => Some(wheel),
+            Self::IncompatibleWheel { wheel, .. } => Some(wheel),
         }
     }
 }

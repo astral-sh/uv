@@ -129,10 +129,10 @@ impl AddBoundsKind {
         // second most significant component, so most versions are either major.minor.patch or
         // 0.major.minor.
         match self {
-            AddBoundsKind::Lower => {
+            Self::Lower => {
                 VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(version))
             }
-            AddBoundsKind::Major => {
+            Self::Major => {
                 let leading_zeroes = version
                     .release()
                     .iter()
@@ -173,7 +173,7 @@ impl AddBoundsKind {
                     VersionSpecifier::less_than_version(upper_bound),
                 ])
             }
-            AddBoundsKind::Minor => {
+            Self::Minor => {
                 let leading_zeroes = version
                     .release()
                     .iter()
@@ -242,7 +242,7 @@ impl AddBoundsKind {
                     VersionSpecifier::less_than_version(upper_bound),
                 ])
             }
-            AddBoundsKind::Exact => {
+            Self::Exact => {
                 VersionSpecifiers::from_iter([VersionSpecifier::equals_version(version)])
             }
         }

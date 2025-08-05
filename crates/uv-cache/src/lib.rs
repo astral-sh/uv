@@ -1211,7 +1211,7 @@ impl Refresh {
 
     /// Combine two [`Refresh`] policies, taking the "max" of the two policies.
     #[must_use]
-    pub fn combine(self, other: Refresh) -> Self {
+    pub fn combine(self, other: Self) -> Self {
         /// Return the maximum of two timestamps.
         fn max(a: Timestamp, b: Timestamp) -> Timestamp {
             if a > b { a } else { b }
@@ -1220,24 +1220,24 @@ impl Refresh {
         match (self, other) {
             // If the policy is `None`, return the existing refresh policy.
             // Take the `max` of the two timestamps.
-            (Self::None(t1), Refresh::None(t2)) => Refresh::None(max(t1, t2)),
-            (Self::None(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::None(t1), Refresh::Packages(packages, paths, t2)) => {
-                Refresh::Packages(packages, paths, max(t1, t2))
+            (Self::None(t1), Self::None(t2)) => Self::None(max(t1, t2)),
+            (Self::None(t1), Self::All(t2)) => Self::All(max(t1, t2)),
+            (Self::None(t1), Self::Packages(packages, paths, t2)) => {
+                Self::Packages(packages, paths, max(t1, t2))
             }
 
             // If the policy is `All`, refresh all packages.
-            (Self::All(t1), Refresh::None(t2)) => Refresh::All(max(t1, t2)),
-            (Self::All(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::All(t1), Refresh::Packages(.., t2)) => Refresh::All(max(t1, t2)),
+            (Self::All(t1), Self::None(t2)) => Self::All(max(t1, t2)),
+            (Self::All(t1), Self::All(t2)) => Self::All(max(t1, t2)),
+            (Self::All(t1), Self::Packages(.., t2)) => Self::All(max(t1, t2)),
 
             // If the policy is `Packages`, take the "max" of the two policies.
-            (Self::Packages(packages, paths, t1), Refresh::None(t2)) => {
-                Refresh::Packages(packages, paths, max(t1, t2))
+            (Self::Packages(packages, paths, t1), Self::None(t2)) => {
+                Self::Packages(packages, paths, max(t1, t2))
             }
-            (Self::Packages(.., t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::Packages(packages1, paths1, t1), Refresh::Packages(packages2, paths2, t2)) => {
-                Refresh::Packages(
+            (Self::Packages(.., t1), Self::All(t2)) => Self::All(max(t1, t2)),
+            (Self::Packages(packages1, paths1, t1), Self::Packages(packages2, paths2, t2)) => {
+                Self::Packages(
                     packages1.into_iter().chain(packages2).collect(),
                     paths1.into_iter().chain(paths2).collect(),
                     max(t1, t2),

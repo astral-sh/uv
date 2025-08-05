@@ -195,7 +195,7 @@ impl PartialOrd for Requirement {
 impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
     /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
     fn from(requirement: Requirement) -> Self {
-        uv_pep508::Requirement {
+        Self {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
@@ -216,7 +216,7 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
 impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
     /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
     fn from(requirement: Requirement) -> Self {
-        uv_pep508::Requirement {
+        Self {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
@@ -299,7 +299,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
                 RequirementSource::from_parsed_url(url.parsed_url, url.verbatim)
             }
         };
-        Requirement {
+        Self {
             name: requirement.name,
             groups: Box::new([]),
             extras: requirement.extras,
@@ -544,23 +544,23 @@ impl RequirementSource {
     /// the PEP 508 string (after the `@`) as [`VerbatimUrl`].
     pub fn from_parsed_url(parsed_url: ParsedUrl, url: VerbatimUrl) -> Self {
         match parsed_url {
-            ParsedUrl::Path(local_file) => RequirementSource::Path {
+            ParsedUrl::Path(local_file) => Self::Path {
                 install_path: local_file.install_path.clone(),
                 ext: local_file.ext,
                 url,
             },
-            ParsedUrl::Directory(directory) => RequirementSource::Directory {
+            ParsedUrl::Directory(directory) => Self::Directory {
                 install_path: directory.install_path.clone(),
                 editable: directory.editable,
                 r#virtual: directory.r#virtual,
                 url,
             },
-            ParsedUrl::Git(git) => RequirementSource::Git {
+            ParsedUrl::Git(git) => Self::Git {
                 git: git.url.clone(),
                 url,
                 subdirectory: git.subdirectory,
             },
-            ParsedUrl::Archive(archive) => RequirementSource::Url {
+            ParsedUrl::Archive(archive) => Self::Url {
                 url,
                 location: archive.url,
                 subdirectory: archive.subdirectory,
@@ -668,21 +668,18 @@ impl RequirementSource {
     /// If the source is the registry, return the version specifiers
     pub fn version_specifiers(&self) -> Option<&VersionSpecifiers> {
         match self {
-            RequirementSource::Registry { specifier, .. } => Some(specifier),
-            RequirementSource::Url { .. }
-            | RequirementSource::Git { .. }
-            | RequirementSource::Path { .. }
-            | RequirementSource::Directory { .. } => None,
+            Self::Registry { specifier, .. } => Some(specifier),
+            Self::Url { .. } | Self::Git { .. } | Self::Path { .. } | Self::Directory { .. } => {
+                None
+            }
         }
     }
 
     /// Convert the source to a [`RequirementSource`] relative to the given path.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         match self {
-            RequirementSource::Registry { .. }
-            | RequirementSource::Url { .. }
-            | RequirementSource::Git { .. } => Ok(self),
-            RequirementSource::Path {
+            Self::Registry { .. } | Self::Url { .. } | Self::Git { .. } => Ok(self),
+            Self::Path {
                 install_path,
                 ext,
                 url,
@@ -693,7 +690,7 @@ impl RequirementSource {
                 ext,
                 url,
             }),
-            RequirementSource::Directory {
+            Self::Directory {
                 install_path,
                 editable,
                 r#virtual,
@@ -714,10 +711,8 @@ impl RequirementSource {
     #[must_use]
     pub fn to_absolute(self, root: &Path) -> Self {
         match self {
-            RequirementSource::Registry { .. }
-            | RequirementSource::Url { .. }
-            | RequirementSource::Git { .. } => self,
-            RequirementSource::Path {
+            Self::Registry { .. } | Self::Url { .. } | Self::Git { .. } => self,
+            Self::Path {
                 install_path,
                 ext,
                 url,
@@ -726,7 +721,7 @@ impl RequirementSource {
                 ext,
                 url,
             },
-            RequirementSource::Directory {
+            Self::Directory {
                 install_path,
                 editable,
                 r#virtual,
@@ -920,7 +915,7 @@ impl From<RequirementSource> for RequirementSourceWire {
 impl TryFrom<RequirementSourceWire> for RequirementSource {
     type Error = RequirementError;
 
-    fn try_from(wire: RequirementSourceWire) -> Result<RequirementSource, RequirementError> {
+    fn try_from(wire: RequirementSourceWire) -> Result<Self, RequirementError> {
         match wire {
             RequirementSourceWire::Registry {
                 specifier,

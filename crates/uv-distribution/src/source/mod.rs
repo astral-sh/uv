@@ -2889,9 +2889,7 @@ impl LocalRevisionPointer {
     /// Read an [`LocalRevisionPointer`] from the cache.
     pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::read(path) {
-            Ok(cached) => Ok(Some(rmp_serde::from_slice::<LocalRevisionPointer>(
-                &cached,
-            )?)),
+            Ok(cached) => Ok(Some(rmp_serde::from_slice::<Self>(&cached)?)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(Error::CacheRead(err)),
         }

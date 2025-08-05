@@ -21,7 +21,7 @@ impl PyProjectToml {
     pub fn from_toml(toml: &str) -> Result<Self, MetadataError> {
         let pyproject_toml = toml_edit::Document::from_str(toml)
             .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
-        let pyproject_toml = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+        let pyproject_toml = Self::deserialize(pyproject_toml.into_deserializer())
             .map_err(MetadataError::InvalidPyprojectTomlSchema)?;
         Ok(pyproject_toml)
     }
@@ -67,7 +67,7 @@ impl TryFrom<PyprojectTomlWire> for Project {
 
     fn try_from(wire: PyprojectTomlWire) -> Result<Self, Self::Error> {
         let name = wire.name.ok_or(MetadataError::MissingName)?;
-        Ok(Project {
+        Ok(Self {
             name,
             version: wire.version,
             requires_python: wire.requires_python,

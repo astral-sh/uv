@@ -122,8 +122,8 @@ impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&T> {
         match self {
-            VersionOrUrlRef::Version(_) => None,
-            VersionOrUrlRef::Url(url) => Some(url),
+            Self::Version(_) => None,
+            Self::Url(url) => Some(url),
         }
     }
 }
@@ -131,8 +131,8 @@ impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
 impl Verbatim for VersionOrUrlRef<'_> {
     fn verbatim(&self) -> Cow<'_, str> {
         match self {
-            VersionOrUrlRef::Version(version) => Cow::Owned(format!("=={version}")),
-            VersionOrUrlRef::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
+            Self::Version(version) => Cow::Owned(format!("=={version}")),
+            Self::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
         }
     }
 }
@@ -140,8 +140,8 @@ impl Verbatim for VersionOrUrlRef<'_> {
 impl std::fmt::Display for VersionOrUrlRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VersionOrUrlRef::Version(version) => write!(f, "=={version}"),
-            VersionOrUrlRef::Url(url) => write!(f, " @ {url}"),
+            Self::Version(version) => write!(f, "=={version}"),
+            Self::Url(url) => write!(f, " @ {url}"),
         }
     }
 }
@@ -159,16 +159,16 @@ impl InstalledVersion<'_> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&DisplaySafeUrl> {
         match self {
-            InstalledVersion::Version(_) => None,
-            InstalledVersion::Url(url, _) => Some(url),
+            Self::Version(_) => None,
+            Self::Url(url, _) => Some(url),
         }
     }
 
     /// If it is a version, return its value.
     pub fn version(&self) -> &Version {
         match self {
-            InstalledVersion::Version(version) => version,
-            InstalledVersion::Url(_, version) => version,
+            Self::Version(version) => version,
+            Self::Url(_, version) => version,
         }
     }
 }
@@ -176,8 +176,8 @@ impl InstalledVersion<'_> {
 impl std::fmt::Display for InstalledVersion<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InstalledVersion::Version(version) => write!(f, "=={version}"),
-            InstalledVersion::Url(url, version) => write!(f, "=={version} (from {url})"),
+            Self::Version(version) => write!(f, "=={version}"),
+            Self::Url(url, version) => write!(f, "=={version} (from {url})"),
         }
     }
 }
@@ -361,7 +361,7 @@ impl Dist {
         location: DisplaySafeUrl,
         subdirectory: Option<Box<Path>>,
         ext: DistExtension,
-    ) -> Result<Dist, Error> {
+    ) -> Result<Self, Error> {
         match ext {
             DistExtension::Wheel => {
                 // Validate that the name in the wheel matches that of the requirement.
@@ -398,7 +398,7 @@ impl Dist {
         url: VerbatimUrl,
         install_path: &Path,
         ext: DistExtension,
-    ) -> Result<Dist, Error> {
+    ) -> Result<Self, Error> {
         // Convert to an absolute path.
         let install_path = path::absolute(install_path)?;
 
@@ -456,7 +456,7 @@ impl Dist {
         install_path: &Path,
         editable: Option<bool>,
         r#virtual: Option<bool>,
-    ) -> Result<Dist, Error> {
+    ) -> Result<Self, Error> {
         // Convert to an absolute path.
         let install_path = path::absolute(install_path)?;
 
@@ -484,7 +484,7 @@ impl Dist {
         url: VerbatimUrl,
         git: GitUrl,
         subdirectory: Option<Box<Path>>,
-    ) -> Result<Dist, Error> {
+    ) -> Result<Self, Error> {
         Ok(Self::Source(SourceDist::Git(GitSourceDist {
             name,
             git: Box::new(git),
@@ -854,17 +854,17 @@ impl Name for Dist {
 impl Name for CompatibleDist<'_> {
     fn name(&self) -> &PackageName {
         match self {
-            CompatibleDist::InstalledDist(dist) => dist.name(),
-            CompatibleDist::SourceDist {
+            Self::InstalledDist(dist) => dist.name(),
+            Self::SourceDist {
                 sdist,
                 prioritized: _,
             } => sdist.name(),
-            CompatibleDist::CompatibleWheel {
+            Self::CompatibleWheel {
                 wheel,
                 priority: _,
                 prioritized: _,
             } => wheel.name(),
-            CompatibleDist::IncompatibleWheel {
+            Self::IncompatibleWheel {
                 sdist,
                 wheel: _,
                 prioritized: _,
@@ -1450,15 +1450,15 @@ impl Identifier for SourceUrl<'_> {
 impl Identifier for BuildableSource<'_> {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            BuildableSource::Dist(source) => source.distribution_id(),
-            BuildableSource::Url(source) => source.distribution_id(),
+            Self::Dist(source) => source.distribution_id(),
+            Self::Url(source) => source.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            BuildableSource::Dist(source) => source.resource_id(),
-            BuildableSource::Url(source) => source.resource_id(),
+            Self::Dist(source) => source.resource_id(),
+            Self::Url(source) => source.resource_id(),
         }
     }
 }

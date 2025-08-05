@@ -276,19 +276,19 @@ impl Deref for VerbatimUrl {
 
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
-        VerbatimUrl::from_url(DisplaySafeUrl::from(url))
+        Self::from_url(DisplaySafeUrl::from(url))
     }
 }
 
 impl From<DisplaySafeUrl> for VerbatimUrl {
     fn from(url: DisplaySafeUrl) -> Self {
-        VerbatimUrl::from_url(url)
+        Self::from_url(url)
     }
 }
 
 impl From<VerbatimUrl> for Url {
     fn from(url: VerbatimUrl) -> Self {
-        Url::from(url.url)
+        Self::from(url.url)
     }
 }
 
@@ -346,13 +346,13 @@ impl Pep508Url for VerbatimUrl {
                         Ok(VerbatimUrl::from_absolute_path(path.as_ref())?.with_given(url))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
-                    Ok(VerbatimUrl::parse_url(expanded)?.with_given(url))
+                    Ok(Self::parse_url(expanded)?.with_given(url))
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
                     // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                    Ok(VerbatimUrl::parse_url(expanded.as_ref())?.with_given(url))
+                    Ok(Self::parse_url(expanded.as_ref())?.with_given(url))
                 }
 
                 // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`

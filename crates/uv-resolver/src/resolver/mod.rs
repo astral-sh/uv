@@ -3327,7 +3327,7 @@ pub(crate) enum Request {
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {
-    fn from(dist: ResolvedDistRef<'a>) -> Request {
+    fn from(dist: ResolvedDistRef<'a>) -> Self {
         // N.B. This is almost identical to `ResolvedDistRef::to_owned`, but
         // creates a `Request` instead of a `ResolvedDist`. There's probably
         // some room for DRYing this up a bit. The obvious way would be to
@@ -3343,7 +3343,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                     (&source.name, &source.version),
                     "expected chosen sdist to match prioritized sdist"
                 );
-                Request::Dist(Dist::Source(SourceDist::Registry(source)))
+                Self::Dist(Dist::Source(SourceDist::Registry(source)))
             }
             ResolvedDistRef::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
@@ -3356,9 +3356,9 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized.built_dist().expect("at least one wheel");
-                Request::Dist(Dist::Built(BuiltDist::Registry(built)))
+                Self::Dist(Dist::Built(BuiltDist::Registry(built)))
             }
-            ResolvedDistRef::Installed { dist } => Request::Installed(dist.clone()),
+            ResolvedDistRef::Installed { dist } => Self::Installed(dist.clone()),
         }
     }
 }
@@ -3435,9 +3435,9 @@ impl Dependencies {
         conflicts: &Conflicts,
     ) -> ForkedDependencies {
         let deps = match self {
-            Dependencies::Available(deps) => deps,
-            Dependencies::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
-            Dependencies::Unavailable(err) => return ForkedDependencies::Unavailable(err),
+            Self::Available(deps) => deps,
+            Self::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
+            Self::Unavailable(err) => return ForkedDependencies::Unavailable(err),
         };
         let mut name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>> = BTreeMap::new();
         for dep in deps {
@@ -3509,7 +3509,7 @@ impl Forks {
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         conflicts: &Conflicts,
-    ) -> Forks {
+    ) -> Self {
         let python_marker = python_requirement.to_marker_tree();
 
         let mut forks = vec![Fork::new(env.clone())];
@@ -3673,7 +3673,7 @@ impl Forks {
             }
             forks = new;
         }
-        Forks {
+        Self {
             forks,
             diverging_packages,
         }
@@ -3723,8 +3723,8 @@ struct Fork {
 impl Fork {
     /// Create a new fork with no dependencies with the given resolver
     /// environment.
-    fn new(env: ResolverEnvironment) -> Fork {
-        Fork {
+    fn new(env: ResolverEnvironment) -> Self {
+        Self {
             dependencies: vec![],
             conflicts: crate::FxHashbrownSet::default(),
             env,
@@ -3772,7 +3772,7 @@ impl Fork {
     fn filter(
         mut self,
         rules: impl IntoIterator<Item = Result<ConflictItem, ConflictItem>>,
-    ) -> Option<Fork> {
+    ) -> Option<Self> {
         self.env = self.env.filter_by_group(rules)?;
         self.dependencies.retain(|dep| {
             let Some(conflicting_item) = dep.package.conflicting_item() else {
@@ -3835,7 +3835,7 @@ impl Fork {
 impl Eq for Fork {}
 
 impl PartialEq for Fork {
-    fn eq(&self, other: &Fork) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.dependencies == other.dependencies && self.env == other.env
     }
 }

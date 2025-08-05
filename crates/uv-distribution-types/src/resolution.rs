@@ -215,7 +215,7 @@ impl From<&ResolvedDist> for RequirementSource {
             ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheels)) => {
                     let wheel = wheels.best_wheel();
-                    RequirementSource::Registry {
+                    Self::Registry {
                         specifier: uv_pep440::VersionSpecifiers::from(
                             uv_pep440::VersionSpecifier::equals_version(
                                 wheel.filename.version.clone(),
@@ -228,19 +228,19 @@ impl From<&ResolvedDist> for RequirementSource {
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     let mut location = wheel.url.to_url();
                     location.set_fragment(None);
-                    RequirementSource::Url {
+                    Self::Url {
                         url: wheel.url.clone(),
                         location,
                         subdirectory: None,
                         ext: DistExtension::Wheel,
                     }
                 }
-                Dist::Built(BuiltDist::Path(wheel)) => RequirementSource::Path {
+                Dist::Built(BuiltDist::Path(wheel)) => Self::Path {
                     install_path: wheel.install_path.clone(),
                     url: wheel.url.clone(),
                     ext: DistExtension::Wheel,
                 },
-                Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
+                Dist::Source(SourceDist::Registry(sdist)) => Self::Registry {
                     specifier: uv_pep440::VersionSpecifiers::from(
                         uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
                     ),
@@ -250,31 +250,31 @@ impl From<&ResolvedDist> for RequirementSource {
                 Dist::Source(SourceDist::DirectUrl(sdist)) => {
                     let mut location = sdist.url.to_url();
                     location.set_fragment(None);
-                    RequirementSource::Url {
+                    Self::Url {
                         url: sdist.url.clone(),
                         location,
                         subdirectory: sdist.subdirectory.clone(),
                         ext: DistExtension::Source(sdist.ext),
                     }
                 }
-                Dist::Source(SourceDist::Git(sdist)) => RequirementSource::Git {
+                Dist::Source(SourceDist::Git(sdist)) => Self::Git {
                     git: (*sdist.git).clone(),
                     url: sdist.url.clone(),
                     subdirectory: sdist.subdirectory.clone(),
                 },
-                Dist::Source(SourceDist::Path(sdist)) => RequirementSource::Path {
+                Dist::Source(SourceDist::Path(sdist)) => Self::Path {
                     install_path: sdist.install_path.clone(),
                     url: sdist.url.clone(),
                     ext: DistExtension::Source(sdist.ext),
                 },
-                Dist::Source(SourceDist::Directory(sdist)) => RequirementSource::Directory {
+                Dist::Source(SourceDist::Directory(sdist)) => Self::Directory {
                     install_path: sdist.install_path.clone(),
                     url: sdist.url.clone(),
                     editable: sdist.editable,
                     r#virtual: sdist.r#virtual,
                 },
             },
-            ResolvedDist::Installed { dist } => RequirementSource::Registry {
+            ResolvedDist::Installed { dist } => Self::Registry {
                 specifier: uv_pep440::VersionSpecifiers::from(
                     uv_pep440::VersionSpecifier::equals_version(dist.version().clone()),
                 ),

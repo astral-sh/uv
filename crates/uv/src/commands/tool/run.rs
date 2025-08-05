@@ -70,8 +70,8 @@ pub(crate) enum ToolRunCommand {
 impl Display for ToolRunCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToolRunCommand::Uvx => write!(f, "uvx"),
-            ToolRunCommand::ToolRun => write!(f, "uv tool run"),
+            Self::Uvx => write!(f, "uvx"),
+            Self::ToolRun => write!(f, "uv tool run"),
         }
     }
 }
@@ -647,8 +647,8 @@ pub(crate) enum ToolRequirement {
 impl ToolRequirement {
     fn executable(&self) -> &str {
         match self {
-            ToolRequirement::Python { executable, .. } => executable,
-            ToolRequirement::Package { executable, .. } => executable,
+            Self::Python { executable, .. } => executable,
+            Self::Package { executable, .. } => executable,
         }
     }
 }
@@ -656,8 +656,8 @@ impl ToolRequirement {
 impl std::fmt::Display for ToolRequirement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToolRequirement::Python { .. } => write!(f, "python"),
-            ToolRequirement::Package { requirement, .. } => write!(f, "{requirement}"),
+            Self::Python { .. } => write!(f, "python"),
+            Self::Package { requirement, .. } => write!(f, "{requirement}"),
         }
     }
 }

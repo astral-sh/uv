@@ -1698,33 +1698,33 @@ impl Source {
     /// Return the [`MarkerTree`] for the source.
     pub fn marker(&self) -> MarkerTree {
         match self {
-            Source::Git { marker, .. } => *marker,
-            Source::Url { marker, .. } => *marker,
-            Source::Path { marker, .. } => *marker,
-            Source::Registry { marker, .. } => *marker,
-            Source::Workspace { marker, .. } => *marker,
+            Self::Git { marker, .. } => *marker,
+            Self::Url { marker, .. } => *marker,
+            Self::Path { marker, .. } => *marker,
+            Self::Registry { marker, .. } => *marker,
+            Self::Workspace { marker, .. } => *marker,
         }
     }
 
     /// Return the extra name for the source.
     pub fn extra(&self) -> Option<&ExtraName> {
         match self {
-            Source::Git { extra, .. } => extra.as_ref(),
-            Source::Url { extra, .. } => extra.as_ref(),
-            Source::Path { extra, .. } => extra.as_ref(),
-            Source::Registry { extra, .. } => extra.as_ref(),
-            Source::Workspace { extra, .. } => extra.as_ref(),
+            Self::Git { extra, .. } => extra.as_ref(),
+            Self::Url { extra, .. } => extra.as_ref(),
+            Self::Path { extra, .. } => extra.as_ref(),
+            Self::Registry { extra, .. } => extra.as_ref(),
+            Self::Workspace { extra, .. } => extra.as_ref(),
         }
     }
 
     /// Return the dependency group name for the source.
     pub fn group(&self) -> Option<&GroupName> {
         match self {
-            Source::Git { group, .. } => group.as_ref(),
-            Source::Url { group, .. } => group.as_ref(),
-            Source::Path { group, .. } => group.as_ref(),
-            Source::Registry { group, .. } => group.as_ref(),
-            Source::Workspace { group, .. } => group.as_ref(),
+            Self::Git { group, .. } => group.as_ref(),
+            Self::Url { group, .. } => group.as_ref(),
+            Self::Path { group, .. } => group.as_ref(),
+            Self::Registry { group, .. } => group.as_ref(),
+            Self::Workspace { group, .. } => group.as_ref(),
         }
     }
 }

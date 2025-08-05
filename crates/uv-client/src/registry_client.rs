@@ -1179,11 +1179,7 @@ impl SimpleMetadata {
         let SimpleHtml { base, files } =
             SimpleHtml::parse(text, url).map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-        Ok(SimpleMetadata::from_files(
-            files,
-            package_name,
-            base.as_url(),
-        ))
+        Ok(Self::from_files(files, package_name, base.as_url()))
     }
 }
 

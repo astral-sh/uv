@@ -736,8 +736,8 @@ impl ScriptInterpreter {
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            ScriptInterpreter::Interpreter(interpreter) => interpreter,
-            ScriptInterpreter::Environment(venv) => venv.into_interpreter(),
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.into_interpreter(),
         }
     }
 
@@ -1033,8 +1033,8 @@ impl ProjectInterpreter {
     /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            ProjectInterpreter::Interpreter(interpreter) => interpreter,
-            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.into_interpreter(),
         }
     }
 
@@ -1073,11 +1073,11 @@ pub(crate) enum PythonRequestSource {
 impl std::fmt::Display for PythonRequestSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PythonRequestSource::UserRequest => write!(f, "explicit request"),
-            PythonRequestSource::DotPythonVersion(file) => {
+            Self::UserRequest => write!(f, "explicit request"),
+            Self::DotPythonVersion(file) => {
                 write!(f, "version file at `{}`", file.path().user_display())
             }
-            PythonRequestSource::RequiresPython => write!(f, "`requires-python` metadata"),
+            Self::RequiresPython => write!(f, "`requires-python` metadata"),
         }
     }
 }

@@ -66,12 +66,12 @@ pub enum BuildDispatchError {
 impl IsBuildBackendError for BuildDispatchError {
     fn is_build_backend_error(&self) -> bool {
         match self {
-            BuildDispatchError::Tags(_)
-            | BuildDispatchError::Resolve(_)
-            | BuildDispatchError::Join(_)
-            | BuildDispatchError::Anyhow(_)
-            | BuildDispatchError::Prepare(_) => false,
-            BuildDispatchError::BuildFrontend(err) => err.is_build_backend_error(),
+            Self::Tags(_)
+            | Self::Resolve(_)
+            | Self::Join(_)
+            | Self::Anyhow(_)
+            | Self::Prepare(_) => false,
+            Self::BuildFrontend(err) => err.is_build_backend_error(),
         }
     }
 }
