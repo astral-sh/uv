@@ -612,8 +612,7 @@ impl<'a> ParsedRawExtra<'a> {
 
     fn package(&self) -> &'a str {
         match self {
-            Self::Extra { package, .. } => package,
-            Self::Group { package, .. } => package,
+            Self::Extra { package, .. } | Self::Group { package, .. } => package,
         }
     }
 }

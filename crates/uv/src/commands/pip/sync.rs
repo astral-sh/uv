@@ -443,7 +443,7 @@ pub(crate) async fn pip_sync(
         (resolution, hasher)
     } else {
         // When resolving, don't take any external preferences into account.
-        let preferences = Vec::default();
+        let preferences = vec![];
 
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)

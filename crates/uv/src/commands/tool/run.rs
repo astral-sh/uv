@@ -647,8 +647,7 @@ pub(crate) enum ToolRequirement {
 impl ToolRequirement {
     fn executable(&self) -> &str {
         match self {
-            Self::Python { executable, .. } => executable,
-            Self::Package { executable, .. } => executable,
+            Self::Python { executable, .. } | Self::Package { executable, .. } => executable,
         }
     }
 }

@@ -200,8 +200,7 @@ impl Set {
 
     fn metadata(&self) -> &OptionSet {
         match self {
-            Self::Global { set, .. } => set,
-            Self::Named { set, .. } => set,
+            Self::Global { set, .. } | Self::Named { set, .. } => set,
         }
     }
 }

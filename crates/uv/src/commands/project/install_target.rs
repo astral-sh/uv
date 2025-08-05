@@ -45,19 +45,19 @@ pub(crate) enum InstallTarget<'lock> {
 impl<'lock> Installable<'lock> for InstallTarget<'lock> {
     fn install_path(&self) -> &'lock Path {
         match self {
-            Self::Project { workspace, .. } => workspace.install_path(),
-            Self::Workspace { workspace, .. } => workspace.install_path(),
-            Self::NonProjectWorkspace { workspace, .. } => workspace.install_path(),
+            Self::Project { workspace, .. }
+            | Self::Workspace { workspace, .. }
+            | Self::NonProjectWorkspace { workspace, .. } => workspace.install_path(),
             Self::Script { script, .. } => script.path.parent().unwrap(),
         }
     }
 
     fn lock(&self) -> &'lock Lock {
         match self {
-            Self::Project { lock, .. } => lock,
-            Self::Workspace { lock, .. } => lock,
-            Self::NonProjectWorkspace { lock, .. } => lock,
-            Self::Script { lock, .. } => lock,
+            Self::Project { lock, .. }
+            | Self::Workspace { lock, .. }
+            | Self::NonProjectWorkspace { lock, .. }
+            | Self::Script { lock, .. } => lock,
         }
     }
 

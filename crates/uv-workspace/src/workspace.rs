@@ -1337,7 +1337,7 @@ impl ProjectWorkspace {
                     // There may be package sources, but we don't need to duplicate them into the
                     // workspace sources.
                     sources: workspace_sources,
-                    indexes: Vec::default(),
+                    indexes: vec![],
                     pyproject_toml: project_pyproject_toml.clone(),
                 },
             });

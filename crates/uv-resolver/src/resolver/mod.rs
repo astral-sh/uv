@@ -1757,7 +1757,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             } => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
-                    return Ok(Dependencies::Unforkable(Vec::default()));
+                    return Ok(Dependencies::Unforkable(vec![]));
                 }
 
                 // Determine the distribution to lookup.
@@ -1866,9 +1866,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .collect()
             }
 
-            PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
+            PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(vec![])),
 
-            PubGrubPackageInner::System(_) => return Ok(Dependencies::Unforkable(Vec::default())),
+            PubGrubPackageInner::System(_) => return Ok(Dependencies::Unforkable(vec![])),
 
             // Add a dependency on both the marker and base package.
             PubGrubPackageInner::Marker { name, marker } => {
