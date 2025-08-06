@@ -727,6 +727,11 @@ impl TestContext {
             r"environments-v(\d+)[\\/](\w+)-[a-z0-9]+".to_string(),
             "environments-v$1/$2-[HASH]".to_string(),
         ));
+        // Filter archive hashes
+        filters.push((
+            r"archive-v(\d+)[\\/][A-Za-z0-9]+".to_string(),
+            "archive-v$1/[HASH]".to_string(),
+        ));
 
         Self {
             root: ChildPath::new(root.path()),

@@ -162,7 +162,7 @@ fn find_uv_bin() -> Result<()> {
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-      File "[CACHE_DIR]/archive-v0/KAPXYug5EtMBzhbPVqTGD/lib/[PYTHON]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
+      File "[CACHE_DIR]/archive-v0/[HASH]/lib/[PYTHON]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
         raise FileNotFoundError(path)
     FileNotFoundError: [HOME]/.local/[BIN]/uv
     "#
