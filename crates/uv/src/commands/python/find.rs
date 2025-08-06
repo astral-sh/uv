@@ -3,6 +3,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use uv_cache::Cache;
+use uv_client::NetworkSettings;
 use uv_configuration::{DependencyGroupsWithDefaults, Preview};
 use uv_fs::Simplified;
 use uv_python::{
@@ -18,7 +19,6 @@ use crate::commands::{
     project::{ScriptInterpreter, WorkspacePython, validate_project_requires_python},
 };
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Find a Python interpreter.
 #[allow(clippy::fn_params_excessive_bools)]

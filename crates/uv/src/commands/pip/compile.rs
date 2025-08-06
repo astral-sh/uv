@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, NetworkSettings, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
     IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
@@ -53,7 +53,6 @@ use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -195,10 +194,8 @@ pub(crate) async fn pip_compile(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings)
+        .keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {

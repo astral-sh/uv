@@ -7,7 +7,7 @@ use std::str::FromStr;
 use tracing::{debug, trace};
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, NetworkSettings};
 use uv_configuration::{Concurrency, Constraints, DryRun, Preview};
 use uv_distribution_types::{ExtraBuildRequires, Requirement};
 use uv_fs::CWD;
@@ -33,7 +33,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
@@ -83,9 +83,7 @@ pub(crate) async fn upgrade(
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(&network_settings);
 
     let python_request = python.as_deref().map(PythonRequest::parse);
 

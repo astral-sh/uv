@@ -55,8 +55,8 @@ use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 use crate::settings::ResolverInstallerSettings;
+use uv_client::NetworkSettings;
 
 /// The user-facing command used to invoke a tool run.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -690,9 +690,7 @@ async fn get_or_create_environment(
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings);
 
     let reporter = PythonDownloadReporter::single(printer);
 

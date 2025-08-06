@@ -48,6 +48,14 @@ pub const DEFAULT_RETRIES: u32 = 3;
 /// This is the default used by [`reqwest`].
 const DEFAULT_MAX_REDIRECTS: u32 = 10;
 
+/// Global network settings for HTTP client configuration.
+#[derive(Debug, Clone, Default)]
+pub struct NetworkSettings {
+    pub connectivity: Connectivity,
+    pub native_tls: bool,
+    pub allow_insecure_host: Vec<TrustedHost>,
+}
+
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum AuthIntegration {
@@ -152,14 +160,11 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
-        self.allow_insecure_host = allow_insecure_host;
-        self
-    }
-
-    #[must_use]
-    pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
-        self.connectivity = connectivity;
+    pub fn network_settings(mut self, settings: &NetworkSettings) -> Self {
+        self.connectivity = settings.connectivity;
+        self.native_tls = settings.native_tls;
+        self.allow_insecure_host
+            .clone_from(&settings.allow_insecure_host);
         self
     }
 
@@ -186,12 +191,6 @@ impl<'a> BaseClientBuilder<'a> {
         } else {
             Ok(self)
         }
-    }
-
-    #[must_use]
-    pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.native_tls = native_tls;
-        self
     }
 
     #[must_use]

@@ -9,6 +9,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_cli::version::VersionInfo;
 use uv_cli::{VersionBump, VersionFormat};
+use uv_client::NetworkSettings;
 use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, InstallOptions, Preview,
@@ -36,7 +37,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(

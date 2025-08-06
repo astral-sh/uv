@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use uv_client::{BaseClientBuilder, Connectivity};
+use uv_client::{BaseClientBuilder, Connectivity, NetworkSettings};
 use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
@@ -37,11 +37,18 @@ pub async fn read_requirements_txt(
         return Ok(Vec::new());
     }
 
+    // TODO(konsti): Use a better abstraction.
+    let network_settings = NetworkSettings {
+        connectivity: Connectivity::Offline,
+        native_tls: false,
+        allow_insecure_host: Vec::new(),
+    };
+
     // Parse the requirements from the lockfile.
     let requirements_txt = RequirementsTxt::parse(
         output_file,
         &*CWD,
-        &BaseClientBuilder::new().connectivity(Connectivity::Offline),
+        &BaseClientBuilder::new().network_settings(&network_settings),
     )
     .await?;
 

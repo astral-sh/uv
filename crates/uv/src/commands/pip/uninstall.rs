@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, NetworkSettings};
 use uv_configuration::{DryRun, KeyringProviderType, Preview};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
@@ -21,7 +21,6 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Uninstall packages from the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -43,10 +42,8 @@ pub(crate) async fn pip_uninstall(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings)
+        .keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;

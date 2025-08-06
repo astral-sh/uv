@@ -21,6 +21,7 @@ use regex::Regex;
 
 use tokio::io::AsyncWriteExt;
 use uv_cache::{Cache, CacheBucket};
+use uv_client::NetworkSettings;
 use uv_configuration::Preview;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
@@ -1752,8 +1753,13 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
         .collect();
 
+    let network_settings = NetworkSettings {
+        allow_insecure_host: trusted_hosts,
+        ..NetworkSettings::default()
+    };
+
     let client = uv_client::BaseClientBuilder::new()
-        .allow_insecure_host(trusted_hosts)
+        .network_settings(&network_settings)
         .build();
     let url = url.parse().unwrap();
     let response = client

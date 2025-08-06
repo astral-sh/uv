@@ -10,7 +10,7 @@ use uv_distribution_types::RequiresPython;
 use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, NetworkSettings};
 use uv_configuration::{
     DependencyGroupsWithDefaults, Preview, ProjectBuildBackend, VersionControlError,
     VersionControlSystem,
@@ -35,7 +35,6 @@ use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -217,9 +216,7 @@ async fn init_script(
     }
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings);
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -348,9 +345,7 @@ async fn init_project(
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings);
 
     // First, determine if there is an request for Python
     let python_request = if let Some(request) = python {

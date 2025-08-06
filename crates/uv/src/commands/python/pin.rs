@@ -22,7 +22,7 @@ use crate::commands::{
     ExitStatus, project::find_requires_python, reporters::PythonDownloadReporter,
 };
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
+use uv_client::NetworkSettings;
 
 /// Pin to a specific Python version.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -117,9 +117,7 @@ pub(crate) async fn pin(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(&network_settings);
     let reporter = PythonDownloadReporter::single(printer);
 
     let python = match PythonInstallation::find_or_download(

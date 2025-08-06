@@ -7,6 +7,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
+use uv_client::NetworkSettings;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
     Preview,
@@ -29,7 +30,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]

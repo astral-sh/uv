@@ -17,8 +17,8 @@ use url::Url;
 
 use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
-use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
@@ -34,15 +34,15 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
-    BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, FlatIndexEntries,
-    RedirectClientWithMiddleware,
+    BaseClient, BaseClientBuilder, CachedClient, Error, ErrorKind, ExtraMiddleware,
+    FlatIndexClient, FlatIndexEntries, NetworkSettings, RedirectClientWithMiddleware,
+    RedirectPolicy,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -96,20 +96,6 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn allow_insecure_host(mut self, allow_insecure_host: Vec<TrustedHost>) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .allow_insecure_host(allow_insecure_host);
-        self
-    }
-
-    #[must_use]
-    pub fn connectivity(mut self, connectivity: Connectivity) -> Self {
-        self.base_client_builder = self.base_client_builder.connectivity(connectivity);
-        self
-    }
-
-    #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
         self.base_client_builder = self.base_client_builder.retries(retries);
         self
@@ -121,8 +107,8 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.base_client_builder = self.base_client_builder.native_tls(native_tls);
+    pub fn network_settings(mut self, settings: &NetworkSettings) -> Self {
+        self.base_client_builder = self.base_client_builder.network_settings(settings);
         self
     }
 

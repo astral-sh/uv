@@ -10,7 +10,7 @@ use tracing::{debug, trace, warn};
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, NetworkSettings, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
     PreviewFeatures, Reinstall, Upgrade,
@@ -55,9 +55,7 @@ use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
-use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
-};
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettings};
 
 pub(crate) mod add;
 pub(crate) mod environment;
@@ -694,9 +692,7 @@ impl ScriptInterpreter {
 
         let client_builder = BaseClientBuilder::new()
             .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+            .network_settings(network_settings);
 
         let reporter = PythonDownloadReporter::single(printer);
 
@@ -978,9 +974,7 @@ impl ProjectInterpreter {
 
         let client_builder = BaseClientBuilder::default()
             .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+            .network_settings(network_settings);
 
         let reporter = PythonDownloadReporter::single(printer);
 
@@ -1709,10 +1703,8 @@ pub(crate) async fn resolve_names(
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()
         .map_err(uv_requirements::Error::ClientError)?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings)
+        .keyring(*keyring_provider);
 
     index_locations.cache_index_credentials();
 
@@ -1876,10 +1868,8 @@ pub(crate) async fn resolve_environment(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings)
+        .keyring(*keyring_provider);
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
@@ -2057,10 +2047,8 @@ pub(crate) async fn sync_environment(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings)
+        .keyring(keyring_provider);
 
     let site_packages = SitePackages::from_environment(&venv)?;
 
@@ -2229,10 +2217,8 @@ pub(crate) async fn update_environment(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(network_settings)
+        .keyring(*keyring_provider);
 
     // Respect all requirements from the provided sources.
     let RequirementsSpecification {

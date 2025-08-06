@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, NetworkSettings, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, IndexStrategy,
     KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures,
@@ -37,7 +37,6 @@ use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{WorkspacePython, validate_project_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 use super::project::default_dependency_groups;
 
@@ -127,10 +126,7 @@ pub(crate) async fn venv(
     // TODO(zanieb): We don't use [`BaseClientBuilder::retries_from_env`] here because it's a pain
     // to map into a miette diagnostic. We should just remove miette diagnostics here, we're not
     // using them elsewhere.
-    let client_builder = BaseClientBuilder::default()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = BaseClientBuilder::default().network_settings(network_settings);
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -232,7 +228,6 @@ pub(crate) async fn venv(
             .index_locations(index_locations)
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();

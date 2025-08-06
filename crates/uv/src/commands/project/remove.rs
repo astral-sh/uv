@@ -8,6 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
+use uv_client::NetworkSettings;
 use uv_configuration::{
     Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
     Preview,
@@ -35,7 +36,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
