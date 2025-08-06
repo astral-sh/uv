@@ -4769,6 +4769,7 @@ name = "uv-audit"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "async-trait",
  "async_zip",
  "flate2",
  "fs-err",

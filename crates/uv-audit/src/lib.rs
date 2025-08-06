@@ -1,12 +1,11 @@
 use thiserror::Error;
 
 pub use crate::cache::{AuditCache, DatabaseMetadata};
-pub use crate::database::DatabaseManager;
 pub use crate::matcher::{
     DatabaseStats, FixAnalysis, FixSuggestion, MatcherConfig, VulnerabilityMatcher,
 };
-pub use crate::osv::{OsvAdvisory, OsvClient};
-pub use crate::pypa::{PypaAdvisory, PypaParser};
+pub use crate::providers::osv::{OsvAdvisory, OsvClient};
+pub use crate::providers::{VulnerabilityProvider, VulnerabilitySource};
 pub use crate::report::{AuditReport, AuditSummary, ReportGenerator};
 pub use crate::sarif::SarifGenerator;
 pub use crate::scanner::{DependencyScanner, DependencySource, DependencyStats, ScannedDependency};
@@ -15,10 +14,8 @@ pub use crate::vulnerability::{
 };
 
 mod cache;
-mod database;
 mod matcher;
-mod osv;
-mod pypa;
+mod providers;
 mod report;
 mod sarif;
 mod scanner;

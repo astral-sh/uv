@@ -4,11 +4,11 @@ use std::path::Path;
 use anyhow::Result;
 
 use uv_audit::{
-    AuditCache, AuditError, AuditReport, DatabaseManager, DependencyScanner, MatcherConfig,
-    ReportGenerator, VulnerabilityMatcher,
+    AuditCache, AuditError, AuditReport, DependencyScanner, MatcherConfig, ReportGenerator,
+    VulnerabilityMatcher, VulnerabilitySource as AuditVulnerabilitySource,
 };
 use uv_cache::Cache;
-use uv_cli::{AuditFormat, SeverityLevel};
+use uv_cli::{AuditFormat, SeverityLevel, VulnerabilitySource};
 use uv_configuration::Preview;
 
 use crate::commands::ExitStatus;
@@ -27,6 +27,7 @@ pub(crate) async fn audit(
     direct_only: bool,
     no_cache: bool,
     _cache_dir: Option<&Path>,
+    source: VulnerabilitySource,
     cache: &Cache,
     printer: Printer,
     _preview: Preview,
@@ -42,7 +43,7 @@ pub(crate) async fn audit(
     if matches!(printer, Printer::Verbose) {
         writeln!(
             printer.stderr(),
-            "Configuration: format={format:?}, severity={severity:?}, dev={dev}, optional={optional}, direct_only={direct_only}"
+            "Configuration: format={format:?}, severity={severity:?}, source={source:?}, dev={dev}, optional={optional}, direct_only={direct_only}"
         )?;
 
         if !ignore_ids.is_empty() {
@@ -62,6 +63,7 @@ pub(crate) async fn audit(
         optional,
         direct_only,
         no_cache,
+        source,
         cache,
         &printer,
     )
@@ -104,28 +106,21 @@ async fn perform_audit(
     optional: bool,
     direct_only: bool,
     no_cache: bool,
+    source: VulnerabilitySource,
     cache: &Cache,
     printer: &Printer,
 ) -> Result<AuditReport> {
     let audit_cache = AuditCache::new(cache.clone());
 
-    let db_manager = DatabaseManager::new(audit_cache);
+    // Create the vulnerability source
+    let vuln_source = AuditVulnerabilitySource::new(source, audit_cache, no_cache);
 
-    // Get or refresh vulnerability database
-    writeln!(printer.stderr(), "Updating vulnerability database...")?;
-    let database = db_manager.get_database(no_cache).await?;
-
-    if matches!(printer, Printer::Verbose) {
-        let db_stats = db_manager.get_stats()?;
-        if let Some(metadata) = db_stats {
-            writeln!(
-                printer.stderr(),
-                "Database: {} advisories (last updated: {})",
-                metadata.advisory_count,
-                metadata.last_updated.strftime("%Y-%m-%d %H:%M:%S UTC")
-            )?;
-        }
-    }
+    // Get source name for display
+    let source_name = vuln_source.name();
+    writeln!(
+        printer.stderr(),
+        "Fetching vulnerability data from {source_name}..."
+    )?;
 
     writeln!(printer.stderr(), "Scanning project dependencies...")?;
     let scanner = DependencyScanner::new(dev, optional, direct_only);
@@ -141,6 +136,21 @@ async fn perform_audit(
     for warning in &warnings {
         writeln!(printer.stderr(), "Warning: {warning}")?;
     }
+
+    // Prepare package list for vulnerability fetching
+    let packages: Vec<(String, String)> = dependencies
+        .iter()
+        .map(|dep| (dep.name.to_string(), dep.version.to_string()))
+        .collect();
+
+    // Fetch vulnerabilities from the selected source
+    writeln!(
+        printer.stderr(),
+        "Fetching vulnerabilities for {} packages from {}...",
+        packages.len(),
+        source_name
+    )?;
+    let database = vuln_source.fetch_vulnerabilities(&packages).await?;
 
     writeln!(
         printer.stderr(),

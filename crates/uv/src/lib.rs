@@ -1034,6 +1034,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.direct_only,
                 args.no_cache,
                 args.cache_dir.as_deref(),
+                args.source,
                 &cache,
                 printer,
                 globals.preview,

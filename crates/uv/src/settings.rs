@@ -13,7 +13,7 @@ use uv_cli::{
     PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs,
     PythonUpgradeArgs, RemoveArgs, RunArgs, SeverityLevel, SyncArgs, SyncFormat, ToolDirArgs,
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs,
-    VersionBump, VersionFormat,
+    VersionBump, VersionFormat, VulnerabilitySource,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
@@ -3464,6 +3464,7 @@ pub(crate) struct AuditSettings {
     pub(crate) direct_only: bool,
     pub(crate) no_cache: bool,
     pub(crate) cache_dir: Option<PathBuf>,
+    pub(crate) source: VulnerabilitySource,
 }
 
 impl AuditSettings {
@@ -3480,6 +3481,7 @@ impl AuditSettings {
             direct_only: args.direct_only,
             no_cache: args.no_cache,
             cache_dir: args.cache_dir,
+            source: args.source,
         }
     }
 }

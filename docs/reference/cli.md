@@ -5129,6 +5129,12 @@ uv audit [OPTIONS] [PATH]
 <li><code>medium</code>:  Include medium, high, and critical vulnerabilities</li>
 <li><code>high</code>:  Include high and critical vulnerabilities</li>
 <li><code>critical</code>:  Include only critical vulnerabilities</li>
+</ul></dd><dt id="uv-audit--source"><a href="#uv-audit--source"><code>--source</code></a> <i>source</i></dt><dd><p>Vulnerability data source to use</p>
+<p>[default: pypa-zip]</p><p>Possible values:</p>
+<ul>
+<li><code>pypa-zip</code>:  Use <code>PyPA</code> Advisory Database (local ZIP download)</li>
+<li><code>pypi</code>:  Use PyPI JSON API for vulnerability data</li>
+<li><code>osv</code>:  Use OSV.dev batch API for vulnerability data</li>
 </ul></dd><dt id="uv-audit--verbose"><a href="#uv-audit--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>

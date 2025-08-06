@@ -1,13 +1,21 @@
-use crate::osv::{
-    OsvAdvisory, OsvAffected, OsvEvent, OsvPackage, OsvRange, OsvReference, OsvSeverity,
-};
-use crate::vulnerability::{Severity, VersionRange, Vulnerability};
-use crate::{AuditError, Result};
+use async_trait::async_trait;
 use jiff::Timestamp;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::str::FromStr;
+use tracing::debug;
+use uv_cache::CacheEntry;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+
+use crate::{
+    AuditCache, AuditError, Result, Severity, VersionRange, Vulnerability, VulnerabilityDatabase,
+    VulnerabilityProvider,
+};
+
+/// URL for downloading the `PyPA` advisory database
+const PYPA_ADVISORY_DB_URL: &str = "https://github.com/pypa/advisory-database/archive/main.zip";
 
 /// `PyPA` Advisory Database YAML record
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,54 +149,196 @@ pub struct PypaSeverity {
     pub score: String,
 }
 
-/// Parser for `PyPA` advisory database YAML files
-pub struct PypaParser;
+/// Client for downloading `PyPA` advisory database
+pub(super) struct PypaClient {
+    client: Client,
+}
 
-impl PypaParser {
+impl PypaClient {
+    /// Create a new `PyPA` client
+    pub(super) fn new() -> Self {
+        let client = Client::builder()
+            .user_agent(format!("uv/{}", env!("CARGO_PKG_VERSION")))
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| Client::new());
+
+        Self { client }
+    }
+
+    /// Download the `PyPA` advisory database ZIP file
+    pub(super) async fn download_advisory_database(&self) -> Result<Vec<u8>> {
+        debug!(
+            "Downloading PyPA advisory database from {}",
+            PYPA_ADVISORY_DB_URL
+        );
+
+        let response = self.client.get(PYPA_ADVISORY_DB_URL).send().await?;
+
+        if !response.status().is_success() {
+            return Err(AuditError::DatabaseDownload(
+                response.error_for_status().unwrap_err(),
+            ));
+        }
+
+        let bytes = response.bytes().await?;
+        debug!("Downloaded advisory database: {} bytes", bytes.len());
+
+        Ok(bytes.to_vec())
+    }
+}
+
+impl Default for PypaClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// `PyPA` Advisory Database source for vulnerability data
+pub struct PypaSource {
+    cache: AuditCache,
+    client: PypaClient,
+    no_cache: bool,
+}
+
+impl PypaSource {
+    /// Create a new `PyPA` source
+    pub fn new(cache: AuditCache, no_cache: bool) -> Self {
+        Self {
+            cache,
+            client: PypaClient::new(),
+            no_cache,
+        }
+    }
+
+    /// Get cache entry for `PyPA` database
+    fn cache_entry(&self) -> CacheEntry {
+        self.cache.cache().entry(
+            uv_cache::CacheBucket::VulnerabilityDatabase,
+            "pypa",
+            "advisories.zip",
+        )
+    }
+
+    /// Download and parse `PyPA` advisory database
+    async fn download_and_parse_database(&self) -> Result<Vec<PypaAdvisory>> {
+        let cache_entry = self.cache_entry();
+
+        // Check cache first unless no_cache is set
+        let zip_data = if !self.no_cache && cache_entry.path().exists() {
+            debug!("Using cached PyPA database");
+            fs_err::read(cache_entry.path())?
+        } else {
+            debug!("Downloading PyPA advisory database");
+            let data = self.client.download_advisory_database().await?;
+
+            // Cache the downloaded data
+            if !self.no_cache {
+                fs_err::create_dir_all(cache_entry.dir())?;
+                fs_err::write(cache_entry.path(), &data)?;
+            }
+
+            data
+        };
+
+        self.parse_zip_database(&zip_data).await
+    }
+
+    /// Parse `PyPA` advisory database from ZIP data
+    async fn parse_zip_database(&self, zip_data: &[u8]) -> Result<Vec<PypaAdvisory>> {
+        use async_zip::base::read::mem::ZipFileReader;
+        use futures::AsyncReadExt;
+
+        let reader = ZipFileReader::new(zip_data.to_vec()).await?;
+        let mut advisories = Vec::new();
+        let mut parsed_count = 0;
+        let mut error_count = 0;
+
+        debug!(
+            "Processing ZIP file with {} entries",
+            reader.file().entries().len()
+        );
+
+        for i in 0..reader.file().entries().len() {
+            let entry = reader.file().entries().get(i).ok_or_else(|| {
+                AuditError::DatabaseIntegrity(format!("Failed to get ZIP entry {i}"))
+            })?;
+
+            let filename = entry.filename().as_str().map_err(|e| {
+                AuditError::DatabaseIntegrity(format!("Failed to read ZIP entry filename: {e}"))
+            })?;
+
+            // Skip directories and non-YAML files
+            if entry.dir().map_err(AuditError::ZipExtraction)?
+                || !std::path::Path::new(filename)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("yaml"))
+            {
+                continue;
+            }
+
+            // Only process PyPI advisories (skip other ecosystems)
+            if !filename.contains("vulns/") {
+                continue;
+            }
+
+            let mut entry_reader = reader.reader_with_entry(i).await?;
+            let mut content = String::new();
+            entry_reader
+                .read_to_string(&mut content)
+                .await
+                .map_err(AuditError::Cache)?;
+
+            // Parse as PyPA YAML format
+            match Self::parse_advisory(&content) {
+                Ok(pypa_advisory) => {
+                    // Only include PyPI advisories that have affected packages
+                    let package_names = Self::extract_package_names(&pypa_advisory);
+                    if !package_names.is_empty() {
+                        advisories.push(pypa_advisory);
+                        parsed_count += 1;
+                    }
+                }
+                Err(e) => {
+                    debug!("Failed to parse advisory from {}: {}", filename, e);
+                    error_count += 1;
+                }
+            }
+        }
+
+        debug!(
+            "Parsed {} PyPA advisories ({} errors) from ZIP file",
+            parsed_count, error_count
+        );
+
+        Ok(advisories)
+    }
+
     /// Parse a `PyPA` YAML advisory from string content
     pub fn parse_advisory(content: &str) -> Result<PypaAdvisory> {
         serde_yaml::from_str(content)
             .map_err(|e| AuditError::PypaAdvisoryParse("PyPA YAML parse error".to_string(), e))
     }
 
-    /// Convert `PyPA` advisory to OSV format for compatibility
-    pub fn to_osv(pypa: &PypaAdvisory) -> Result<OsvAdvisory> {
-        let affected = pypa
-            .affected
-            .iter()
-            .map(Self::convert_affected)
-            .collect::<Vec<_>>();
+    /// Convert `PyPA` advisories to vulnerability database
+    fn convert_advisories(advisories: Vec<PypaAdvisory>) -> Result<VulnerabilityDatabase> {
+        let mut package_vulnerabilities: HashMap<String, Vec<Vulnerability>> = HashMap::new();
 
-        let references = pypa
-            .references
-            .iter()
-            .map(|pypa_ref| OsvReference {
-                ref_type: pypa_ref.ref_type.clone(),
-                url: pypa_ref.url.clone(),
-            })
-            .collect();
+        for advisory in advisories {
+            let package_names = Self::extract_package_names(&advisory);
 
-        let severity = pypa
-            .severity
-            .iter()
-            .map(|pypa_sev| OsvSeverity {
-                severity_type: pypa_sev.severity_type.clone(),
-                score: pypa_sev.score.clone(),
-            })
-            .collect();
+            for package_name in package_names {
+                let vulnerability = Self::to_vulnerability(&advisory, &package_name)?;
+                package_vulnerabilities
+                    .entry(package_name.to_string())
+                    .or_default()
+                    .push(vulnerability);
+            }
+        }
 
-        Ok(OsvAdvisory {
-            id: pypa.id.clone(),
-            // Use details as summary since PyPA doesn't always have summary
-            summary: pypa.summary.clone().unwrap_or_else(|| pypa.details.clone()),
-            details: Some(pypa.details.clone()),
-            affected,
-            references,
-            severity,
-            published: pypa.published.clone(),
-            modified: pypa.modified.clone(),
-            database_specific: pypa.database_specific.clone(),
-        })
+        Ok(VulnerabilityDatabase::from_package_map(
+            package_vulnerabilities,
+        ))
     }
 
     /// Convert `PyPA` advisory directly to internal Vulnerability format
@@ -241,51 +391,8 @@ impl PypaParser {
             cvss_score,
             published,
             modified,
+            source: Some("pypa-zip".to_string()),
         })
-    }
-
-    /// Convert `PyPA` affected to OSV affected
-    fn convert_affected(pypa_affected: &PypaAffected) -> OsvAffected {
-        let package = OsvPackage {
-            ecosystem: pypa_affected.package.ecosystem.clone(),
-            name: pypa_affected.package.name.clone(),
-            purl: pypa_affected.package.purl.clone(),
-        };
-
-        let ranges = pypa_affected
-            .ranges
-            .iter()
-            .map(Self::convert_range)
-            .collect();
-
-        OsvAffected {
-            package,
-            ranges,
-            versions: pypa_affected.versions.clone(),
-            database_specific: pypa_affected.database_specific.clone(),
-            ecosystem_specific: pypa_affected.ecosystem_specific.clone(),
-        }
-    }
-
-    /// Convert `PyPA` range to OSV range
-    fn convert_range(pypa_range: &PypaRange) -> OsvRange {
-        let events = pypa_range
-            .events
-            .iter()
-            .map(|pypa_event| OsvEvent {
-                introduced: pypa_event.introduced.clone(),
-                fixed: pypa_event.fixed.clone(),
-                last_affected: pypa_event.last_affected.clone(),
-                limit: pypa_event.limit.clone(),
-            })
-            .collect();
-
-        OsvRange {
-            range_type: pypa_range.range_type.clone(),
-            repo: pypa_range.repo.clone(),
-            events,
-            database_specific: pypa_range.database_specific.clone(),
-        }
     }
 
     /// Determine severity level from `PyPA` advisory
@@ -495,10 +602,36 @@ impl PypaParser {
     }
 }
 
+#[async_trait]
+impl VulnerabilityProvider for PypaSource {
+    fn name(&self) -> &'static str {
+        "pypa-zip"
+    }
+
+    async fn fetch_vulnerabilities(
+        &self,
+        _packages: &[(String, String)],
+    ) -> Result<VulnerabilityDatabase> {
+        // Download and parse the entire PyPA database
+        let advisories = self.download_and_parse_database().await?;
+
+        // Convert PyPA advisories to vulnerability database
+        Self::convert_advisories(advisories)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::str::FromStr;
+    use tempfile::TempDir;
+    use uv_cache::Cache;
+
+    fn create_test_cache() -> AuditCache {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = Cache::from_path(temp_dir.path()).init().unwrap();
+        AuditCache::new(cache)
+    }
 
     #[test]
     fn test_pypa_advisory_parsing() {
@@ -531,47 +664,14 @@ modified: "2021-07-15T02:22:07.728618Z"
 published: "2007-10-30T19:46:00Z"
 "#;
 
-        let advisory = PypaParser::parse_advisory(yaml).unwrap();
+        let _source = PypaSource::new(create_test_cache(), true);
+
+        let advisory = PypaSource::parse_advisory(yaml).unwrap();
         assert_eq!(advisory.id, "PYSEC-2007-1");
         assert!(advisory.details.contains("Django"));
         assert_eq!(advisory.affected.len(), 1);
         assert_eq!(advisory.aliases.len(), 1);
         assert_eq!(advisory.aliases[0], "CVE-2007-5712");
-    }
-
-    #[test]
-    fn test_pypa_to_osv_conversion() {
-        let yaml = r#"
-id: PYSEC-2025-1
-details: Test vulnerability description
-affected:
-- package:
-    ecosystem: PyPI
-    name: django
-  ranges:
-  - type: ECOSYSTEM
-    events:
-    - introduced: "5.1"
-    - fixed: "5.1.5"
-references:
-- type: ARTICLE
-  url: https://example.com
-aliases:
-- CVE-2024-56374
-modified: "2025-01-14T21:22:18.665005Z"
-published: "2025-01-14T19:15:32Z"
-"#;
-
-        let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
-        let osv_advisory = PypaParser::to_osv(&pypa_advisory).unwrap();
-
-        assert_eq!(osv_advisory.id, "PYSEC-2025-1");
-        assert_eq!(osv_advisory.summary, "Test vulnerability description");
-        assert_eq!(
-            osv_advisory.details,
-            Some("Test vulnerability description".to_string())
-        );
-        assert_eq!(osv_advisory.affected.len(), 1);
     }
 
     #[test]
@@ -592,8 +692,10 @@ affected:
 references: []
 ";
 
-        let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
-        let package_names = PypaParser::extract_package_names(&pypa_advisory);
+        let _source = PypaSource::new(create_test_cache(), true);
+
+        let pypa_advisory = PypaSource::parse_advisory(yaml).unwrap();
+        let package_names = PypaSource::extract_package_names(&pypa_advisory);
 
         assert_eq!(package_names.len(), 2);
         assert!(package_names.contains(&PackageName::from_str("django").unwrap()));
@@ -618,8 +720,10 @@ affected:
 references: []
 ";
 
-        let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
-        let package_names = PypaParser::extract_package_names(&pypa_advisory);
+        let _source = PypaSource::new(create_test_cache(), true);
+
+        let pypa_advisory = PypaSource::parse_advisory(yaml).unwrap();
+        let package_names = PypaSource::extract_package_names(&pypa_advisory);
 
         // Should only extract valid package names, ignoring invalid ones
         assert_eq!(package_names.len(), 2);
@@ -651,8 +755,10 @@ affected:
 references: []
 ";
 
-        let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
-        let package_names = PypaParser::extract_package_names(&pypa_advisory);
+        let _source = PypaSource::new(create_test_cache(), true);
+
+        let pypa_advisory = PypaSource::parse_advisory(yaml).unwrap();
+        let package_names = PypaSource::extract_package_names(&pypa_advisory);
 
         // Should only extract PyPI packages
         assert_eq!(package_names.len(), 2);
@@ -661,7 +767,7 @@ references: []
     }
 
     #[test]
-    fn test_osv_conversion_preserves_package_info() {
+    fn test_to_vulnerability_conversion() {
         let yaml = "
 id: PYSEC-2025-TEST
 details: Test vulnerability conversion
@@ -674,12 +780,6 @@ affected:
     events:
     - introduced: \"2.0.0\"
     - fixed: \"2.31.0\"
-- package:
-    ecosystem: PyPI
-    name: urllib3
-  versions:
-  - \"1.26.0\"
-  - \"1.26.1\"
 references:
 - type: ADVISORY
   url: https://example.com/advisory
@@ -689,36 +789,20 @@ modified: \"2025-01-14T21:22:18.665005Z\"
 published: \"2025-01-14T19:15:32Z\"
 ";
 
-        let pypa_advisory = PypaParser::parse_advisory(yaml).unwrap();
-        let osv_advisory = PypaParser::to_osv(&pypa_advisory).unwrap();
+        let _source = PypaSource::new(create_test_cache(), true);
 
-        // Verify basic conversion
-        assert_eq!(osv_advisory.id, "PYSEC-2025-TEST");
-        assert_eq!(osv_advisory.affected.len(), 2);
+        let pypa_advisory = PypaSource::parse_advisory(yaml).unwrap();
+        let package_name = PackageName::from_str("requests").unwrap();
+        let vulnerability = PypaSource::to_vulnerability(&pypa_advisory, &package_name).unwrap();
 
-        // Verify package information is preserved
-        let affected_packages: Vec<&str> = osv_advisory
-            .affected
-            .iter()
-            .map(|a| a.package.name.as_str())
-            .collect();
-        assert!(affected_packages.contains(&"requests"));
-        assert!(affected_packages.contains(&"urllib3"));
-
-        // Verify ranges and versions are preserved
-        let requests_affected = osv_advisory
-            .affected
-            .iter()
-            .find(|a| a.package.name == "requests")
-            .unwrap();
-        assert_eq!(requests_affected.ranges.len(), 1);
-        assert_eq!(requests_affected.ranges[0].events.len(), 2);
-
-        let urllib3_affected = osv_advisory
-            .affected
-            .iter()
-            .find(|a| a.package.name == "urllib3")
-            .unwrap();
-        assert_eq!(urllib3_affected.versions.as_ref().unwrap().len(), 2);
+        // Verify conversion
+        assert_eq!(vulnerability.id, "PYSEC-2025-TEST");
+        assert_eq!(vulnerability.summary, "Test vulnerability conversion");
+        assert_eq!(
+            vulnerability.description,
+            Some("Test vulnerability conversion".to_string())
+        );
+        assert_eq!(vulnerability.source, Some("pypa-zip".to_string()));
+        assert_eq!(vulnerability.references.len(), 1);
     }
 }

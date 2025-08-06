@@ -378,6 +378,7 @@ mod tests {
             cvss_score: Some(7.5),
             published: None,
             modified: None,
+            source: Some("test".to_string()),
         }
     }
 

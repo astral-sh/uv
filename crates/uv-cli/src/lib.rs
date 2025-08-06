@@ -83,6 +83,20 @@ pub enum AuditFormat {
 }
 
 #[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
+pub enum VulnerabilitySource {
+    /// Use `PyPA` Advisory Database (local ZIP download).
+    #[default]
+    #[value(name = "pypa-zip")]
+    PypaZip,
+    /// Use PyPI JSON API for vulnerability data.
+    #[value(name = "pypi")]
+    Pypi,
+    /// Use OSV.dev batch API for vulnerability data.
+    #[value(name = "osv")]
+    Osv,
+}
+
+#[derive(Debug, Default, Clone, Copy, clap::ValueEnum)]
 pub enum SeverityLevel {
     /// Include all vulnerabilities.
     #[default]
@@ -2684,6 +2698,10 @@ pub struct AuditArgs {
     /// Custom cache directory
     #[arg(long)]
     pub cache_dir: Option<PathBuf>,
+
+    /// Vulnerability data source to use
+    #[arg(long, value_enum, default_value = "pypa-zip")]
+    pub source: VulnerabilitySource,
 }
 
 #[derive(Args)]

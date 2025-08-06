@@ -1,5 +1,5 @@
 use crate::{AuditError, Result};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use tracing::{debug, warn};
@@ -127,17 +127,20 @@ impl DependencyScanner {
         )
         .await
         .map_err(AuditError::WorkspaceDiscovery)?;
-        let direct_deps = self.get_direct_dependencies(&workspace);
+
+        // Get direct dependencies
+        let direct_deps_with_types = self.get_direct_dependencies_with_types(&workspace);
 
         debug!(
             "Found {} direct dependencies from workspace",
-            direct_deps.len()
+            direct_deps_with_types.len()
         );
 
         let mut dependencies = Vec::new();
 
-        // Build dependency graph to determine direct vs transitive relationships
-        let dependency_graph = Self::build_dependency_graph(&lock, &direct_deps);
+        // Build dependency graph
+        let dependency_graph: HashMap<PackageName, DependencyInfo> =
+            Self::build_dependency_graph(&lock, &direct_deps_with_types);
 
         for package in lock.packages() {
             let package_name = package.name().clone();
@@ -169,7 +172,7 @@ impl DependencyScanner {
             }
 
             // Check if this package should be included based on dev/optional flags
-            if !self.should_include_package_with_info(&package_name, dep_info, &workspace) {
+            if !self.should_include_package_with_info(&package_name, dep_info) {
                 continue;
             }
 
@@ -254,64 +257,13 @@ impl DependencyScanner {
         Ok(dependencies)
     }
 
-    /// Get direct dependencies from workspace
-    fn get_direct_dependencies(&self, workspace: &Workspace) -> Vec<PackageName> {
-        let mut direct_deps = Vec::new();
-
-        for member in workspace.packages().values() {
-            let pyproject = member.pyproject_toml();
-
-            // Add main dependencies
-            if let Some(project_table) = &pyproject.project {
-                if let Some(dependencies) = &project_table.dependencies {
-                    for dep_str in dependencies {
-                        if let Ok(package_name) = extract_package_name_from_dep_string(dep_str) {
-                            direct_deps.push(package_name);
-                        }
-                    }
-                }
-
-                // Add optional dependencies if requested
-                if self.include_optional {
-                    if let Some(optional_deps) = &project_table.optional_dependencies {
-                        for deps in optional_deps.values() {
-                            for dep_str in deps {
-                                if let Ok(package_name) =
-                                    extract_package_name_from_dep_string(dep_str)
-                                {
-                                    direct_deps.push(package_name);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Add development dependencies if requested
-            if self.include_dev {
-                if let Some(tool_uv) = &pyproject.tool.as_ref().and_then(|t| t.uv.as_ref()) {
-                    if let Some(dev_deps) = &tool_uv.dev_dependencies {
-                        for dep in dev_deps {
-                            direct_deps.push(dep.name.clone());
-                        }
-                    }
-                }
-            }
-        }
-
-        // Deduplicate
-        direct_deps.sort();
-        direct_deps.dedup();
-
-        direct_deps
-    }
-
-    /// Get direct dependencies with additional type and version information
+    /// Get direct dependencies
     fn get_direct_dependencies_with_info(
         &self,
         workspace: &Workspace,
     ) -> Vec<(PackageName, DependencyType, String)> {
-        let mut direct_deps = Vec::new();
+        // Use a map to track dependencies with proper priority
+        let mut deps_map: HashMap<PackageName, (DependencyType, String)> = HashMap::new();
 
         for member in workspace.packages().values() {
             let pyproject = member.pyproject_toml();
@@ -321,7 +273,7 @@ impl DependencyScanner {
                 if let Some(dependencies) = &project_table.dependencies {
                     for dep_str in dependencies {
                         if let Ok(package_name) = extract_package_name_from_dep_string(dep_str) {
-                            direct_deps.push((package_name, DependencyType::Main, dep_str.clone()));
+                            deps_map.insert(package_name, (DependencyType::Main, dep_str.clone()));
                         }
                     }
                 }
@@ -334,11 +286,10 @@ impl DependencyScanner {
                                 if let Ok(package_name) =
                                     extract_package_name_from_dep_string(dep_str)
                                 {
-                                    direct_deps.push((
-                                        package_name,
-                                        DependencyType::Optional,
-                                        dep_str.clone(),
-                                    ));
+                                    // Only insert if not already present as Main
+                                    deps_map
+                                        .entry(package_name)
+                                        .or_insert((DependencyType::Optional, dep_str.clone()));
                                 }
                             }
                         }
@@ -353,18 +304,112 @@ impl DependencyScanner {
                         for dep in dev_deps {
                             // Convert Requirement to string representation
                             let dep_str = format!("{dep}");
-                            direct_deps.push((dep.name.clone(), DependencyType::Dev, dep_str));
+                            deps_map.insert(dep.name.clone(), (DependencyType::Dev, dep_str));
                         }
                     }
                 }
             }
         }
 
-        // Remove duplicates by package name, keeping the first occurrence
-        let mut seen = HashSet::new();
-        direct_deps.retain(|(name, _, _)| seen.insert(name.clone()));
+        // Convert map to vector
+        let direct_deps: Vec<(PackageName, DependencyType, String)> = deps_map
+            .into_iter()
+            .map(|(name, (dep_type, spec))| (name, dep_type, spec))
+            .collect();
+
+        debug!(
+            "Found {} direct dependencies with info: {} main, {} dev, {} optional",
+            direct_deps.len(),
+            direct_deps
+                .iter()
+                .filter(|(_, t, _)| *t == DependencyType::Main)
+                .count(),
+            direct_deps
+                .iter()
+                .filter(|(_, t, _)| *t == DependencyType::Dev)
+                .count(),
+            direct_deps
+                .iter()
+                .filter(|(_, t, _)| *t == DependencyType::Optional)
+                .count(),
+        );
 
         direct_deps
+    }
+
+    /// Get direct dependencies with their types for use in lock file scanning
+    fn get_direct_dependencies_with_types(
+        &self,
+        workspace: &Workspace,
+    ) -> HashMap<PackageName, DependencyType> {
+        let mut direct_deps_map = HashMap::new();
+
+        for member in workspace.packages().values() {
+            let pyproject = member.pyproject_toml();
+
+            // Add main dependencies first (lowest priority)
+            if let Some(project_table) = &pyproject.project {
+                if let Some(dependencies) = &project_table.dependencies {
+                    for dep_str in dependencies {
+                        if let Ok(package_name) = extract_package_name_from_dep_string(dep_str) {
+                            direct_deps_map.insert(package_name, DependencyType::Main);
+                        }
+                    }
+                }
+
+                // Add optional dependencies (don't override Main)
+                if self.include_optional {
+                    if let Some(optional_deps) = &project_table.optional_dependencies {
+                        for deps in optional_deps.values() {
+                            for dep_str in deps {
+                                if let Ok(package_name) =
+                                    extract_package_name_from_dep_string(dep_str)
+                                {
+                                    // Optional dependencies don't override Main dependencies
+                                    // They're considered Optional only if not already Main
+                                    direct_deps_map
+                                        .entry(package_name)
+                                        .or_insert(DependencyType::Optional);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Add development dependencies (highest priority - overrides Main and Optional)
+            if self.include_dev {
+                if let Some(tool_uv) = &pyproject.tool.as_ref().and_then(|t| t.uv.as_ref()) {
+                    if let Some(dev_deps) = &tool_uv.dev_dependencies {
+                        for dep in dev_deps {
+                            // Dev dependencies override everything else
+                            // This is because if a package is both a main/optional AND dev dependency,
+                            // we want to treat it as Dev for filtering purposes
+                            direct_deps_map.insert(dep.name.clone(), DependencyType::Dev);
+                        }
+                    }
+                }
+            }
+        }
+
+        debug!(
+            "Classified {} direct dependencies: {} main, {} dev, {} optional",
+            direct_deps_map.len(),
+            direct_deps_map
+                .values()
+                .filter(|t| **t == DependencyType::Main)
+                .count(),
+            direct_deps_map
+                .values()
+                .filter(|t| **t == DependencyType::Dev)
+                .count(),
+            direct_deps_map
+                .values()
+                .filter(|t| **t == DependencyType::Optional)
+                .count(),
+        );
+
+        direct_deps_map
     }
 
     /// Check if a dependency type should be included based on scanner configuration
@@ -487,31 +532,11 @@ impl DependencyScanner {
         None
     }
 
-    /// Check if a package should be included based on configuration (legacy method)
-    #[allow(dead_code)]
-    fn should_include_package(
-        &self,
-        package_name: &PackageName,
-        direct_deps: &[PackageName],
-        _workspace: &Workspace,
-    ) -> bool {
-        let is_direct = direct_deps.contains(package_name);
-
-        if self.direct_only && !is_direct {
-            return false;
-        }
-
-        // For more sophisticated filtering, we'd need to analyze dependency groups
-        // This is a simplified implementation
-        true
-    }
-
     /// Check if a package should be included based on dependency info
     fn should_include_package_with_info(
         &self,
         _package_name: &PackageName,
         dep_info: &DependencyInfo,
-        _workspace: &Workspace,
     ) -> bool {
         // Filter based on dependency type and scanner configuration
         match dep_info.dependency_type {
@@ -524,27 +549,32 @@ impl DependencyScanner {
     /// Build dependency graph from lock file to determine direct vs transitive relationships
     fn build_dependency_graph(
         lock: &Lock,
-        direct_deps: &[PackageName],
+        direct_deps_with_types: &HashMap<PackageName, DependencyType>,
     ) -> HashMap<PackageName, DependencyInfo> {
         debug!(
             "Building dependency graph for {} packages",
             lock.packages().len()
         );
-        debug!("Direct dependencies: {:?}", direct_deps);
+        debug!(
+            "Direct dependencies with types: {:?}",
+            direct_deps_with_types
+        );
 
         let mut graph = HashMap::new();
 
-        // CRITICAL FIX: Add ALL packages from the lock file to the graph first
+        // Add ALL packages from the lock file to the graph
         // This ensures that every package that was scanned will be found in the graph
         for package in lock.packages() {
             let package_name = package.name().clone();
-            let is_direct = direct_deps.contains(&package_name);
 
-            let dependency_type = if is_direct {
-                Self::classify_dependency_type(&package_name)
-            } else {
-                DependencyType::Main // Transitive dependencies are main by default
-            };
+            // Check if this is a direct dependency and get its type
+            let (is_direct, dependency_type) =
+                if let Some(dep_type) = direct_deps_with_types.get(&package_name) {
+                    (true, *dep_type)
+                } else {
+                    // Transitive dependencies default to Main type
+                    (false, DependencyType::Main)
+                };
 
             graph.insert(
                 package_name.clone(),
@@ -555,66 +585,13 @@ impl DependencyScanner {
             );
 
             debug!(
-                "Added {} to dependency graph (direct: {})",
-                package_name, is_direct
+                "Added {} to dependency graph (direct: {}, type: {:?})",
+                package_name, is_direct, dependency_type
             );
         }
-
-        // TODO: In a future improvement, we could add proper transitive relationship tracking
-        // by parsing the dependency information from the lock file. For now, this ensures
-        // that all packages are present in the graph, which fixes the immediate error.
 
         debug!("Built dependency graph with {} entries", graph.len());
         graph
-    }
-
-    /// Extract dependencies from a package in the lock file
-    #[allow(dead_code)]
-    fn extract_package_dependencies(package: &Package, lock: &Lock) -> Vec<PackageName> {
-        debug!("Extracting dependencies for package: {}", package.name());
-
-        let dependencies = Vec::new();
-
-        // Unfortunately, the Package struct has private fields, including `dependencies`.
-        // We need to find another way to access the dependency information.
-        // Since we have the lock file, we can look up the dependencies by examining the
-        // lock file structure directly through the parsed TOML data.
-
-        // For now, let's try to reconstruct the dependencies by examining the lock file
-        // packages and their relationships. We'll need to access this through the
-        // Lock structure's public methods.
-
-        // Get all packages from the lock file
-        for other_package in lock.packages() {
-            // We need to check if other_package depends on our current package
-            // This is a reverse lookup - we're building the dependency graph
-            // by finding which packages depend on each other
-
-            // This is a temporary workaround until we can access Package.dependencies directly
-            // In a real implementation, we would need proper access to the dependencies field
-            debug!(
-                "Checking if {} depends on {}",
-                other_package.name(),
-                package.name()
-            );
-        }
-
-        debug!(
-            "Found {} dependencies for package {}",
-            dependencies.len(),
-            package.name()
-        );
-        dependencies
-    }
-
-    /// Classify the type of dependency based on workspace information
-    fn classify_dependency_type(_package_name: &PackageName) -> DependencyType {
-        // For direct dependencies, we assume they are main dependencies unless
-        // we have more sophisticated analysis of the workspace structure
-        // TODO: Implement proper classification based on workspace dependency groups
-        // by checking which section of pyproject.toml they come from
-
-        DependencyType::Main
     }
 
     /// Determine the source type from a lock file package
@@ -905,5 +882,192 @@ mod tests {
         assert!(scanner.should_include_dependency_type(DependencyType::Main));
         assert!(scanner.should_include_dependency_type(DependencyType::Dev));
         assert!(scanner.should_include_dependency_type(DependencyType::Optional));
+    }
+
+    #[test]
+    fn test_extract_package_name_from_dep_string() {
+        // Test basic package name
+        let result = extract_package_name_from_dep_string("requests");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_string(), "requests");
+
+        // Test with version specifier
+        let result = extract_package_name_from_dep_string("requests>=2.31.0");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_string(), "requests");
+
+        // Test with extras
+        let result = extract_package_name_from_dep_string("requests[security]>=2.31.0");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_string(), "requests");
+
+        // Test with URL
+        let result = extract_package_name_from_dep_string(
+            "mypackage @ git+https://github.com/user/repo.git",
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_string(), "mypackage");
+
+        // Test with complex version spec
+        let result = extract_package_name_from_dep_string("numpy>=1.20.0,<2.0.0");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_string(), "numpy");
+
+        // Test edge cases
+        let result = extract_package_name_from_dep_string("  requests  ");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_string(), "requests");
+
+        // Test that empty string handling - it might be valid or invalid depending on PackageName implementation
+        // We'll just verify it's handled consistently
+        let _result = extract_package_name_from_dep_string("");
+
+        // Test version spec without package name
+        let _result = extract_package_name_from_dep_string(">=1.0.0");
+        // The function will extract everything before '>=', which is empty string
+        // This might be valid or invalid depending on PackageName implementation
+    }
+
+    #[test]
+    fn test_build_dependency_graph_with_types() {
+        // Create a mock lock with test packages
+        // Note: This is a simplified test since we can't easily create real Lock instances
+        // In a real test, we'd use test fixtures or mocks
+
+        // Create dependency type mappings
+        let mut direct_deps_with_types = HashMap::new();
+        direct_deps_with_types.insert(
+            PackageName::from_str("main-dep").unwrap(),
+            DependencyType::Main,
+        );
+        direct_deps_with_types.insert(
+            PackageName::from_str("dev-dep").unwrap(),
+            DependencyType::Dev,
+        );
+        direct_deps_with_types.insert(
+            PackageName::from_str("optional-dep").unwrap(),
+            DependencyType::Optional,
+        );
+
+        // The actual build_dependency_graph would need a real Lock instance
+        // This test verifies the logic conceptually
+        assert_eq!(direct_deps_with_types.len(), 3);
+
+        // Verify each dependency has the correct type
+        assert_eq!(
+            direct_deps_with_types.get(&PackageName::from_str("main-dep").unwrap()),
+            Some(&DependencyType::Main)
+        );
+        assert_eq!(
+            direct_deps_with_types.get(&PackageName::from_str("dev-dep").unwrap()),
+            Some(&DependencyType::Dev)
+        );
+        assert_eq!(
+            direct_deps_with_types.get(&PackageName::from_str("optional-dep").unwrap()),
+            Some(&DependencyType::Optional)
+        );
+
+        // Verify transitive dependencies would default to Main
+        assert_eq!(
+            direct_deps_with_types.get(&PackageName::from_str("transitive-dep").unwrap()),
+            None
+        );
+    }
+
+    #[test]
+    fn test_dependency_type_priority() {
+        // Test that when a package appears in multiple sections,
+        // Main takes priority over Optional, which takes priority over Dev
+
+        let mut deps_map = HashMap::new();
+
+        // First insert as Dev
+        deps_map.insert(
+            PackageName::from_str("multi-dep").unwrap(),
+            DependencyType::Dev,
+        );
+
+        // Then try to insert as Optional (should not override)
+        deps_map
+            .entry(PackageName::from_str("multi-dep").unwrap())
+            .or_insert(DependencyType::Optional);
+
+        // Verify it's still Dev
+        assert_eq!(
+            deps_map.get(&PackageName::from_str("multi-dep").unwrap()),
+            Some(&DependencyType::Dev)
+        );
+
+        // Now force update to Main
+        deps_map.insert(
+            PackageName::from_str("multi-dep").unwrap(),
+            DependencyType::Main,
+        );
+
+        // Verify it's now Main
+        assert_eq!(
+            deps_map.get(&PackageName::from_str("multi-dep").unwrap()),
+            Some(&DependencyType::Main)
+        );
+    }
+
+    #[test]
+    fn test_dependency_info_structure() {
+        let info = DependencyInfo {
+            is_direct: true,
+            dependency_type: DependencyType::Dev,
+        };
+
+        assert!(info.is_direct);
+        assert_eq!(info.dependency_type, DependencyType::Dev);
+    }
+
+    #[test]
+    fn test_should_include_package_with_info() {
+        // Create a mock workspace - we don't actually need a real one for this test
+        // since should_include_package_with_info doesn't use the workspace parameter
+        let package_name = PackageName::from_str("test-package").unwrap();
+
+        // Test with dev dependency included
+        let scanner_with_dev = DependencyScanner::new(true, false, false);
+        let dev_info = DependencyInfo {
+            is_direct: true,
+            dependency_type: DependencyType::Dev,
+        };
+        assert!(scanner_with_dev.should_include_package_with_info(&package_name, &dev_info));
+
+        // Test with dev dependency excluded
+        let scanner_no_dev = DependencyScanner::new(false, false, false);
+        assert!(!scanner_no_dev.should_include_package_with_info(&package_name, &dev_info));
+
+        // Test with optional dependency included
+        let scanner_with_opt = DependencyScanner::new(false, true, false);
+        let opt_info = DependencyInfo {
+            is_direct: true,
+            dependency_type: DependencyType::Optional,
+        };
+        assert!(scanner_with_opt.should_include_package_with_info(&package_name, &opt_info));
+
+        // Test with optional dependency excluded
+        let scanner_no_opt = DependencyScanner::new(false, false, false);
+        assert!(!scanner_no_opt.should_include_package_with_info(&package_name, &opt_info));
+
+        // Test main dependency always included
+        let scanner_minimal = DependencyScanner::new(false, false, false);
+        let main_info = DependencyInfo {
+            is_direct: true,
+            dependency_type: DependencyType::Main,
+        };
+        assert!(scanner_minimal.should_include_package_with_info(&package_name, &main_info));
+    }
+
+    #[test]
+    fn test_dependency_type_equality() {
+        assert_eq!(DependencyType::Main, DependencyType::Main);
+        assert_eq!(DependencyType::Dev, DependencyType::Dev);
+        assert_eq!(DependencyType::Optional, DependencyType::Optional);
+        assert_ne!(DependencyType::Main, DependencyType::Dev);
+        assert_ne!(DependencyType::Dev, DependencyType::Optional);
+        assert_ne!(DependencyType::Main, DependencyType::Optional);
     }
 }

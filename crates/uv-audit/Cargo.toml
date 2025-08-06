@@ -56,4 +56,5 @@ reqwest = { workspace = true }
 tracing = { workspace = true }
 
 # Async
+async-trait = { workspace = true }
 futures = { workspace = true }

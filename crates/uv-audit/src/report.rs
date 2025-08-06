@@ -181,12 +181,19 @@ impl ReportGenerator {
                     Severity::Low => "🟢",
                 };
 
+                let source_tag = if let Some(source) = &m.vulnerability.source {
+                    format!(" [source: {source}]")
+                } else {
+                    String::new()
+                };
+
                 writeln!(
                     output,
-                    "{}. {} {}",
+                    "{}. {} {}{}",
                     i + 1,
                     severity_icon,
-                    m.vulnerability.id
+                    m.vulnerability.id,
+                    source_tag
                 )?;
                 writeln!(
                     output,
@@ -284,6 +291,7 @@ impl ReportGenerator {
                         .collect(),
                     references: m.vulnerability.references.clone(),
                     is_direct: m.is_direct,
+                    source: m.vulnerability.source.clone(),
                 })
                 .collect(),
             fix_suggestions: report
@@ -347,6 +355,7 @@ struct JsonVulnerability {
     fixed_versions: Vec<String>,
     references: Vec<String>,
     is_direct: bool,
+    source: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -396,6 +405,7 @@ mod tests {
             cvss_score: Some(7.5),
             published: None,
             modified: None,
+            source: Some("test".to_string()),
         };
 
         let matches = vec![VulnerabilityMatch {
