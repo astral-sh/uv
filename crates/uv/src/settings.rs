@@ -19,13 +19,13 @@ use uv_cli::{
     ToolUpgradeArgs,
     options::{flag, resolver_installer_options, resolver_options},
 };
-use uv_client::Connectivity;
+use uv_client::{Connectivity, NetworkSettings};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
     ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
     KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, ProjectBuildBackend,
-    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
-    Upgrade, VersionControlSystem,
+    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl, Requirement};
 use uv_install_wheel::LinkMode;
@@ -74,7 +74,7 @@ pub(crate) struct GlobalSettings {
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
-        let network_settings = NetworkSettings::resolve(args, workspace);
+        let network_settings = resolve_network_settings(args, workspace);
         let python_preference = resolve_python_preference(args, workspace);
         Self {
             required_version: workspace
@@ -158,49 +158,42 @@ fn resolve_python_preference(
     }
 }
 
-/// The resolved network settings to use for any invocation of the CLI.
-#[derive(Debug, Clone)]
-pub(crate) struct NetworkSettings {
-    pub(crate) connectivity: Connectivity,
-    pub(crate) native_tls: bool,
-    pub(crate) allow_insecure_host: Vec<TrustedHost>,
-}
-
-impl NetworkSettings {
-    pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
-        let connectivity = if flag(args.offline, args.no_offline, "offline")
-            .combine(workspace.and_then(|workspace| workspace.globals.offline))
-            .unwrap_or(false)
-        {
-            Connectivity::Offline
-        } else {
-            Connectivity::Online
-        };
-        let native_tls = flag(args.native_tls, args.no_native_tls, "native-tls")
-            .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
-            .unwrap_or(false);
-        let allow_insecure_host = args
-            .allow_insecure_host
-            .as_ref()
-            .map(|allow_insecure_host| {
-                allow_insecure_host
-                    .iter()
-                    .filter_map(|value| value.clone().into_option())
-            })
-            .into_iter()
-            .flatten()
-            .chain(
-                workspace
-                    .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
-                    .into_iter()
-                    .flatten(),
-            )
-            .collect();
-        Self {
-            connectivity,
-            native_tls,
-            allow_insecure_host,
-        }
+pub(crate) fn resolve_network_settings(
+    args: &GlobalArgs,
+    workspace: Option<&FilesystemOptions>,
+) -> NetworkSettings {
+    let connectivity = if flag(args.offline, args.no_offline, "offline")
+        .combine(workspace.and_then(|workspace| workspace.globals.offline))
+        .unwrap_or(false)
+    {
+        Connectivity::Offline
+    } else {
+        Connectivity::Online
+    };
+    let native_tls = flag(args.native_tls, args.no_native_tls, "native-tls")
+        .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
+        .unwrap_or(false);
+    let allow_insecure_host = args
+        .allow_insecure_host
+        .as_ref()
+        .map(|allow_insecure_host| {
+            allow_insecure_host
+                .iter()
+                .filter_map(|value| value.clone().into_option())
+        })
+        .into_iter()
+        .flatten()
+        .chain(
+            workspace
+                .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
+                .into_iter()
+                .flatten(),
+        )
+        .collect();
+    NetworkSettings {
+        connectivity,
+        native_tls,
+        allow_insecure_host,
     }
 }
 

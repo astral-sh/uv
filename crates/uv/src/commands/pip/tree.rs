@@ -12,7 +12,7 @@ use tokio::sync::Semaphore;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, NetworkSettings, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, Preview};
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython};
 use uv_installer::SitePackages;
@@ -28,7 +28,6 @@ use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Display the installed packages in the current environment as a dependency tree.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -88,10 +87,8 @@ pub(crate) async fn pip_tree(
 
         let client_builder = BaseClientBuilder::new()
             .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+            .network_settings(&network_settings)
+            .keyring(keyring_provider);
 
         // Initialize the registry client.
         let client = RegistryClientBuilder::try_from(client_builder)?

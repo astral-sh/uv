@@ -14,6 +14,7 @@ use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
+use uv_client::NetworkSettings;
 use uv_configuration::{Preview, PreviewFeatures};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
@@ -36,7 +37,6 @@ use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InstallRequest {
@@ -393,9 +393,7 @@ pub(crate) async fn install(
     // Download and unpack the Python versions concurrently
     let client = uv_client::BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .network_settings(&network_settings)
         .build();
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
     let mut tasks = FuturesUnordered::new();

@@ -9,7 +9,9 @@ use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::Credentials;
 use uv_cache::Cache;
-use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{
+    AuthIntegration, BaseClient, BaseClientBuilder, NetworkSettings, RegistryClientBuilder,
+};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
@@ -21,7 +23,6 @@ use uv_warnings::{warn_user_once, write_error_chain};
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 pub(crate) async fn publish(
     paths: Vec<String>,
@@ -59,8 +60,7 @@ pub(crate) async fn publish(
     let upload_client = BaseClientBuilder::new()
         .retries(0)
         .keyring(keyring_provider)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .network_settings(network_settings)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
         // Set a very high timeout for uploads, connections are often 10x slower on upload than
@@ -95,9 +95,7 @@ pub(crate) async fn publish(
         );
         let registry_client_builder = RegistryClientBuilder::new(cache.clone())
             .retries_from_env()?
-            .native_tls(network_settings.native_tls)
-            .connectivity(network_settings.connectivity)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
+            .network_settings(network_settings)
             .index_locations(&index_locations)
             .keyring(keyring_provider);
         Some(CheckUrlClient {

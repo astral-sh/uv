@@ -16,7 +16,7 @@ use url::Url;
 
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, NetworkSettings};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
     InstallOptions, Preview,
@@ -70,7 +70,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -634,9 +634,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // base environment for the project.
                 let client_builder = BaseClientBuilder::new()
                     .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone());
+                    .network_settings(&network_settings);
 
                 // Resolve the Python request and requirement for the workspace.
                 let WorkspacePython {
@@ -876,9 +874,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
                     .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone());
+                    .network_settings(&network_settings);
 
                 // (1) Explicit request from user
                 let python_request = if let Some(request) = python.as_deref() {
@@ -947,9 +943,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     } else {
         let client_builder = BaseClientBuilder::new()
             .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+            .network_settings(&network_settings);
 
         let spec =
             RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
@@ -1623,9 +1617,7 @@ async fn resolve_gist_url(
 
     let client = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .network_settings(network_settings)
         .build();
 
     // Build the request with appropriate headers.
@@ -1723,9 +1715,7 @@ impl RunCommand {
 
                 let client = BaseClientBuilder::new()
                     .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone())
+                    .network_settings(&network_settings)
                     .build();
                 let response = client
                     .for_host(&url)

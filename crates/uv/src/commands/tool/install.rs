@@ -38,7 +38,8 @@ use crate::commands::tool::common::{
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{ResolverInstallerSettings, ResolverSettings};
+use uv_client::NetworkSettings;
 
 /// Install a tool.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -67,9 +68,7 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(&network_settings);
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -99,9 +98,7 @@ pub(crate) async fn install(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        .network_settings(&network_settings);
 
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref())?;

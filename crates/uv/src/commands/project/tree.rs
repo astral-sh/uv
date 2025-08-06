@@ -6,7 +6,7 @@ use futures::StreamExt;
 use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::RegistryClientBuilder;
+use uv_client::{NetworkSettings, RegistryClientBuilder};
 use uv_configuration::{Concurrency, DependencyGroups, Preview, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
 use uv_normalize::DefaultGroups;
@@ -28,7 +28,7 @@ use crate::commands::project::{
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -218,9 +218,7 @@ pub(crate) async fn tree(
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
             .retries_from_env()?
-            .native_tls(network_settings.native_tls)
-            .connectivity(network_settings.connectivity)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
+            .network_settings(network_settings)
             .index_locations(index_locations)
             .keyring(*keyring_provider)
             .build();

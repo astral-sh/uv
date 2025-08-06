@@ -5,12 +5,11 @@ use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_client::WrappedReqwestError;
+use uv_client::{NetworkSettings, WrappedReqwestError};
 use uv_fs::Simplified;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Attempt to update the uv binary.
 pub(crate) async fn self_update(
