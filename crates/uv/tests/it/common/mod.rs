@@ -465,6 +465,12 @@ impl TestContext {
         self
     }
 
+    /// Add a custom filter to the `TestContext`.
+    pub fn with_filter(mut self, filter: (String, String)) -> Self {
+        self.filters.push(filter);
+        self
+    }
+
     /// Clear filters on `TestContext`.
     pub fn clear_filters(mut self) -> Self {
         self.filters.clear();

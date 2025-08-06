@@ -6,8 +6,20 @@ use uv_static::EnvVars;
 
 use crate::common::{TestContext, site_packages_path, uv_snapshot};
 
+/// Filter the user scheme, which differs between Windows and Unix.
+fn user_scheme_bin_filter() -> (String, String) {
+    if cfg!(windows) {
+        (
+            r"\[USER_CONFIG_DIR\]/Python/Python\d+".to_string(),
+            "[USER_SCHEME]".to_string(),
+        )
+    } else {
+        (r"\[HOME\]/\.local".to_string(), "[USER_SCHEME]".to_string())
+    }
+}
+
 #[test]
-fn find_uv_bin_venv() -> anyhow::Result<()> {
+fn find_uv_bin_venv() {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
@@ -40,8 +52,6 @@ fn find_uv_bin_venv() -> anyhow::Result<()> {
     ----- stderr -----
     "
     );
-
-    Ok(())
 }
 
 #[test]
@@ -89,7 +99,8 @@ fn find_uv_bin_prefix() {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filter(user_scheme_bin_filter());
 
     // Install in a prefix directory
     let prefix = context.temp_dir.child("prefix");
@@ -128,7 +139,7 @@ fn find_uv_bin_prefix() {
       File "<string>", line 1, in <module>
       File "[TEMP_DIR]/prefix/lib/[PYTHON]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
         raise FileNotFoundError(path)
-    FileNotFoundError: [HOME]/.local/[BIN]/uv
+    FileNotFoundError: [USER_SCHEME]/[BIN]/uv
     "#
     );
 }
@@ -138,7 +149,8 @@ fn find_uv_bin_base_prefix() {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filter(user_scheme_bin_filter());
 
     // Test base prefix fallback by mutating sys.base_prefix
     // First, create a "base" environment with fake-uv installed
@@ -179,7 +191,7 @@ fn find_uv_bin_base_prefix() {
       File "<string>", line 1, in <module>
       File "[TEMP_DIR]/base-venv/lib/[PYTHON]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
         raise FileNotFoundError(path)
-    FileNotFoundError: [HOME]/.local/[BIN]/uv
+    FileNotFoundError: [USER_SCHEME]/[BIN]/uv
     "#
     );
 }
@@ -189,7 +201,8 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filter(user_scheme_bin_filter());
 
     // Create a minimal pyproject.toml
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -224,7 +237,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
       File "<string>", line 1, in <module>
       File "[CACHE_DIR]/archive-v0/[HASH]/lib/[PYTHON]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
         raise FileNotFoundError(path)
-    FileNotFoundError: [HOME]/.local/[BIN]/uv
+    FileNotFoundError: [USER_SCHEME]/[BIN]/uv
     "#
     );
 
@@ -236,7 +249,8 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filter(user_scheme_bin_filter());
 
     // Add the fake-uv package as a dependency
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -281,7 +295,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
       File "<string>", line 1, in <module>
       File "[SITE_PACKAGES]/uv/_find_uv.py", line 36, in find_uv_bin
         raise FileNotFoundError(path)
-    FileNotFoundError: [HOME]/.local/[BIN]/uv
+    FileNotFoundError: [USER_SCHEME]/[BIN]/uv
     "#
     );
 
