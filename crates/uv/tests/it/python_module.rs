@@ -1,4 +1,4 @@
-use crate::common::{TestContext, site_packages_path, uv_snapshot, venv_bin_path};
+use crate::common::{TestContext, site_packages_path, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileWriteStr, PathChild};
@@ -161,7 +161,7 @@ fn find_uv_bin() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(format!(r#"import sys, uv; sys.base_prefix = "{}"; print(uv.find_uv_bin())"#, base_venv.path().display()))
-        .env(EnvVars::PYTHONPATH, site_packages_path(&base_venv.path(), "python3.12")), @r#"
+        .env(EnvVars::PYTHONPATH, site_packages_path(base_venv.path(), "python3.12")), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -205,7 +205,7 @@ fn find_uv_bin() -> Result<()> {
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-      File "[CACHE_DIR]/archive-v0/[HASH]_/lib/[PYTHON]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
+      File "[CACHE_DIR]/archive-v0/[HASH]/lib/[PYTHON]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
         raise FileNotFoundError(path)
     FileNotFoundError: [HOME]/.local/[BIN]/uv
     "#
