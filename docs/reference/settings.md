@@ -224,6 +224,27 @@ pytest = ["pip"]
 
 ---
 
+### [`extra-build-variables`](#extra-build-variables) {: #extra-build-variables }
+
+Extra environment variables to set when building certain packages.
+
+Environment variables will be added to the environment when building the
+specified packages.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, dict[str, str]]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.extra-build-variables]
+flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The indexes to use when resolving dependencies.
@@ -1175,6 +1196,34 @@ additional packages. This is useful for packages that assume the presence of pac
     ```toml
     [extra-build-dependencies] 
     pytest = ["setuptools"]
+    ```
+
+---
+
+### [`extra-build-variables`](#extra-build-variables) {: #extra-build-variables }
+
+Extra environment variables to set when building certain packages.
+
+Environment variables will be added to the environment when building the
+specified packages.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, dict[str, str]]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.extra-build-variables]
+    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [tool.uv.extra-build-variables]
+    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
     ```
 
 ---
@@ -2696,6 +2745,37 @@ additional packages. This is useful for packages that assume the presence of pac
     [pip]
     [extra-build-dependencies]
     pytest = ["setuptools"]
+    ```
+
+---
+
+#### [`extra-build-variables`](#pip_extra-build-variables) {: #pip_extra-build-variables }
+<span id="extra-build-variables"></span>
+
+Extra environment variables to set when building certain packages.
+
+Environment variables will be added to the environment when building the
+specified packages.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, dict[str, str]]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    [extra-build-variables]
+    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    [extra-build-variables]
+    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
     ```
 
 ---

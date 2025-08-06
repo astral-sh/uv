@@ -187,6 +187,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -382,6 +385,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -580,6 +586,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -812,6 +821,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -975,6 +987,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -1184,6 +1199,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -1441,6 +1459,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -1710,6 +1731,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -1932,6 +1956,9 @@ fn resolve_find_links() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2117,6 +2144,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -2366,6 +2396,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2596,6 +2629,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2782,6 +2818,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -2952,6 +2991,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3120,6 +3162,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -3294,6 +3339,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -3457,6 +3505,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             no_build_isolation: None,
             no_build_isolation_package: None,
             extra_build_dependencies: None,
+            extra_build_variables: None,
             exclude_newer: None,
             exclude_newer_package: None,
             link_mode: Some(
@@ -3506,6 +3555,9 @@ fn resolve_tool() -> anyhow::Result<()> {
                 no_build_isolation: false,
                 no_build_isolation_package: [],
                 extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
                     {},
                 ),
                 prerelease: IfNecessaryOrExplicit,
@@ -3667,6 +3719,9 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -3905,6 +3960,9 @@ fn resolve_both() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -4147,6 +4205,9 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -4470,6 +4531,9 @@ fn resolve_config_file() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4555,7 +4619,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4733,6 +4797,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -4904,6 +4971,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -5096,6 +5166,9 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -5351,6 +5424,9 @@ fn index_priority() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -5581,6 +5657,9 @@ fn index_priority() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -5821,6 +5900,9 @@ fn index_priority() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6052,6 +6134,9 @@ fn index_priority() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -6294,6 +6379,9 @@ fn index_priority() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6527,6 +6615,9 @@ fn index_priority() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6704,6 +6795,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -6867,6 +6961,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7026,6 +7123,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -7191,6 +7291,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
             ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
             build_options: BuildOptions {
                 no_binary: None,
                 no_build: None,
@@ -7350,6 +7453,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -7512,6 +7618,9 @@ fn verify_hashes() -> anyhow::Result<()> {
             no_build_isolation: false,
             no_build_isolation_package: [],
             extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
                 {},
             ),
             build_options: BuildOptions {
@@ -7685,6 +7794,9 @@ fn preview_features() {
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
                 ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -7793,6 +7905,9 @@ fn preview_features() {
                 no_build_isolation: false,
                 no_build_isolation_package: [],
                 extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
                     {},
                 ),
                 prerelease: IfNecessaryOrExplicit,
@@ -7905,6 +8020,9 @@ fn preview_features() {
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
                 ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -8013,6 +8131,9 @@ fn preview_features() {
                 no_build_isolation: false,
                 no_build_isolation_package: [],
                 extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
                     {},
                 ),
                 prerelease: IfNecessaryOrExplicit,
@@ -8125,6 +8246,9 @@ fn preview_features() {
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
                 ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
@@ -8235,6 +8359,9 @@ fn preview_features() {
                 no_build_isolation: false,
                 no_build_isolation_package: [],
                 extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
                     {},
                 ),
                 prerelease: IfNecessaryOrExplicit,

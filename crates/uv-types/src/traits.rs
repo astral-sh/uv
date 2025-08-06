@@ -12,8 +12,9 @@ use uv_configuration::{
 };
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, DistributionId, ExtraBuildRequires, IndexCapabilities,
-    IndexLocations, InstalledDist, IsBuildBackendError, Requirement, Resolution, SourceDist,
+    CachedDist, DependencyMetadata, DistributionId, ExtraBuildRequires, ExtraBuildVariables,
+    IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError, Requirement, Resolution,
+    SourceDist,
 };
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
@@ -105,6 +106,9 @@ pub trait BuildContext {
 
     /// Get the extra build requirements.
     fn extra_build_requires(&self) -> &ExtraBuildRequires;
+
+    /// Get the extra build variables.
+    fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(

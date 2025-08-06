@@ -7,7 +7,9 @@ use uv_configuration::{
     ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, PackageConfigSettings,
     RequiredVersion, TargetTriple, TrustedPublishing,
 };
-use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex};
+use uv_distribution_types::{
+    ExtraBuildVariables, Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex,
+};
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -228,6 +230,35 @@ impl Combine for ExtraBuildDependencies {
 }
 
 impl Combine for Option<ExtraBuildDependencies> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for ExtraBuildVariables {
+    fn combine(mut self, other: Self) -> Self {
+        for (key, value) in other {
+            match self.entry(key) {
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    // Combine the maps, with self taking precedence
+                    let existing = entry.get_mut();
+                    for (k, v) in value {
+                        existing.entry(k).or_insert(v);
+                    }
+                }
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(value);
+                }
+            }
+        }
+        self
+    }
+}
+
+impl Combine for Option<ExtraBuildVariables> {
     fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
