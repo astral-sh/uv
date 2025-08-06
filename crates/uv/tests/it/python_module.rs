@@ -1,9 +1,10 @@
-use crate::common::{TestContext, site_packages_path, uv_snapshot};
-use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileWriteStr, PathChild};
 use indoc::{formatdoc, indoc};
+
 use uv_static::EnvVars;
+
+use crate::common::{TestContext, site_packages_path, uv_snapshot};
 
 /// Test that `find_uv_bin` works in various installation scenarios.
 ///
@@ -11,7 +12,7 @@ use uv_static::EnvVars;
 /// expensive (we need to construct an archive with a pretty large debug binary) and we can share a
 /// cached build across all the cases.
 #[test]
-fn find_uv_bin() -> Result<()> {
+fn find_uv_bin() -> anyhow::Result<()> {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
