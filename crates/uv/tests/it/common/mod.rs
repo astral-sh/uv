@@ -831,6 +831,20 @@ impl TestContext {
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .env_remove(EnvVars::XDG_CONFIG_HOME)
             .env_remove(EnvVars::XDG_DATA_HOME)
+            // I believe the intent of all tests is that they are run outside the
+            // context of an existing git repository. And when they aren't, state
+            // from the parent git repository can bleed into the behavior of `uv
+            // init` in a way that makes it difficult to test consistently. By
+            // setting GIT_CEILING_DIRECTORIES, we specifically prevent git from
+            // climbing up past the root of our test directory to look for any
+            // other git repos.
+            //
+            // If one wants to write a test specifically targeting uv within a
+            // pre-existing git repository, then the test should make the parent
+            // git repo explicitly. The GIT_CEILING_DIRECTORIES here shouldn't
+            // impact it, since it only prevents git from discovering repositories
+            // at or above the root.
+            .env(EnvVars::GIT_CEILING_DIRECTORIES, self.root.path())
             .current_dir(self.temp_dir.path());
 
         for (key, value) in &self.extra_env {
@@ -1207,6 +1221,9 @@ impl TestContext {
             .arg("-B")
             // Python on windows
             .env(EnvVars::PYTHONUTF8, "1");
+
+        self.add_shared_env(&mut command, false);
+
         command
     }
 
@@ -1411,20 +1428,6 @@ impl TestContext {
     /// all tests, but with the given binary.
     fn new_command_with(&self, bin: &Path) -> Command {
         let mut command = Command::new(bin);
-        // I believe the intent of all tests is that they are run outside the
-        // context of an existing git repository. And when they aren't, state
-        // from the parent git repository can bleed into the behavior of `uv
-        // init` in a way that makes it difficult to test consistently. By
-        // setting GIT_CEILING_DIRECTORIES, we specifically prevent git from
-        // climbing up past the root of our test directory to look for any
-        // other git repos.
-        //
-        // If one wants to write a test specifically targeting uv within a
-        // pre-existing git repository, then the test should make the parent
-        // git repo explicitly. The GIT_CEILING_DIRECTORIES here shouldn't
-        // impact it, since it only prevents git from discovering repositories
-        // at or above the root.
-        command.env(EnvVars::GIT_CEILING_DIRECTORIES, self.root.path());
         command
     }
 }
