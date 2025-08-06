@@ -9,6 +9,9 @@ use uv_static::EnvVars;
 /// We combine all these cases into a single test because building the `fake-uv` package is
 /// expensive (we need to construct an archive with a pretty large debug binary) and we can share a
 /// cached build across all the cases.
+///
+/// This test requires symlinks, so it's only run on Unix.
+#[cfg(unix)]
 #[test]
 fn find_uv_bin() -> Result<()> {
     let context = TestContext::new("3.12")

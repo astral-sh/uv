@@ -154,7 +154,8 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          robocopy "${{ github.workspace }}" "${{ env.UV_WORKSPACE }}" /E /SL
+          if ($LASTEXITCODE -le 3) { $LASTEXITCODE = 0 }
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
@@ -284,7 +285,8 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          robocopy "${{ github.workspace }}" "${{ env.UV_WORKSPACE }}" /E /SL
+          if ($LASTEXITCODE -le 3) { $LASTEXITCODE = 0 }
 
       - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
       - name: "Install required Python versions"
@@ -339,7 +341,8 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          robocopy "${{ github.workspace }}" "${{ env.UV_WORKSPACE }}" /E /SL
+          if ($LASTEXITCODE -le 3) { $LASTEXITCODE = 0 }
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
@@ -398,7 +401,8 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          robocopy "${{ github.workspace }}" "${{ env.UV_WORKSPACE }}" /E /SL
+          if ($LASTEXITCODE -le 3) { $LASTEXITCODE = 0 }
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
@@ -599,7 +603,8 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          robocopy "${{ github.workspace }}" "${{ env.UV_WORKSPACE }}" /E /SL
+          if ($LASTEXITCODE -le 3) { $LASTEXITCODE = 0 }
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
@@ -634,7 +639,8 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          robocopy "${{ github.workspace }}" "${{ env.UV_WORKSPACE }}" /E /SL
+          if ($LASTEXITCODE -le 3) { $LASTEXITCODE = 0 }
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
