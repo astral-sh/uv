@@ -2,6 +2,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileWriteStr, PathChild};
 use indoc::{formatdoc, indoc};
 
+use uv_fs::Simplified;
 use uv_static::EnvVars;
 
 use crate::common::{TestContext, site_packages_path, uv_snapshot};
@@ -10,7 +11,7 @@ use crate::common::{TestContext, site_packages_path, uv_snapshot};
 fn user_scheme_bin_filter() -> (String, String) {
     if cfg!(windows) {
         (
-            r"\[USER_CONFIG_DIR\]/Python/Python\d+".to_string(),
+            r"\[USER_CONFIG_DIR\][\\/]Python[\\/]Python\d+".to_string(),
             "[USER_SCHEME]".to_string(),
         )
     } else {
@@ -61,7 +62,10 @@ fn find_uv_bin_target() {
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
-        .with_filter(user_scheme_bin_filter());
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // with_filtered_virtualenv_bin only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin[\\/]".to_string(), "/[BIN]/".to_string()));
 
     // Install in a target directory
     uv_snapshot!(context.filters(), context.pip_install()
@@ -182,7 +186,7 @@ fn find_uv_bin_base_prefix() {
     // Mutate `base_prefix` to simulate lookup in a system Python installation
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(format!(r#"import sys, uv; sys.base_prefix = "{}"; print(uv.find_uv_bin())"#, base_venv.path().display()))
+        .arg(format!(r#"import sys, uv; sys.base_prefix = "{}"; print(uv.find_uv_bin())"#, base_venv.path().portable_display()))
         .env(EnvVars::PYTHONPATH, site_packages_path(base_venv.path(), "python3.12")), @r#"
     success: false
     exit_code: 1
@@ -266,7 +270,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         [tool.uv.sources]
         uv = {{ path = "{}" }}
         "#,
-        context.workspace_root.join("scripts/packages/fake-uv").display()
+        context.workspace_root.join("scripts/packages/fake-uv").portable_display()
     })?;
 
     // When running in an ephemeral environment, we should find the binary in the project
