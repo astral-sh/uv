@@ -729,7 +729,7 @@ impl TestContext {
         ));
         // Filter archive hashes
         filters.push((
-            r"archive-v(\d+)[\\/][A-Za-z0-9]+".to_string(),
+            r"archive-v(\d+)[\\/][A-Za-z0-9\-]+".to_string(),
             "archive-v$1/[HASH]".to_string(),
         ));
 

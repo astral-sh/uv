@@ -1,5 +1,6 @@
-use crate::common::{TestContext, site_packages_path, uv_snapshot};
+use crate::common::{TestContext, site_packages_path, uv_snapshot, venv_bin_path};
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileWriteStr, PathChild};
 use indoc::{formatdoc, indoc};
 use uv_static::EnvVars;
@@ -127,6 +128,45 @@ fn find_uv_bin() -> Result<()> {
     "
     );
 
+    // Test base prefix fallback by mutating sys.base_prefix
+    // First, create a "base" environment with fake-uv installed
+    let base_venv = context.temp_dir.child("base-venv");
+    context.venv().arg(base_venv.path()).assert().success();
+
+    // Install fake-uv in the "base" venv
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python")
+        .arg(base_venv.path())
+        .arg("-r")
+        .arg("requirements.txt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: base-venv
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+    "
+    );
+
+    context.venv().assert().success();
+
+    // Mutate `base_prefix` to simulate lookup in a system Python installation
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg(format!(r#"import sys, uv; sys.base_prefix = "{}"; print(uv.find_uv_bin())"#, base_venv.path().display()))
+        .env(EnvVars::PYTHONPATH, site_packages_path(&base_venv.path(), "python3.12")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    /Users/zb/.local/[BIN]/uv
+
+    ----- stderr -----
+    "
+    );
+
     // Create a minimal pyproject.toml
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -150,8 +190,6 @@ fn find_uv_bin() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Audited in [TIME]
     Resolved 1 package in [TIME]
