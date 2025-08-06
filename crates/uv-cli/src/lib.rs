@@ -3662,7 +3662,7 @@ pub struct AddArgs {
     #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    #[arg(long, overrides_with = "editable", hide = true)]
+    #[arg(long, overrides_with = "editable", hide = true, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Add a dependency as provided.
@@ -4164,7 +4164,7 @@ pub struct ExportArgs {
 
     /// Export any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long)]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Include hashes for all dependencies.

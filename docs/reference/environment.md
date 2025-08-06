@@ -252,8 +252,8 @@ directories.
 ### `UV_NO_EDITABLE`
 
 Equivalent to the `--no-editable` command-line argument. If set, uv
-installs any editable dependencies, including the project and any workspace members, as
-non-editable
+installs or exports any editable dependencies, including the project and any workspace
+members, as non-editable.
 
 ### `UV_NO_ENV_FILE`
 
