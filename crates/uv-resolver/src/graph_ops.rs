@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::collections::hash_map::Entry;
 
 use petgraph::graph::{EdgeIndex, NodeIndex};
@@ -6,7 +7,7 @@ use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{ConflictItem, Conflicts};
+use uv_pypi_types::{ConflictItem, Conflicts, Inference};
 
 use crate::resolution::ResolutionGraphNode;
 use crate::universal_marker::UniversalMarker;
@@ -99,27 +100,6 @@ pub(crate) fn simplify_conflict_markers(
     conflicts: &Conflicts,
     graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
 ) {
-    /// An inference about whether a conflicting item is always included or
-    /// excluded.
-    ///
-    /// We collect these for each node in the graph after determining which
-    /// extras/groups are activated for each node. Once we know what's
-    /// activated, we can infer what must also be *inactivated* based on what's
-    /// conflicting with it. So for example, if we have a conflict marker like
-    /// `extra == 'foo' and extra != 'bar'`, and `foo` and `bar` have been
-    /// declared as conflicting, and we are in a part of the graph where we
-    /// know `foo` must be activated, then it follows that `extra != 'bar'`
-    /// must always be true. Because if it were false, it would imply both
-    /// `foo` and `bar` were activated simultaneously, which uv guarantees
-    /// won't happen.
-    ///
-    /// We then use these inferences to simplify the conflict markers.
-    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-    struct Inference {
-        item: ConflictItem,
-        included: bool,
-    }
-
     // Do nothing if there are no declared conflicts. Without any declared
     // conflicts, we know we have no conflict markers and thus nothing to
     // simplify by determining which extras are activated at different points
@@ -198,11 +178,11 @@ pub(crate) fn simplify_conflict_markers(
         }
     }
 
-    let mut inferences: FxHashMap<NodeIndex, Vec<FxHashSet<Inference>>> = FxHashMap::default();
+    let mut inferences: FxHashMap<NodeIndex, Vec<BTreeSet<Inference>>> = FxHashMap::default();
     for (node_id, sets) in activated {
         let mut new_sets = Vec::with_capacity(sets.len());
         for set in sets {
-            let mut new_set = FxHashSet::default();
+            let mut new_set = BTreeSet::default();
             for item in set {
                 for conflict_set in conflicts.iter() {
                     if !conflict_set.contains(item.package(), item.as_ref().conflict()) {
@@ -270,19 +250,27 @@ pub(crate) fn simplify_conflict_markers(
                     Some((inf.item.package(), inf.item.group()?))
                 })
                 .collect::<Vec<_>>();
-            graph[edge_index].conflict().evaluate(&extras, &groups)
+            // Notably, the marker must be possible to satisfy with the extras and groups alone.
+            // For example, when `a` and `b` conflict, this marker does not simplify:
+            // ```
+            // (platform_machine == 'x86_64' and extra == 'extra-5-foo-b') or extra == 'extra-5-foo-a'
+            // ````
+            graph[edge_index].evaluate_only_extras(&extras, &groups)
         });
-        if !all_paths_satisfied {
-            continue;
-        }
-        for set in inference_sets {
-            for inf in set {
-                if inf.included {
-                    graph[edge_index].assume_conflict_item(&inf.item);
-                } else {
-                    graph[edge_index].assume_not_conflict_item(&inf.item);
+        if all_paths_satisfied {
+            for set in inference_sets {
+                for inf in set {
+                    // TODO(konsti): Now that `Inference` is public, move more `included` handling
+                    // to `UniversalMarker`.
+                    if inf.included {
+                        graph[edge_index].assume_conflict_item(&inf.item);
+                    } else {
+                        graph[edge_index].assume_not_conflict_item(&inf.item);
+                    }
                 }
             }
+        } else {
+            graph[edge_index].unify_inference_sets(inference_sets);
         }
     }
 }

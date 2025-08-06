@@ -1,9 +1,13 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
+
+use itertools::Itertools;
 use tracing::trace;
+
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictPackage, ResolverMarkerEnvironment};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::resolver::ForkState;
@@ -374,15 +378,62 @@ impl ResolverEnvironment {
     /// This is useful in contexts where one wants to display a message
     /// relating to a particular fork, but either no message or an entirely
     /// different message when this isn't a fork.
-    pub(crate) fn end_user_fork_display(&self) -> Option<impl std::fmt::Display + '_> {
-        match self.kind {
+    pub(crate) fn end_user_fork_display(&self) -> Option<String> {
+        match &self.kind {
             Kind::Specific { .. } => None,
-            Kind::Universal { ref markers, .. } => {
-                if markers.is_true() {
-                    None
-                } else {
-                    Some(format!("split ({markers:?})"))
+            Kind::Universal {
+                initial_forks: _,
+                markers,
+                include,
+                exclude,
+            } => {
+                let format_conflict_item = |conflict_item: &ConflictItem| {
+                    format!(
+                        "{}{}",
+                        conflict_item.package(),
+                        match conflict_item.conflict() {
+                            ConflictPackage::Extra(extra) => format!("[{extra}]"),
+                            ConflictPackage::Group(group) => {
+                                format!("[group:{group}]")
+                            }
+                        }
+                    )
+                };
+
+                if markers.is_true() && include.is_empty() && exclude.is_empty() {
+                    return None;
                 }
+
+                let mut descriptors = Vec::new();
+                if !markers.is_true() {
+                    descriptors.push(format!("markers: {markers:?}"));
+                }
+                if !include.is_empty() {
+                    descriptors.push(format!(
+                        "included: {}",
+                        // Sort to ensure stable error messages
+                        include
+                            .iter()
+                            .map(format_conflict_item)
+                            .collect::<BTreeSet<_>>()
+                            .into_iter()
+                            .join(", "),
+                    ));
+                }
+                if !exclude.is_empty() {
+                    descriptors.push(format!(
+                        "excluded: {}",
+                        // Sort to ensure stable error messages
+                        exclude
+                            .iter()
+                            .map(format_conflict_item)
+                            .collect::<BTreeSet<_>>()
+                            .into_iter()
+                            .join(", "),
+                    ));
+                }
+
+                Some(format!("split ({})", descriptors.join("; ")))
             }
         }
     }

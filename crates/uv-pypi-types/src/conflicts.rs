@@ -756,3 +756,24 @@ impl From<SchemaConflictItem> for ConflictItemWire {
         }
     }
 }
+
+/// An inference about whether a conflicting item is always included or
+/// excluded.
+///
+/// We collect these for each node in the graph after determining which
+/// extras/groups are activated for each node. Once we know what's
+/// activated, we can infer what must also be *inactivated* based on what's
+/// conflicting with it. So for example, if we have a conflict marker like
+/// `extra == 'foo' and extra != 'bar'`, and `foo` and `bar` have been
+/// declared as conflicting, and we are in a part of the graph where we
+/// know `foo` must be activated, then it follows that `extra != 'bar'`
+/// must always be true. Because if it were false, it would imply both
+/// `foo` and `bar` were activated simultaneously, which uv guarantees
+/// won't happen.
+///
+/// We then use these inferences to simplify the conflict markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct Inference {
+    pub included: bool,
+    pub item: ConflictItem,
+}
