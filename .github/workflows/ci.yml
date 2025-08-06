@@ -382,13 +382,15 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     name: "test windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
       matrix:
-        # Note, we exclude `aarch64` because it's not supported by the GitHub runner
-        target-arch: ["x86_64", "i686"]
+        include:
+          - { runner: windows-latest, target-arch: "x86_64" }
+          - { runner: windows-latest, target-arch: "i686" }
+          - { runner: windows-11-arm, target-arch: "aarch64" }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Setup Dev Drive
