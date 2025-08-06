@@ -6,32 +6,16 @@ use uv_static::EnvVars;
 
 use crate::common::{TestContext, site_packages_path, uv_snapshot};
 
-/// Test that `find_uv_bin` works in various installation scenarios.
-///
-/// We combine all these cases into a single test because building the `fake-uv` package is
-/// expensive (we need to construct an archive with a pretty large debug binary) and we can share a
-/// cached build across all the cases.
 #[test]
-fn find_uv_bin() -> anyhow::Result<()> {
+fn find_uv_bin_venv() -> anyhow::Result<()> {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
 
-    // Create a requirements.txt file to avoid forced rebuilds
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str(&format!(
-        "{}",
-        context
-            .workspace_root
-            .join("scripts/packages/fake-uv")
-            .display()
-    ))?;
-
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt"), @r"
+        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -57,13 +41,19 @@ fn find_uv_bin() -> anyhow::Result<()> {
     "
     );
 
-    // Remove the virtual environment to avoid polluting subsequent tests
-    fs_err::remove_dir_all(&context.venv)?;
+    Ok(())
+}
+
+#[test]
+fn find_uv_bin_target() {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install in a target directory
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
+        .arg(context.workspace_root.join("scripts/packages/fake-uv"))
         .arg("--target")
         .arg("target"), @r"
     success: true
@@ -71,8 +61,9 @@ fn find_uv_bin() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     "
@@ -91,13 +82,20 @@ fn find_uv_bin() -> anyhow::Result<()> {
     ----- stderr -----
     "
     );
+}
+
+#[test]
+fn find_uv_bin_prefix() {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install in a prefix directory
     let prefix = context.temp_dir.child("prefix");
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
+        .arg(context.workspace_root.join("scripts/packages/fake-uv"))
         .arg("--prefix")
         .arg(prefix.path()), @r"
     success: true
@@ -105,8 +103,9 @@ fn find_uv_bin() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     "
@@ -132,6 +131,14 @@ fn find_uv_bin() -> anyhow::Result<()> {
     FileNotFoundError: [HOME]/.local/[BIN]/uv
     "#
     );
+}
+
+#[test]
+fn find_uv_bin_base_prefix() {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Test base prefix fallback by mutating sys.base_prefix
     // First, create a "base" environment with fake-uv installed
@@ -142,8 +149,7 @@ fn find_uv_bin() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python")
         .arg(base_venv.path())
-        .arg("-r")
-        .arg("requirements.txt"), @r"
+        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -151,6 +157,7 @@ fn find_uv_bin() -> anyhow::Result<()> {
     ----- stderr -----
     Using Python 3.12.[X] environment at: base-venv
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     "
@@ -175,6 +182,14 @@ fn find_uv_bin() -> anyhow::Result<()> {
     FileNotFoundError: [HOME]/.local/[BIN]/uv
     "#
     );
+}
+
+#[test]
+fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Create a minimal pyproject.toml
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -202,6 +217,7 @@ fn find_uv_bin() -> anyhow::Result<()> {
     Resolved 1 package in [TIME]
     Audited in [TIME]
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     Traceback (most recent call last):
@@ -211,6 +227,16 @@ fn find_uv_bin() -> anyhow::Result<()> {
     FileNotFoundError: [HOME]/.local/[BIN]/uv
     "#
     );
+
+    Ok(())
+}
+
+#[test]
+fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Add the fake-uv package as a dependency
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -242,6 +268,7 @@ fn find_uv_bin() -> anyhow::Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     Resolved 3 packages in [TIME]

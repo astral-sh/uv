@@ -1,2 +1,3 @@
-This fake package symlinks to a debug build of uv in-tree, allowing testing of the uv Python module
-without building uv again.
+This fake uv package symlinks the Python module of uv in-tree with a fake `uv` binary, allowing
+testing of the Python module behaviors. Consumers can replace the `uv` binary with a debug binary or
+similar if they need it to actually work.
