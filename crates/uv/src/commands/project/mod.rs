@@ -263,6 +263,9 @@ pub(crate) enum ProjectError {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
+    RetryParsing(#[from] uv_client::RetryParsingError),
+
+    #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }
 
@@ -1708,7 +1711,7 @@ pub(crate) async fn resolve_names(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()
-        .map_err(uv_requirements::Error::ClientError)?
+        .map_err(|err| uv_requirements::Error::ClientError(err.into()))?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)

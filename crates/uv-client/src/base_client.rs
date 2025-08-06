@@ -1,12 +1,12 @@
 use std::error::Error;
 use std::fmt::Debug;
 use std::fmt::Write;
+use std::num::ParseIntError;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{env, io, iter};
 
-use anyhow::Context;
 use anyhow::anyhow;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
@@ -22,6 +22,7 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
 };
+use thiserror::Error;
 use tracing::{debug, trace};
 use url::ParseError;
 use url::Url;
@@ -42,7 +43,9 @@ use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
 
+/// Do not use this value directly outside tests, use [`retries_from_env`] instead.
 pub const DEFAULT_RETRIES: u32 = 3;
+
 /// Maximum number of redirects to follow before giving up.
 ///
 /// This is the default used by [`reqwest`].
@@ -169,23 +172,13 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
-    /// Read the retry count from [`EnvVars::UV_HTTP_RETRIES`] if set, otherwise, make no change.
+    /// Read the retry count from [`EnvVars::UV_HTTP_RETRIES`] if set, otherwise use the default
+    /// retries.
     ///
     /// Errors when [`EnvVars::UV_HTTP_RETRIES`] is not a valid u32.
-    pub fn retries_from_env(self) -> anyhow::Result<Self> {
-        // TODO(zanieb): We should probably parse this in another layer, but there's not a natural
-        // fit for it right now
-        if let Some(value) = env::var_os(EnvVars::UV_HTTP_RETRIES) {
-            Ok(self.retries(
-                value
-                    .to_string_lossy()
-                    .as_ref()
-                    .parse::<u32>()
-                    .context("Failed to parse `UV_HTTP_RETRIES`")?,
-            ))
-        } else {
-            Ok(self)
-        }
+    pub fn retries_from_env(mut self) -> Result<Self, RetryParsingError> {
+        self.retries = retries_from_env()?;
+        Ok(self)
     }
 
     #[must_use]
@@ -980,6 +973,26 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
 /// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
 fn find_sources<E: Error + 'static>(orig: &dyn Error) -> impl Iterator<Item = &E> {
     iter::successors(find_source::<E>(orig), |&err| find_source(err))
+}
+
+// TODO(konsti): Remove once we find a native home for `retries_from_env`
+#[derive(Debug, Error)]
+pub enum RetryParsingError {
+    #[error("Failed to parse `UV_HTTP_RETRIES`")]
+    ParseInt(#[from] ParseIntError),
+}
+
+/// Read the retry count from [`EnvVars::UV_HTTP_RETRIES`] if set, otherwise, make no change.
+///
+/// Errors when [`EnvVars::UV_HTTP_RETRIES`] is not a valid u32.
+pub fn retries_from_env() -> Result<u32, RetryParsingError> {
+    // TODO(zanieb): We should probably parse this in another layer, but there's not a natural
+    // fit for it right now
+    if let Some(value) = env::var_os(EnvVars::UV_HTTP_RETRIES) {
+        Ok(value.to_string_lossy().as_ref().parse::<u32>()?)
+    } else {
+        Ok(DEFAULT_RETRIES)
+    }
 }
 
 #[cfg(test)]
