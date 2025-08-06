@@ -67,17 +67,15 @@ fn find_uv_bin() -> Result<()> {
         .arg("requirements.txt")
         .arg("--target")
         .arg("target"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
-      × Failed to build `uv @ file://[WORKSPACE]/scripts/packages/fake-uv`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `uv-build>=0.8.0`
-      ╰─▶ Because there are no versions of uv-build and you require uv-build>=0.8.0, we can conclude that your requirements are unsatisfiable.
+    Installed 1 package in [TIME]
+     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     "
     );
 
@@ -85,16 +83,14 @@ fn find_uv_bin() -> Result<()> {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg("import uv; print(uv.find_uv_bin())")
-        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path()), @r#"
-    success: false
-    exit_code: 1
+        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path()), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    /Users/zb/.local/[BIN]/uv
 
     ----- stderr -----
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-    ModuleNotFoundError: No module named 'uv'
-    "#
+    "
     );
 
     // Install in a prefix directory
@@ -105,17 +101,15 @@ fn find_uv_bin() -> Result<()> {
         .arg("requirements.txt")
         .arg("--prefix")
         .arg(prefix.path()), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
-      × Failed to build `uv @ file://[WORKSPACE]/scripts/packages/fake-uv`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `uv-build>=0.8.0`
-      ╰─▶ Because there are no versions of uv-build and you require uv-build>=0.8.0, we can conclude that your requirements are unsatisfiable.
+    Installed 1 package in [TIME]
+     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     "
     );
 
@@ -126,16 +120,14 @@ fn find_uv_bin() -> Result<()> {
         .env(
             EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
-        ), @r#"
-    success: false
-    exit_code: 1
+        ), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    /Users/zb/.local/[BIN]/uv
 
     ----- stderr -----
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-    ModuleNotFoundError: No module named 'uv'
-    "#
+    "
     );
 
     // Create a minimal pyproject.toml
@@ -155,7 +147,7 @@ fn find_uv_bin() -> Result<()> {
         .arg(context.workspace_root.join("scripts/packages/fake-uv"))
         .arg("python")
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r"
+        .arg("import uv; print(uv.find_uv_bin())"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -166,11 +158,14 @@ fn find_uv_bin() -> Result<()> {
     Resolved 1 package in [TIME]
     Audited in [TIME]
     Resolved 1 package in [TIME]
-      × Failed to build `uv @ file://[WORKSPACE]/scripts/packages/fake-uv`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `uv-build>=0.8.0`
-      ╰─▶ Because there are no versions of uv-build and you require uv-build>=0.8.0, we can conclude that your requirements are unsatisfiable.
-    "
+    Installed 1 package in [TIME]
+     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+      File "[CACHE_DIR]/archive-v0/KAPXYug5EtMBzhbPVqTGD/lib/[PYTHON]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
+        raise FileNotFoundError(path)
+    FileNotFoundError: [HOME]/.local/[BIN]/uv
+    "#
     );
 
     // Add the fake-uv package as a dependency
@@ -196,19 +191,27 @@ fn find_uv_bin() -> Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import uv; print(uv.find_uv_bin())"),
-     @r"
+     @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `uv @ file://[WORKSPACE]/scripts/packages/fake-uv`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `uv-build>=0.8.0`
-      ╰─▶ Because there are no versions of uv-build and you require uv-build>=0.8.0, we can conclude that your requirements are unsatisfiable.
-      help: `uv` was included because `test-project` (v1.0.0) depends on `uv`
-    "
+    Installed 1 package in [TIME]
+     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+      File "[SITE_PACKAGES]/uv/_find_uv.py", line 36, in find_uv_bin
+        raise FileNotFoundError(path)
+    FileNotFoundError: [HOME]/.local/[BIN]/uv
+    "#
     );
 
     Ok(())
