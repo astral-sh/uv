@@ -23,7 +23,8 @@ fn find_uv_bin_venv() {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filter(user_scheme_bin_filter());
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
@@ -59,7 +60,8 @@ fn find_uv_bin_target() {
     let context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
-        .with_filtered_exe_suffix();
+        .with_filtered_exe_suffix()
+        .with_filter(user_scheme_bin_filter());
 
     // Install in a target directory
     uv_snapshot!(context.filters(), context.pip_install()
