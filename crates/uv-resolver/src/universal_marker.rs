@@ -148,14 +148,7 @@ impl UniversalMarker {
         for conflict_set in conflict_sets {
             let mut marker = self.marker;
             for inference in conflict_set {
-                let extra = match inference.item.conflict() {
-                    ConflictPackage::Extra(extra) => {
-                        encode_package_extra(inference.item.package(), extra)
-                    }
-                    ConflictPackage::Group(group) => {
-                        encode_package_group(inference.item.package(), group)
-                    }
-                };
+                let extra = encode_conflict_item(&inference.item);
 
                 marker = if inference.included {
                     marker.simplify_extras_with(|candidate| *candidate == extra)
@@ -509,6 +502,14 @@ impl std::fmt::Debug for ConflictMarker {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // This is a little more succinct than the default.
         write!(f, "ConflictMarker({:?})", self.marker)
+    }
+}
+
+/// Encodes the given conflict into a valid `extra` value in a PEP 508 marker.
+fn encode_conflict_item(conflict: &ConflictItem) -> ExtraName {
+    match conflict.conflict() {
+        ConflictPackage::Extra(extra) => encode_package_extra(conflict.package(), extra),
+        ConflictPackage::Group(group) => encode_package_group(conflict.package(), group),
     }
 }
 
