@@ -687,9 +687,6 @@ jobs:
       #       #(konsti) TODO: Enable this test on all platforms,currently `find_uv_bin` is failingto discover uv here.
       #       # python -m ${MODULE_NAME} --helppython -m ${MODULE_NAME} --help
       #       uvx --help
-      #     env: |
-      #       PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
-      #       MODULE_NAME: ${{ env.MODULE_NAME }}
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
