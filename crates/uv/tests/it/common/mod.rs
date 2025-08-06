@@ -1182,7 +1182,20 @@ impl TestContext {
     }
 
     pub fn python_command(&self) -> Command {
-        let mut command = self.new_command_with(&self.interpreter());
+        let mut interpreter = self.interpreter();
+
+        // If there's not a virtual environment, use the first Python interpreter in the context
+        if !interpreter.exists() {
+            interpreter.clone_from(
+                &self
+                    .python_versions
+                    .first()
+                    .expect("At least one Python version is required")
+                    .1,
+            );
+        }
+
+        let mut command = self.new_command_with(&interpreter);
         command
             // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
             // https://github.com/python/cpython/issues/75953
