@@ -741,6 +741,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     LockMode::Frozen
                 } else if locked {
                     LockMode::Locked(venv.interpreter())
+                } else if isolated {
+                    LockMode::DryRun(venv.interpreter())
                 } else {
                     LockMode::Write(venv.interpreter())
                 };
