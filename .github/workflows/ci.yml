@@ -1934,8 +1934,8 @@ jobs:
 
       - name: "Test `uv run` with system Python"
         run: |
-          ./uv run -p python3.11 python -c "import debian"
-          ./uv run -p python3.11 --with anyio python -c "import debian"
+          ./uv run -p python3.11 -v python -c "import debian"
+          ./uv run -p python3.11 -v --with anyio python -c "import debian"
 
   system-test-fedora:
     timeout-minutes: 10

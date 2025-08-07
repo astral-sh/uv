@@ -1084,6 +1084,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 "import site; {}",
                 std::iter::once(requirements_site_packages.as_ref())
                     .chain(base_site_packages.iter().map(AsRef::as_ref))
+                    .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
                     .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
                     .collect::<Vec<_>>()
                     .join("; ")
