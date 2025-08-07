@@ -72,7 +72,7 @@ Authentication can come from the following sources, in order of precedence:
 
 - The URL, e.g., `https://<user>:<password>@<hostname>/...`
 - A [`.netrc`](https://everything.curl.dev/usingcurl/netrc) configuration file
-- A [keyring](https://github.com/jaraco/keyring) provider (requires opt-in)
+- A keyring provider (requires opt-in)
 
 If authentication is found for a single index URL or net location (scheme, host, and port), it will
 be cached for the duration of the command and used for other queries to that index or net location.
@@ -81,8 +81,15 @@ Authentication is not cached across invocations of uv.
 `.netrc` authentication is enabled by default, and will respect the `NETRC` environment variable if
 defined, falling back to `~/.netrc` if not.
 
-To enable keyring-based authentication, pass the `--keyring-provider subprocess` command-line
-argument to uv, or set `UV_KEYRING_PROVIDER=subprocess`.
+To enable keyring-based authentication, pass a `--keyring-provider` command-line argument to uv, or
+set the `UV_KEYRING_PROVIDER` env var. uv supports two keyring provider options:
+
+- `--keyring provider subprocess` instructs uv to use the
+  [Python keyring plugin](https://github.com/jaraco/keyring).
+- `--keyring provider native` instructs uv to use the system keyring (Keychain Services on macOS,
+  Secret Service on Linux, and the Windows Credential Manager on Windows). Currently, this is used
+  to automatically persist credentials for an index after successful authentication. If the username
+  is provided for the index, uv will automatically fetch these credentials on future invocations.
 
 Authentication may be used for hosts specified in the following contexts:
 
