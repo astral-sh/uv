@@ -1,6 +1,4 @@
 use crate::Error;
-use std::fmt;
-use std::fmt::Display;
 use std::str::FromStr;
 
 /// Architecture variants, e.g., with support for different instruction sets
@@ -76,6 +74,13 @@ impl Arch {
     }
 
     pub fn from_env() -> Self {
+        #[cfg(test)]
+        {
+            if let Some(arch) = test_support::get_mock_arch() {
+                return arch;
+            }
+        }
+
         Self {
             family: target_lexicon::HOST.architecture,
             variant: None,
@@ -116,8 +121,8 @@ impl Arch {
     }
 }
 
-impl Display for Arch {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Arch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.family {
             target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686) => {
                 write!(f, "x86")?;
@@ -191,8 +196,8 @@ impl FromStr for ArchVariant {
     }
 }
 
-impl Display for ArchVariant {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ArchVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::V2 => write!(f, "v2"),
             Self::V3 => write!(f, "v3"),
@@ -244,5 +249,60 @@ impl From<&uv_platform_tags::Arch> for Arch {
             ),
             uv_platform_tags::Arch::Wasm32 => Self::new(target_lexicon::Architecture::Wasm32, None),
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+    use std::cell::RefCell;
+
+    thread_local! {
+        static MOCK_ARCH: RefCell<Option<Arch>> = RefCell::new(None);
+    }
+
+    pub(crate) fn get_mock_arch() -> Option<Arch> {
+        MOCK_ARCH.with(|arch| *arch.borrow())
+    }
+
+    fn set_mock_arch(arch: Option<Arch>) {
+        MOCK_ARCH.with(|mock| *mock.borrow_mut() = arch);
+    }
+
+    pub(crate) struct MockArchGuard;
+
+    impl MockArchGuard {
+        pub(crate) fn new(arch: Arch) -> Self {
+            set_mock_arch(Some(arch));
+            MockArchGuard
+        }
+    }
+
+    impl Drop for MockArchGuard {
+        fn drop(&mut self) {
+            set_mock_arch(None);
+        }
+    }
+
+    /// Run a function with a mocked architecture.
+    /// The mock is automatically cleaned up after the function returns.
+    pub(crate) fn run_with_arch<F, R>(arch: Arch, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let _guard = MockArchGuard::new(arch);
+        f()
+    }
+
+    /// Helper to create common architectures for testing
+    pub(crate) fn x86_64() -> Arch {
+        Arch::new(target_lexicon::Architecture::X86_64, None)
+    }
+
+    pub(crate) fn aarch64() -> Arch {
+        Arch::new(
+            target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+            None,
+        )
     }
 }

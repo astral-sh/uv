@@ -503,17 +503,24 @@ impl FromStr for PythonInstallationKey {
     fn from_str(key: &str) -> Result<Self, Self::Err> {
         let parts = key.split('-').collect::<Vec<_>>();
 
-        // We need at least implementation-version-platform (where platform is os-arch-libc)
-        if parts.len() < 5 {
+        // We need exactly implementation-version-os-arch-libc
+        if parts.len() != 5 {
             return Err(PythonInstallationKeyError::ParseError(
                 key.to_string(),
-                "not enough `-`-separated values".to_string(),
+                format!(
+                    "expected exactly 5 `-`-separated values, got {}",
+                    parts.len()
+                ),
             ));
         }
 
-        let implementation = LenientImplementationName::from(parts[0]);
+        let [implementation_str, version_str, os, arch, libc] = parts.as_slice() else {
+            unreachable!()
+        };
 
-        let (version, variant) = match parts[1].split_once('+') {
+        let implementation = LenientImplementationName::from(*implementation_str);
+
+        let (version, variant) = match version_str.split_once('+') {
             Some((version, variant)) => {
                 let variant = PythonVariant::from_str(variant).map_err(|()| {
                     PythonInstallationKeyError::ParseError(
@@ -523,7 +530,7 @@ impl FromStr for PythonInstallationKey {
                 })?;
                 (version, variant)
             }
-            None => (parts[1], PythonVariant::Default),
+            None => (*version_str, PythonVariant::Default),
         };
 
         let version = PythonVersion::from_str(version).map_err(|err| {
@@ -533,9 +540,7 @@ impl FromStr for PythonInstallationKey {
             )
         })?;
 
-        // Join the remaining parts as the platform string
-        let platform_str = parts[2..].join("-");
-        let platform = Platform::from_str(&platform_str).map_err(|err| {
+        let platform = Platform::from_parts(os, arch, libc).map_err(|err| {
             PythonInstallationKeyError::ParseError(
                 key.to_string(),
                 format!("invalid platform: {err}"),
@@ -668,5 +673,72 @@ impl Hash for PythonInstallationMinorVersionKey {
 impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
     fn from(key: PythonInstallationKey) -> Self {
         Self(key)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_python_installation_key_from_str() {
+        // Test basic parsing
+        let key = PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64-gnu").unwrap();
+        assert_eq!(key.implementation.to_string(), "cpython");
+        assert_eq!(key.major, 3);
+        assert_eq!(key.minor, 12);
+        assert_eq!(key.patch, 0);
+        assert_eq!(key.platform.to_string(), "linux-x86_64-gnu");
+
+        // Test with architecture variant
+        let key = PythonInstallationKey::from_str("cpython-3.11.2-linux-x86_64_v3-musl").unwrap();
+        assert_eq!(key.implementation.to_string(), "cpython");
+        assert_eq!(key.major, 3);
+        assert_eq!(key.minor, 11);
+        assert_eq!(key.patch, 2);
+        assert_eq!(key.platform.to_string(), "linux-x86_64_v3-musl");
+
+        // Test with Python variant (freethreaded)
+        let key = PythonInstallationKey::from_str("cpython-3.13.0+freethreaded-macos-aarch64-none")
+            .unwrap();
+        assert_eq!(key.implementation.to_string(), "cpython");
+        assert_eq!(key.major, 3);
+        assert_eq!(key.minor, 13);
+        assert_eq!(key.patch, 0);
+        assert_eq!(key.variant, PythonVariant::Freethreaded);
+        assert_eq!(key.platform.to_string(), "macos-aarch64-none");
+
+        // Test error cases
+        assert!(PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64").is_err()); // Missing libc
+        assert!(PythonInstallationKey::from_str("cpython-3.12.0").is_err()); // Missing platform
+        assert!(PythonInstallationKey::from_str("cpython").is_err()); // Missing everything
+    }
+
+    #[test]
+    fn test_python_installation_key_display() {
+        let key = PythonInstallationKey {
+            implementation: LenientImplementationName::from("cpython"),
+            major: 3,
+            minor: 12,
+            patch: 0,
+            prerelease: None,
+            platform: Platform::from_str("linux-x86_64-gnu").unwrap(),
+            variant: PythonVariant::Default,
+        };
+        assert_eq!(key.to_string(), "cpython-3.12.0-linux-x86_64-gnu");
+
+        let key_with_variant = PythonInstallationKey {
+            implementation: LenientImplementationName::from("cpython"),
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            platform: Platform::from_str("macos-aarch64-none").unwrap(),
+            variant: PythonVariant::Freethreaded,
+        };
+        assert_eq!(
+            key_with_variant.to_string(),
+            "cpython-3.13.0+freethreaded-macos-aarch64-none"
+        );
     }
 }

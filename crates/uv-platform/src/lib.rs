@@ -44,6 +44,15 @@ impl Platform {
         Self { os, arch, libc }
     }
 
+    /// Create a platform from string parts (os, arch, libc).
+    pub fn from_parts(os: &str, arch: &str, libc: &str) -> Result<Self, Error> {
+        Ok(Self {
+            os: Os::from_str(os)?,
+            arch: Arch::from_str(arch)?,
+            libc: Libc::from_str(libc)?,
+        })
+    }
+
     /// Detect the platform from the current environment.
     pub fn from_env() -> Result<Self, Error> {
         let os = Os::from_env();
@@ -94,24 +103,14 @@ impl FromStr for Platform {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('-').collect();
 
-        if parts.len() < 3 {
+        if parts.len() != 3 {
             return Err(Error::InvalidPlatformFormat(format!(
-                "expected at least 3 parts separated by '-', got {}",
+                "expected exactly 3 parts separated by '-', got {}",
                 parts.len()
             )));
         }
 
-        // Handle potential arch variants (e.g., x86_64_v3)
-        let os = Os::from_str(parts[0])?;
-
-        // Join middle parts for arch in case it contains dashes (like arch variants)
-        let arch_parts = &parts[1..parts.len() - 1];
-        let arch_str = arch_parts.join("-");
-        let arch = Arch::from_str(&arch_str)?;
-
-        let libc = Libc::from_str(parts[parts.len() - 1])?;
-
-        Ok(Self { os, arch, libc })
+        Self::from_parts(parts[0], parts[1], parts[2])
     }
 }
 
@@ -196,6 +195,25 @@ mod tests {
     }
 
     #[test]
+    fn test_platform_from_parts() {
+        let platform = Platform::from_parts("linux", "x86_64", "gnu").unwrap();
+        assert_eq!(platform.os.to_string(), "linux");
+        assert_eq!(platform.arch.to_string(), "x86_64");
+        assert_eq!(platform.libc.to_string(), "gnu");
+
+        // Test with arch variant
+        let platform = Platform::from_parts("linux", "x86_64_v3", "musl").unwrap();
+        assert_eq!(platform.os.to_string(), "linux");
+        assert_eq!(platform.arch.to_string(), "x86_64_v3");
+        assert_eq!(platform.libc.to_string(), "musl");
+
+        // Test error cases
+        assert!(Platform::from_parts("invalid_os", "x86_64", "gnu").is_err());
+        assert!(Platform::from_parts("linux", "invalid_arch", "gnu").is_err());
+        assert!(Platform::from_parts("linux", "x86_64", "invalid_libc").is_err());
+    }
+
+    #[test]
     fn test_platform_from_str_with_arch_variant() {
         let platform = Platform::from_str("linux-x86_64_v3-gnu").unwrap();
         assert_eq!(platform.os.to_string(), "linux");
@@ -205,27 +223,70 @@ mod tests {
 
     #[test]
     fn test_platform_from_str_error() {
+        // Too few parts
         assert!(Platform::from_str("linux-x86_64").is_err());
         assert!(Platform::from_str("invalid").is_err());
+
+        // Too many parts (would have been accepted by the old code)
+        assert!(Platform::from_str("linux-x86-64-gnu").is_err());
+        assert!(Platform::from_str("linux-x86_64-gnu-extra").is_err());
     }
 
     #[test]
-    fn test_platform_sorting() {
-        let p1 = Platform::from_str("linux-x86_64-gnu").unwrap();
-        let p2 = Platform::from_str("linux-aarch64-gnu").unwrap();
-        let p3 = Platform::from_str("macos-x86_64-none").unwrap();
-        let p4 = Platform::from_str("linux-x86_64-musl").unwrap();
+    fn test_platform_sorting_os_precedence() {
+        let linux = Platform::from_str("linux-x86_64-gnu").unwrap();
+        let macos = Platform::from_str("macos-x86_64-none").unwrap();
+        let windows = Platform::from_str("windows-x86_64-none").unwrap();
 
-        // OS sorting takes precedence
-        assert!(p1 < p3);
-        assert!(p2 < p3);
+        // OS sorting takes precedence (alphabetical)
+        assert!(linux < macos);
+        assert!(macos < windows);
+    }
 
-        // Same OS, architecture comparison
-        // This will depend on the current architecture
-        let _ = p1.cmp(&p2);
+    #[test]
+    fn test_platform_sorting_libc() {
+        let gnu = Platform::from_str("linux-x86_64-gnu").unwrap();
+        let musl = Platform::from_str("linux-x86_64-musl").unwrap();
 
-        // Same OS and arch, libc comparison
-        assert!(p1 < p4); // "gnu" < "musl" lexicographically
+        // Same OS and arch, libc comparison (alphabetical)
+        assert!(gnu < musl);
+    }
+
+    #[test]
+    fn test_platform_sorting_arch_linux() {
+        // Test that Linux prefers the native architecture
+        use crate::arch::test_support::{aarch64, run_with_arch, x86_64};
+
+        let linux_x86_64 = Platform::from_str("linux-x86_64-gnu").unwrap();
+        let linux_aarch64 = Platform::from_str("linux-aarch64-gnu").unwrap();
+
+        // On x86_64 Linux, x86_64 should be preferred over aarch64
+        run_with_arch(x86_64(), || {
+            assert!(linux_x86_64 < linux_aarch64);
+        });
+
+        // On aarch64 Linux, aarch64 should be preferred over x86_64
+        run_with_arch(aarch64(), || {
+            assert!(linux_aarch64 < linux_x86_64);
+        });
+    }
+
+    #[test]
+    fn test_platform_sorting_arch_macos() {
+        use crate::arch::test_support::{aarch64, run_with_arch, x86_64};
+
+        let macos_x86_64 = Platform::from_str("macos-x86_64-none").unwrap();
+        let macos_aarch64 = Platform::from_str("macos-aarch64-none").unwrap();
+
+        // On x86_64 macOS, x86_64 should be preferred over aarch64
+        run_with_arch(x86_64(), || {
+            assert!(macos_x86_64 < macos_aarch64);
+        });
+
+        // On aarch64 macOS, aarch64 should be preferred over x86_64
+        run_with_arch(aarch64(), || {
+            assert!(macos_aarch64 < macos_x86_64);
+        });
     }
 
     #[test]
@@ -246,17 +307,80 @@ mod tests {
         assert!(!native.supports(&different_libc));
 
         // Different architecture but same family
-        // x86_64 doesn't support aarch64 even though both are 64-bit
+        // x86_64 doesn't support aarch64 on Linux
         assert!(!native.supports(&different_arch));
 
         // Test architecture family support
         let x86_64_v2 = Platform::from_str("linux-x86_64_v2-gnu").unwrap();
         let x86_64_v3 = Platform::from_str("linux-x86_64_v3-gnu").unwrap();
+
         // These have the same architecture family (both x86_64)
         assert_eq!(native.arch.family(), x86_64_v2.arch.family());
         assert_eq!(native.arch.family(), x86_64_v3.arch.family());
+
         // Due to the family check, these should support each other
         assert!(native.supports(&x86_64_v2));
         assert!(native.supports(&x86_64_v3));
+    }
+
+    #[test]
+    fn test_windows_aarch64_platform_sorting() {
+        // Test that on Windows, x86_64 is preferred over aarch64
+        let windows_x86_64 = Platform::from_str("windows-x86_64-none").unwrap();
+        let windows_aarch64 = Platform::from_str("windows-aarch64-none").unwrap();
+
+        // x86_64 should sort before aarch64 on Windows (preferred)
+        assert!(windows_x86_64 < windows_aarch64);
+
+        // Test with multiple Windows platforms
+        let mut platforms = vec![
+            Platform::from_str("windows-aarch64-none").unwrap(),
+            Platform::from_str("windows-x86_64-none").unwrap(),
+            Platform::from_str("windows-x86-none").unwrap(),
+        ];
+
+        platforms.sort();
+
+        // After sorting on Windows, the order should be: x86_64 (preferred), aarch64, x86
+        // x86_64 is preferred on Windows regardless of native architecture
+        assert_eq!(platforms[0].arch.to_string(), "x86_64");
+        assert_eq!(platforms[1].arch.to_string(), "aarch64");
+        assert_eq!(platforms[2].arch.to_string(), "x86");
+    }
+
+    #[test]
+    fn test_windows_sorting_always_prefers_x86_64() {
+        // Test that Windows always prefers x86_64 regardless of host architecture
+        use crate::arch::test_support::{aarch64, run_with_arch, x86_64};
+
+        let windows_x86_64 = Platform::from_str("windows-x86_64-none").unwrap();
+        let windows_aarch64 = Platform::from_str("windows-aarch64-none").unwrap();
+
+        // Even with aarch64 as host, Windows should still prefer x86_64
+        run_with_arch(aarch64(), || {
+            assert!(windows_x86_64 < windows_aarch64);
+        });
+
+        // With x86_64 as host, Windows should still prefer x86_64
+        run_with_arch(x86_64(), || {
+            assert!(windows_x86_64 < windows_aarch64);
+        });
+    }
+
+    #[test]
+    fn test_windows_aarch64_supports() {
+        // Test that Windows aarch64 can run x86_64 binaries through emulation
+        let windows_aarch64 = Platform::from_str("windows-aarch64-none").unwrap();
+        let windows_x86_64 = Platform::from_str("windows-x86_64-none").unwrap();
+
+        // aarch64 Windows supports x86_64 through transparent emulation
+        assert!(windows_aarch64.supports(&windows_x86_64));
+
+        // But x86_64 doesn't support aarch64
+        assert!(!windows_x86_64.supports(&windows_aarch64));
+
+        // Self-support should always work
+        assert!(windows_aarch64.supports(&windows_aarch64));
+        assert!(windows_x86_64.supports(&windows_x86_64));
     }
 }
