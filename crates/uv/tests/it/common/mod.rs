@@ -465,6 +465,12 @@ impl TestContext {
         self
     }
 
+    /// Add a custom filter to the `TestContext`.
+    pub fn with_filter(mut self, filter: (String, String)) -> Self {
+        self.filters.push(filter);
+        self
+    }
+
     /// Clear filters on `TestContext`.
     pub fn clear_filters(mut self) -> Self {
         self.filters.clear();
@@ -608,6 +614,26 @@ impl TestContext {
                 .into_iter()
                 .map(|pattern| (pattern, "[VENV]/".to_string())),
         );
+
+        // Account for [`Simplified::user_display`] which is relative to the command working directory
+        if let Some(site_packages) = site_packages {
+            filters.push((
+                Self::path_pattern(
+                    site_packages
+                        .strip_prefix(&canonical_temp_dir)
+                        .expect("The test site-packages directory is always in the tempdir"),
+                ),
+                "[SITE_PACKAGES]/".to_string(),
+            ));
+        }
+
+        // Filter Python library path differences between Windows and Unix
+        filters.push((
+            r"[\\/]lib[\\/]python\d+\.\d+[\\/]".to_string(),
+            "/[PYTHON-LIB]/".to_string(),
+        ));
+        filters.push((r"[\\/]Lib[\\/]".to_string(), "/[PYTHON-LIB]/".to_string()));
+
         for (version, executable) in &python_versions {
             // Add filtering for the interpreter path
             filters.extend(
@@ -680,18 +706,6 @@ impl TestContext {
             "Activate with: source $1/[BIN]/activate".to_string(),
         ));
 
-        // Account for [`Simplified::user_display`] which is relative to the command working directory
-        if let Some(site_packages) = site_packages {
-            filters.push((
-                Self::path_pattern(
-                    site_packages
-                        .strip_prefix(&canonical_temp_dir)
-                        .expect("The test site-packages directory is always in the tempdir"),
-                ),
-                "[SITE_PACKAGES]/".to_string(),
-            ));
-        }
-
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching
         filters.push((r"(\\|\/)\.tmp.*(\\|\/)".to_string(), "/[TMP]/".to_string()));
@@ -727,6 +741,11 @@ impl TestContext {
             r"environments-v(\d+)[\\/](\w+)-[a-z0-9]+".to_string(),
             "environments-v$1/$2-[HASH]".to_string(),
         ));
+        // Filter archive hashes
+        filters.push((
+            r"archive-v(\d+)[\\/][A-Za-z0-9\-\_]+".to_string(),
+            "archive-v$1/[HASH]".to_string(),
+        ));
 
         Self {
             root: ChildPath::new(root.path()),
@@ -748,7 +767,7 @@ impl TestContext {
 
     /// Create a uv command for testing.
     pub fn command(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         self.add_shared_options(&mut command, true);
         command
     }
@@ -826,6 +845,20 @@ impl TestContext {
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .env_remove(EnvVars::XDG_CONFIG_HOME)
             .env_remove(EnvVars::XDG_DATA_HOME)
+            // I believe the intent of all tests is that they are run outside the
+            // context of an existing git repository. And when they aren't, state
+            // from the parent git repository can bleed into the behavior of `uv
+            // init` in a way that makes it difficult to test consistently. By
+            // setting GIT_CEILING_DIRECTORIES, we specifically prevent git from
+            // climbing up past the root of our test directory to look for any
+            // other git repos.
+            //
+            // If one wants to write a test specifically targeting uv within a
+            // pre-existing git repository, then the test should make the parent
+            // git repo explicitly. The GIT_CEILING_DIRECTORIES here shouldn't
+            // impact it, since it only prevents git from discovering repositories
+            // at or above the root.
+            .env(EnvVars::GIT_CEILING_DIRECTORIES, self.root.path())
             .current_dir(self.temp_dir.path());
 
         for (key, value) in &self.extra_env {
@@ -844,7 +877,7 @@ impl TestContext {
 
     /// Create a `pip compile` command for testing.
     pub fn pip_compile(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("compile");
         self.add_shared_options(&mut command, true);
         command
@@ -852,14 +885,14 @@ impl TestContext {
 
     /// Create a `pip compile` command for testing.
     pub fn pip_sync(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("sync");
         self.add_shared_options(&mut command, true);
         command
     }
 
     pub fn pip_show(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("show");
         self.add_shared_options(&mut command, true);
         command
@@ -867,7 +900,7 @@ impl TestContext {
 
     /// Create a `pip freeze` command with options shared across scenarios.
     pub fn pip_freeze(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("freeze");
         self.add_shared_options(&mut command, true);
         command
@@ -875,14 +908,14 @@ impl TestContext {
 
     /// Create a `pip check` command with options shared across scenarios.
     pub fn pip_check(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("check");
         self.add_shared_options(&mut command, true);
         command
     }
 
     pub fn pip_list(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("list");
         self.add_shared_options(&mut command, true);
         command
@@ -890,7 +923,7 @@ impl TestContext {
 
     /// Create a `uv venv` command
     pub fn venv(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("venv");
         self.add_shared_options(&mut command, false);
         command
@@ -898,7 +931,7 @@ impl TestContext {
 
     /// Create a `pip install` command with options shared across scenarios.
     pub fn pip_install(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("install");
         self.add_shared_options(&mut command, true);
         command
@@ -906,7 +939,7 @@ impl TestContext {
 
     /// Create a `pip uninstall` command with options shared across scenarios.
     pub fn pip_uninstall(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("uninstall");
         self.add_shared_options(&mut command, true);
         command
@@ -914,7 +947,7 @@ impl TestContext {
 
     /// Create a `pip tree` command for testing.
     pub fn pip_tree(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("pip").arg("tree");
         self.add_shared_options(&mut command, true);
         command
@@ -923,7 +956,7 @@ impl TestContext {
     /// Create a `uv help` command with options shared across scenarios.
     #[allow(clippy::unused_self)]
     pub fn help(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("help");
         command.env_remove(EnvVars::UV_CACHE_DIR);
         command
@@ -932,7 +965,7 @@ impl TestContext {
     /// Create a `uv init` command with options shared across scenarios and
     /// isolated from any git repository that may exist in a parent directory.
     pub fn init(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("init");
         self.add_shared_options(&mut command, false);
         command
@@ -940,7 +973,7 @@ impl TestContext {
 
     /// Create a `uv sync` command with options shared across scenarios.
     pub fn sync(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("sync");
         self.add_shared_options(&mut command, false);
         command
@@ -948,7 +981,7 @@ impl TestContext {
 
     /// Create a `uv lock` command with options shared across scenarios.
     pub fn lock(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("lock");
         self.add_shared_options(&mut command, false);
         command
@@ -956,7 +989,7 @@ impl TestContext {
 
     /// Create a `uv export` command with options shared across scenarios.
     pub fn export(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("export");
         self.add_shared_options(&mut command, false);
         command
@@ -964,43 +997,44 @@ impl TestContext {
 
     /// Create a `uv build` command with options shared across scenarios.
     pub fn build(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("build");
         self.add_shared_options(&mut command, false);
         command
     }
 
     pub fn version(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("version");
         self.add_shared_options(&mut command, false);
         command
     }
 
     pub fn self_version(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("self").arg("version");
         self.add_shared_options(&mut command, false);
         command
     }
 
     pub fn self_update(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("self").arg("update");
         self.add_shared_options(&mut command, false);
         command
     }
 
     /// Create a `uv publish` command with options shared across scenarios.
+    #[allow(clippy::unused_self)]
     pub fn publish(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("publish");
         command
     }
 
     /// Create a `uv python find` command with options shared across scenarios.
     pub fn python_find(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command
             .arg("python")
             .arg("find")
@@ -1012,7 +1046,7 @@ impl TestContext {
 
     /// Create a `uv python list` command with options shared across scenarios.
     pub fn python_list(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command
             .arg("python")
             .arg("list")
@@ -1023,7 +1057,7 @@ impl TestContext {
 
     /// Create a `uv python install` command with options shared across scenarios.
     pub fn python_install(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         self.add_shared_options(&mut command, true);
         command.arg("python").arg("install");
         command
@@ -1031,7 +1065,7 @@ impl TestContext {
 
     /// Create a `uv python uninstall` command with options shared across scenarios.
     pub fn python_uninstall(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         self.add_shared_options(&mut command, true);
         command.arg("python").arg("uninstall");
         command
@@ -1039,7 +1073,7 @@ impl TestContext {
 
     /// Create a `uv python upgrade` command with options shared across scenarios.
     pub fn python_upgrade(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         self.add_shared_options(&mut command, true);
         command.arg("python").arg("upgrade");
         command
@@ -1047,7 +1081,7 @@ impl TestContext {
 
     /// Create a `uv python pin` command with options shared across scenarios.
     pub fn python_pin(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("python").arg("pin");
         self.add_shared_options(&mut command, true);
         command
@@ -1055,7 +1089,7 @@ impl TestContext {
 
     /// Create a `uv python dir` command with options shared across scenarios.
     pub fn python_dir(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("python").arg("dir");
         self.add_shared_options(&mut command, true);
         command
@@ -1063,7 +1097,7 @@ impl TestContext {
 
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("run").env(EnvVars::UV_SHOW_RESOLUTION, "1");
         self.add_shared_options(&mut command, true);
         command
@@ -1071,7 +1105,7 @@ impl TestContext {
 
     /// Create a `uv tool run` command with options shared across scenarios.
     pub fn tool_run(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command
             .arg("tool")
             .arg("run")
@@ -1082,7 +1116,7 @@ impl TestContext {
 
     /// Create a `uv upgrade run` command with options shared across scenarios.
     pub fn tool_upgrade(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("tool").arg("upgrade");
         self.add_shared_options(&mut command, false);
         command
@@ -1090,7 +1124,7 @@ impl TestContext {
 
     /// Create a `uv tool install` command with options shared across scenarios.
     pub fn tool_install(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("tool").arg("install");
         self.add_shared_options(&mut command, false);
         command
@@ -1098,7 +1132,7 @@ impl TestContext {
 
     /// Create a `uv tool list` command with options shared across scenarios.
     pub fn tool_list(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("tool").arg("list");
         self.add_shared_options(&mut command, false);
         command
@@ -1106,7 +1140,7 @@ impl TestContext {
 
     /// Create a `uv tool dir` command with options shared across scenarios.
     pub fn tool_dir(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("tool").arg("dir");
         self.add_shared_options(&mut command, false);
         command
@@ -1114,7 +1148,7 @@ impl TestContext {
 
     /// Create a `uv tool uninstall` command with options shared across scenarios.
     pub fn tool_uninstall(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("tool").arg("uninstall");
         self.add_shared_options(&mut command, false);
         command
@@ -1122,7 +1156,7 @@ impl TestContext {
 
     /// Create a `uv add` command for the given requirements.
     pub fn add(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("add");
         self.add_shared_options(&mut command, false);
         command
@@ -1130,7 +1164,7 @@ impl TestContext {
 
     /// Create a `uv remove` command for the given requirements.
     pub fn remove(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("remove");
         self.add_shared_options(&mut command, false);
         command
@@ -1138,7 +1172,7 @@ impl TestContext {
 
     /// Create a `uv tree` command with options shared across scenarios.
     pub fn tree(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("tree");
         self.add_shared_options(&mut command, false);
         command
@@ -1146,7 +1180,7 @@ impl TestContext {
 
     /// Create a `uv cache clean` command.
     pub fn clean(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("cache").arg("clean");
         self.add_shared_options(&mut command, false);
         command
@@ -1154,7 +1188,7 @@ impl TestContext {
 
     /// Create a `uv cache prune` command.
     pub fn prune(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("cache").arg("prune");
         self.add_shared_options(&mut command, false);
         command
@@ -1164,7 +1198,7 @@ impl TestContext {
     ///
     /// Note that this command is hidden and only invoking it through a build frontend is supported.
     pub fn build_backend(&self) -> Command {
-        let mut command = self.new_command();
+        let mut command = Self::new_command();
         command.arg("build-backend");
         self.add_shared_options(&mut command, false);
         command
@@ -1182,13 +1216,29 @@ impl TestContext {
     }
 
     pub fn python_command(&self) -> Command {
-        let mut command = self.new_command_with(&self.interpreter());
+        let mut interpreter = self.interpreter();
+
+        // If there's not a virtual environment, use the first Python interpreter in the context
+        if !interpreter.exists() {
+            interpreter.clone_from(
+                &self
+                    .python_versions
+                    .first()
+                    .expect("At least one Python version is required")
+                    .1,
+            );
+        }
+
+        let mut command = Self::new_command_with(&interpreter);
         command
             // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
             // https://github.com/python/cpython/issues/75953
             .arg("-B")
             // Python on windows
             .env(EnvVars::PYTHONUTF8, "1");
+
+        self.add_shared_env(&mut command, false);
+
         command
     }
 
@@ -1385,29 +1435,14 @@ impl TestContext {
 
     /// Creates a new `Command` that is intended to be suitable for use in
     /// all tests.
-    fn new_command(&self) -> Command {
-        self.new_command_with(&get_bin())
+    fn new_command() -> Command {
+        Self::new_command_with(&get_bin())
     }
 
     /// Creates a new `Command` that is intended to be suitable for use in
     /// all tests, but with the given binary.
-    fn new_command_with(&self, bin: &Path) -> Command {
-        let mut command = Command::new(bin);
-        // I believe the intent of all tests is that they are run outside the
-        // context of an existing git repository. And when they aren't, state
-        // from the parent git repository can bleed into the behavior of `uv
-        // init` in a way that makes it difficult to test consistently. By
-        // setting GIT_CEILING_DIRECTORIES, we specifically prevent git from
-        // climbing up past the root of our test directory to look for any
-        // other git repos.
-        //
-        // If one wants to write a test specifically targeting uv within a
-        // pre-existing git repository, then the test should make the parent
-        // git repo explicitly. The GIT_CEILING_DIRECTORIES here shouldn't
-        // impact it, since it only prevents git from discovering repositories
-        // at or above the root.
-        command.env(EnvVars::GIT_CEILING_DIRECTORIES, self.root.path());
-        command
+    fn new_command_with(bin: &Path) -> Command {
+        Command::new(bin)
     }
 }
 
