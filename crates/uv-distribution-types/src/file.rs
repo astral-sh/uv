@@ -97,8 +97,8 @@ impl FileLocation {
     /// example, the location is a path and the path isn't valid UTF-8.
     /// (Because URLs must be valid UTF-8.)
     pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
-        match *self {
-            Self::RelativeUrl(ref base, ref path) => {
+        match self {
+            Self::RelativeUrl(base, path) => {
                 let base_url =
                     DisplaySafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
                         base: base.to_string(),
@@ -111,7 +111,7 @@ impl FileLocation {
                 })?;
                 Ok(joined)
             }
-            Self::AbsoluteUrl(ref absolute) => absolute.to_url(),
+            Self::AbsoluteUrl(absolute) => absolute.to_url(),
         }
     }
 }

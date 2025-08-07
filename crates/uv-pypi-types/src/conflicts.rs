@@ -466,8 +466,8 @@ impl ConflictKind {
     /// If this conflict corresponds to an extra, then return the
     /// extra name.
     pub fn extra(&self) -> Option<&ExtraName> {
-        match *self {
-            Self::Extra(ref extra) => Some(extra),
+        match self {
+            Self::Extra(extra) => Some(extra),
             Self::Group(_) | Self::Project => None,
         }
     }
@@ -475,17 +475,17 @@ impl ConflictKind {
     /// If this conflict corresponds to a group, then return the
     /// group name.
     pub fn group(&self) -> Option<&GroupName> {
-        match *self {
-            Self::Group(ref group) => Some(group),
+        match self {
+            Self::Group(group) => Some(group),
             Self::Extra(_) | Self::Project => None,
         }
     }
 
     /// Returns this conflict as a new type with its fields borrowed.
     pub fn as_ref(&self) -> ConflictKindRef<'_> {
-        match *self {
-            Self::Extra(ref extra) => ConflictKindRef::Extra(extra),
-            Self::Group(ref group) => ConflictKindRef::Group(group),
+        match self {
+            Self::Extra(extra) => ConflictKindRef::Extra(extra),
+            Self::Group(group) => ConflictKindRef::Group(group),
             Self::Project => ConflictKindRef::Project,
         }
     }
@@ -505,40 +505,40 @@ impl<'a> ConflictKindRef<'a> {
     /// If this conflict corresponds to an extra, then return the
     /// extra name.
     pub fn extra(&self) -> Option<&'a ExtraName> {
-        match *self {
-            ConflictKindRef::Extra(extra) => Some(extra),
-            ConflictKindRef::Group(_) | ConflictKindRef::Project => None,
+        match self {
+            Self::Extra(extra) => Some(extra),
+            Self::Group(_) | Self::Project => None,
         }
     }
 
     /// If this conflict corresponds to a group, then return the
     /// group name.
     pub fn group(&self) -> Option<&'a GroupName> {
-        match *self {
-            ConflictKindRef::Group(group) => Some(group),
-            ConflictKindRef::Extra(_) | ConflictKindRef::Project => None,
+        match self {
+            Self::Group(group) => Some(group),
+            Self::Extra(_) | Self::Project => None,
         }
     }
 
     /// Converts this borrowed conflict to its owned variant.
     pub fn to_owned(&self) -> ConflictKind {
-        match *self {
-            ConflictKindRef::Extra(extra) => ConflictKind::Extra(extra.clone()),
-            ConflictKindRef::Group(group) => ConflictKind::Group(group.clone()),
-            ConflictKindRef::Project => ConflictKind::Project,
+        match self {
+            Self::Extra(extra) => ConflictKind::Extra((*extra).clone()),
+            Self::Group(group) => ConflictKind::Group((*group).clone()),
+            Self::Project => ConflictKind::Project,
         }
     }
 }
 
 impl<'a> From<&'a ExtraName> for ConflictKindRef<'a> {
     fn from(extra: &'a ExtraName) -> Self {
-        ConflictKindRef::Extra(extra)
+        Self::Extra(extra)
     }
 }
 
 impl<'a> From<&'a GroupName> for ConflictKindRef<'a> {
     fn from(group: &'a GroupName) -> Self {
-        ConflictKindRef::Group(group)
+        Self::Group(group)
     }
 }
 
@@ -792,4 +792,25 @@ impl From<SchemaConflictItem> for ConflictItemWire {
             },
         }
     }
+}
+
+/// An inference about whether a conflicting item is always included or
+/// excluded.
+///
+/// We collect these for each node in the graph after determining which
+/// extras/groups are activated for each node. Once we know what's
+/// activated, we can infer what must also be *inactivated* based on what's
+/// conflicting with it. So for example, if we have a conflict marker like
+/// `extra == 'foo' and extra != 'bar'`, and `foo` and `bar` have been
+/// declared as conflicting, and we are in a part of the graph where we
+/// know `foo` must be activated, then it follows that `extra != 'bar'`
+/// must always be true. Because if it were false, it would imply both
+/// `foo` and `bar` were activated simultaneously, which uv guarantees
+/// won't happen.
+///
+/// We then use these inferences to simplify the conflict markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct Inference {
+    pub included: bool,
+    pub item: ConflictItem,
 }

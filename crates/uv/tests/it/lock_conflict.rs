@@ -546,16 +546,16 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
         project4 = ["sortedcontainers==2.4.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: project[extra2], project[project3]; excluded: project[extra1], project[project4]):
       ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
           And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    ");
 
     // One could try to declare all pairs of conflicting extras as
     // conflicting, but this doesn't quite work either. For example,
@@ -703,16 +703,16 @@ fn extra_multiple_independent() -> Result<()> {
         project4 = ["anyio==4.2.0"]
         "#,
     )?;
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: project[project4]; excluded: project[project3]):
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    ");
 
     // Once we declare ALL our conflicting extras, resolution succeeds.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1551,20 +1551,20 @@ fn extra_nested_across_workspace() -> Result<()> {
     // `dummy[extra1]` conflicts with `dummysub[extra2]` and that
     // `dummy[extra2]` conflicts with `dummysub[extra1]`. So we end
     // up with a resolution failure.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: dummy[extra2], dummysub[extra1]; excluded: dummy[extra1], dummysub[extra2]):
       ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
 
           Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
           And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
           And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
           And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
-    "###);
+    ");
 
     // Now let's write out the full set of conflicts, taking
     // advantage of the optional `package` key.
@@ -1696,7 +1696,7 @@ fn extra_depends_on_conflicting_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
+      × No solution found when resolving dependencies for split (included: example[foo]; excluded: example[bar]):
       ╰─▶ Because example[foo] depends on sortedcontainers==2.3.0 and sortedcontainers==2.4.0, we can conclude that example[foo]'s requirements are unsatisfiable.
           And because your project requires example[foo], we can conclude that your project's requirements are unsatisfiable.
     ");
@@ -6005,7 +6005,7 @@ fn extra_inferences() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
+            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
         wheels = [
@@ -6026,7 +6026,7 @@ fn extra_inferences() -> Result<()> {
         version = "4.8.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
+            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/75/32/cdfba08674d72fe7895a8ec7be8f171e8502274999cae9497e4545404873/colorlog-4.8.0.tar.gz", hash = "sha256:59b53160c60902c405cdec28d38356e09d40686659048893e026ecbd589516b1", size = 28770, upload-time = "2021-03-22T11:26:32.319Z" }
         wheels = [
@@ -6100,7 +6100,7 @@ fn extra_inferences() -> Result<()> {
         version = "42.0.5"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
+            { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/13/9e/a55763a32d340d7b06d045753c186b690e7d88780cafce5f88cb931536be/cryptography-42.0.5.tar.gz", hash = "sha256:6fe07eec95dfd477eb9530aef5bead34fec819b3aaf6c5bd6d20565da607bfe1", size = 671025, upload-time = "2024-02-24T01:17:48.141Z" }
         wheels = [
@@ -6804,7 +6804,7 @@ fn extra_inferences() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "python-dateutil" },
-            { name = "time-machine", marker = "implementation_name != 'pypy'" },
+            { name = "time-machine", marker = "implementation_name != 'pypy' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
             { name = "tzdata" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/fe/27c7438c6ac8b8f8bef3c6e571855602ee784b85d072efddfff0ceb1cd77/pendulum-3.0.0.tar.gz", hash = "sha256:5d034998dea404ec31fae27af6b22cff1708f830a1ed7353be4d1019bb9f584e", size = 84524, upload-time = "2023-12-16T21:27:19.742Z" }
@@ -7189,7 +7189,7 @@ fn extra_inferences() -> Result<()> {
         version = "1.4.52"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'" },
+            { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8a/a4/b5991829c34af0505e0f2b1ccf9588d1ba90f2d984ee208c90c985f1265a/SQLAlchemy-1.4.52.tar.gz", hash = "sha256:80e63bbdc5217dad3485059bdf6f65a7d43f33c8bde619df5c220edf03d87296", size = 8514200, upload-time = "2024-03-04T13:29:44.258Z" }
         wheels = [
@@ -10165,7 +10165,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
         version = "4.67.1"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
+            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
         wheels = [
@@ -10511,7 +10511,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         dependencies = [
             { name = "aiohappyeyeballs" },
             { name = "aiosignal" },
-            { name = "async-timeout", marker = "python_full_version < '3.11'" },
+            { name = "async-timeout", marker = "python_full_version < '3.11' or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
             { name = "attrs" },
             { name = "frozenlist" },
             { name = "multidict" },
@@ -11621,7 +11621,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         version = "6.1.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+            { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d6/be/504b89a5e9ca731cd47487e91c469064f8ae5af93b7259758dcfc2b9c848/multidict-6.1.0.tar.gz", hash = "sha256:22ae2ebf9b0c69d206c003e2f6a914ea33f0a932d4aa16f236afc049d9958f4a", size = 64002, upload-time = "2024-09-09T23:49:38.163Z" }
         wheels = [
@@ -13398,7 +13398,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         version = "4.67.1"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
+            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
         wheels = [
@@ -14159,10 +14159,10 @@ fn overlapping_resolution_markers() -> Result<()> {
             "sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
         ]
         dependencies = [
-            { name = "filelock" },
-            { name = "fsspec" },
-            { name = "jinja2" },
-            { name = "networkx" },
+            { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
@@ -14174,9 +14174,9 @@ fn overlapping_resolution_markers() -> Result<()> {
             { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "sympy" },
+            { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "typing-extensions" },
+            { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/33/b3/1fcc3bccfddadfd6845dcbfe26eb4b099f1dfea5aa0e5cfb92b3c98dba5b/torch-2.2.2-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:bc889d311a855dd2dfd164daf8cc903a6b7273a747189cebafdd89106e4ad585", size = 755526581, upload-time = "2024-03-27T21:06:46.5Z" },
@@ -15140,6 +15140,163 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Check that simplification of conflict markers does not apply with not all paths activate the
+/// marker unconditionally.
+///
+/// For example, when `a` and `b` conflict, this marker does not simplify:
+/// ```text
+/// (platform_machine == 'x86_64' and extra == 'extra-5-foo-b') or extra == 'extra-5-foo-a'
+/// ````
+///
+/// Ref: <https://github.com/astral-sh/uv/issues/14805>
+#[test]
+fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-02-06T00:00Z");
+
+    let pyproject = r#"
+        [project]
+        name = "debug"
+        version = "0.0.1"
+        requires-python = "==3.12.*"
+
+        [project.optional-dependencies]
+        a = [
+          "python-dateutil==2.8.0",
+        ]
+        b = [
+          "python-dateutil==2.8.1; platform_machine != 'inapplicable'",
+          "python-dateutil==2.8.0; platform_machine == 'inapplicable'",
+        ]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "a" },
+            { extra = "b" },
+          ],
+        ]
+    "#;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(pyproject)?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = "==3.12.*"
+        resolution-markers = [
+            "platform_machine != 'inapplicable' and extra != 'extra-5-debug-a' and extra == 'extra-5-debug-b'",
+            "platform_machine == 'inapplicable' and extra != 'extra-5-debug-a' and extra == 'extra-5-debug-b'",
+            "extra == 'extra-5-debug-a' and extra != 'extra-5-debug-b'",
+            "extra != 'extra-5-debug-a' and extra != 'extra-5-debug-b'",
+        ]
+        conflicts = [[
+            { package = "debug", extra = "a" },
+            { package = "debug", extra = "b" },
+        ]]
+
+        [options]
+        exclude-newer = "2025-02-06T00:00:00Z"
+
+        [[package]]
+        name = "debug"
+        version = "0.0.1"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        a = [
+            { name = "python-dateutil", version = "2.8.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        b = [
+            { name = "python-dateutil", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'inapplicable' and extra == 'extra-5-debug-b') or (extra == 'extra-5-debug-a' and extra == 'extra-5-debug-b')" },
+            { name = "python-dateutil", version = "2.8.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'inapplicable' and extra == 'extra-5-debug-b') or (extra == 'extra-5-debug-a' and extra == 'extra-5-debug-b')" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "python-dateutil", marker = "platform_machine == 'inapplicable' and extra == 'b'", specifier = "==2.8.0" },
+            { name = "python-dateutil", marker = "platform_machine != 'inapplicable' and extra == 'b'", specifier = "==2.8.1" },
+            { name = "python-dateutil", marker = "extra == 'a'", specifier = "==2.8.0" },
+        ]
+        provides-extras = ["a", "b"]
+
+        [[package]]
+        name = "python-dateutil"
+        version = "2.8.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "platform_machine == 'inapplicable' and extra != 'extra-5-debug-a' and extra == 'extra-5-debug-b'",
+            "extra == 'extra-5-debug-a' and extra != 'extra-5-debug-b'",
+        ]
+        dependencies = [
+            { name = "six", marker = "(platform_machine == 'inapplicable' and extra == 'extra-5-debug-b') or extra == 'extra-5-debug-a'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/ad/99/5b2e99737edeb28c71bcbec5b5dda19d0d9ef3ca3e92e3e925e7c0bb364c/python-dateutil-2.8.0.tar.gz", hash = "sha256:c89805f6f4d64db21ed966fda138f8a5ed7a4fdbc1a8ee329ce1b74e3c74da9e", size = 327134, upload-time = "2019-02-05T14:12:37.493Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/41/17/c62faccbfbd163c7f57f3844689e3a78bae1f403648a6afb1d0866d87fbb/python_dateutil-2.8.0-py2.py3-none-any.whl", hash = "sha256:7e6584c74aeed623791615e26efd690f29817a27c73085b78e4bad02493df2fb", size = 226803, upload-time = "2019-02-05T14:12:35.322Z" },
+        ]
+
+        [[package]]
+        name = "python-dateutil"
+        version = "2.8.1"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "platform_machine != 'inapplicable'",
+        ]
+        dependencies = [
+            { name = "six", marker = "platform_machine != 'inapplicable'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/be/ed/5bbc91f03fa4c839c4c7360375da77f9659af5f7086b7a7bdda65771c8e0/python-dateutil-2.8.1.tar.gz", hash = "sha256:73ebfe9dbf22e832286dafa60473e4cd239f8592f699aa5adaf10050e6e1823c", size = 331745, upload-time = "2019-11-03T05:42:03.923Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d4/70/d60450c3dd48ef87586924207ae8907090de0b306af2bce5d134d78615cb/python_dateutil-2.8.1-py2.py3-none-any.whl", hash = "sha256:75bb3f31ea686f1197762692a9ee6a7550b59fc6ca3a1f4b5d7e32fb98e2da2a", size = 227183, upload-time = "2019-11-03T05:42:01.643Z" },
+        ]
+
+        [[package]]
+        name = "six"
+        version = "1.17.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+        ]
+        "#
+        );
+    });
+
+    // The incorrect behavior was that only python-dateutil was installed and six was missing.
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("a").arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would use project environment at: .venv
+    Resolved 4 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Would download 2 packages
+    Would install 2 packages
+     + python-dateutil==2.8.0
+     + six==1.17.0
+    ");
 
     Ok(())
 }

@@ -1,15 +1,13 @@
 use std::borrow::Borrow;
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{
-    ExtraOperator, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator,
-    MarkerTree,
-};
-use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts};
+use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 use crate::ResolveError;
 
@@ -138,6 +136,36 @@ impl UniversalMarker {
         self.marker = conflicts.marker;
         self.marker.implies(self_marker);
         self.pep508 = self.marker.without_extras();
+    }
+
+    /// If all inference sets reduce to the same marker, simplify the marker using that knowledge.
+    pub(crate) fn unify_inference_sets(&mut self, conflict_sets: &[BTreeSet<Inference>]) {
+        let mut previous_marker = None;
+
+        for conflict_set in conflict_sets {
+            let mut marker = self.marker;
+            for inference in conflict_set {
+                let extra = encode_conflict_item(&inference.item);
+
+                marker = if inference.included {
+                    marker.simplify_extras_with(|candidate| *candidate == extra)
+                } else {
+                    marker.simplify_not_extras_with(|candidate| *candidate == extra)
+                };
+            }
+            if let Some(previous_marker) = &previous_marker {
+                if previous_marker != &marker {
+                    return;
+                }
+            } else {
+                previous_marker = Some(marker);
+            }
+        }
+
+        if let Some(all_branches_marker) = previous_marker {
+            self.marker = all_branches_marker;
+            self.pep508 = self.marker.without_extras();
+        }
     }
 
     /// Assumes that a given extra/group for the given package is activated.
@@ -298,6 +326,23 @@ impl UniversalMarker {
                 .chain(groups)
                 .collect::<Vec<ExtraName>>(),
         )
+    }
+
+    /// Returns true if the marker always evaluates to true if the given set of extras is activated.
+    pub(crate) fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
+    where
+        P: Borrow<PackageName>,
+        E: Borrow<ExtraName>,
+        G: Borrow<GroupName>,
+    {
+        let extras = extras
+            .iter()
+            .map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
+        let groups = groups
+            .iter()
+            .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
+        self.marker
+            .evaluate_only_extras(&extras.chain(groups).collect::<Vec<ExtraName>>())
     }
 
     /// Returns the internal marker that combines both the PEP 508
@@ -467,40 +512,6 @@ impl ConflictMarker {
         self.marker.is_false()
     }
 
-    /// Returns true if this conflict marker is satisfied by the given
-    /// list of activated extras and groups.
-    pub(crate) fn evaluate<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
-    where
-        P: Borrow<PackageName>,
-        E: Borrow<ExtraName>,
-        G: Borrow<GroupName>,
-    {
-        static DUMMY: std::sync::LazyLock<MarkerEnvironment> = std::sync::LazyLock::new(|| {
-            MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
-                implementation_name: "",
-                implementation_version: "3.7",
-                os_name: "linux",
-                platform_machine: "",
-                platform_python_implementation: "",
-                platform_release: "",
-                platform_system: "",
-                platform_version: "",
-                python_full_version: "3.7",
-                python_version: "3.7",
-                sys_platform: "linux",
-            })
-            .unwrap()
-        });
-        let extras = extras
-            .iter()
-            .map(|(package, extra)| encode_package_extra(package.borrow(), extra.borrow()));
-        let groups = groups
-            .iter()
-            .map(|(package, group)| encode_package_group(package.borrow(), group.borrow()));
-        self.marker
-            .evaluate(&DUMMY, &extras.chain(groups).collect::<Vec<ExtraName>>())
-    }
-
     /// Returns inclusion and exclusion (respectively) conflict items parsed
     /// from this conflict marker.
     ///
@@ -534,6 +545,15 @@ impl std::fmt::Debug for ConflictMarker {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // This is a little more succinct than the default.
         write!(f, "ConflictMarker({:?})", self.marker)
+    }
+}
+
+/// Encodes the given conflict into a valid `extra` value in a PEP 508 marker.
+fn encode_conflict_item(conflict: &ConflictItem) -> ExtraName {
+    match conflict.kind() {
+        ConflictKind::Extra(extra) => encode_package_extra(conflict.package(), extra),
+        ConflictKind::Group(group) => encode_package_group(conflict.package(), group),
+        ConflictKind::Project => encode_project(conflict.package()),
     }
 }
 
@@ -649,9 +669,9 @@ impl<'a> ParsedRawExtra<'a> {
                 name_error,
             }
         })?;
-        match *self {
-            ParsedRawExtra::Project { .. } => Ok(ConflictItem::from(package)),
-            ParsedRawExtra::Extra { extra, .. } => {
+        match self {
+            Self::Project { .. } => Ok(ConflictItem::from(package)),
+            Self::Extra { extra, .. } => {
                 let extra = ExtraName::from_str(extra).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
                         kind: "extra",
@@ -660,7 +680,7 @@ impl<'a> ParsedRawExtra<'a> {
                 })?;
                 Ok(ConflictItem::from((package, extra)))
             }
-            ParsedRawExtra::Group { group, .. } => {
+            Self::Group { group, .. } => {
                 let group = GroupName::from_str(group).map_err(|name_error| {
                     ResolveError::InvalidValueInConflictMarker {
                         kind: "group",
@@ -673,10 +693,10 @@ impl<'a> ParsedRawExtra<'a> {
     }
 
     fn package(&self) -> &'a str {
-        match *self {
-            ParsedRawExtra::Project { package, .. } => package,
-            ParsedRawExtra::Extra { package, .. } => package,
-            ParsedRawExtra::Group { package, .. } => package,
+        match self {
+            Self::Project { package, .. } => package,
+            Self::Extra { package, .. } => package,
+            Self::Group { package, .. } => package,
         }
     }
 }
@@ -874,7 +894,7 @@ mod tests {
     /// This is just the underlying marker. And if it's `true`, then a
     /// non-conforming `true` string is returned. (Which is fine since
     /// this is just for tests.)
-    fn tostr(cm: ConflictMarker) -> String {
+    fn to_str(cm: ConflictMarker) -> String {
         cm.marker
             .try_to_string()
             .unwrap_or_else(|| "true".to_string())
@@ -888,14 +908,14 @@ mod tests {
         let conflicts = create_conflicts([create_set(["foo", "bar"])]);
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
-            tostr(cm),
+            to_str(cm),
             "extra != 'extra-3-pkg-foo' or extra != 'extra-3-pkg-bar'"
         );
 
         let conflicts = create_conflicts([create_set(["foo", "bar", "baz"])]);
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
-            tostr(cm),
+            to_str(cm),
             "(extra != 'extra-3-pkg-baz' and extra != 'extra-3-pkg-foo') \
              or (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-foo') \
              or (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-baz')",
@@ -904,7 +924,7 @@ mod tests {
         let conflicts = create_conflicts([create_set(["foo", "bar"]), create_set(["fox", "ant"])]);
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
-            tostr(cm),
+            to_str(cm),
             "(extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-fox') or \
              (extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-foo') or \
              (extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-bar') or \
@@ -939,7 +959,7 @@ mod tests {
                 .collect::<Vec<(PackageName, ExtraName)>>();
             let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                !cm.evaluate(&extras, &groups),
+                !UniversalMarker::new(MarkerTree::TRUE, cm).evaluate_only_extras(&extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `false` in `{cm:?}`"
             );
         }
@@ -962,7 +982,7 @@ mod tests {
                 .collect::<Vec<(PackageName, ExtraName)>>();
             let groups = Vec::<(PackageName, GroupName)>::new();
             assert!(
-                cm.evaluate(&extras, &groups),
+                UniversalMarker::new(MarkerTree::TRUE, cm).evaluate_only_extras(&extras, &groups),
                 "expected `{extra_names:?}` to evaluate to `true` in `{cm:?}`"
             );
         }

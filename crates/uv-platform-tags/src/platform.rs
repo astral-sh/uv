@@ -56,7 +56,7 @@ pub enum Os {
 
 impl fmt::Display for Os {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+        match self {
             Self::Manylinux { .. } => write!(f, "manylinux"),
             Self::Musllinux { .. } => write!(f, "musllinux"),
             Self::Windows => write!(f, "windows"),
