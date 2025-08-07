@@ -143,7 +143,7 @@ fn find_uv_bin_prefix() {
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-      File "[TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
+      File "[TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 37, in find_uv_bin
         raise FileNotFoundError(path)
     FileNotFoundError: [USER_SCHEME]/[BIN]/uv
     "#
@@ -187,18 +187,14 @@ fn find_uv_bin_base_prefix() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(format!(r#"import sys, uv; sys.base_prefix = "{}"; print(uv.find_uv_bin())"#, base_venv.path().portable_display()))
-        .env(EnvVars::PYTHONPATH, site_packages_path(base_venv.path(), "python3.12")), @r#"
-    success: false
-    exit_code: 1
+        .env(EnvVars::PYTHONPATH, site_packages_path(base_venv.path(), "python3.12")), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [TEMP_DIR]/base-venv/[BIN]/uv
 
     ----- stderr -----
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-      File "[TEMP_DIR]/base-venv/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
-        raise FileNotFoundError(path)
-    FileNotFoundError: [USER_SCHEME]/[BIN]/uv
-    "#
+    "
     );
 }
 
@@ -241,7 +237,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
+      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 37, in find_uv_bin
         raise FileNotFoundError(path)
     FileNotFoundError: [USER_SCHEME]/[BIN]/uv
     "#
@@ -299,7 +295,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
      + sniffio==1.3.1
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-      File "[SITE_PACKAGES]/uv/_find_uv.py", line 36, in find_uv_bin
+      File "[SITE_PACKAGES]/uv/_find_uv.py", line 37, in find_uv_bin
         raise FileNotFoundError(path)
     FileNotFoundError: [USER_SCHEME]/[BIN]/uv
     "#
