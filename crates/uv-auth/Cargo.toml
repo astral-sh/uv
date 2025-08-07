@@ -10,7 +10,7 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-keyring = { workspace = true }
+uv-keyring = { workspace = true, features = ["apple-native", "secret-service", "windows-native"] }
 uv-once-map = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
