@@ -251,7 +251,7 @@ dependencies = [
 [[package]]
 name = "async_zip"
 version = "0.0.17"
-source = "git+https://github.com/astral-sh/rs-async-zip?rev=c909fda63fcafe4af496a07bfda28a5aae97e58d#c909fda63fcafe4af496a07bfda28a5aae97e58d"
+source = "git+https://github.com/astral-sh/rs-async-zip?rev=285e48742b74ab109887d62e1ae79e7c15fd4878#285e48742b74ab109887d62e1ae79e7c15fd4878"
 dependencies = [
  "async-compression",
  "crc32fast",
@@ -4701,6 +4701,7 @@ dependencies = [
  "textwrap",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-util",
  "toml",
  "toml_edit",
  "tracing",
@@ -5092,6 +5093,7 @@ dependencies = [
  "anyhow",
  "clap",
  "fs-err",
+ "futures",
  "itertools 0.14.0",
  "markdown",
  "owo-colors",
@@ -5104,8 +5106,10 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tagu",
+ "tempfile",
  "textwrap",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",
@@ -5298,6 +5302,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution-filename",
  "uv-pypi-types",
+ "uv-static",
  "xz2",
  "zip",
 ]

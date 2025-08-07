@@ -22,7 +22,7 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
-uv-extract = { workspace = true, optional = true }
+uv-extract = { workspace = true }
 uv-installer = { workspace = true }
 uv-macros = { workspace = true }
 uv-options-metadata = { workspace = true }
@@ -39,20 +39,23 @@ anstream = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
 itertools = { workspace = true }
 markdown = { version = "1.0.0" }
 owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.1" }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
 resvg = { version = "0.29.0", optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { version = "0.9.34" }
 tagu = { version = "0.1.6", optional = true }
+tempfile = { workspace = true }
 textwrap = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"] }
 tracing-subscriber = { workspace = true }

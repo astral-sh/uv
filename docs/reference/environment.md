@@ -162,6 +162,15 @@ to use when creating a new project.
 
 Equivalent to the `--allow-insecure-host` argument.
 
+### `UV_INSECURE_NO_ZIP_VALIDATION`
+
+Disable ZIP validation for streamed wheels and ZIP-based source distributions.
+
+WARNING: Disabling ZIP validation can expose your system to security risks by bypassing
+integrity checks and allowing uv to install potentially malicious ZIP files. If uv rejects
+a ZIP file due to failing validation, it is likely that the file is malformed; consider
+filing an issue with the package maintainer.
+
 ### `UV_INSTALLER_GHE_BASE_URL`
 
 The URL from which to download uv using the standalone installer and `self update` feature,

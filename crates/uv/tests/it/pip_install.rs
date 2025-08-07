@@ -9247,7 +9247,7 @@ fn bad_crc32() -> Result<()> {
     Resolved 7 packages in [TIME]
       × Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
       ├─▶ Failed to extract archive: osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      ╰─▶ Bad CRC (got ca5f1131, expected d5c95dfa) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
+      ╰─▶ Bad uncompressed size (got 0007b829, expected 0007b828) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
     "
     );
 
@@ -12032,6 +12032,175 @@ fn config_settings_package() -> Result<()> {
     assert!(finder.exists());
 
     Ok(())
+}
+
+#[test]
+fn reject_invalid_streaming_zip() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheelstreamtest==0.0.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheelstreamtest==0.0.1`
+      ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
+      ╰─▶ ZIP file contains multiple entries with different contents for: cbwheelstreamtest/__init__.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_double_zip() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheelziptest==0.0.2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download `cbwheelziptest==0.0.2`
+      ├─▶ Failed to extract archive: cbwheelziptest-0.0.2-py2.py3-none-any.whl
+      ╰─▶ ZIP file contains trailing contents after the end-of-central-directory record
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_central_directory_offset() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ├─▶ Failed to read from zip file
+      ╰─▶ the end of central directory offset (0xf0d9) did not match the actual offset (0xf9ac)
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_crc32_mismatch() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_crc32_non_data_descriptor() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_duplicate_extra_field() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ an extra field with id 0x7075 was duplicated in the header
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_short_usize() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad CRC (got 5100f20e, expected de0ffd6e) for file: attr/_make.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_chained_extra_field() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ an extra field with id 0x7075 was duplicated in the header
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_short_usize_zip64() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ zip64 extended information field was too long: expected 16 bytes, but 0 bytes were provided
+    "
+    );
 }
 
 /// Test that build dependencies respect locked versions from the resolution.

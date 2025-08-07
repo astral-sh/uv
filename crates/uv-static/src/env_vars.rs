@@ -238,6 +238,14 @@ impl EnvVars {
     /// Equivalent to the `--allow-insecure-host` argument.
     pub const UV_INSECURE_HOST: &'static str = "UV_INSECURE_HOST";
 
+    /// Disable ZIP validation for streamed wheels and ZIP-based source distributions.
+    ///
+    /// WARNING: Disabling ZIP validation can expose your system to security risks by bypassing
+    /// integrity checks and allowing uv to install potentially malicious ZIP files. If uv rejects
+    /// a ZIP file due to failing validation, it is likely that the file is malformed; consider
+    /// filing an issue with the package maintainer.
+    pub const UV_INSECURE_NO_ZIP_VALIDATION: &'static str = "UV_INSECURE_NO_ZIP_VALIDATION";
+
     /// Sets the maximum number of in-flight concurrent downloads that uv will
     /// perform at any given time.
     pub const UV_CONCURRENT_DOWNLOADS: &'static str = "UV_CONCURRENT_DOWNLOADS";
