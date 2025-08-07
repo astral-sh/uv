@@ -15,6 +15,7 @@ bitflags::bitflags! {
         const PYLOCK = 1 << 3;
         const ADD_BOUNDS = 1 << 4;
         const EXTRA_BUILD_DEPENDENCIES = 1 << 5;
+        const FORMAT = 1 << 6;
     }
 }
 
@@ -30,6 +31,7 @@ impl PreviewFeatures {
             Self::PYLOCK => "pylock",
             Self::ADD_BOUNDS => "add-bounds",
             Self::EXTRA_BUILD_DEPENDENCIES => "extra-build-dependencies",
+            Self::FORMAT => "format",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -73,6 +75,7 @@ impl FromStr for PreviewFeatures {
                 "pylock" => Self::PYLOCK,
                 "add-bounds" => Self::ADD_BOUNDS,
                 "extra-build-dependencies" => Self::EXTRA_BUILD_DEPENDENCIES,
+                "format" => Self::FORMAT,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -239,6 +242,7 @@ mod tests {
             PreviewFeatures::EXTRA_BUILD_DEPENDENCIES.flag_as_str(),
             "extra-build-dependencies"
         );
+        assert_eq!(PreviewFeatures::FORMAT.flag_as_str(), "format");
     }
 
     #[test]
