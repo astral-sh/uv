@@ -1578,7 +1578,7 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match fs_err::remove_dir_all(&root) {
+                let replaced = match remove_virtualenv(&root) {
                     Ok(()) => {
                         debug!(
                             "Removed virtual environment at: {}",
@@ -1586,7 +1586,11 @@ impl ScriptEnvironment {
                         );
                         true
                     }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(uv_virtualenv::Error::Io(err))
+                        if err.kind() == std::io::ErrorKind::NotFound =>
+                    {
+                        false
+                    }
                     Err(err) => return Err(err.into()),
                 };
 

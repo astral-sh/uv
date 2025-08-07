@@ -5966,7 +5966,6 @@ version = "0.0.1"
 dependencies = [
  "fs-err",
  "pathdiff",
- "self-replace",
  "serde",
  "thiserror 2.0.12",
  "toml",
