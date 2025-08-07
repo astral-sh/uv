@@ -18,9 +18,9 @@ These changes have been validated against the top 15,000 PyPI packages; however,
 
 - Harden ZIP streaming to reject repeated entries and other malformed ZIP files ([#15136](https://github.com/astral-sh/uv/pull/15136))
 
-### Enhancements
+### Python
 
-- Sync latest Python releases ([#15135](https://github.com/astral-sh/uv/pull/15135))
+- Add CPython 3.13.6
 
 ### Configuration
 
@@ -33,6 +33,7 @@ These changes have been validated against the top 15,000 PyPI packages; however,
 - Support `UV_NO_EDITABLE` where `--no-editable` is supported ([#15107](https://github.com/astral-sh/uv/pull/15107))
 - Upgrade `cargo-dist` to add `UV_INSTALLER_URL` to PowerShell installer ([#15114](https://github.com/astral-sh/uv/pull/15114))
 - Upgrade `h2` again to avoid `too_many_internal_resets` errors ([#15111](https://github.com/astral-sh/uv/pull/15111))
+- Consider `pythonw` when copying entry points in uv run ([#15134](https://github.com/astral-sh/uv/pull/15134))
 
 ### Documentation
 
