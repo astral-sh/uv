@@ -592,6 +592,59 @@ impl TestContext {
             filters.push((r"exit code: ".to_string(), "exit status: ".to_string()));
         }
 
+        for (version, executable) in &python_versions {
+            // Add filtering for the interpreter path
+            filters.extend(
+                Self::path_patterns(executable)
+                    .into_iter()
+                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+            );
+
+            // Add filtering for the bin directory of the base interpreter path
+            let bin_dir = if cfg!(windows) {
+                // On Windows, the Python executable is in the root, not the bin directory
+                executable
+                    .canonicalize()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join("Scripts")
+            } else {
+                executable
+                    .canonicalize()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            };
+            filters.extend(
+                Self::path_patterns(bin_dir)
+                    .into_iter()
+                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-BIN-{version}]"))),
+            );
+
+            // And for the symlink we created in the test the Python path
+            filters.extend(
+                Self::path_patterns(python_dir.join(version.to_string()))
+                    .into_iter()
+                    .map(|pattern| {
+                        (
+                            format!("{pattern}[a-zA-Z0-9]*"),
+                            format!("[PYTHON-{version}]"),
+                        )
+                    }),
+            );
+
+            // Add Python patch version filtering unless explicitly requested to ensure
+            // snapshots are patch version agnostic when it is not a part of the test.
+            if version.patch().is_none() {
+                filters.push((
+                    format!(r"({})\.\d+", regex::escape(version.to_string().as_str())),
+                    "$1.[X]".to_string(),
+                ));
+            }
+        }
+
         filters.extend(
             Self::path_patterns(&bin_dir)
                 .into_iter()
@@ -634,35 +687,6 @@ impl TestContext {
         ));
         filters.push((r"[\\/]Lib[\\/]".to_string(), "/[PYTHON-LIB]/".to_string()));
 
-        for (version, executable) in &python_versions {
-            // Add filtering for the interpreter path
-            filters.extend(
-                Self::path_patterns(executable)
-                    .into_iter()
-                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
-            );
-
-            // And for the symlink we created in the test the Python path
-            filters.extend(
-                Self::path_patterns(python_dir.join(version.to_string()))
-                    .into_iter()
-                    .map(|pattern| {
-                        (
-                            format!("{pattern}[a-zA-Z0-9]*"),
-                            format!("[PYTHON-{version}]"),
-                        )
-                    }),
-            );
-
-            // Add Python patch version filtering unless explicitly requested to ensure
-            // snapshots are patch version agnostic when it is not a part of the test.
-            if version.patch().is_none() {
-                filters.push((
-                    format!(r"({})\.\d+", regex::escape(version.to_string().as_str())),
-                    "$1.[X]".to_string(),
-                ));
-            }
-        }
         filters.extend(
             Self::path_patterns(&temp_dir)
                 .into_iter()
