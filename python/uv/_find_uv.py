@@ -21,8 +21,15 @@ def find_uv_bin() -> str:
         # The user scheme scripts directory, e.g., `~/.local/bin`
         sysconfig.get_path("scripts", scheme=_user_scheme()),
         # Above the package root, e.g., from `pip install --prefix`
-        # with module path `<prefix>/lib/python3.13/site-packages/uv`
-        _join(_matching_parents(_module_path(), "lib/python*/site-packages/uv"), "bin"),
+        (
+            # On Windows, with module path `<prefix>/Lib/site-packages/uv`
+            _join(_matching_parents(_module_path(), "Lib/site-packages/uv"), "Scripts")
+            if sys.platform == "win32"
+            # On Unix,  with module path `<prefix>/lib/python3.13/site-packages/uv`
+            else _join(
+                _matching_parents(_module_path(), "lib/python*/site-packages/uv"), "bin"
+            )
+        ),
         # Adjacent to the package root, e.g., from `pip install --target`
         # with module path `<target>/uv`
         _join(_matching_parents(_module_path(), "uv"), "bin"),
