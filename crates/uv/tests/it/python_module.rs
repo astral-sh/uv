@@ -25,7 +25,10 @@ fn find_uv_bin_venv() {
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
-        .with_filter(user_scheme_bin_filter());
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
@@ -64,8 +67,8 @@ fn find_uv_bin_target() {
         .with_filtered_exe_suffix()
         .with_filter(user_scheme_bin_filter())
         // Target installs always use "bin" on all platforms. On Windows,
-        // with_filtered_virtualenv_bin only filters "Scripts", not "bin"
-        .with_filter((r"[\\/]bin[\\/]".to_string(), "/[BIN]/".to_string()));
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
 
     // Install in a target directory
     uv_snapshot!(context.filters(), context.pip_install()
@@ -106,7 +109,10 @@ fn find_uv_bin_prefix() {
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
-        .with_filter(user_scheme_bin_filter());
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
 
     // Install in a prefix directory
     let prefix = context.temp_dir.child("prefix");
@@ -143,9 +149,13 @@ fn find_uv_bin_prefix() {
     ----- stderr -----
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-      File "[TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 37, in find_uv_bin
-        raise FileNotFoundError(path)
-    FileNotFoundError: [USER_SCHEME]/[BIN]/uv
+      File "[TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
+        raise UvNotFound(
+    uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
+     - [VENV]/[BIN]
+     - [PYTHON-BIN-3.12]
+     - [USER_SCHEME]/[BIN]
+     - [TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages/[BIN]
     "#
     );
 }
@@ -156,7 +166,10 @@ fn find_uv_bin_base_prefix() {
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
-        .with_filter(user_scheme_bin_filter());
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
 
     // Test base prefix fallback by mutating sys.base_prefix
     // First, create a "base" environment with fake-uv installed
@@ -204,7 +217,10 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
-        .with_filter(user_scheme_bin_filter());
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
 
     // Create a minimal pyproject.toml
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -237,9 +253,13 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 37, in find_uv_bin
-        raise FileNotFoundError(path)
-    FileNotFoundError: [USER_SCHEME]/[BIN]/uv
+      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
+        raise UvNotFound(
+    uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
+     - [CACHE_DIR]/builds-v0/[TMP]/[BIN]
+     - [PYTHON-BIN-3.12]
+     - [USER_SCHEME]/[BIN]
+     - [CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/[BIN]
     "#
     );
 
@@ -252,7 +272,10 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
-        .with_filter(user_scheme_bin_filter());
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
 
     // Add the fake-uv package as a dependency
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -295,9 +318,13 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
      + sniffio==1.3.1
     Traceback (most recent call last):
       File "<string>", line 1, in <module>
-      File "[SITE_PACKAGES]/uv/_find_uv.py", line 37, in find_uv_bin
-        raise FileNotFoundError(path)
-    FileNotFoundError: [USER_SCHEME]/[BIN]/uv
+      File "[SITE_PACKAGES]/uv/_find_uv.py", line 36, in find_uv_bin
+        raise UvNotFound(
+    uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
+     - [CACHE_DIR]/builds-v0/[TMP]/[BIN]
+     - [PYTHON-BIN-3.12]
+     - [USER_SCHEME]/[BIN]
+     - [SITE_PACKAGES]/[BIN]
     "#
     );
 
