@@ -141,22 +141,14 @@ fn find_uv_bin_prefix() {
         .env(
             EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
-        ), @r#"
-    success: false
-    exit_code: 1
+        ), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [TEMP_DIR]/prefix/[BIN]/uv
 
     ----- stderr -----
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-      File "[TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
-        raise UvNotFound(
-    uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
-     - [VENV]/[BIN]
-     - [PYTHON-BIN-3.12]
-     - [USER_SCHEME]/[BIN]
-     - [TEMP_DIR]/prefix/[PYTHON-LIB]/site-packages/[BIN]
-    "#
+    "
     );
 }
 
@@ -239,10 +231,11 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
         .arg(context.workspace_root.join("scripts/packages/fake-uv"))
         .arg("python")
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r#"
-    success: false
-    exit_code: 1
+        .arg("import uv; print(uv.find_uv_bin())"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [CACHE_DIR]/archive-v0/[HASH]/[BIN]/uv
 
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -251,16 +244,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/uv/_find_uv.py", line 36, in find_uv_bin
-        raise UvNotFound(
-    uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
-     - [CACHE_DIR]/builds-v0/[TMP]/[BIN]
-     - [PYTHON-BIN-3.12]
-     - [USER_SCHEME]/[BIN]
-     - [CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/[BIN]
-    "#
+    "
     );
 
     Ok(())
@@ -300,10 +284,11 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         .arg("python")
         .arg("-c")
         .arg("import uv; print(uv.find_uv_bin())"),
-     @r#"
-    success: false
-    exit_code: 1
+     @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [VENV]/[BIN]/uv
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -316,16 +301,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-      File "[SITE_PACKAGES]/uv/_find_uv.py", line 36, in find_uv_bin
-        raise UvNotFound(
-    uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
-     - [CACHE_DIR]/builds-v0/[TMP]/[BIN]
-     - [PYTHON-BIN-3.12]
-     - [USER_SCHEME]/[BIN]
-     - [SITE_PACKAGES]/[BIN]
-    "#
+    "
     );
 
     Ok(())
