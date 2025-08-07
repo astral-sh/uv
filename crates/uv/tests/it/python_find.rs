@@ -758,7 +758,7 @@ fn python_find_managed() {
         .with_filtered_python_sources()
         .with_versions_as_managed(&["3.11"]);
 
-    // We find the unmanaged interpreter
+    // We find the unmanaged interpreter with managed Python disabled
     uv_snapshot!(context.filters(), context.python_find().arg("--no-managed-python"), @r"
     success: true
     exit_code: 0
@@ -776,6 +776,26 @@ fn python_find_managed() {
 
     ----- stderr -----
     error: No interpreter found for Python 3.11 in [PYTHON SOURCES]
+    ");
+
+    // We find the unmanaged interpreter with system Python preferred
+    uv_snapshot!(context.filters(), context.python_find().arg("--python-preference").arg("system"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // But, if no system Python meets the request, we'll use the managed interpreter
+    uv_snapshot!(context.filters(), context.python_find().arg("--python-preference").arg("system").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
     ");
 }
 

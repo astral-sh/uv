@@ -117,17 +117,17 @@ impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError
     /// Adds to existing errors if any, in case different layers retried.
     fn with_retries(self, retries: u32) -> Self {
         match self {
-            CachedClientError::Client {
+            Self::Client {
                 retries: existing_retries,
                 err,
-            } => CachedClientError::Client {
+            } => Self::Client {
                 retries: Some(existing_retries.unwrap_or_default() + retries),
                 err,
             },
-            CachedClientError::Callback {
+            Self::Callback {
                 retries: existing_retries,
                 err,
-            } => CachedClientError::Callback {
+            } => Self::Callback {
                 retries: Some(existing_retries.unwrap_or_default() + retries),
                 err,
             },
@@ -136,15 +136,15 @@ impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError
 
     fn retries(&self) -> Option<u32> {
         match self {
-            CachedClientError::Client { retries, .. } => *retries,
-            CachedClientError::Callback { retries, .. } => *retries,
+            Self::Client { retries, .. } => *retries,
+            Self::Callback { retries, .. } => *retries,
         }
     }
 
     fn error(&self) -> &dyn std::error::Error {
         match self {
-            CachedClientError::Client { err, .. } => err,
-            CachedClientError::Callback { err, .. } => err,
+            Self::Client { err, .. } => err,
+            Self::Callback { err, .. } => err,
         }
     }
 }
@@ -176,20 +176,12 @@ impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for
             CachedClientError::Client {
                 retries: Some(retries),
                 err,
-            } => ErrorKind::RequestWithRetries {
-                source: Box::new(err.into_kind()),
-                retries,
-            }
-            .into(),
+            } => Self::new(err.into_kind(), retries),
             CachedClientError::Client { retries: None, err } => err,
             CachedClientError::Callback {
                 retries: Some(retries),
                 err,
-            } => ErrorKind::RequestWithRetries {
-                source: Box::new(err.into().into_kind()),
-                retries,
-            }
-            .into(),
+            } => Self::new(err.into().into_kind(), retries),
             CachedClientError::Callback { retries: None, err } => err.into(),
         }
     }
@@ -525,7 +517,7 @@ impl CachedClient {
             BeforeRequest::NoMatch => {
                 // This shouldn't happen; if it does, we'll override the cache.
                 warn!(
-                    "Cached request doesn't match current request for: {}",
+                    "Cached response doesn't match current request for: {}",
                     req.url()
                 );
                 let (response, cache_policy) = self.fresh_request(req, cache_control).await?;

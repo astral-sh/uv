@@ -719,7 +719,7 @@ impl BinaryFormat {
     ///
     /// This is roughly the inverse of the above: given a binary format, which `platform_machine`
     /// tags are supported?
-    pub fn platform_machine(&self) -> &'static [BinaryFormat] {
+    pub fn platform_machine(&self) -> &'static [Self] {
         match self {
             Self::Arm64 => &[Self::Arm64],
             Self::Fat => &[Self::X86_64, Self::Ppc],

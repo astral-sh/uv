@@ -680,15 +680,15 @@ pub enum VersionBump {
 impl std::fmt::Display for VersionBump {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = match self {
-            VersionBump::Major => "major",
-            VersionBump::Minor => "minor",
-            VersionBump::Patch => "patch",
-            VersionBump::Stable => "stable",
-            VersionBump::Alpha => "alpha",
-            VersionBump::Beta => "beta",
-            VersionBump::Rc => "rc",
-            VersionBump::Post => "post",
-            VersionBump::Dev => "dev",
+            Self::Major => "major",
+            Self::Minor => "minor",
+            Self::Patch => "patch",
+            Self::Stable => "stable",
+            Self::Alpha => "alpha",
+            Self::Beta => "beta",
+            Self::Rc => "rc",
+            Self::Post => "post",
+            Self::Dev => "dev",
         };
         string.fmt(f)
     }
@@ -1017,13 +1017,13 @@ pub enum Maybe<T> {
 impl<T> Maybe<T> {
     pub fn into_option(self) -> Option<T> {
         match self {
-            Maybe::Some(value) => Some(value),
-            Maybe::None => None,
+            Self::Some(value) => Some(value),
+            Self::None => None,
         }
     }
 
     pub fn is_some(&self) -> bool {
-        matches!(self, Maybe::Some(_))
+        matches!(self, Self::Some(_))
     }
 }
 
@@ -2769,6 +2769,11 @@ pub struct VenvArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(long, value_enum, env = EnvVars::UV_LINK_MODE)]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
@@ -3662,7 +3667,7 @@ pub struct AddArgs {
     #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    #[arg(long, overrides_with = "editable", hide = true)]
+    #[arg(long, overrides_with = "editable", hide = true, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Add a dependency as provided.
@@ -4164,7 +4169,7 @@ pub struct ExportArgs {
 
     /// Export any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long)]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Include hashes for all dependencies.
@@ -4490,6 +4495,10 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
+    /// Install executables from the following packages.
+    #[arg(long)]
+    pub with_executables_from: Vec<comma::CommaSeparatedRequirements>,
+
     /// Constrain versions using the given requirements files.
     ///
     /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
@@ -4804,6 +4813,11 @@ pub struct ToolUpgradeArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -5608,6 +5622,11 @@ pub struct InstallerArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -5820,6 +5839,11 @@ pub struct ResolverArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -6024,6 +6048,11 @@ pub struct ResolverInstallerArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,

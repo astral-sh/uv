@@ -55,7 +55,7 @@ impl FromStr for GitOid {
 
         let mut bytes = [0; 40];
         bytes.copy_from_slice(s.as_bytes());
-        Ok(GitOid { bytes })
+        Ok(Self { bytes })
     }
 }
 
@@ -75,7 +75,7 @@ impl serde::Serialize for GitOid {
 }
 
 impl<'de> serde::Deserialize<'de> for GitOid {
-    fn deserialize<D>(deserializer: D) -> Result<GitOid, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {

@@ -121,12 +121,12 @@ impl Error {
         // Unfortunately different variants of `Error` track retry counts in different ways. We
         // could consider unifying the variants we handle here in `Error::from_reqwest_middleware`
         // instead, but both approaches will be fragile as new variants get added over time.
-        if let Error::NetworkErrorWithRetries { retries, .. } = self {
+        if let Self::NetworkErrorWithRetries { retries, .. } = self {
             return retries + 1;
         }
         // TODO(jack): let-chains are stable as of Rust 1.88. We should use them here as soon as
         // our rust-version is high enough.
-        if let Error::NetworkMiddlewareError(_, anyhow_error) = self {
+        if let Self::NetworkMiddlewareError(_, anyhow_error) = self {
             if let Some(RetryError::WithRetries { retries, .. }) =
                 anyhow_error.downcast_ref::<RetryError>()
             {
@@ -632,7 +632,7 @@ impl ManagedPythonDownload {
     pub fn from_request(
         request: &PythonDownloadRequest,
         python_downloads_json_url: Option<&str>,
-    ) -> Result<&'static ManagedPythonDownload, Error> {
+    ) -> Result<&'static Self, Error> {
         if let Some(download) = request.iter_downloads(python_downloads_json_url)?.next() {
             return Ok(download);
         }
@@ -658,7 +658,7 @@ impl ManagedPythonDownload {
     /// so `python_downloads_json_url` is only used in the first call to this function.
     pub fn iter_all(
         python_downloads_json_url: Option<&str>,
-    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
+    ) -> Result<impl Iterator<Item = &'static Self>, Error> {
         let downloads = PYTHON_DOWNLOADS.get_or_try_init(|| {
             let json_downloads: HashMap<String, JsonPythonDownload> = if let Some(json_source) =
                 python_downloads_json_url
@@ -1244,8 +1244,8 @@ pub enum Direction {
 impl Direction {
     fn as_str(&self) -> &str {
         match self {
-            Direction::Download => "download",
-            Direction::Extract => "extract",
+            Self::Download => "download",
+            Self::Extract => "extract",
         }
     }
 }

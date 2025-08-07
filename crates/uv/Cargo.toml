@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.8.4"
+version = "0.8.6"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -79,6 +79,7 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+h2 = { workspace = true }
 jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
@@ -93,6 +94,7 @@ tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
@@ -138,6 +140,7 @@ nix = { workspace = true }
 [package.metadata.cargo-shear]
 ignored = [
     "flate2",
+    "h2",
     "uv-performance-memory-allocator",
 ]
 

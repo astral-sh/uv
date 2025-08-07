@@ -416,6 +416,7 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
 // processes, by using the .lpReserved2 field. We want to close those file descriptors too.
 // The UCRT source code has details on the memory layout (see also initialize_inherited_file_handles_nolock):
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
+#[allow(clippy::ptr_eq)]
 fn close_handles(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
     // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!

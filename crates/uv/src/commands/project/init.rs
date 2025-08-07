@@ -684,7 +684,7 @@ pub(crate) enum InitKind {
 
 impl Default for InitKind {
     fn default() -> Self {
-        InitKind::Project(InitProjectKind::default())
+        Self::Project(InitProjectKind::default())
     }
 }
 
@@ -701,7 +701,7 @@ pub(crate) enum InitProjectKind {
 impl InitKind {
     /// Returns `true` if the project should be packaged by default.
     pub(crate) fn packaged_by_default(self) -> bool {
-        matches!(self, InitKind::Project(InitProjectKind::Library))
+        matches!(self, Self::Project(InitProjectKind::Library))
     }
 }
 
@@ -723,7 +723,7 @@ impl InitProjectKind {
         package: bool,
     ) -> Result<()> {
         match self {
-            InitProjectKind::Application => InitProjectKind::init_application(
+            Self::Application => Self::init_application(
                 name,
                 path,
                 requires_python,
@@ -736,7 +736,7 @@ impl InitProjectKind {
                 no_readme,
                 package,
             ),
-            InitProjectKind::Library => InitProjectKind::init_library(
+            Self::Library => Self::init_library(
                 name,
                 path,
                 requires_python,

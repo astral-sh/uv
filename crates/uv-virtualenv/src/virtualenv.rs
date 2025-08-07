@@ -109,15 +109,27 @@ pub(crate) fn create(
                 }
                 OnExisting::Remove => {
                     debug!("Removing existing {name} due to `--clear`");
-                    remove_virtualenv(location)?;
-                    fs::create_dir_all(location)?;
+                    // Before removing the virtual environment, we need to canonicalize the path
+                    // because `Path::metadata` will follow the symlink but we're still operating on
+                    // the unresolved path and will remove the symlink itself.
+                    let location = location
+                        .canonicalize()
+                        .unwrap_or_else(|_| location.to_path_buf());
+                    remove_virtualenv(&location)?;
+                    fs::create_dir_all(&location)?;
                 }
                 OnExisting::Fail => {
                     match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
-                            remove_virtualenv(location)?;
-                            fs::create_dir_all(location)?;
+                            // Before removing the virtual environment, we need to canonicalize the
+                            // path because `Path::metadata` will follow the symlink but we're still
+                            // operating on the unresolved path and will remove the symlink itself.
+                            let location = location
+                                .canonicalize()
+                                .unwrap_or_else(|_| location.to_path_buf());
+                            remove_virtualenv(&location)?;
+                            fs::create_dir_all(&location)?;
                         }
                         Some(false) => {
                             let hint = format!(
@@ -626,11 +638,11 @@ pub enum OnExisting {
 impl OnExisting {
     pub fn from_args(allow_existing: bool, clear: bool) -> Self {
         if allow_existing {
-            OnExisting::Allow
+            Self::Allow
         } else if clear {
-            OnExisting::Remove
+            Self::Remove
         } else {
-            OnExisting::default()
+            Self::default()
         }
     }
 }
@@ -667,52 +679,52 @@ impl WindowsExecutable {
     /// The name of the Python executable.
     fn exe(self, interpreter: &Interpreter) -> String {
         match self {
-            WindowsExecutable::Python => String::from("python.exe"),
-            WindowsExecutable::PythonMajor => {
+            Self::Python => String::from("python.exe"),
+            Self::PythonMajor => {
                 format!("python{}.exe", interpreter.python_major())
             }
-            WindowsExecutable::PythonMajorMinor => {
+            Self::PythonMajorMinor => {
                 format!(
                     "python{}.{}.exe",
                     interpreter.python_major(),
                     interpreter.python_minor()
                 )
             }
-            WindowsExecutable::PythonMajorMinort => {
+            Self::PythonMajorMinort => {
                 format!(
                     "python{}.{}t.exe",
                     interpreter.python_major(),
                     interpreter.python_minor()
                 )
             }
-            WindowsExecutable::Pythonw => String::from("pythonw.exe"),
-            WindowsExecutable::PythonwMajorMinort => {
+            Self::Pythonw => String::from("pythonw.exe"),
+            Self::PythonwMajorMinort => {
                 format!(
                     "pythonw{}.{}t.exe",
                     interpreter.python_major(),
                     interpreter.python_minor()
                 )
             }
-            WindowsExecutable::PyPy => String::from("pypy.exe"),
-            WindowsExecutable::PyPyMajor => {
+            Self::PyPy => String::from("pypy.exe"),
+            Self::PyPyMajor => {
                 format!("pypy{}.exe", interpreter.python_major())
             }
-            WindowsExecutable::PyPyMajorMinor => {
+            Self::PyPyMajorMinor => {
                 format!(
                     "pypy{}.{}.exe",
                     interpreter.python_major(),
                     interpreter.python_minor()
                 )
             }
-            WindowsExecutable::PyPyw => String::from("pypyw.exe"),
-            WindowsExecutable::PyPyMajorMinorw => {
+            Self::PyPyw => String::from("pypyw.exe"),
+            Self::PyPyMajorMinorw => {
                 format!(
                     "pypy{}.{}w.exe",
                     interpreter.python_major(),
                     interpreter.python_minor()
                 )
             }
-            WindowsExecutable::GraalPy => String::from("graalpy.exe"),
+            Self::GraalPy => String::from("graalpy.exe"),
         }
     }
 
@@ -733,7 +745,7 @@ impl WindowsExecutable {
             // These are not relevant as of now for PyPy as it doesn't yet support Python 3.13.
             Self::PyPy | Self::PyPyMajor | Self::PyPyMajorMinor => "venvlauncher.exe",
             Self::PyPyw | Self::PyPyMajorMinorw => "venvwlauncher.exe",
-            WindowsExecutable::GraalPy => "venvlauncher.exe",
+            Self::GraalPy => "venvlauncher.exe",
         }
     }
 }

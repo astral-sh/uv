@@ -5,7 +5,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
-use uv_pep440::VersionSpecifiers;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
@@ -84,20 +84,20 @@ impl CompatibleDist<'_> {
     /// Return the `requires-python` specifier for the distribution, if any.
     pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
         match self {
-            CompatibleDist::InstalledDist(_) => None,
-            CompatibleDist::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
-            CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
-            CompatibleDist::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
+            Self::InstalledDist(_) => None,
+            Self::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
+            Self::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
+            Self::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
         }
     }
 
     // For installable distributions, return the prioritized distribution it was derived from.
     pub fn prioritized(&self) -> Option<&PrioritizedDist> {
         match self {
-            CompatibleDist::InstalledDist(_) => None,
-            CompatibleDist::SourceDist { prioritized, .. }
-            | CompatibleDist::CompatibleWheel { prioritized, .. }
-            | CompatibleDist::IncompatibleWheel { prioritized, .. } => Some(prioritized),
+            Self::InstalledDist(_) => None,
+            Self::SourceDist { prioritized, .. }
+            | Self::CompatibleWheel { prioritized, .. }
+            | Self::IncompatibleWheel { prioritized, .. } => Some(prioritized),
         }
     }
 
@@ -620,15 +620,15 @@ impl PrioritizedDist {
 impl<'a> CompatibleDist<'a> {
     /// Return the [`ResolvedDistRef`] to use during resolution.
     pub fn for_resolution(&self) -> ResolvedDistRef<'a> {
-        match *self {
-            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
-            CompatibleDist::SourceDist { sdist, prioritized } => {
+        match self {
+            Self::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
+            Self::SourceDist { sdist, prioritized } => {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
-            CompatibleDist::CompatibleWheel {
+            Self::CompatibleWheel {
                 wheel, prioritized, ..
             } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
-            CompatibleDist::IncompatibleWheel {
+            Self::IncompatibleWheel {
                 wheel, prioritized, ..
             } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
         }
@@ -636,15 +636,15 @@ impl<'a> CompatibleDist<'a> {
 
     /// Return the [`ResolvedDistRef`] to use during installation.
     pub fn for_installation(&self) -> ResolvedDistRef<'a> {
-        match *self {
-            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
-            CompatibleDist::SourceDist { sdist, prioritized } => {
+        match self {
+            Self::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
+            Self::SourceDist { sdist, prioritized } => {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
-            CompatibleDist::CompatibleWheel {
+            Self::CompatibleWheel {
                 wheel, prioritized, ..
             } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
-            CompatibleDist::IncompatibleWheel {
+            Self::IncompatibleWheel {
                 sdist, prioritized, ..
             } => ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized },
         }
@@ -654,10 +654,10 @@ impl<'a> CompatibleDist<'a> {
     /// wheel.
     pub fn wheel(&self) -> Option<&RegistryBuiltWheel> {
         match self {
-            CompatibleDist::InstalledDist(_) => None,
-            CompatibleDist::SourceDist { .. } => None,
-            CompatibleDist::CompatibleWheel { wheel, .. } => Some(wheel),
-            CompatibleDist::IncompatibleWheel { wheel, .. } => Some(wheel),
+            Self::InstalledDist(_) => None,
+            Self::SourceDist { .. } => None,
+            Self::CompatibleWheel { wheel, .. } => Some(wheel),
+            Self::IncompatibleWheel { wheel, .. } => Some(wheel),
         }
     }
 }
@@ -804,11 +804,19 @@ impl IncompatibleWheel {
     }
 }
 
+/// Given a wheel filename, determine the set of supported markers.
+pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
+    let mut marker = implied_platform_markers(filename);
+    marker.and(implied_python_markers(filename));
+
+    marker
+}
+
 /// Given a wheel filename, determine the set of supported platforms, in terms of their markers.
 ///
 /// This is roughly the inverse of platform tag generation: given a tag, we want to infer the
 /// supported platforms (rather than generating the supported tags from a given platform).
-pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
+fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
     for platform_tag in filename.platform_tags() {
         match platform_tag {
@@ -904,6 +912,94 @@ pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
             }
         }
     }
+
+    marker
+}
+
+/// Given a wheel filename, determine the set of supported Python versions, in terms of their markers.
+///
+/// This is roughly the inverse of Python tag generation: given a tag, we want to infer the
+/// supported Python version (rather than generating the supported tags from a given Python version).
+fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
+    let mut marker = MarkerTree::FALSE;
+
+    for python_tag in filename.python_tags() {
+        // First, construct the version marker based on the tag
+        let mut tree = match python_tag {
+            LanguageTag::None => {
+                // No Python tag means no Python version requirement.
+                return MarkerTree::TRUE;
+            }
+            LanguageTag::Python { major, minor: None } => {
+                MarkerTree::expression(MarkerExpression::Version {
+                    key: uv_pep508::MarkerValueVersion::PythonVersion,
+                    specifier: VersionSpecifier::equals_star_version(Version::new([u64::from(
+                        *major,
+                    )])),
+                })
+            }
+            LanguageTag::Python {
+                major,
+                minor: Some(minor),
+            }
+            | LanguageTag::CPython {
+                python_version: (major, minor),
+            }
+            | LanguageTag::PyPy {
+                python_version: (major, minor),
+            }
+            | LanguageTag::GraalPy {
+                python_version: (major, minor),
+            }
+            | LanguageTag::Pyston {
+                python_version: (major, minor),
+            } => MarkerTree::expression(MarkerExpression::Version {
+                key: uv_pep508::MarkerValueVersion::PythonVersion,
+                specifier: VersionSpecifier::equals_star_version(Version::new([
+                    u64::from(*major),
+                    u64::from(*minor),
+                ])),
+            }),
+        };
+
+        // Then, add implementation markers for implementation-specific tags
+        match python_tag {
+            LanguageTag::None | LanguageTag::Python { .. } => {
+                // No implementation marker needed
+            }
+            LanguageTag::CPython { .. } => {
+                tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("CPython"),
+                }));
+            }
+            LanguageTag::PyPy { .. } => {
+                tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("PyPy"),
+                }));
+            }
+            LanguageTag::GraalPy { .. } => {
+                tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("GraalPy"),
+                }));
+            }
+            LanguageTag::Pyston { .. } => {
+                tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("Pyston"),
+                }));
+            }
+        }
+
+        marker.or(tree);
+    }
+
     marker
 }
 
@@ -914,7 +1010,25 @@ mod tests {
     use super::*;
 
     #[track_caller]
-    fn assert_markers(filename: &str, expected: &str) {
+    fn assert_platform_markers(filename: &str, expected: &str) {
+        let filename = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(
+            implied_platform_markers(&filename),
+            expected.parse::<MarkerTree>().unwrap()
+        );
+    }
+
+    #[track_caller]
+    fn assert_python_markers(filename: &str, expected: &str) {
+        let filename = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(
+            implied_python_markers(&filename),
+            expected.parse::<MarkerTree>().unwrap()
+        );
+    }
+
+    #[track_caller]
+    fn assert_implied_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
             implied_markers(&filename),
@@ -923,45 +1037,108 @@ mod tests {
     }
 
     #[test]
-    fn test_implied_markers() {
+    fn test_implied_platform_markers() {
         let filename = WheelFilename::from_str("example-1.0-py3-none-any.whl").unwrap();
-        assert_eq!(implied_markers(&filename), MarkerTree::TRUE);
+        assert_eq!(implied_platform_markers(&filename), MarkerTree::TRUE);
 
-        assert_markers(
+        assert_platform_markers(
             "example-1.0-cp310-cp310-win32.whl",
             "sys_platform == 'win32' and platform_machine == 'x86'",
         );
-        assert_markers(
+        assert_platform_markers(
             "numpy-2.2.1-cp313-cp313t-win_amd64.whl",
             "sys_platform == 'win32' and platform_machine == 'AMD64'",
         );
-        assert_markers(
+        assert_platform_markers(
             "numpy-2.2.1-cp313-cp313t-win_arm64.whl",
             "sys_platform == 'win32' and platform_machine == 'arm64'",
         );
-        assert_markers(
+        assert_platform_markers(
             "numpy-2.2.1-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
             "sys_platform == 'linux' and platform_machine == 'aarch64'",
         );
-        assert_markers(
+        assert_platform_markers(
             "numpy-2.2.1-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
             "sys_platform == 'linux' and platform_machine == 'x86_64'",
         );
-        assert_markers(
+        assert_platform_markers(
             "numpy-2.2.1-cp312-cp312-musllinux_1_2_aarch64.whl",
             "sys_platform == 'linux' and platform_machine == 'aarch64'",
         );
-        assert_markers(
+        assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_14_0_x86_64.whl",
             "sys_platform == 'darwin' and platform_machine == 'x86_64'",
         );
-        assert_markers(
+        assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_10_9_x86_64.whl",
             "sys_platform == 'darwin' and platform_machine == 'x86_64'",
         );
-        assert_markers(
+        assert_platform_markers(
             "numpy-2.2.1-cp310-cp310-macosx_11_0_arm64.whl",
             "sys_platform == 'darwin' and platform_machine == 'arm64'",
+        );
+    }
+
+    #[test]
+    fn test_implied_python_markers() {
+        let filename = WheelFilename::from_str("example-1.0-none-none-any.whl").unwrap();
+        assert_eq!(implied_python_markers(&filename), MarkerTree::TRUE);
+
+        assert_python_markers(
+            "example-1.0-cp310-cp310-any.whl",
+            "python_full_version == '3.10.*' and platform_python_implementation == 'CPython'",
+        );
+        assert_python_markers(
+            "example-1.0-cp311-cp311-any.whl",
+            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython'",
+        );
+        assert_python_markers(
+            "example-1.0-cp312-cp312-any.whl",
+            "python_full_version == '3.12.*' and platform_python_implementation == 'CPython'",
+        );
+        assert_python_markers(
+            "example-1.0-cp313-cp313-any.whl",
+            "python_full_version == '3.13.*' and platform_python_implementation == 'CPython'",
+        );
+        assert_python_markers(
+            "example-1.0-cp313-cp313t-any.whl",
+            "python_full_version == '3.13.*' and platform_python_implementation == 'CPython'",
+        );
+        assert_python_markers(
+            "example-1.0-pp310-pypy310_pp73-any.whl",
+            "python_full_version == '3.10.*' and platform_python_implementation == 'PyPy'",
+        );
+        assert_python_markers(
+            "example-1.0-py310-none-any.whl",
+            "python_full_version >= '3.10' and python_full_version < '3.11'",
+        );
+        assert_python_markers(
+            "example-1.0-py3-none-any.whl",
+            "python_full_version >= '3' and python_full_version < '4'",
+        );
+        assert_python_markers(
+            "example-1.0-py311.py312-none-any.whl",
+            "python_full_version >= '3.11' and python_full_version < '3.13'",
+        );
+    }
+
+    #[test]
+    fn test_implied_markers() {
+        assert_implied_markers(
+            "numpy-1.0-cp310-cp310-win32.whl",
+            "python_full_version == '3.10.*' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'x86'",
+        );
+        assert_implied_markers(
+            "numpy-1.0-cp311-cp311-macosx_10_9_x86_64.whl",
+            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64'",
+        );
+        assert_implied_markers(
+            "numpy-1.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "python_full_version == '3.12.*' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'aarch64'",
+        );
+        assert_implied_markers(
+            "example-1.0-py3-none-any.whl",
+            "python_full_version >= '3' and python_full_version < '4'",
         );
     }
 }

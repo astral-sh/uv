@@ -80,8 +80,8 @@ impl FileLocation {
     /// that page.
     pub fn new(url: SmallString, base: &SmallString) -> Self {
         match split_scheme(&url) {
-            Some(..) => FileLocation::AbsoluteUrl(UrlString::new(url)),
-            None => FileLocation::RelativeUrl(base.clone(), url),
+            Some(..) => Self::AbsoluteUrl(UrlString::new(url)),
+            None => Self::RelativeUrl(base.clone(), url),
         }
     }
 
@@ -97,8 +97,8 @@ impl FileLocation {
     /// example, the location is a path and the path isn't valid UTF-8.
     /// (Because URLs must be valid UTF-8.)
     pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
-        match *self {
-            FileLocation::RelativeUrl(ref base, ref path) => {
+        match self {
+            Self::RelativeUrl(base, path) => {
                 let base_url =
                     DisplaySafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
                         base: base.to_string(),
@@ -111,7 +111,7 @@ impl FileLocation {
                 })?;
                 Ok(joined)
             }
-            FileLocation::AbsoluteUrl(ref absolute) => absolute.to_url(),
+            Self::AbsoluteUrl(absolute) => absolute.to_url(),
         }
     }
 }
@@ -174,7 +174,7 @@ impl UrlString {
     pub fn without_fragment(&self) -> Cow<'_, Self> {
         self.as_ref()
             .split_once('#')
-            .map(|(path, _)| Cow::Owned(UrlString(SmallString::from(path))))
+            .map(|(path, _)| Cow::Owned(Self(SmallString::from(path))))
             .unwrap_or(Cow::Borrowed(self))
     }
 }

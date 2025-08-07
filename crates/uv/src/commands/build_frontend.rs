@@ -19,11 +19,12 @@ use uv_configuration::{
     PackageConfigSettings, Preview, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, RequiresPython, SourceDist,
+    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, RequiresPython, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
@@ -202,6 +203,7 @@ async fn build_impl(
         no_build_isolation,
         no_build_isolation_package,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade: _,
@@ -349,6 +351,7 @@ async fn build_impl(
             *no_build_isolation,
             no_build_isolation_package,
             extra_build_dependencies,
+            extra_build_variables,
             *index_strategy,
             *keyring_provider,
             exclude_newer.clone(),
@@ -428,6 +431,7 @@ async fn build_package(
     no_build_isolation: bool,
     no_build_isolation_package: &[PackageName],
     extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
     exclude_newer: ExcludeNewer,
@@ -563,13 +567,15 @@ async fn build_package(
     let state = SharedState::default();
     let workspace_cache = WorkspaceCache::default();
 
-    // Create a build dispatch.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         &interpreter,
         index_locations,
         &flat_index,
@@ -580,6 +586,7 @@ async fn build_package(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &hasher,
@@ -1173,11 +1180,11 @@ impl BuildMessage {
     /// The normalized filename of the wheel or source distribution.
     fn normalized_filename(&self) -> &DistFilename {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 normalized_filename: name,
                 ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 normalized_filename: name,
                 ..
             } => name,
@@ -1187,10 +1194,10 @@ impl BuildMessage {
     /// The filename of the wheel or source distribution before normalization.
     fn raw_filename(&self) -> &str {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename: name, ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 raw_filename: name, ..
             } => name,
         }
@@ -1198,7 +1205,7 @@ impl BuildMessage {
 
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename,
                 output_dir,
                 ..
@@ -1209,7 +1216,7 @@ impl BuildMessage {
                     output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
-            BuildMessage::List {
+            Self::List {
                 raw_filename,
                 file_list,
                 source_tree,

@@ -666,7 +666,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
@@ -681,7 +681,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
@@ -810,7 +810,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
@@ -826,7 +826,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (python_full_version == '3.8.*'):
+      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
       ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
           And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
           And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
@@ -1662,6 +1662,19 @@ fn sync_extra_build_dependencies() -> Result<()> {
      + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
     // Adding `extra-build-dependencies` with the wrong name should fail the build
     // (the cache is invalidated when extra build dependencies change)
     pyproject_toml.write_str(indoc! {r#"
@@ -1802,6 +1815,205 @@ fn sync_extra_build_dependencies() -> Result<()> {
 }
 
 #[test]
+fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that uses legacy setuptools (no pyproject.toml) and requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+
+    // Create a setup.py that checks for anyio during build
+    let setup_py = child.child("setup.py");
+    setup_py.write_str(indoc! {r#"
+        import sys
+        from setuptools import setup, find_packages
+
+        try:
+            import anyio
+            print("anyio is available!", file=sys.stderr)
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        setup(
+            name="child",
+            version="0.1.0",
+            packages=find_packages(),
+        )
+    "#})?;
+    child.child("child").create_dir_all()?;
+    child.child("child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_setuptools() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that uses setuptools with pyproject.toml and requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+
+    // Create a pyproject.toml that uses setuptools
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    // Create a setup.py that checks for anyio during build
+    let setup_py = child.child("setup.py");
+    setup_py.write_str(indoc! {r#"
+        import sys
+        from setuptools import setup, find_packages
+
+        try:
+            import anyio
+            print("anyio is available!", file=sys.stderr)
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        setup(
+            name="child",
+            version="0.1.0",
+            packages=find_packages(),
+        )
+    "#})?;
+    child.child("child").create_dir_all()?;
+    child.child("child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Missing `anyio` module
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_extra_build_dependencies_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
@@ -1875,6 +2087,160 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
 
     // TODO(zanieb): We want to test with `--no-sources` too but unfortunately that's not easy
     // because it'll disable the `child` path source too!
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_index() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // Create a build backend that checks for a specific version of anyio
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        if not expected_version:
+            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Ensure our build backend is checking the version correctly
+    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 3.0 but got 4.3.0
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Ensure that we're resolving to `4.3.0`, the "latest" on PyPI.
+    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Pin `anyio` to the Test PyPI.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        anyio = { index = "test" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
+        name = "test"
+        explicit = true
+    "#})?;
+
+    // The child should be rebuilt with `3.5` on reinstall, the "latest" on Test PyPI.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 4.3 but got 3.5.0
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
 
     Ok(())
 }
@@ -12109,6 +12475,431 @@ fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     error: failed to write to file `[TEMP_DIR]/project/uv.lock`: Permission denied (os error 13)
+    ");
+
+    Ok(())
+}
+
+/// Test that build dependencies respect locked versions from the lockfile.
+#[test]
+fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // Create a build backend that checks for a specific version of anyio
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        if not expected_version:
+            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Create a project that will resolve to a non-latest version of `anyio`
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    // Now add the child dependency.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Ensure our build backend is checking the version correctly
+    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 3.0 but got 4.3.0
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Now constrain the `anyio` build dependency to match the runtime
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+    "#})?;
+
+    // The child should be built with anyio 4.0
+    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.0.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Change the constraints on anyio
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+    "#})?;
+
+    // The child should be rebuilt with anyio 3.7, without `--reinstall`
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 4.0 but got 3.7.1
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // With preview enabled, there's no warning
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features").arg("extra-build-dependencies")
+        .arg("--reinstall-package").arg("child")
+        .env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Now, we'll set a constraint in the parent project
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+    "#})?;
+
+    // And an incompatible constraint in the child project
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio>3.8,<4.2"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // This should fail
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
+      ├─▶ No solution found when resolving: `hatchling`, `anyio>3.8, <4.2`, `anyio==3.7.1 (index: https://pypi.org/simple)`
+      ╰─▶ Because you require anyio>3.8,<4.2 and anyio==3.7.1, we can conclude that your requirements are unsatisfiable.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Adding a version specifier should also fail
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio>4", match-runtime = true }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 11, column 9
+         |
+      11 | child = [{ requirement = "anyio>4", match-runtime = true }]
+         |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      Dependencies marked with `match-runtime = true` cannot include version specifiers
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 11, column 9
+       |
+    11 | child = [{ requirement = "anyio>4", match-runtime = true }]
+       |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Dependencies marked with `match-runtime = true` cannot include version specifiers
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_variables() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Create a build backend that asserts that `EXPECTED_ANYIO_VERSION` matches the installed version of `anyio`.
+    let build_backend = context.temp_dir.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        if not expected_version:
+            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+
+    // Create a project that will resolve to a non-latest version of `anyio`
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    context.temp_dir.child("src/parent/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    // Ensure our build backend is checking the version correctly.
+    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `parent @ file://[TEMP_DIR]/`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_editable` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 3.0 but got 4.3.0
+
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    // Set the variable in TOML (to an incorrect value).
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.extra-build-variables]
+        parent = { EXPECTED_ANYIO_VERSION = "3.0" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `parent @ file://[TEMP_DIR]/`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_editable` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 3.0 but got 4.3.0
+
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
+
+    // Set the variable in TOML (to a correct value).
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv.extra-build-variables]
+        parent = { EXPECTED_ANYIO_VERSION = "4.3.0" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + parent==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())

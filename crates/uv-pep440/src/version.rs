@@ -63,18 +63,18 @@ impl Operator {
     /// Note that this routine is not reversible in all cases. For example
     /// `Operator::ExactEqual` negates to `Operator::NotEqual`, and
     /// `Operator::NotEqual` in turn negates to `Operator::Equal`.
-    pub fn negate(self) -> Option<Operator> {
+    pub fn negate(self) -> Option<Self> {
         Some(match self {
-            Operator::Equal => Operator::NotEqual,
-            Operator::EqualStar => Operator::NotEqualStar,
-            Operator::ExactEqual => Operator::NotEqual,
-            Operator::NotEqual => Operator::Equal,
-            Operator::NotEqualStar => Operator::EqualStar,
-            Operator::TildeEqual => return None,
-            Operator::LessThan => Operator::GreaterThanEqual,
-            Operator::LessThanEqual => Operator::GreaterThan,
-            Operator::GreaterThan => Operator::LessThanEqual,
-            Operator::GreaterThanEqual => Operator::LessThan,
+            Self::Equal => Self::NotEqual,
+            Self::EqualStar => Self::NotEqualStar,
+            Self::ExactEqual => Self::NotEqual,
+            Self::NotEqual => Self::Equal,
+            Self::NotEqualStar => Self::EqualStar,
+            Self::TildeEqual => return None,
+            Self::LessThan => Self::GreaterThanEqual,
+            Self::LessThanEqual => Self::GreaterThan,
+            Self::GreaterThan => Self::LessThanEqual,
+            Self::GreaterThanEqual => Self::LessThan,
         })
     }
 
@@ -1721,8 +1721,8 @@ impl LocalVersion {
     /// Convert the local version segments into a slice.
     pub fn as_slice(&self) -> LocalVersionSlice<'_> {
         match self {
-            LocalVersion::Segments(segments) => LocalVersionSlice::Segments(segments),
-            LocalVersion::Max => LocalVersionSlice::Max,
+            Self::Segments(segments) => LocalVersionSlice::Segments(segments),
+            Self::Max => LocalVersionSlice::Max,
         }
     }
 
@@ -1742,7 +1742,7 @@ impl LocalVersion {
 impl std::fmt::Display for LocalVersionSlice<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LocalVersionSlice::Segments(segments) => {
+            Self::Segments(segments) => {
                 for (i, segment) in segments.iter().enumerate() {
                     if i > 0 {
                         write!(f, ".")?;
@@ -1751,7 +1751,7 @@ impl std::fmt::Display for LocalVersionSlice<'_> {
                 }
                 Ok(())
             }
-            LocalVersionSlice::Max => write!(f, "[max]"),
+            Self::Max => write!(f, "[max]"),
         }
     }
 }
@@ -1759,14 +1759,14 @@ impl std::fmt::Display for LocalVersionSlice<'_> {
 impl CacheKey for LocalVersionSlice<'_> {
     fn cache_key(&self, state: &mut CacheKeyHasher) {
         match self {
-            LocalVersionSlice::Segments(segments) => {
+            Self::Segments(segments) => {
                 0u8.cache_key(state);
                 segments.len().cache_key(state);
                 for segment in *segments {
                     segment.cache_key(state);
                 }
             }
-            LocalVersionSlice::Max => {
+            Self::Max => {
                 1u8.cache_key(state);
             }
         }
@@ -1912,7 +1912,7 @@ impl<'a> Parser<'a> {
     const SEPARATOR: ByteSet = ByteSet::new(&[b'.', b'_', b'-']);
 
     /// Create a new `Parser` for parsing the version in the given byte string.
-    fn new(version: &'a [u8]) -> Parser<'a> {
+    fn new(version: &'a [u8]) -> Self {
         Parser {
             v: version,
             i: 0,
@@ -2405,9 +2405,9 @@ impl ReleaseNumbers {
 
     /// Returns the release components as a slice.
     fn as_slice(&self) -> &[u64] {
-        match *self {
-            Self::Inline { ref numbers, len } => &numbers[..len],
-            Self::Vec(ref vec) => vec,
+        match self {
+            Self::Inline { numbers, len } => &numbers[..*len],
+            Self::Vec(vec) => vec,
         }
     }
 }

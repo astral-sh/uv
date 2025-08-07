@@ -549,11 +549,11 @@ impl RegistryClient {
 
         match result {
             Ok(metadata) => Ok(SimpleMetadataSearchOutcome::Found(metadata)),
-            Err(err) => match err.into_kind() {
+            Err(err) => match err.kind() {
                 // The package could not be found in the remote index.
-                ErrorKind::WrappedReqwestError(url, err) => {
-                    let Some(status_code) = err.status() else {
-                        return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                ErrorKind::WrappedReqwestError(.., reqwest_err) => {
+                    let Some(status_code) = reqwest_err.status() else {
+                        return Err(err);
                     };
                     let decision =
                         status_code_strategy.handle_status_code(status_code, index, capabilities);
@@ -562,7 +562,7 @@ impl RegistryClient {
                             status_code,
                             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
                         ) {
-                            return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                            return Err(err);
                         }
                     }
                     Ok(SimpleMetadataSearchOutcome::from(decision))
@@ -574,7 +574,7 @@ impl RegistryClient {
                 // The package could not be found in the local index.
                 ErrorKind::FileNotFound(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
-                err => Err(err.into()),
+                _ => Err(err),
             },
         }
     }
@@ -1179,11 +1179,7 @@ impl SimpleMetadata {
         let SimpleHtml { base, files } =
             SimpleHtml::parse(text, url).map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-        Ok(SimpleMetadata::from_files(
-            files,
-            package_name,
-            base.as_url(),
-        ))
+        Ok(Self::from_files(files, package_name, base.as_url()))
     }
 }
 

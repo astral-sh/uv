@@ -19,9 +19,11 @@ use uv_configuration::{
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Origin, Requirement, RequiresPython, UnresolvedRequirementSpecification, Verbatim,
+    DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
+    NameRequirementSpecification, Origin, Requirement, RequiresPython,
+    UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -97,6 +99,7 @@ pub(crate) async fn pip_compile(
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
@@ -283,6 +286,7 @@ pub(crate) async fn pip_compile(
 
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
+    let python_preference = python_preference.with_system_flag(system);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
         PythonInstallation::find(
@@ -480,12 +484,16 @@ pub(crate) async fn pip_compile(
             .map(|constraint| constraint.requirement.clone()),
     );
 
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        build_constraints,
+        &build_constraints,
         &interpreter,
         &index_locations,
         &flat_index,
@@ -496,6 +504,7 @@ pub(crate) async fn pip_compile(
         &config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         &build_options,
         &build_hashes,

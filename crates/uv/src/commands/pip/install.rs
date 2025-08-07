@@ -15,9 +15,10 @@ use uv_configuration::{
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Requirement,
-    Resolution, UnresolvedRequirementSpecification,
+    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, NameRequirementSpecification,
+    Origin, Requirement, Resolution, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -80,6 +81,7 @@ pub(crate) async fn pip_install(
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
     extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
     modifications: Modifications,
     python_version: Option<PythonVersion>,
@@ -146,7 +148,7 @@ pub(crate) async fn pip_install(
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeatures::PYLOCK) {
             warn_user!(
-                "The `--pylock` setting is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                "The `--pylock` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
                 PreviewFeatures::PYLOCK
             );
         }
@@ -193,7 +195,7 @@ pub(crate) async fn pip_install(
                 .map(PythonRequest::parse)
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, false),
-            python_preference,
+            python_preference.with_system_flag(system),
             &cache,
             preview,
         )?;
@@ -206,6 +208,7 @@ pub(crate) async fn pip_install(
                 .map(PythonRequest::parse)
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
+            PythonPreference::default().with_system_flag(system),
             &cache,
             preview,
         )?;
@@ -423,13 +426,16 @@ pub(crate) async fn pip_install(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         &index_locations,
         &flat_index,
@@ -440,6 +446,7 @@ pub(crate) async fn pip_install(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         &build_options,
         &build_hasher,
@@ -506,7 +513,7 @@ pub(crate) async fn pip_install(
             .resolution_mode(resolution_mode)
             .prerelease_mode(prerelease_mode)
             .dependency_mode(dependency_mode)
-            .exclude_newer(exclude_newer)
+            .exclude_newer(exclude_newer.clone())
             .index_strategy(index_strategy)
             .torch_backend(torch_backend)
             .build_options(build_options.clone())
@@ -554,6 +561,35 @@ pub(crate) async fn pip_install(
         (resolution, hasher)
     };
 
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
+
+    // Create a build dispatch.
+    let build_dispatch = BuildDispatch::new(
+        &client,
+        &cache,
+        &build_constraints,
+        interpreter,
+        &index_locations,
+        &flat_index,
+        &dependency_metadata,
+        state.clone(),
+        index_strategy,
+        config_settings,
+        config_settings_package,
+        build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
+        link_mode,
+        &build_options,
+        &hasher,
+        exclude_newer.clone(),
+        sources,
+        WorkspaceCache::default(),
+        concurrency,
+        preview,
+    );
+
     // Sync the environment.
     match operations::install(
         &resolution,
@@ -563,9 +599,6 @@ pub(crate) async fn pip_install(
         &build_options,
         link_mode,
         compile,
-        &index_locations,
-        config_settings,
-        config_settings_package,
         &hasher,
         &tags,
         &client,

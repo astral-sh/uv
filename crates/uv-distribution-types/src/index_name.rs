@@ -62,7 +62,7 @@ impl<'de> serde::de::Deserialize<'de> for IndexName {
         D: serde::de::Deserializer<'de>,
     {
         let s = Cow::<'_, str>::deserialize(deserializer)?;
-        IndexName::new(&s).map_err(serde::de::Error::custom)
+        Self::new(&s).map_err(serde::de::Error::custom)
     }
 }
 

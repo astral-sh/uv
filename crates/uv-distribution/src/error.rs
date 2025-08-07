@@ -189,7 +189,7 @@ impl Error {
         distribution: String,
         expected: &[HashDigest],
         actual: &[HashDigest],
-    ) -> Error {
+    ) -> Self {
         match (expected.is_empty(), actual.is_empty()) {
             (true, true) => Self::MissingHashes { distribution },
             (true, false) => {

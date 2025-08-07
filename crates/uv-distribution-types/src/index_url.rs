@@ -212,7 +212,7 @@ impl serde::ser::Serialize for IndexUrl {
 }
 
 impl<'de> serde::de::Deserialize<'de> for IndexUrl {
-    fn deserialize<D>(deserializer: D) -> Result<IndexUrl, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
@@ -260,7 +260,7 @@ impl Deref for IndexUrl {
     type Target = Url;
 
     fn deref(&self) -> &Self::Target {
-        match &self {
+        match self {
             Self::Pypi(url) => url,
             Self::Url(url) => url,
             Self::Path(url) => url,
@@ -488,8 +488,8 @@ impl<'a> IndexLocations {
 }
 
 impl From<&IndexLocations> for uv_auth::Indexes {
-    fn from(index_locations: &IndexLocations) -> uv_auth::Indexes {
-        uv_auth::Indexes::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
+    fn from(index_locations: &IndexLocations) -> Self {
+        Self::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
             let mut url = index.url().url().clone();
             url.set_username("").ok();
             url.set_password(None).ok();

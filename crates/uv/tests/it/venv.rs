@@ -6,6 +6,9 @@ use predicates::prelude::*;
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 
+#[cfg(unix)]
+use fs_err::os::unix::fs::symlink;
+
 use crate::common::{TestContext, uv_snapshot};
 
 #[test]
@@ -1387,4 +1390,185 @@ fn venv_python_preference() {
     warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
     ");
+}
+
+#[test]
+#[cfg(unix)]
+fn create_venv_symlink_clear_preservation() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a target directory
+    let target_dir = context.temp_dir.child("target");
+    target_dir.create_dir_all()?;
+
+    // Create a symlink pointing to the target directory
+    let symlink_path = context.temp_dir.child(".venv");
+    symlink(&target_dir, &symlink_path)?;
+
+    // Verify symlink exists
+    assert!(symlink_path.path().is_symlink());
+
+    // Create virtual environment at symlink location
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(symlink_path.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Verify symlink is still preserved after creation
+    assert!(symlink_path.path().is_symlink());
+
+    // Run uv venv with --clear to test symlink preservation during clear
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(symlink_path.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Verify symlink is STILL preserved after --clear
+    assert!(symlink_path.path().is_symlink());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn create_venv_symlink_recreate_preservation() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a target directory
+    let target_dir = context.temp_dir.child("target");
+    target_dir.create_dir_all()?;
+
+    // Create a symlink pointing to the target directory
+    let symlink_path = context.temp_dir.child(".venv");
+    symlink(&target_dir, &symlink_path)?;
+
+    // Verify symlink exists
+    assert!(symlink_path.path().is_symlink());
+
+    // Create virtual environment at symlink location
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(symlink_path.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Verify symlink is preserved after first creation
+    assert!(symlink_path.path().is_symlink());
+
+    // Run uv venv again WITHOUT --clear to test recreation behavior
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(symlink_path.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Verify symlink is STILL preserved after recreation
+    assert!(symlink_path.path().is_symlink());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn create_venv_nested_symlink_preservation() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a target directory
+    let target_dir = context.temp_dir.child("target");
+    target_dir.create_dir_all()?;
+
+    // Create first symlink level: intermediate -> target
+    let intermediate_link = context.temp_dir.child("intermediate");
+    symlink(&target_dir, &intermediate_link)?;
+
+    // Create second symlink level: .venv -> intermediate (nested symlink)
+    let symlink_path = context.temp_dir.child(".venv");
+    symlink(&intermediate_link, &symlink_path)?;
+
+    // Verify nested symlink exists
+    assert!(symlink_path.path().is_symlink());
+    assert!(intermediate_link.path().is_symlink());
+
+    // Create virtual environment at nested symlink location
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(symlink_path.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Verify both symlinks are preserved
+    assert!(symlink_path.path().is_symlink());
+    assert!(intermediate_link.path().is_symlink());
+
+    // Run uv venv again to test nested symlink preservation during recreation
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(symlink_path.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    // Verify nested symlinks are STILL preserved
+    assert!(symlink_path.path().is_symlink());
+    assert!(intermediate_link.path().is_symlink());
+
+    Ok(())
 }

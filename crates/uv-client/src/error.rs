@@ -11,19 +11,56 @@ use uv_redacted::DisplaySafeUrl;
 use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
 
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
+#[derive(Debug)]
 pub struct Error {
     kind: Box<ErrorKind>,
+    retries: u32,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.retries > 0 {
+            write!(
+                f,
+                "Request failed after {retries} retries",
+                retries = self.retries
+            )
+        } else {
+            Display::fmt(&self.kind, f)
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        if self.retries > 0 {
+            Some(&self.kind)
+        } else {
+            self.kind.source()
+        }
+    }
 }
 
 impl Error {
-    /// Convert this error into its [`ErrorKind`] variant.
+    /// Create a new [`Error`] with the given [`ErrorKind`] and number of retries.
+    pub fn new(kind: ErrorKind, retries: u32) -> Self {
+        Self {
+            kind: Box::new(kind),
+            retries,
+        }
+    }
+
+    /// Return the number of retries that were attempted before this error was returned.
+    pub fn retries(&self) -> u32 {
+        self.retries
+    }
+
+    /// Convert this error into an [`ErrorKind`].
     pub fn into_kind(self) -> ErrorKind {
         *self.kind
     }
 
-    /// Get a reference to the [`ErrorKind`] variant of this error.
+    /// Return the [`ErrorKind`] of this error.
     pub fn kind(&self) -> &ErrorKind {
         &self.kind
     }
@@ -78,7 +115,7 @@ impl Error {
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            ErrorKind::WrappedReqwestError(_url, err) => {
+            ErrorKind::WrappedReqwestError(_, err) => {
                 if let Some(status) = err.status() {
                     // If the server doesn't support HEAD requests, we can't check for range
                     // requests.
@@ -143,6 +180,7 @@ impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
         Self {
             kind: Box::new(kind),
+            retries: 0,
         }
     }
 }
@@ -265,10 +303,12 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
+    /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
         Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
     }
 
+    /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`].
     pub(crate) fn from_reqwest_middleware(
         url: DisplaySafeUrl,
         err: reqwest_middleware::Error,

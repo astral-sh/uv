@@ -27,11 +27,6 @@ pub enum LinkMode {
     /// Hard link packages from the wheel into the `site-packages` directory.
     Hardlink,
     /// Symbolically link packages from the wheel into the `site-packages` directory.
-    ///
-    /// WARNING: The use of symlinks is discouraged, as they create tight coupling between the
-    /// cache and the target environment. For example, clearing the cache (`uv cache clear`) will
-    /// break all installed packages by way of removing the underlying source files. Use symlinks
-    /// with caution.
     Symlink,
 }
 

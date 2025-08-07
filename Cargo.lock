@@ -251,7 +251,7 @@ dependencies = [
 [[package]]
 name = "async_zip"
 version = "0.0.17"
-source = "git+https://github.com/astral-sh/rs-async-zip?rev=c909fda63fcafe4af496a07bfda28a5aae97e58d#c909fda63fcafe4af496a07bfda28a5aae97e58d"
+source = "git+https://github.com/astral-sh/rs-async-zip?rev=285e48742b74ab109887d62e1ae79e7c15fd4878#285e48742b74ab109887d62e1ae79e7c15fd4878"
 dependencies = [
  "async-compression",
  "crc32fast",
@@ -337,9 +337,9 @@ dependencies = [
 
 [[package]]
 name = "backon"
-version = "1.5.1"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "302eaff5357a264a2c42f127ecb8bac761cf99749fc3dc95677e2743991f99e7"
+checksum = "592277618714fbcecda9a02ba7a8781f319d26532a88553bbacc77ba5d2b3a8d"
 dependencies = [
  "fastrand",
  "gloo-timers",
@@ -607,9 +607,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.41"
+version = "4.5.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be92d32e80243a54711e5d7ce823c35c41c9d929dc4ab58e1276f625841aadf9"
+checksum = "ed87a9d530bb41a67537289bafcac159cb3ee28460e0a4571123d2a778a6a882"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -617,9 +617,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.41"
+version = "4.5.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "707eab41e9622f9139419d573eca0900137718000c517d47da73045f54331c3d"
+checksum = "64f4f3f3c77c94aff3c7e9aac9a2ca1974a5adf392a8bb751e827d6d127ab966"
 dependencies = [
  "anstream",
  "anstyle",
@@ -678,9 +678,9 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
 name = "codspeed"
-version = "3.0.4"
+version = "3.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d29180405ab3b37bb020246ea66bf8ae233708766fd59581ae929feaef10ce91"
+checksum = "35584c5fcba8059780748866387fb97c5a203bcfc563fc3d0790af406727a117"
 dependencies = [
  "anyhow",
  "bincode",
@@ -696,9 +696,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-criterion-compat"
-version = "3.0.4"
+version = "3.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2454d874ca820ffd71273565530ad318f413195bbc99dce6c958ca07db362c63"
+checksum = "78f6c1c6bed5fd84d319e8b0889da051daa361c79b7709c9394dfe1a882bba67"
 dependencies = [
  "codspeed",
  "codspeed-criterion-compat-walltime",
@@ -707,9 +707,9 @@ dependencies = [
 
 [[package]]
 name = "codspeed-criterion-compat-walltime"
-version = "3.0.4"
+version = "3.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "093a9383cdd1a5a0bd1a47cdafb49ae0c6dcd0793c8fb8f79768bab423128c9c"
+checksum = "c989289ce6b1cbde72ed560496cb8fbf5aa14d5ef5666f168e7f87751038352e"
 dependencies = [
  "anes",
  "cast",
@@ -1514,9 +1514,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17da50a276f1e01e0ba6c029e47b7100754904ee8a278f886546e98575380785"
+checksum = "f3c0b69cfcb4e1b9f1bf2f53f95f766e4661169728ec61cd3fe5a0166f2d1386"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -1715,7 +1715,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -1941,7 +1941,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2001,7 +2001,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2872,7 +2872,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3228,9 +3228,9 @@ dependencies = [
 
 [[package]]
 name = "rkyv"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e147371c75553e1e2fcdb483944a8540b8438c31426279553b9a8182a9b7b65"
+checksum = "19f5c3e5da784cd8c69d32cdc84673f3204536ca56e1fa01be31a74b92c932ac"
 dependencies = [
  "bytecheck",
  "bytes",
@@ -3248,9 +3248,9 @@ dependencies = [
 
 [[package]]
 name = "rkyv_derive"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "246b40ac189af6c675d124b802e8ef6d5246c53e17367ce9501f8f66a81abb7a"
+checksum = "4270433626cffc9c4c1d3707dd681f2a2718d3d7b09ad754bec137acecda8d22"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3339,7 +3339,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3590,9 +3590,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.141"
+version = "1.0.142"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30b9eff21ebe718216c6ec64e1d9ac57087aad11efc64e32002bce4a0d4c03d3"
+checksum = "030fedb782600dcbd6f02d479bf0d817ac3bb40d644745b769d6a96bc3afc5a7"
 dependencies = [
  "itoa",
  "memchr",
@@ -3943,7 +3943,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix 1.0.8",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4655,7 +4655,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.8.4"
+version = "0.8.6"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4674,6 +4674,7 @@ dependencies = [
  "flate2",
  "fs-err",
  "futures",
+ "h2",
  "http",
  "ignore",
  "indexmap",
@@ -4700,6 +4701,7 @@ dependencies = [
  "textwrap",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-util",
  "toml",
  "toml_edit",
  "tracing",
@@ -4822,7 +4824,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.8.4"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "uv-build-backend",
@@ -5091,6 +5093,7 @@ dependencies = [
  "anyhow",
  "clap",
  "fs-err",
+ "futures",
  "itertools 0.14.0",
  "markdown",
  "owo-colors",
@@ -5103,8 +5106,10 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tagu",
+ "tempfile",
  "textwrap",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",
@@ -5297,6 +5302,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution-filename",
  "uv-pypi-types",
+ "uv-static",
  "xz2",
  "zip",
 ]
@@ -5423,6 +5429,7 @@ dependencies = [
  "async-channel",
  "fs-err",
  "futures",
+ "owo-colors",
  "rayon",
  "rustc-hash",
  "same-file",
@@ -5436,6 +5443,7 @@ dependencies = [
  "uv-cache-key",
  "uv-configuration",
  "uv-distribution",
+ "uv-distribution-filename",
  "uv-distribution-types",
  "uv-fs",
  "uv-git-types",
@@ -5958,7 +5966,6 @@ version = "0.0.1"
 dependencies = [
  "fs-err",
  "pathdiff",
- "self-replace",
  "serde",
  "thiserror 2.0.12",
  "toml",
@@ -6039,7 +6046,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.8.4"
+version = "0.8.6"
 
 [[package]]
 name = "uv-virtualenv"

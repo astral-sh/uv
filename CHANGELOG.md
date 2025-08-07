@@ -2,6 +2,80 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.8.6
+
+This release contains hardening measures to address differentials in behavior between uv and Python's built-in ZIP parser ([CVE-2025-54368](https://github.com/astral-sh/uv/security/advisories/GHSA-8qf3-x8v5-2pj8)).
+
+Prior to this release, attackers could construct ZIP files that would be extracted differently by pip, uv, and other tools. As a result, ZIPs could be constructed that would be considered harmless by (e.g.) scanners, but contain a malicious payload when extracted by uv. As of v0.8.6, uv now applies additional checks to reject such ZIPs.
+
+Thanks to a triage effort with the [Python Security Response Team](https://devguide.python.org/developer-workflow/psrt/) and PyPI maintainers, we were able to determine that these differentials **were not exploited** via PyPI during the time they were present. The PyPI team has also implemented similar checks and now guards against these parsing differentials on upload.
+
+Although the practical risk of exploitation is low, we take the _hypothetical_ risk of parser differentials very seriously. Out of an abundance of caution, we have assigned this advisory a CVE identifier and have given it a "moderate" severity suggestion.
+
+These changes have been validated against the top 15,000 PyPI packages; however, it's plausible that a non-malicious ZIP could be falsely rejected with this additional hardening. As an escape hatch, users who do encounter breaking changes can enable `UV_INSECURE_NO_ZIP_VALIDATION` to restore the previous behavior. If you encounter such a rejection, please file an issue in uv and to the upstream package.
+
+For additional information, please refer to the following blog posts:
+
+* [Astral: uv security advisory: ZIP payload obfuscation](https://astral.sh/blog/uv-security-advisory-cve-2025-54368)
+* [PyPI: Preventing ZIP parser confusion attacks on Python package installers](https://blog.pypi.org/posts/2025-08-07-wheel-archive-confusion-attacks/)
+
+### Security
+
+- Harden ZIP streaming to reject repeated entries and other malformed ZIP files ([#15136](https://github.com/astral-sh/uv/pull/15136))
+
+### Python
+
+- Add CPython 3.13.6
+
+### Configuration
+
+- Add support for per-project build-time environment variables ([#15095](https://github.com/astral-sh/uv/pull/15095))
+
+### Bug fixes
+
+- Avoid invalid simplification with conflict markers  ([#15041](https://github.com/astral-sh/uv/pull/15041))
+- Respect `UV_HTTP_RETRIES` in `uv publish` ([#15106](https://github.com/astral-sh/uv/pull/15106))
+- Support `UV_NO_EDITABLE` where `--no-editable` is supported ([#15107](https://github.com/astral-sh/uv/pull/15107))
+- Upgrade `cargo-dist` to add `UV_INSTALLER_URL` to PowerShell installer ([#15114](https://github.com/astral-sh/uv/pull/15114))
+- Upgrade `h2` again to avoid `too_many_internal_resets` errors ([#15111](https://github.com/astral-sh/uv/pull/15111))
+- Consider `pythonw` when copying entry points in uv run ([#15134](https://github.com/astral-sh/uv/pull/15134))
+
+### Documentation
+
+- Ensure symlink warning is shown ([#15126](https://github.com/astral-sh/uv/pull/15126))
+
+## 0.8.5
+
+### Enhancements
+
+- Enable `uv run` with a GitHub Gist ([#15058](https://github.com/astral-sh/uv/pull/15058))
+- Improve HTTP response caching log messages ([#15067](https://github.com/astral-sh/uv/pull/15067))
+- Show wheel tag hints in install plan ([#15066](https://github.com/astral-sh/uv/pull/15066))
+- Support installing additional executables in `uv tool install` ([#14014](https://github.com/astral-sh/uv/pull/14014))
+
+### Preview features
+
+- Enable extra build dependencies to 'match runtime' versions ([#15036](https://github.com/astral-sh/uv/pull/15036))
+- Remove duplicate `extra-build-dependencies` warnings for `uv pip` ([#15088](https://github.com/astral-sh/uv/pull/15088))
+- Use "option" instead of "setting" in `pylock` warning ([#15089](https://github.com/astral-sh/uv/pull/15089))
+- Respect extra build requires when reading from wheel cache ([#15030](https://github.com/astral-sh/uv/pull/15030))
+- Preserve lowered extra build dependencies ([#15038](https://github.com/astral-sh/uv/pull/15038))
+
+### Bug fixes
+
+- Add Python versions to markers implied from wheels ([#14913](https://github.com/astral-sh/uv/pull/14913))
+- Ensure consistent indentation when adding dependencies ([#14991](https://github.com/astral-sh/uv/pull/14991))
+- Fix handling of `python-preference = system` when managed interpreters are on the PATH ([#15059](https://github.com/astral-sh/uv/pull/15059))
+- Fix symlink preservation in virtual environment creation ([#14933](https://github.com/astral-sh/uv/pull/14933))
+- Gracefully handle entrypoint permission errors ([#15026](https://github.com/astral-sh/uv/pull/15026))
+- Include wheel hashes from local Simple indexes ([#14993](https://github.com/astral-sh/uv/pull/14993))
+- Prefer system Python installations over managed ones when `--system` is used ([#15061](https://github.com/astral-sh/uv/pull/15061))
+- Remove retry wrapper when matching on error kind ([#14996](https://github.com/astral-sh/uv/pull/14996))
+- Revert `h2` upgrade ([#15079](https://github.com/astral-sh/uv/pull/15079))
+
+### Documentation
+
+- Improve visibility of copy and line separator in dark mode ([#14987](https://github.com/astral-sh/uv/pull/14987))
 
 ## 0.8.4
 

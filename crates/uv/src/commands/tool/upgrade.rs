@@ -3,12 +3,13 @@ use itertools::Itertools;
 use owo_colors::{AnsiColors, OwoColorize};
 use std::collections::BTreeMap;
 use std::fmt::Write;
-use tracing::debug;
+use std::str::FromStr;
+use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, Preview};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{ExtraBuildRequires, Requirement};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_python::{
@@ -19,7 +20,7 @@ use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::write_error_chain;
-use uv_workspace::{WorkspaceCache, pyproject::ExtraBuildDependencies};
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
@@ -156,6 +157,7 @@ pub(crate) async fn upgrade(
             .into_iter()
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
+            trace!("Error trace: {err:?}");
             write_error_chain(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
@@ -337,7 +339,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             build_constraints,
-            uv_distribution::ExtraBuildRequires::from_lowered(ExtraBuildDependencies::default()),
+            ExtraBuildRequires::default(),
             &settings,
             network_settings,
             &state,
@@ -372,12 +374,19 @@ async fn upgrade_tool(
         // existing executables.
         remove_entrypoints(&existing_tool_receipt);
 
+        let entrypoints: Vec<_> = existing_tool_receipt
+            .entrypoints()
+            .iter()
+            .filter_map(|entry| PackageName::from_str(entry.from.as_ref()?).ok())
+            .collect();
+
         // If we modified the target tool, reinstall the entrypoints.
         finalize_tool_install(
             &environment,
             name,
+            &entrypoints,
             installed_tools,
-            ToolOptions::from(options),
+            &ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
             existing_tool_receipt.requirements().to_vec(),

@@ -16,10 +16,10 @@ use uv_configuration::{
     PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::{DistributionDatabase, LoweredRequirement};
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    Index, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -46,7 +46,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
@@ -254,10 +254,16 @@ pub(crate) enum ProjectError {
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]
+    ExtraBuildRequires(#[from] uv_distribution_types::ExtraBuildRequiresError),
+
+    #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    RetryParsing(#[from] uv_client::RetryParsingError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -737,8 +743,8 @@ impl ScriptInterpreter {
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            ScriptInterpreter::Interpreter(interpreter) => interpreter,
-            ScriptInterpreter::Environment(venv) => venv.into_interpreter(),
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.into_interpreter(),
         }
     }
 
@@ -1034,8 +1040,8 @@ impl ProjectInterpreter {
     /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            ProjectInterpreter::Interpreter(interpreter) => interpreter,
-            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.into_interpreter(),
         }
     }
 
@@ -1074,11 +1080,11 @@ pub(crate) enum PythonRequestSource {
 impl std::fmt::Display for PythonRequestSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PythonRequestSource::UserRequest => write!(f, "explicit request"),
-            PythonRequestSource::DotPythonVersion(file) => {
+            Self::UserRequest => write!(f, "explicit request"),
+            Self::DotPythonVersion(file) => {
                 write!(f, "version file at `{}`", file.path().user_display())
             }
-            PythonRequestSource::RequiresPython => write!(f, "`requires-python` metadata"),
+            Self::RequiresPython => write!(f, "`requires-python` metadata"),
         }
     }
 }
@@ -1572,7 +1578,7 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match fs_err::remove_dir_all(&root) {
+                let replaced = match remove_virtualenv(&root) {
                     Ok(()) => {
                         debug!(
                             "Removed virtual environment at: {}",
@@ -1580,7 +1586,11 @@ impl ScriptEnvironment {
                         );
                         true
                     }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(uv_virtualenv::Error::Io(err))
+                        if err.kind() == std::io::ErrorKind::NotFound =>
+                    {
+                        false
+                    }
                     Err(err) => return Err(err.into()),
                 };
 
@@ -1694,6 +1704,7 @@ pub(crate) async fn resolve_names(
                 no_build_isolation,
                 no_build_isolation_package,
                 extra_build_dependencies,
+                extra_build_variables,
                 prerelease: _,
                 resolution: _,
                 sources,
@@ -1705,7 +1716,7 @@ pub(crate) async fn resolve_names(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()
-        .map_err(uv_requirements::Error::ClientError)?
+        .map_err(|err| uv_requirements::Error::ClientError(err.into()))?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
@@ -1741,13 +1752,16 @@ pub(crate) async fn resolve_names(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -1758,6 +1772,7 @@ pub(crate) async fn resolve_names(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -1851,6 +1866,7 @@ pub(crate) async fn resolve_environment(
         no_build_isolation,
         no_build_isolation_package,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade: _,
@@ -1953,13 +1969,16 @@ pub(crate) async fn resolve_environment(
 
     let workspace_cache = WorkspaceCache::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -1970,6 +1989,7 @@ pub(crate) async fn resolve_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -2038,6 +2058,7 @@ pub(crate) async fn sync_environment(
         no_build_isolation,
         no_build_isolation_package,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -2095,13 +2116,16 @@ pub(crate) async fn sync_environment(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -2112,6 +2136,7 @@ pub(crate) async fn sync_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &build_hasher,
@@ -2131,9 +2156,6 @@ pub(crate) async fn sync_environment(
         build_options,
         link_mode,
         compile_bytecode,
-        index_locations,
-        config_setting,
-        config_settings_package,
         &hasher,
         tags,
         &client,
@@ -2177,7 +2199,7 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     modifications: Modifications,
     build_constraints: Constraints,
-    extra_build_requires: uv_distribution::ExtraBuildRequires,
+    extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     state: &SharedState,
@@ -2209,6 +2231,7 @@ pub(crate) async fn update_environment(
                 no_build_isolation,
                 no_build_isolation_package,
                 extra_build_dependencies: _,
+                extra_build_variables,
                 prerelease,
                 resolution,
                 sources,
@@ -2328,7 +2351,7 @@ pub(crate) async fn update_environment(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -2339,6 +2362,7 @@ pub(crate) async fn update_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -2393,9 +2417,6 @@ pub(crate) async fn update_environment(
         build_options,
         *link_mode,
         *compile_bytecode,
-        index_locations,
-        config_setting,
-        config_settings_package,
         &hasher,
         tags,
         &client,
@@ -2624,7 +2645,7 @@ pub(crate) fn script_specification(
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
-) -> Result<uv_distribution::ExtraBuildRequires, ProjectError> {
+) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
     let script_indexes = script.indexes(settings.sources);
     let script_sources = script.sources(settings.sources);
@@ -2639,28 +2660,36 @@ pub(crate) fn script_extra_build_requires(
         .and_then(|uv| uv.extra_build_dependencies.as_ref())
         .unwrap_or(&empty);
 
-    // Lower the extra build dependencies
-    let mut extra_build_dependencies = ExtraBuildDependencies::default();
+    // Lower the extra build dependencies.
+    let mut extra_build_requires = ExtraBuildRequires::default();
     for (name, requirements) in script_extra_build_dependencies {
         let lowered_requirements: Vec<_> = requirements
             .iter()
             .cloned()
-            .flat_map(|requirement| {
-                LoweredRequirement::from_non_workspace_requirement(
-                    requirement,
-                    script_dir.as_ref(),
-                    script_sources,
-                    script_indexes,
-                    &settings.index_locations,
-                )
-                .map_ok(|req| req.into_inner().into())
-            })
+            .flat_map(
+                |ExtraBuildDependency {
+                     requirement,
+                     match_runtime,
+                 }| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                    )
+                    .map_ok(move |requirement| ExtraBuildRequirement {
+                        requirement: requirement.into_inner(),
+                        match_runtime,
+                    })
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
-        extra_build_dependencies.insert(name.clone(), lowered_requirements);
+        extra_build_requires.insert(name.clone(), lowered_requirements);
     }
 
-    Ok(uv_distribution::ExtraBuildRequires::from_lowered(
-        extra_build_dependencies,
+    Ok(LoweredExtraBuildDependencies::from_lowered(
+        extra_build_requires,
     ))
 }
 

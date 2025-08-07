@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::convert::Infallible;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
@@ -1981,7 +1980,7 @@ impl<'tags> TagPolicy<'tags> {
     /// Returns the platform tags to consider.
     fn tags(&self) -> &'tags Tags {
         match self {
-            TagPolicy::Required(tags) | TagPolicy::Preferred(tags) => tags,
+            Self::Required(tags) | Self::Preferred(tags) => tags,
         }
     }
 }
@@ -2208,7 +2207,7 @@ struct LockWire {
 impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
-    fn try_from(wire: LockWire) -> Result<Lock, LockError> {
+    fn try_from(wire: LockWire) -> Result<Self, LockError> {
         // Count the number of sources for each package name. When
         // there's only one source for a particular package name (the
         // overwhelmingly common case), we can omit some data (like source and
@@ -2247,7 +2246,7 @@ impl TryFrom<LockWire> for Lock {
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .map(UniversalMarker::from_combined)
             .collect();
-        let lock = Lock::new(
+        let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -2354,7 +2353,7 @@ impl Package {
                 })
                 .collect::<Result<_, _>>()?
         };
-        Ok(Package {
+        Ok(Self {
             id,
             sdist,
             wheels,
@@ -3160,7 +3159,7 @@ struct PackageMetadata {
 }
 
 impl PackageMetadata {
-    fn unwire(self, requires_python: &RequiresPython) -> PackageMetadata {
+    fn unwire(self, requires_python: &RequiresPython) -> Self {
         // We need to complexify these markers so things like
         // `requires_python < '0'` get normalized to False
         let unwire_requirements = |requirements: BTreeSet<Requirement>| -> BTreeSet<Requirement> {
@@ -3175,7 +3174,7 @@ impl PackageMetadata {
                 .collect()
         };
 
-        PackageMetadata {
+        Self {
             requires_dist: unwire_requirements(self.requires_dist),
             provides_extras: self.provides_extras,
             dependency_groups: self
@@ -3253,10 +3252,7 @@ pub(crate) struct PackageId {
 }
 
 impl PackageId {
-    fn from_annotated_dist(
-        annotated_dist: &AnnotatedDist,
-        root: &Path,
-    ) -> Result<PackageId, LockError> {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist, root: &Path) -> Result<Self, LockError> {
         // Identify the source of the package.
         let source = Source::from_resolved_dist(&annotated_dist.dist, root)?;
         // Omit versions for dynamic source trees.
@@ -3356,8 +3352,8 @@ impl PackageIdForDependency {
 }
 
 impl From<PackageId> for PackageIdForDependency {
-    fn from(id: PackageId) -> PackageIdForDependency {
-        PackageIdForDependency {
+    fn from(id: PackageId) -> Self {
+        Self {
             name: id.name,
             version: id.version,
             source: Some(id.source),
@@ -3392,50 +3388,48 @@ enum Source {
 }
 
 impl Source {
-    fn from_resolved_dist(resolved_dist: &ResolvedDist, root: &Path) -> Result<Source, LockError> {
+    fn from_resolved_dist(resolved_dist: &ResolvedDist, root: &Path) -> Result<Self, LockError> {
         match *resolved_dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => Source::from_dist(dist, root),
+            ResolvedDist::Installable { ref dist, .. } => Self::from_dist(dist, root),
         }
     }
 
-    fn from_dist(dist: &Dist, root: &Path) -> Result<Source, LockError> {
+    fn from_dist(dist: &Dist, root: &Path) -> Result<Self, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => Source::from_built_dist(built_dist, root),
-            Dist::Source(ref source_dist) => Source::from_source_dist(source_dist, root),
+            Dist::Built(ref built_dist) => Self::from_built_dist(built_dist, root),
+            Dist::Source(ref source_dist) => Self::from_source_dist(source_dist, root),
         }
     }
 
-    fn from_built_dist(built_dist: &BuiltDist, root: &Path) -> Result<Source, LockError> {
+    fn from_built_dist(built_dist: &BuiltDist, root: &Path) -> Result<Self, LockError> {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Source::from_registry_built_dist(reg_dist, root),
-            BuiltDist::DirectUrl(ref direct_dist) => {
-                Ok(Source::from_direct_built_dist(direct_dist))
-            }
-            BuiltDist::Path(ref path_dist) => Source::from_path_built_dist(path_dist, root),
+            BuiltDist::Registry(ref reg_dist) => Self::from_registry_built_dist(reg_dist, root),
+            BuiltDist::DirectUrl(ref direct_dist) => Ok(Self::from_direct_built_dist(direct_dist)),
+            BuiltDist::Path(ref path_dist) => Self::from_path_built_dist(path_dist, root),
         }
     }
 
     fn from_source_dist(
         source_dist: &uv_distribution_types::SourceDist,
         root: &Path,
-    ) -> Result<Source, LockError> {
+    ) -> Result<Self, LockError> {
         match *source_dist {
             uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
-                Source::from_registry_source_dist(reg_dist, root)
+                Self::from_registry_source_dist(reg_dist, root)
             }
             uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
-                Ok(Source::from_direct_source_dist(direct_dist))
+                Ok(Self::from_direct_source_dist(direct_dist))
             }
             uv_distribution_types::SourceDist::Git(ref git_dist) => {
-                Ok(Source::from_git_dist(git_dist))
+                Ok(Self::from_git_dist(git_dist))
             }
             uv_distribution_types::SourceDist::Path(ref path_dist) => {
-                Source::from_path_source_dist(path_dist, root)
+                Self::from_path_source_dist(path_dist, root)
             }
             uv_distribution_types::SourceDist::Directory(ref directory) => {
-                Source::from_directory_source_dist(directory, root)
+                Self::from_directory_source_dist(directory, root)
             }
         }
     }
@@ -3443,26 +3437,26 @@ impl Source {
     fn from_registry_built_dist(
         reg_dist: &RegistryBuiltDist,
         root: &Path,
-    ) -> Result<Source, LockError> {
-        Source::from_index_url(&reg_dist.best_wheel().index, root)
+    ) -> Result<Self, LockError> {
+        Self::from_index_url(&reg_dist.best_wheel().index, root)
     }
 
     fn from_registry_source_dist(
         reg_dist: &RegistrySourceDist,
         root: &Path,
-    ) -> Result<Source, LockError> {
-        Source::from_index_url(&reg_dist.index, root)
+    ) -> Result<Self, LockError> {
+        Self::from_index_url(&reg_dist.index, root)
     }
 
-    fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Source {
-        Source::Direct(
+    fn from_direct_built_dist(direct_dist: &DirectUrlBuiltDist) -> Self {
+        Self::Direct(
             normalize_url(direct_dist.url.to_url()),
             DirectSource { subdirectory: None },
         )
     }
 
-    fn from_direct_source_dist(direct_dist: &DirectUrlSourceDist) -> Source {
-        Source::Direct(
+    fn from_direct_source_dist(direct_dist: &DirectUrlSourceDist) -> Self {
+        Self::Direct(
             normalize_url(direct_dist.url.to_url()),
             DirectSource {
                 subdirectory: direct_dist.subdirectory.clone(),
@@ -3470,43 +3464,43 @@ impl Source {
         )
     }
 
-    fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Source, LockError> {
+    fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
         let path = relative_to(&path_dist.install_path, root)
             .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Source::Path(path.into_boxed_path()))
+        Ok(Self::Path(path.into_boxed_path()))
     }
 
-    fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Source, LockError> {
+    fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
         let path = relative_to(&path_dist.install_path, root)
             .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Source::Path(path.into_boxed_path()))
+        Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_directory_source_dist(
         directory_dist: &DirectorySourceDist,
         root: &Path,
-    ) -> Result<Source, LockError> {
+    ) -> Result<Self, LockError> {
         let path = relative_to(&directory_dist.install_path, root)
             .or_else(|_| std::path::absolute(&directory_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
-            Ok(Source::Editable(path.into_boxed_path()))
+            Ok(Self::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual.unwrap_or(false) {
-            Ok(Source::Virtual(path.into_boxed_path()))
+            Ok(Self::Virtual(path.into_boxed_path()))
         } else {
-            Ok(Source::Directory(path.into_boxed_path()))
+            Ok(Self::Directory(path.into_boxed_path()))
         }
     }
 
-    fn from_index_url(index_url: &IndexUrl, root: &Path) -> Result<Source, LockError> {
+    fn from_index_url(index_url: &IndexUrl, root: &Path) -> Result<Self, LockError> {
         match index_url {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 // Remove any sensitive credentials from the index URL.
                 let redacted = index_url.without_credentials();
                 let source = RegistrySource::Url(UrlString::from(redacted.as_ref()));
-                Ok(Source::Registry(source))
+                Ok(Self::Registry(source))
             }
             IndexUrl::Path(url) => {
                 let path = url
@@ -3516,13 +3510,13 @@ impl Source {
                     .or_else(|_| std::path::absolute(&path))
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
-                Ok(Source::Registry(source))
+                Ok(Self::Registry(source))
             }
         }
     }
 
-    fn from_git_dist(git_dist: &GitSourceDist) -> Source {
-        Source::Git(
+    fn from_git_dist(git_dist: &GitSourceDist) -> Self {
+        Self::Git(
             UrlString::from(locked_git_url(git_dist)),
             GitSource {
                 kind: GitSourceKind::from(git_dist.git.reference().clone()),
@@ -3546,47 +3540,47 @@ impl Source {
 
     /// Returns `true` if the source is that of a wheel.
     fn is_wheel(&self) -> bool {
-        match &self {
-            Source::Path(path) => {
+        match self {
+            Self::Path(path) => {
                 matches!(
                     DistExtension::from_path(path).ok(),
                     Some(DistExtension::Wheel)
                 )
             }
-            Source::Direct(url, _) => {
+            Self::Direct(url, _) => {
                 matches!(
                     DistExtension::from_path(url.as_ref()).ok(),
                     Some(DistExtension::Wheel)
                 )
             }
-            Source::Directory(..) => false,
-            Source::Editable(..) => false,
-            Source::Virtual(..) => false,
-            Source::Git(..) => false,
-            Source::Registry(..) => false,
+            Self::Directory(..) => false,
+            Self::Editable(..) => false,
+            Self::Virtual(..) => false,
+            Self::Git(..) => false,
+            Self::Registry(..) => false,
         }
     }
 
     /// Returns `true` if the source is that of a source tree.
     fn is_source_tree(&self) -> bool {
         match self {
-            Source::Directory(..) | Source::Editable(..) | Source::Virtual(..) => true,
-            Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => false,
+            Self::Directory(..) | Self::Editable(..) | Self::Virtual(..) => true,
+            Self::Path(..) | Self::Git(..) | Self::Registry(..) | Self::Direct(..) => false,
         }
     }
 
     /// Returns the path to the source tree, if the source is a source tree.
     fn as_source_tree(&self) -> Option<&Path> {
         match self {
-            Source::Directory(path) | Source::Editable(path) | Source::Virtual(path) => Some(path),
-            Source::Path(..) | Source::Git(..) | Source::Registry(..) | Source::Direct(..) => None,
+            Self::Directory(path) | Self::Editable(path) | Self::Virtual(path) => Some(path),
+            Self::Path(..) | Self::Git(..) | Self::Registry(..) | Self::Direct(..) => None,
         }
     }
 
     fn to_toml(&self, table: &mut Table) {
         let mut source_table = InlineTable::new();
-        match *self {
-            Source::Registry(ref source) => match source {
+        match self {
+            Self::Registry(source) => match source {
                 RegistrySource::Url(url) => {
                     source_table.insert("registry", Value::from(url.as_ref()));
                 }
@@ -3597,10 +3591,10 @@ impl Source {
                     );
                 }
             },
-            Source::Git(ref url, _) => {
+            Self::Git(url, _) => {
                 source_table.insert("git", Value::from(url.as_ref()));
             }
-            Source::Direct(ref url, DirectSource { ref subdirectory }) => {
+            Self::Direct(url, DirectSource { subdirectory }) => {
                 source_table.insert("url", Value::from(url.as_ref()));
                 if let Some(ref subdirectory) = *subdirectory {
                     source_table.insert(
@@ -3609,22 +3603,22 @@ impl Source {
                     );
                 }
             }
-            Source::Path(ref path) => {
+            Self::Path(path) => {
                 source_table.insert("path", Value::from(PortablePath::from(path).to_string()));
             }
-            Source::Directory(ref path) => {
+            Self::Directory(path) => {
                 source_table.insert(
                     "directory",
                     Value::from(PortablePath::from(path).to_string()),
                 );
             }
-            Source::Editable(ref path) => {
+            Self::Editable(path) => {
                 source_table.insert(
                     "editable",
                     Value::from(PortablePath::from(path).to_string()),
                 );
             }
-            Source::Virtual(ref path) => {
+            Self::Virtual(path) => {
                 source_table.insert("virtual", Value::from(PortablePath::from(path).to_string()));
             }
         }
@@ -3635,16 +3629,14 @@ impl Source {
 impl Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Source::Registry(RegistrySource::Url(url))
-            | Source::Git(url, _)
-            | Source::Direct(url, _) => {
+            Self::Registry(RegistrySource::Url(url)) | Self::Git(url, _) | Self::Direct(url, _) => {
                 write!(f, "{}+{}", self.name(), url)
             }
-            Source::Registry(RegistrySource::Path(path))
-            | Source::Path(path)
-            | Source::Directory(path)
-            | Source::Editable(path)
-            | Source::Virtual(path) => {
+            Self::Registry(RegistrySource::Path(path))
+            | Self::Path(path)
+            | Self::Directory(path)
+            | Self::Editable(path)
+            | Self::Virtual(path) => {
                 write!(f, "{}+{}", self.name(), PortablePath::from(path))
             }
         }
@@ -3653,7 +3645,7 @@ impl Display for Source {
 
 impl Source {
     fn name(&self) -> &str {
-        match *self {
+        match self {
             Self::Registry(..) => "registry",
             Self::Git(..) => "git",
             Self::Direct(..) => "direct",
@@ -3672,7 +3664,7 @@ impl Source {
     ///
     /// Returns `None` to indicate that the source kind _may_ include a hash.
     fn requires_hash(&self) -> Option<bool> {
-        match *self {
+        match self {
             Self::Registry(..) => None,
             Self::Direct(..) | Self::Path(..) => Some(true),
             Self::Git(..) | Self::Directory(..) | Self::Editable(..) | Self::Virtual(..) => {
@@ -3712,12 +3704,12 @@ enum SourceWire {
 impl TryFrom<SourceWire> for Source {
     type Error = LockError;
 
-    fn try_from(wire: SourceWire) -> Result<Source, LockError> {
+    fn try_from(wire: SourceWire) -> Result<Self, LockError> {
         #[allow(clippy::enum_glob_use)]
         use self::SourceWire::*;
 
         match wire {
-            Registry { registry } => Ok(Source::Registry(registry.into())),
+            Registry { registry } => Ok(Self::Registry(registry.into())),
             Git { git } => {
                 let url = DisplaySafeUrl::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
@@ -3737,18 +3729,18 @@ impl TryFrom<SourceWire> for Source {
                     })
                     .map_err(LockErrorKind::InvalidGitSourceUrl)?;
 
-                Ok(Source::Git(UrlString::from(url), git_source))
+                Ok(Self::Git(UrlString::from(url), git_source))
             }
-            Direct { url, subdirectory } => Ok(Source::Direct(
+            Direct { url, subdirectory } => Ok(Self::Direct(
                 url,
                 DirectSource {
                     subdirectory: subdirectory.map(Box::<std::path::Path>::from),
                 },
             )),
-            Path { path } => Ok(Source::Path(path.into())),
-            Directory { directory } => Ok(Source::Directory(directory.into())),
-            Editable { editable } => Ok(Source::Editable(editable.into())),
-            Virtual { r#virtual } => Ok(Source::Virtual(r#virtual.into())),
+            Path { path } => Ok(Self::Path(path.into())),
+            Directory { directory } => Ok(Self::Directory(directory.into())),
+            Editable { editable } => Ok(Self::Editable(editable.into())),
+            Virtual { r#virtual } => Ok(Self::Virtual(r#virtual.into())),
         }
     }
 }
@@ -3765,8 +3757,8 @@ enum RegistrySource {
 impl Display for RegistrySource {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            RegistrySource::Url(url) => write!(f, "{url}"),
-            RegistrySource::Path(path) => write!(f, "{}", path.display()),
+            Self::Url(url) => write!(f, "{url}"),
+            Self::Path(path) => write!(f, "{}", path.display()),
         }
     }
 }
@@ -3855,7 +3847,7 @@ enum GitSourceError {
 impl GitSource {
     /// Extracts a Git source reference from the query pairs and the hash
     /// fragment in the given URL.
-    fn from_url(url: &Url) -> Result<GitSource, GitSourceError> {
+    fn from_url(url: &Url) -> Result<Self, GitSourceError> {
         let mut kind = GitSourceKind::DefaultBranch;
         let mut subdirectory = None;
         for (key, val) in url.query_pairs() {
@@ -3870,7 +3862,7 @@ impl GitSource {
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
 
-        Ok(GitSource {
+        Ok(Self {
             precise,
             subdirectory,
             kind,
@@ -3907,7 +3899,7 @@ struct SourceDistMetadata {
 /// future, so this should be treated as only a hint to where to look
 /// and/or recording where the source dist file originally came from.
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(try_from = "SourceDistWire")]
+#[serde(from = "SourceDistWire")]
 enum SourceDist {
     Url {
         url: UrlString,
@@ -3928,43 +3920,41 @@ enum SourceDist {
 impl SourceDist {
     fn filename(&self) -> Option<Cow<str>> {
         match self {
-            SourceDist::Metadata { .. } => None,
-            SourceDist::Url { url, .. } => url.filename().ok(),
-            SourceDist::Path { path, .. } => {
-                path.file_name().map(|filename| filename.to_string_lossy())
-            }
+            Self::Metadata { .. } => None,
+            Self::Url { url, .. } => url.filename().ok(),
+            Self::Path { path, .. } => path.file_name().map(|filename| filename.to_string_lossy()),
         }
     }
 
     fn url(&self) -> Option<&UrlString> {
-        match &self {
-            SourceDist::Metadata { .. } => None,
-            SourceDist::Url { url, .. } => Some(url),
-            SourceDist::Path { .. } => None,
+        match self {
+            Self::Metadata { .. } => None,
+            Self::Url { url, .. } => Some(url),
+            Self::Path { .. } => None,
         }
     }
 
     pub(crate) fn hash(&self) -> Option<&Hash> {
-        match &self {
-            SourceDist::Metadata { metadata } => metadata.hash.as_ref(),
-            SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
-            SourceDist::Path { metadata, .. } => metadata.hash.as_ref(),
+        match self {
+            Self::Metadata { metadata } => metadata.hash.as_ref(),
+            Self::Url { metadata, .. } => metadata.hash.as_ref(),
+            Self::Path { metadata, .. } => metadata.hash.as_ref(),
         }
     }
 
     pub(crate) fn size(&self) -> Option<u64> {
-        match &self {
-            SourceDist::Metadata { metadata } => metadata.size,
-            SourceDist::Url { metadata, .. } => metadata.size,
-            SourceDist::Path { metadata, .. } => metadata.size,
+        match self {
+            Self::Metadata { metadata } => metadata.size,
+            Self::Url { metadata, .. } => metadata.size,
+            Self::Path { metadata, .. } => metadata.size,
         }
     }
 
     pub(crate) fn upload_time(&self) -> Option<Timestamp> {
-        match &self {
-            SourceDist::Metadata { metadata } => metadata.upload_time,
-            SourceDist::Url { metadata, .. } => metadata.upload_time,
-            SourceDist::Path { metadata, .. } => metadata.upload_time,
+        match self {
+            Self::Metadata { metadata } => metadata.upload_time,
+            Self::Url { metadata, .. } => metadata.upload_time,
+            Self::Path { metadata, .. } => metadata.upload_time,
         }
     }
 }
@@ -3973,11 +3963,11 @@ impl SourceDist {
     fn from_annotated_dist(
         id: &PackageId,
         annotated_dist: &AnnotatedDist,
-    ) -> Result<Option<SourceDist>, LockError> {
+    ) -> Result<Option<Self>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => SourceDist::from_dist(
+            ResolvedDist::Installable { ref dist, .. } => Self::from_dist(
                 id,
                 dist,
                 annotated_dist.hashes.as_slice(),
@@ -3991,18 +3981,16 @@ impl SourceDist {
         dist: &Dist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
-    ) -> Result<Option<SourceDist>, LockError> {
+    ) -> Result<Option<Self>, LockError> {
         match *dist {
             Dist::Built(BuiltDist::Registry(ref built_dist)) => {
                 let Some(sdist) = built_dist.sdist.as_ref() else {
                     return Ok(None);
                 };
-                SourceDist::from_registry_dist(sdist, index)
+                Self::from_registry_dist(sdist, index)
             }
             Dist::Built(_) => Ok(None),
-            Dist::Source(ref source_dist) => {
-                SourceDist::from_source_dist(id, source_dist, hashes, index)
-            }
+            Dist::Source(ref source_dist) => Self::from_source_dist(id, source_dist, hashes, index),
         }
     }
 
@@ -4011,16 +3999,16 @@ impl SourceDist {
         source_dist: &uv_distribution_types::SourceDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
-    ) -> Result<Option<SourceDist>, LockError> {
+    ) -> Result<Option<Self>, LockError> {
         match *source_dist {
             uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
-                SourceDist::from_registry_dist(reg_dist, index)
+                Self::from_registry_dist(reg_dist, index)
             }
             uv_distribution_types::SourceDist::DirectUrl(_) => {
-                SourceDist::from_direct_dist(id, hashes).map(Some)
+                Self::from_direct_dist(id, hashes).map(Some)
             }
             uv_distribution_types::SourceDist::Path(_) => {
-                SourceDist::from_path_dist(id, hashes).map(Some)
+                Self::from_path_dist(id, hashes).map(Some)
             }
             // An actual sdist entry in the lockfile is only required when
             // it's from a registry or a direct URL. Otherwise, it's strictly
@@ -4033,7 +4021,7 @@ impl SourceDist {
     fn from_registry_dist(
         reg_dist: &RegistrySourceDist,
         index: Option<&IndexUrl>,
-    ) -> Result<Option<SourceDist>, LockError> {
+    ) -> Result<Option<Self>, LockError> {
         // Reject distributions from registries that don't match the index URL, as can occur with
         // `--find-links`.
         if index.is_none_or(|index| *index != reg_dist.index) {
@@ -4053,7 +4041,7 @@ impl SourceDist {
                     .map(Timestamp::from_millisecond)
                     .transpose()
                     .map_err(LockErrorKind::InvalidTimestamp)?;
-                Ok(Some(SourceDist::Url {
+                Ok(Some(Self::Url {
                     url,
                     metadata: SourceDistMetadata {
                         hash,
@@ -4088,7 +4076,7 @@ impl SourceDist {
                         .map(Timestamp::from_millisecond)
                         .transpose()
                         .map_err(LockErrorKind::InvalidTimestamp)?;
-                    Ok(Some(SourceDist::Path {
+                    Ok(Some(Self::Path {
                         path,
                         metadata: SourceDistMetadata {
                             hash,
@@ -4108,7 +4096,7 @@ impl SourceDist {
                         .map(Timestamp::from_millisecond)
                         .transpose()
                         .map_err(LockErrorKind::InvalidTimestamp)?;
-                    Ok(Some(SourceDist::Url {
+                    Ok(Some(Self::Url {
                         url,
                         metadata: SourceDistMetadata {
                             hash,
@@ -4121,7 +4109,7 @@ impl SourceDist {
         }
     }
 
-    fn from_direct_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<SourceDist, LockError> {
+    fn from_direct_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
         let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
@@ -4130,7 +4118,7 @@ impl SourceDist {
             };
             return Err(kind.into());
         };
-        Ok(SourceDist::Metadata {
+        Ok(Self::Metadata {
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
@@ -4139,7 +4127,7 @@ impl SourceDist {
         })
     }
 
-    fn from_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<SourceDist, LockError> {
+    fn from_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<Self, LockError> {
         let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
@@ -4148,7 +4136,7 @@ impl SourceDist {
             };
             return Err(kind.into());
         };
-        Ok(SourceDist::Metadata {
+        Ok(Self::Metadata {
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
@@ -4181,12 +4169,12 @@ impl SourceDist {
     /// Returns the TOML representation of this source distribution.
     fn to_toml(&self) -> Result<InlineTable, toml_edit::ser::Error> {
         let mut table = InlineTable::new();
-        match &self {
-            SourceDist::Metadata { .. } => {}
-            SourceDist::Url { url, .. } => {
+        match self {
+            Self::Metadata { .. } => {}
+            Self::Url { url, .. } => {
                 table.insert("url", Value::from(url.as_ref()));
             }
-            SourceDist::Path { path, .. } => {
+            Self::Path { path, .. } => {
                 table.insert("path", Value::from(PortablePath::from(path).to_string()));
             }
         }
@@ -4206,17 +4194,15 @@ impl SourceDist {
     }
 }
 
-impl TryFrom<SourceDistWire> for SourceDist {
-    type Error = Infallible;
-
-    fn try_from(wire: SourceDistWire) -> Result<SourceDist, Infallible> {
+impl From<SourceDistWire> for SourceDist {
+    fn from(wire: SourceDistWire) -> Self {
         match wire {
-            SourceDistWire::Url { url, metadata } => Ok(SourceDist::Url { url, metadata }),
-            SourceDistWire::Path { path, metadata } => Ok(SourceDist::Path {
+            SourceDistWire::Url { url, metadata } => Self::Url { url, metadata },
+            SourceDistWire::Path { path, metadata } => Self::Path {
                 path: path.into(),
                 metadata,
-            }),
-            SourceDistWire::Metadata { metadata } => Ok(SourceDist::Metadata { metadata }),
+            },
+            SourceDistWire::Metadata { metadata } => Self::Metadata { metadata },
         }
     }
 }
@@ -4224,12 +4210,12 @@ impl TryFrom<SourceDistWire> for SourceDist {
 impl From<GitReference> for GitSourceKind {
     fn from(value: GitReference) -> Self {
         match value {
-            GitReference::Branch(branch) => GitSourceKind::Branch(branch.to_string()),
-            GitReference::Tag(tag) => GitSourceKind::Tag(tag.to_string()),
-            GitReference::BranchOrTag(rev) => GitSourceKind::Rev(rev.to_string()),
-            GitReference::BranchOrTagOrCommit(rev) => GitSourceKind::Rev(rev.to_string()),
-            GitReference::NamedRef(rev) => GitSourceKind::Rev(rev.to_string()),
-            GitReference::DefaultBranch => GitSourceKind::DefaultBranch,
+            GitReference::Branch(branch) => Self::Branch(branch.to_string()),
+            GitReference::Tag(tag) => Self::Tag(tag.to_string()),
+            GitReference::BranchOrTag(rev) => Self::Rev(rev.to_string()),
+            GitReference::BranchOrTagOrCommit(rev) => Self::Rev(rev.to_string()),
+            GitReference::NamedRef(rev) => Self::Rev(rev.to_string()),
+            GitReference::DefaultBranch => Self::DefaultBranch,
         }
     }
 }
@@ -4237,10 +4223,10 @@ impl From<GitReference> for GitSourceKind {
 impl From<GitSourceKind> for GitReference {
     fn from(value: GitSourceKind) -> Self {
         match value {
-            GitSourceKind::Branch(branch) => GitReference::Branch(branch),
-            GitSourceKind::Tag(tag) => GitReference::Tag(tag),
-            GitSourceKind::Rev(rev) => GitReference::from_rev(rev),
-            GitSourceKind::DefaultBranch => GitReference::DefaultBranch,
+            GitSourceKind::Branch(branch) => Self::Branch(branch),
+            GitSourceKind::Tag(tag) => Self::Tag(tag),
+            GitSourceKind::Rev(rev) => Self::from_rev(rev),
+            GitSourceKind::DefaultBranch => Self::DefaultBranch,
         }
     }
 }
@@ -4330,11 +4316,11 @@ struct Wheel {
 }
 
 impl Wheel {
-    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Wheel>, LockError> {
+    fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Self>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => Wheel::from_dist(
+            ResolvedDist::Installable { ref dist, .. } => Self::from_dist(
                 dist,
                 annotated_dist.hashes.as_slice(),
                 annotated_dist.index(),
@@ -4346,9 +4332,9 @@ impl Wheel {
         dist: &Dist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
-    ) -> Result<Vec<Wheel>, LockError> {
+    ) -> Result<Vec<Self>, LockError> {
         match *dist {
-            Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes, index),
+            Dist::Built(ref built_dist) => Self::from_built_dist(built_dist, hashes, index),
             Dist::Source(uv_distribution_types::SourceDist::Registry(ref source_dist)) => {
                 source_dist
                     .wheels
@@ -4358,7 +4344,7 @@ impl Wheel {
                         // `--find-links`.
                         index.is_some_and(|index| *index == wheel.index)
                     })
-                    .map(Wheel::from_registry_wheel)
+                    .map(Self::from_registry_wheel)
                     .collect()
             }
             Dist::Source(_) => Ok(vec![]),
@@ -4369,20 +4355,20 @@ impl Wheel {
         built_dist: &BuiltDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
-    ) -> Result<Vec<Wheel>, LockError> {
+    ) -> Result<Vec<Self>, LockError> {
         match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => Wheel::from_registry_dist(reg_dist, index),
+            BuiltDist::Registry(ref reg_dist) => Self::from_registry_dist(reg_dist, index),
             BuiltDist::DirectUrl(ref direct_dist) => {
-                Ok(vec![Wheel::from_direct_dist(direct_dist, hashes)])
+                Ok(vec![Self::from_direct_dist(direct_dist, hashes)])
             }
-            BuiltDist::Path(ref path_dist) => Ok(vec![Wheel::from_path_dist(path_dist, hashes)]),
+            BuiltDist::Path(ref path_dist) => Ok(vec![Self::from_path_dist(path_dist, hashes)]),
         }
     }
 
     fn from_registry_dist(
         reg_dist: &RegistryBuiltDist,
         index: Option<&IndexUrl>,
-    ) -> Result<Vec<Wheel>, LockError> {
+    ) -> Result<Vec<Self>, LockError> {
         reg_dist
             .wheels
             .iter()
@@ -4391,32 +4377,17 @@ impl Wheel {
                 // `--find-links`.
                 index.is_some_and(|index| *index == wheel.index)
             })
-            .map(Wheel::from_registry_wheel)
+            .map(Self::from_registry_wheel)
             .collect()
     }
 
-    fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Wheel, LockError> {
-        let filename = wheel.filename.clone();
-        match &wheel.index {
+    fn from_registry_wheel(wheel: &RegistryBuiltWheel) -> Result<Self, LockError> {
+        let url = match &wheel.index {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 let url = normalize_file_location(&wheel.file.url)
                     .map_err(LockErrorKind::InvalidUrl)
                     .map_err(LockError::from)?;
-                let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-                let size = wheel.file.size;
-                let upload_time = wheel
-                    .file
-                    .upload_time_utc_ms
-                    .map(Timestamp::from_millisecond)
-                    .transpose()
-                    .map_err(LockErrorKind::InvalidTimestamp)?;
-                Ok(Wheel {
-                    url: WheelWireSource::Url { url },
-                    hash,
-                    size,
-                    filename,
-                    upload_time,
-                })
+                WheelWireSource::Url { url }
             }
             IndexUrl::Path(path) => {
                 let index_path = path
@@ -4432,39 +4403,35 @@ impl Wheel {
                         .or_else(|_| std::path::absolute(&wheel_path))
                         .map_err(LockErrorKind::DistributionRelativePath)?
                         .into_boxed_path();
-                    Ok(Wheel {
-                        url: WheelWireSource::Path { path },
-                        hash: None,
-                        size: None,
-                        upload_time: None,
-                        filename,
-                    })
+                    WheelWireSource::Path { path }
                 } else {
                     let url = normalize_file_location(&wheel.file.url)
                         .map_err(LockErrorKind::InvalidUrl)
                         .map_err(LockError::from)?;
-                    let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
-                    let size = wheel.file.size;
-                    let upload_time = wheel
-                        .file
-                        .upload_time_utc_ms
-                        .map(Timestamp::from_millisecond)
-                        .transpose()
-                        .map_err(LockErrorKind::InvalidTimestamp)?;
-                    Ok(Wheel {
-                        url: WheelWireSource::Url { url },
-                        hash,
-                        size,
-                        filename,
-                        upload_time,
-                    })
+                    WheelWireSource::Url { url }
                 }
             }
-        }
+        };
+        let filename = wheel.filename.clone();
+        let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
+        let size = wheel.file.size;
+        let upload_time = wheel
+            .file
+            .upload_time_utc_ms
+            .map(Timestamp::from_millisecond)
+            .transpose()
+            .map_err(LockErrorKind::InvalidTimestamp)?;
+        Ok(Self {
+            url,
+            hash,
+            size,
+            upload_time,
+            filename,
+        })
     }
 
-    fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Wheel {
-        Wheel {
+    fn from_direct_dist(direct_dist: &DirectUrlBuiltDist, hashes: &[HashDigest]) -> Self {
+        Self {
             url: WheelWireSource::Url {
                 url: normalize_url(direct_dist.url.to_url()),
             },
@@ -4475,8 +4442,8 @@ impl Wheel {
         }
     }
 
-    fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Wheel {
-        Wheel {
+    fn from_path_dist(path_dist: &PathBuiltDist, hashes: &[HashDigest]) -> Self {
+        Self {
             url: WheelWireSource::Filename {
                 filename: path_dist.filename.clone(),
             },
@@ -4656,7 +4623,7 @@ impl Wheel {
 impl TryFrom<WheelWire> for Wheel {
     type Error = String;
 
-    fn try_from(wire: WheelWire) -> Result<Wheel, String> {
+    fn try_from(wire: WheelWire) -> Result<Self, String> {
         let filename = match &wire.url {
             WheelWireSource::Url { url } => {
                 let filename = url.filename().map_err(|err| err.to_string())?;
@@ -4678,7 +4645,7 @@ impl TryFrom<WheelWire> for Wheel {
             WheelWireSource::Filename { filename } => filename.clone(),
         };
 
-        Ok(Wheel {
+        Ok(Self {
             url: wire.url,
             hash: wire.hash,
             size: wire.size,
@@ -4725,10 +4692,10 @@ impl Dependency {
         package_id: PackageId,
         extra: BTreeSet<ExtraName>,
         complexified_marker: UniversalMarker,
-    ) -> Dependency {
+    ) -> Self {
         let simplified_marker =
             SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
-        Dependency {
+        Self {
             package_id,
             extra,
             simplified_marker,
@@ -4741,10 +4708,10 @@ impl Dependency {
         annotated_dist: &AnnotatedDist,
         complexified_marker: UniversalMarker,
         root: &Path,
-    ) -> Result<Dependency, LockError> {
+    ) -> Result<Self, LockError> {
         let package_id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let extra = annotated_dist.extra.iter().cloned().collect();
-        Ok(Dependency::new(
+        Ok(Self::new(
             requires_python,
             package_id,
             extra,
@@ -4835,22 +4802,22 @@ impl DependencyWire {
 struct Hash(HashDigest);
 
 impl From<HashDigest> for Hash {
-    fn from(hd: HashDigest) -> Hash {
-        Hash(hd)
+    fn from(hd: HashDigest) -> Self {
+        Self(hd)
     }
 }
 
 impl FromStr for Hash {
     type Err = HashParseError;
 
-    fn from_str(s: &str) -> Result<Hash, HashParseError> {
+    fn from_str(s: &str) -> Result<Self, HashParseError> {
         let (algorithm, digest) = s.split_once(':').ok_or(HashParseError(
             "expected '{algorithm}:{digest}', but found no ':' in hash digest",
         ))?;
         let algorithm = algorithm
             .parse()
             .map_err(|_| HashParseError("unrecognized hash algorithm"))?;
-        Ok(Hash(HashDigest {
+        Ok(Self(HashDigest {
             algorithm,
             digest: digest.into(),
         }))
@@ -4864,7 +4831,7 @@ impl Display for Hash {
 }
 
 impl<'de> serde::Deserialize<'de> for Hash {
-    fn deserialize<D>(deserializer: D) -> Result<Hash, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
@@ -4889,35 +4856,35 @@ impl<'de> serde::Deserialize<'de> for Hash {
 impl From<Hash> for Hashes {
     fn from(value: Hash) -> Self {
         match value.0.algorithm {
-            HashAlgorithm::Md5 => Hashes {
+            HashAlgorithm::Md5 => Self {
                 md5: Some(value.0.digest),
                 sha256: None,
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             },
-            HashAlgorithm::Sha256 => Hashes {
+            HashAlgorithm::Sha256 => Self {
                 md5: None,
                 sha256: Some(value.0.digest),
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             },
-            HashAlgorithm::Sha384 => Hashes {
+            HashAlgorithm::Sha384 => Self {
                 md5: None,
                 sha256: None,
                 sha384: Some(value.0.digest),
                 sha512: None,
                 blake2b: None,
             },
-            HashAlgorithm::Sha512 => Hashes {
+            HashAlgorithm::Sha512 => Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
                 sha512: Some(value.0.digest),
                 blake2b: None,
             },
-            HashAlgorithm::Blake2b => Hashes {
+            HashAlgorithm::Blake2b => Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
@@ -5144,7 +5111,7 @@ where
     LockErrorKind: From<E>,
 {
     fn from(err: E) -> Self {
-        LockError {
+        Self {
             kind: Box::new(LockErrorKind::from(err)),
             hint: None,
         }
@@ -5187,7 +5154,7 @@ impl WheelTagHint {
         version: Option<&Version>,
         filenames: &[&WheelFilename],
         tags: &Tags,
-    ) -> Option<WheelTagHint> {
+    ) -> Option<Self> {
         let incompatibility = filenames
             .iter()
             .map(|filename| {
@@ -5205,7 +5172,7 @@ impl WheelTagHint {
                 if tags.is_empty() {
                     None
                 } else {
-                    Some(WheelTagHint::LanguageTags {
+                    Some(Self::LanguageTags {
                         package: name.clone(),
                         version: version.cloned(),
                         tags,
@@ -5229,7 +5196,7 @@ impl WheelTagHint {
                 if tags.is_empty() {
                     None
                 } else {
-                    Some(WheelTagHint::AbiTags {
+                    Some(Self::AbiTags {
                         package: name.clone(),
                         version: version.cloned(),
                         tags,
@@ -5245,7 +5212,7 @@ impl WheelTagHint {
                 if tags.is_empty() {
                     None
                 } else {
-                    Some(WheelTagHint::PlatformTags {
+                    Some(Self::PlatformTags {
                         package: name.clone(),
                         version: version.cloned(),
                         tags,

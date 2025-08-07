@@ -67,11 +67,11 @@ impl MetadataUnavailable {
     /// formatting system is more custom.
     pub(crate) fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            MetadataUnavailable::Offline => None,
-            MetadataUnavailable::InvalidMetadata(err) => Some(err),
-            MetadataUnavailable::InconsistentMetadata(err) => Some(err),
-            MetadataUnavailable::InvalidStructure(err) => Some(err),
-            MetadataUnavailable::RequiresPython(_, _) => None,
+            Self::Offline => None,
+            Self::InvalidMetadata(err) => Some(err),
+            Self::InconsistentMetadata(err) => Some(err),
+            Self::InvalidStructure(err) => Some(err),
+            Self::RequiresPython(_, _) => None,
         }
     }
 }
@@ -199,7 +199,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     })
                     .collect(),
             )),
-            Err(err) => match err.into_kind() {
+            Err(err) => match err.kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
                     if let Some(flat_index) = flat_index
                         .and_then(|flat_index| flat_index.get(package_name))
@@ -232,7 +232,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         Ok(VersionsResponse::Offline)
                     }
                 }
-                kind => Err(kind.into()),
+                _ => Err(err),
             },
         }
     }
@@ -246,20 +246,25 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
-                uv_distribution::Error::Client(client) => match client.into_kind() {
-                    uv_client::ErrorKind::Offline(_) => {
-                        Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
+                uv_distribution::Error::Client(client) => {
+                    let retries = client.retries();
+                    match client.into_kind() {
+                        uv_client::ErrorKind::Offline(_) => {
+                            Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
+                        }
+                        uv_client::ErrorKind::MetadataParseError(_, _, err) => {
+                            Ok(MetadataResponse::Unavailable(
+                                MetadataUnavailable::InvalidMetadata(Arc::new(*err)),
+                            ))
+                        }
+                        uv_client::ErrorKind::Metadata(_, err) => {
+                            Ok(MetadataResponse::Unavailable(
+                                MetadataUnavailable::InvalidStructure(Arc::new(err)),
+                            ))
+                        }
+                        kind => Err(uv_client::Error::new(kind, retries).into()),
                     }
-                    uv_client::ErrorKind::MetadataParseError(_, _, err) => {
-                        Ok(MetadataResponse::Unavailable(
-                            MetadataUnavailable::InvalidMetadata(Arc::new(*err)),
-                        ))
-                    }
-                    uv_client::ErrorKind::Metadata(_, err) => Ok(MetadataResponse::Unavailable(
-                        MetadataUnavailable::InvalidStructure(Arc::new(err)),
-                    )),
-                    kind => Err(uv_client::Error::from(kind).into()),
-                },
+                }
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {
                     Ok(MetadataResponse::Unavailable(
                         MetadataUnavailable::InconsistentMetadata(Arc::new(err)),

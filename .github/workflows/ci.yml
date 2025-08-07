@@ -206,7 +206,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -242,7 +242,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -382,13 +382,15 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     name: "test windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
       matrix:
-        # Note, we exclude `aarch64` because it's not supported by the GitHub runner
-        target-arch: ["x86_64", "i686"]
+        include:
+          - { runner: windows-latest, target-arch: "x86_64" }
+          - { runner: windows-latest, target-arch: "i686" }
+          - { runner: windows-11-arm, target-arch: "aarch64" }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Setup Dev Drive
@@ -427,7 +429,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: crate-ci/typos@master
+      - uses: crate-ci/typos@392b78fe18a52790c53f42456e46124f77346842 # v1.34.0
 
   docs:
     timeout-minutes: 10
@@ -463,7 +465,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -488,7 +490,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -513,7 +515,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
 
       - name: "Setup musl"
         run: |
@@ -543,7 +545,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -567,7 +569,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -670,7 +672,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup default ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
-        uses: rui314/setup-mold@v1
+        uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - run: cargo +${{ steps.msrv.outputs.value }} build
       - run: ./target/debug/uv --version
@@ -1339,6 +1341,11 @@ jobs:
         run: |
           ./uv pip install anyio
 
+      - name: "Check a GraalPy dev version (different version parsing)"
+        run: |
+          curl -sLf https://github.com/graalvm/graal-languages-ea-builds/releases/download/graalpy-25.0.0-ea.31/graalpy-25.0.0-ea.31-linux-amd64.tar.gz | tar xz
+          ./uv run -p ./graalpy-25.0.0-dev-linux-amd64/bin/python python --version
+
   integration-test-graalpy-windows-x86_64:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64
@@ -1613,7 +1620,7 @@ jobs:
 
       - name: "Authenticate with GCP"
         id: "auth"
-        uses: "google-github-actions/auth@140bb5113ffb6b65a7e9b937a81fa96cf5064462"
+        uses: "google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5"
         with:
           credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
 
