@@ -614,6 +614,26 @@ impl TestContext {
                 .into_iter()
                 .map(|pattern| (pattern, "[VENV]/".to_string())),
         );
+
+        // Account for [`Simplified::user_display`] which is relative to the command working directory
+        if let Some(site_packages) = site_packages {
+            filters.push((
+                Self::path_pattern(
+                    site_packages
+                        .strip_prefix(&canonical_temp_dir)
+                        .expect("The test site-packages directory is always in the tempdir"),
+                ),
+                "[SITE_PACKAGES]/".to_string(),
+            ));
+        }
+
+        // Filter Python library path differences between Windows and Unix
+        filters.push((
+            r"[\\/]lib[\\/]python\d+\.\d+[\\/]".to_string(),
+            "/[PYTHON-LIB]/".to_string(),
+        ));
+        filters.push((r"[\\/]Lib[\\/]".to_string(), "/[PYTHON-LIB]/".to_string()));
+
         for (version, executable) in &python_versions {
             // Add filtering for the interpreter path
             filters.extend(
@@ -685,18 +705,6 @@ impl TestContext {
             r"Activate with: source (.*)/bin/activate(?:\.\w+)?".to_string(),
             "Activate with: source $1/[BIN]/activate".to_string(),
         ));
-
-        // Account for [`Simplified::user_display`] which is relative to the command working directory
-        if let Some(site_packages) = site_packages {
-            filters.push((
-                Self::path_pattern(
-                    site_packages
-                        .strip_prefix(&canonical_temp_dir)
-                        .expect("The test site-packages directory is always in the tempdir"),
-                ),
-                "[SITE_PACKAGES]/".to_string(),
-            ));
-        }
 
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching
