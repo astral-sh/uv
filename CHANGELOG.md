@@ -2,6 +2,41 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.8.6
+
+This release contains hardening measures to address differentials in behavior between uv and Python's built-in ZIP parser (CVE-2025-54368).
+
+Prior to this release, attackers could construct ZIP files that would be extracted differently by pip, uv, and other tools. As a result, ZIPs could be constructed that would be considered harmless by (e.g.) scanners, but contain a malicious payload when extracted by uv. As of v0.8.6, uv now applies additional checks to reject such ZIPs.
+
+Thanks to a triage effort with the [Python Security Response Team](https://devguide.python.org/developer-workflow/psrt/) and PyPI maintainers, we were able to determine that these differentials **were not exploited** via PyPI during the time they were present. The PyPI team has also implemented similar checks and now guards against these parsing differentials on upload.
+
+Although the practical risk of exploitation is low, we take the _hypothetical_ risk of parser differentials very seriously. Out of an abundance of caution, we have assigned this advisory a CVE identifier and have given it a "moderate" severity suggestion.
+
+These changes have been validated against the top 15,000 PyPI packages; however, it's plausible that a non-malicious ZIP could be falsely rejected with this additional hardening. As an escape hatch, users who do encounter breaking changes can enable `UV_INSECURE_NO_ZIP_VALIDATION` to restore the previous behavior. If you encounter such a rejection, please file an issue in uv and to the upstream package.
+
+### Security
+
+- Harden ZIP streaming to reject repeated entries and other malformed ZIP files ([#15136](https://github.com/astral-sh/uv/pull/15136))
+
+### Enhancements
+
+- Sync latest Python releases ([#15135](https://github.com/astral-sh/uv/pull/15135))
+
+### Configuration
+
+- Add support for per-project build-time environment variables ([#15095](https://github.com/astral-sh/uv/pull/15095))
+
+### Bug fixes
+
+- Avoid invalid simplification with conflict markers  ([#15041](https://github.com/astral-sh/uv/pull/15041))
+- Respect `UV_HTTP_RETRIES` in `uv publish` ([#15106](https://github.com/astral-sh/uv/pull/15106))
+- Support `UV_NO_EDITABLE` where `--no-editable` is supported ([#15107](https://github.com/astral-sh/uv/pull/15107))
+- Upgrade `cargo-dist` to add `UV_INSTALLER_URL` to PowerShell installer ([#15114](https://github.com/astral-sh/uv/pull/15114))
+- Upgrade `h2` again to avoid `too_many_internal_resets` errors ([#15111](https://github.com/astral-sh/uv/pull/15111))
+
+### Documentation
+
+- Ensure symlink warning is shown ([#15126](https://github.com/astral-sh/uv/pull/15126))
 
 ## 0.8.5
 
