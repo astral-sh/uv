@@ -12555,6 +12555,75 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "keyring-tests")]
+#[test]
+fn add_package_persist_system_keyring_credentials() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Configure `pyproject.toml` with native keyring provider.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [tool.uv]
+        keyring-provider = "native"
+        "#
+    })?;
+
+    // Try to add a package without credentials.
+    uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+
+    // Add a different package with credentials. This should persist
+    // the credentials to the system keyring.
+    uv_snapshot!(context.add().arg("iniconfig==2.0.0").arg("--default-index").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    // Try to add the original package without credentials again. This should use
+    // credentials storied in the system keyring.
+    uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
 /// If uv receives a 302 redirect to a cross-origin server, it should not forward
 /// credentials. In the absence of a netrc entry for the new location,
 /// it should fail.
