@@ -151,6 +151,7 @@ uv run [OPTIONS] [COMMAND]
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-run--link-mode"><a href="#uv-run--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -509,6 +510,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-add--link-mode"><a href="#uv-add--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -702,6 +704,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-remove--link-mode"><a href="#uv-remove--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -883,6 +886,7 @@ uv version [OPTIONS] [VALUE]
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-version--link-mode"><a href="#uv-version--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1080,6 +1084,7 @@ uv sync [OPTIONS]
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-sync--link-mode"><a href="#uv-sync--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1321,6 +1326,7 @@ uv lock [OPTIONS]
 </ul></dd><dt id="uv-lock--link-mode"><a href="#uv-lock--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1499,6 +1505,7 @@ uv export [OPTIONS]
 </ul></dd><dt id="uv-export--link-mode"><a href="#uv-export--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1690,6 +1697,7 @@ uv tree [OPTIONS]
 </ul></dd><dt id="uv-tree--link-mode"><a href="#uv-tree--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1953,6 +1961,7 @@ uv tool run [OPTIONS] [COMMAND]
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-tool-run--link-mode"><a href="#uv-tool-run--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -2127,6 +2136,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-tool-install--link-mode"><a href="#uv-tool-install--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -2293,6 +2303,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-tool-upgrade--link-mode"><a href="#uv-tool-upgrade--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -3465,6 +3476,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 </ul></dd><dt id="uv-pip-compile--link-mode"><a href="#uv-pip-compile--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -3755,6 +3767,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-pip-sync--link-mode"><a href="#uv-pip-sync--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -4024,6 +4037,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-pip-install--link-mode"><a href="#uv-pip-install--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -4812,6 +4826,7 @@ uv venv [OPTIONS] [PATH]
 </ul></dd><dt id="uv-venv--link-mode"><a href="#uv-venv--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used for installing seed packages.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -4967,6 +4982,7 @@ uv build [OPTIONS] [SRC]
 </ul></dd><dt id="uv-build--link-mode"><a href="#uv-build--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clear</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
