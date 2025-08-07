@@ -1344,6 +1344,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
         [project.scripts]
         main = "foo:main"
+
+        [project.gui-scripts]
+        main_gui = "foo:main_gui"
         "#
     })?;
 
@@ -1362,10 +1365,19 @@ fn run_with_overlay_interpreter() -> Result<()> {
             base = Path(sys.executable)
             shutil.copyfile(base.with_name("main").with_suffix(base.suffix), sys.argv[1])
 
+        def copy_gui_entrypoint():
+            base = Path(sys.executable)
+            shutil.copyfile(base.with_name("main_gui").with_suffix(base.suffix), sys.argv[1])
+
         def main():
             show_python()
             if len(sys.argv) > 1:
                 copy_entrypoint()
+
+        def main_gui():
+            show_python()
+            if len(sys.argv) > 1:
+                copy_gui_entrypoint()
        "#
     })?;
 
@@ -1388,6 +1400,20 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    ");
+
+    // The project's gui entrypoint should be rewritten to use the overlay interpreter.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 
     #[cfg(unix)]
@@ -1439,8 +1465,25 @@ fn run_with_overlay_interpreter() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
     // Switch to a relocatable virtual environment.
     context.venv().arg("--relocatable").assert().success();
+
+    // Cleanup previous shutil
+    fs_err::remove_file(context.temp_dir.child("main"))?;
+    #[cfg(windows)]
+    fs_err::remove_file(context.temp_dir.child("main_gui"))?;
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @r"
@@ -1448,6 +1491,20 @@ fn run_with_overlay_interpreter() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 1 package in [TIME]
+    ");
+
+    // The project's gui entrypoint should be rewritten to use the overlay interpreter.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1493,6 +1550,18 @@ fn run_with_overlay_interpreter() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
