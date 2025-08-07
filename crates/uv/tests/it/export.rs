@@ -1,16 +1,17 @@
 #![allow(clippy::disallowed_types)]
 
-use crate::common::{
-    READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, TestContext, apply_filters,
-    decode_token, uv_snapshot,
-};
+#[cfg(feature = "git")]
+use crate::common::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
+use crate::common::{TestContext, apply_filters, uv_snapshot};
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+#[cfg(feature = "git")]
 use std::path::Path;
 use std::process::Stdio;
+#[cfg(feature = "git")]
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
@@ -1180,6 +1181,7 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
 
 /// SSH blocks too permissive key files, so we need to scope permissions for the file to the current
 /// user.
+#[cfg(feature = "git")]
 fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
     #[cfg(unix)]
     {

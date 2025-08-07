@@ -6,9 +6,11 @@ use insta::assert_snapshot;
 use std::io::BufReader;
 use url::Url;
 
+#[cfg(feature = "git")]
+use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use crate::common::{
-    self, TestContext, build_vendor_links_url, decode_token, download_to_disk, packse_index_url,
-    uv_snapshot, venv_bin_path,
+    TestContext, build_vendor_links_url, download_to_disk, packse_index_url, uv_snapshot,
+    venv_bin_path,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -8053,7 +8055,7 @@ fn lock_redact_https() -> Result<()> {
 #[cfg(feature = "git")]
 fn lock_redact_git_pep508() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
@@ -8138,7 +8140,7 @@ fn lock_redact_git_pep508() -> Result<()> {
 #[cfg(feature = "git")]
 fn lock_redact_git_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
@@ -8226,7 +8228,7 @@ fn lock_redact_git_sources() -> Result<()> {
 #[cfg(feature = "git")]
 fn lock_redact_git_pep508_non_project() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
