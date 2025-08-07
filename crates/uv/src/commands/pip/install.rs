@@ -582,7 +582,7 @@ pub(crate) async fn pip_install(
         extra_build_variables,
         link_mode,
         &build_options,
-        &hasher,
+        &build_hasher,
         exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
