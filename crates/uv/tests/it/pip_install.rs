@@ -6693,16 +6693,17 @@ fn require_hashes_build_dependencies() -> Result<()> {
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-      × Failed to download and build `idna==3.6`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `flit-core>=3.2, <4`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `flit-core`
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
     "
     );
 
