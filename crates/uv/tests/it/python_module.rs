@@ -412,20 +412,14 @@ fn find_uv_bin_py38() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r#"
-    success: false
-    exit_code: 1
+        .arg("import uv; print(uv.find_uv_bin())"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [VENV]/[BIN]/uv
 
     ----- stderr -----
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-      File "[SITE_PACKAGES]/uv/_find_uv.py", line 28, in find_uv_bin
-        _matching_parents(_module_path(), "lib/[PYTHON]*/site-packages/uv"), "bin"
-      File "[SITE_PACKAGES]/uv/_find_uv.py", line 79, in _matching_parents
-        for part, match_part in zip(
-    TypeError: zip() takes no keyword arguments
-    "#
+    "
     );
 }
 
@@ -458,20 +452,14 @@ fn find_uv_bin_py39() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg("import uv; print(uv.find_uv_bin())"), @r#"
-    success: false
-    exit_code: 1
+        .arg("import uv; print(uv.find_uv_bin())"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [VENV]/[BIN]/uv
 
     ----- stderr -----
-    Traceback (most recent call last):
-      File "<string>", line 1, in <module>
-      File "[SITE_PACKAGES]/uv/_find_uv.py", line 28, in find_uv_bin
-        _matching_parents(_module_path(), "lib/[PYTHON]*/site-packages/uv"), "bin"
-      File "[SITE_PACKAGES]/uv/_find_uv.py", line 79, in _matching_parents
-        for part, match_part in zip(
-    TypeError: zip() takes no keyword arguments
-    "#
+    "
     );
 }
 
