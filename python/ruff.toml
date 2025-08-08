@@ -1,2 +1,2 @@
-# It is important retain compatibility here
+# It is important to retain compatibility here.
 target-version = "py37"
