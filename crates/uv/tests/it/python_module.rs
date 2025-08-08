@@ -1,5 +1,5 @@
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::prelude::{FileWriteStr, PathChild};
+use assert_fs::prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir};
 use indoc::{formatdoc, indoc};
 
 use uv_fs::Simplified;
@@ -305,4 +305,80 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn find_uv_bin_user_bin() {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix()
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
+
+    // Add uv to `~/.local/bin`
+    let bin = if cfg!(unix) {
+        context.home_dir.child(".local").child("bin")
+    } else {
+        context
+            .user_config_dir
+            .child("Python")
+            .child("Python312")
+            .child("Scripts")
+    };
+    bin.create_dir_all().unwrap();
+    bin.child(format!("uv{}", std::env::consts::EXE_SUFFIX))
+        .touch()
+        .unwrap();
+
+    // Install in a virtual environment
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+    "
+    );
+
+    // We should find the binary in the virtual environment first
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import uv; print(uv.find_uv_bin())"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/uv
+
+    ----- stderr -----
+    "
+    );
+
+    // Remove the virtual environment one for some reason
+    fs_err::remove_file(if cfg!(unix) {
+        context.venv.child("bin").child("uv")
+    } else {
+        context.venv.child("Scripts").child("uv.exe")
+    })
+    .unwrap();
+
+    // We should find the binary in the bin now
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import uv; print(uv.find_uv_bin())"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [USER_SCHEME]/[BIN]/uv
+
+    ----- stderr -----
+    "
+    );
 }
