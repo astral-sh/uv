@@ -87,31 +87,6 @@ impl Arch {
         }
     }
 
-    /// Does the current architecture support running the other?
-    ///
-    /// When the architecture is equal, this is always true. Otherwise, this is true if the
-    /// architecture is transparently emulated or is a microarchitecture with worse performance
-    /// characteristics.
-    pub fn supports(self, other: Self) -> bool {
-        if self == other {
-            return true;
-        }
-
-        // TODO: Implement `variant` support checks
-
-        // Windows ARM64 runs emulated x86_64 binaries transparently
-        // Similarly, macOS aarch64 runs emulated x86_64 binaries transparently if you have Rosetta
-        // installed. We don't try to be clever and check if that's the case here, we just assume
-        // that if x86_64 distributions are available, they're usable.
-        if (cfg!(windows) || cfg!(target_os = "macos"))
-            && matches!(self.family, target_lexicon::Architecture::Aarch64(_))
-        {
-            return other.family == target_lexicon::Architecture::X86_64;
-        }
-
-        false
-    }
-
     pub fn family(&self) -> target_lexicon::Architecture {
         self.family
     }
@@ -258,7 +233,7 @@ pub(crate) mod test_support {
     use std::cell::RefCell;
 
     thread_local! {
-        static MOCK_ARCH: RefCell<Option<Arch>> = RefCell::new(None);
+        static MOCK_ARCH: RefCell<Option<Arch>> = const { RefCell::new(None) };
     }
 
     pub(crate) fn get_mock_arch() -> Option<Arch> {
@@ -274,7 +249,7 @@ pub(crate) mod test_support {
     impl MockArchGuard {
         pub(crate) fn new(arch: Arch) -> Self {
             set_mock_arch(Some(arch));
-            MockArchGuard
+            Self
         }
     }
 

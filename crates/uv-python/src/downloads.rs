@@ -180,7 +180,7 @@ impl PlatformRequest {
         }
 
         if let Some(arch) = self.arch {
-            if !arch.satisfied_by(platform.arch) {
+            if !arch.satisfied_by(platform) {
                 return false;
             }
         }
@@ -220,10 +220,14 @@ impl Display for ArchRequest {
 }
 
 impl ArchRequest {
-    pub(crate) fn satisfied_by(self, arch: Arch) -> bool {
+    pub(crate) fn satisfied_by(self, platform: &Platform) -> bool {
         match self {
-            Self::Explicit(request) => request == arch,
-            Self::Environment(env) => env.supports(arch),
+            Self::Explicit(request) => request == platform.arch,
+            Self::Environment(env) => {
+                // Check if the environment's platform can run the target platform
+                let env_platform = Platform::new(platform.os, env, platform.libc);
+                env_platform.supports(platform)
+            }
         }
     }
 
@@ -456,7 +460,8 @@ impl PythonDownloadRequest {
             }
         }
         if let Some(arch) = self.arch() {
-            if !arch.satisfied_by(interpreter.arch()) {
+            let interpreter_platform = Platform::from(interpreter.platform());
+            if !arch.satisfied_by(&interpreter_platform) {
                 debug!(
                     "Skipping interpreter at `{executable}`: architecture `{}` does not match request `{arch}`",
                     interpreter.arch()

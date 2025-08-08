@@ -78,14 +78,24 @@ impl Platform {
             return false;
         }
 
-        // Check architecture support
-        // This includes transparent emulation (e.g., x86_64 on ARM64 Windows/macOS)
-        if self.arch.supports(other.arch) {
+        // Check architecture compatibility
+        if self.arch == other.arch {
             return true;
         }
 
-        // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
-        // implement this yet. See https://github.com/astral-sh/uv/pull/9788
+        // Windows ARM64 runs emulated x86_64 binaries transparently
+        // Similarly, macOS aarch64 runs emulated x86_64 binaries transparently if you have Rosetta
+        // installed. We don't try to be clever and check if that's the case here, we just assume
+        // that if x86_64 distributions are available, they're usable.
+        if (self.os.is_windows() || self.os.is_macos())
+            && matches!(self.arch.family(), target_lexicon::Architecture::Aarch64(_))
+            && matches!(other.arch.family(), target_lexicon::Architecture::X86_64)
+        {
+            return true;
+        }
+
+        // TODO: Allow inequal variants, as we don't implement variant support checks yet.
+        // See https://github.com/astral-sh/uv/pull/9788
         // For now, allow same architecture family as a fallback
         self.arch.family() == other.arch.family()
     }
@@ -169,6 +179,16 @@ impl Ord for Platform {
 impl PartialOrd for Platform {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl From<&uv_platform_tags::Platform> for Platform {
+    fn from(value: &uv_platform_tags::Platform) -> Self {
+        Self {
+            os: Os::from(value.os()),
+            arch: Arch::from(&value.arch()),
+            libc: Libc::from(value.os()),
+        }
     }
 }
 
@@ -333,7 +353,7 @@ mod tests {
         assert!(windows_x86_64 < windows_aarch64);
 
         // Test with multiple Windows platforms
-        let mut platforms = vec![
+        let mut platforms = [
             Platform::from_str("windows-aarch64-none").unwrap(),
             Platform::from_str("windows-x86_64-none").unwrap(),
             Platform::from_str("windows-x86-none").unwrap(),
@@ -382,5 +402,33 @@ mod tests {
         // Self-support should always work
         assert!(windows_aarch64.supports(&windows_aarch64));
         assert!(windows_x86_64.supports(&windows_x86_64));
+    }
+
+    #[test]
+    fn test_from_platform_tags_platform() {
+        // Test conversion from uv_platform_tags::Platform to uv_platform::Platform
+        let tags_platform = uv_platform_tags::Platform::new(
+            uv_platform_tags::Os::Windows,
+            uv_platform_tags::Arch::X86_64,
+        );
+        let platform = Platform::from(&tags_platform);
+
+        assert_eq!(platform.os.to_string(), "windows");
+        assert_eq!(platform.arch.to_string(), "x86_64");
+        assert_eq!(platform.libc.to_string(), "none");
+
+        // Test with manylinux
+        let tags_platform_linux = uv_platform_tags::Platform::new(
+            uv_platform_tags::Os::Manylinux {
+                major: 2,
+                minor: 17,
+            },
+            uv_platform_tags::Arch::Aarch64,
+        );
+        let platform_linux = Platform::from(&tags_platform_linux);
+
+        assert_eq!(platform_linux.os.to_string(), "linux");
+        assert_eq!(platform_linux.arch.to_string(), "aarch64");
+        assert_eq!(platform_linux.libc.to_string(), "gnu");
     }
 }
