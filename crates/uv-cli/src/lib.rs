@@ -3022,7 +3022,7 @@ pub struct RunArgs {
     /// This option is an alias for `--group dev`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
@@ -3031,7 +3031,7 @@ pub struct RunArgs {
     /// See `--no-default-groups` to disable all default groups instead.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -3311,14 +3311,14 @@ pub struct SyncArgs {
     /// Include the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
@@ -3640,7 +3640,9 @@ pub struct AddArgs {
         long,
         conflicts_with("optional"),
         conflicts_with("group"),
-        conflicts_with("script")
+        conflicts_with("script"),
+        env = EnvVars::UV_DEV,
+        value_parser = clap::builder::BoolishValueParser::new()
     )]
     pub dev: bool,
 
@@ -3819,7 +3821,7 @@ pub struct RemoveArgs {
     /// Remove the packages from the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
+    #[arg(long, conflicts_with("optional"), conflicts_with("group"), env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Remove the packages from the project's optional dependencies for the specified extra.
@@ -3924,7 +3926,7 @@ pub struct TreeArgs {
     /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Only include the development dependency group.
@@ -3939,7 +3941,7 @@ pub struct TreeArgs {
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -4099,14 +4101,14 @@ pub struct ExportArgs {
     /// Include the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
