@@ -1075,7 +1075,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 requirements_env.site_packages().next().ok_or_else(|| {
                     anyhow!("Requirements environment has no site packages directory")
                 })?;
-            let base_site_packages: Vec<_> = base_interpreter.site_packages().collect();
+            let base_site_packages = base_interpreter.runtime_site_packages();
             if base_site_packages.is_empty() {
                 return Err(anyhow!("Base environment has no site packages directory"));
             }

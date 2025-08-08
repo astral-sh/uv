@@ -444,8 +444,15 @@ impl Interpreter {
     pub fn sys_path(&self) -> &[PathBuf] {
         &self.sys_path
     }
+
     /// Return the `site.getsitepackages` for this Python interpreter.
-    pub fn site_packages_(&self) -> &[PathBuf] {
+    ///
+    /// These are the paths Python will search for packages in at runtime. We use this for
+    /// environment layering, but not for checking for installed packages. We could use these paths
+    /// to check for installed packages, but it introduces a lot of complexity, so instead we use a
+    /// simplified version that does not respect customized site-packages. See
+    /// [`Interpreter::site_packages`].
+    pub fn runtime_site_packages(&self) -> &[PathBuf] {
         &self.site_packages
     }
 
@@ -573,6 +580,9 @@ impl Interpreter {
     ///
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
+    ///
+    /// Note this does not include all runtime site-packages directories if the interpreter has been
+    /// customized. See [`Interpreter::runtime_site_packages`].
     pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
         let target = self.target().map(Target::site_packages);
 
