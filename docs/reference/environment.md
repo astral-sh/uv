@@ -68,6 +68,11 @@ script, to include the name of the wrapper script in the output file.
 Equivalent to the `--default-index` command-line argument. If set, uv will use
 this URL as the default index when searching for packages.
 
+### `UV_DEV`
+
+Equivalent to the `--dev` command-line argument. If set, uv will include
+development dependencies.
+
 ### `UV_DOWNLOAD_URL`
 
 The URL from which to download uv using the standalone installer. By default, installs from
@@ -257,6 +262,11 @@ cache for any operations.
 Equivalent to the `--no-config` command-line argument. If set, uv will not read
 any configuration files from the current directory, parent directories, or user configuration
 directories.
+
+### `UV_NO_DEV`
+
+Equivalent to the `--no-dev` command-line argument. If set, uv will exclude
+development dependencies.
 
 ### `UV_NO_EDITABLE`
 

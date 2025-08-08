@@ -170,6 +170,14 @@ impl EnvVars {
     /// members, as non-editable.
     pub const UV_NO_EDITABLE: &'static str = "UV_NO_EDITABLE";
 
+    /// Equivalent to the `--dev` command-line argument. If set, uv will include
+    /// development dependencies.
+    pub const UV_DEV: &'static str = "UV_DEV";
+
+    /// Equivalent to the `--no-dev` command-line argument. If set, uv will exclude
+    /// development dependencies.
+    pub const UV_NO_DEV: &'static str = "UV_NO_DEV";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.

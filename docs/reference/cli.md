@@ -185,7 +185,7 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt id="uv-run--no-dev"><a href="#uv-run--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 <p>This option is only available when running in a project.</p>
-</dd><dt id="uv-run--no-editable"><a href="#uv-run--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-run--no-editable"><a href="#uv-run--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-run--no-env-file"><a href="#uv-run--no-env-file"><code>--no-env-file</code></a></dt><dd><p>Avoid reading environment variables from a <code>.env</code> file</p>
 <p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p></dd><dt id="uv-run--no-extra"><a href="#uv-run--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 <p>May be provided multiple times.</p>
@@ -457,7 +457,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-add--dev"><a href="#uv-add--dev"><code>--dev</code></a></dt><dd><p>Add the requirements to the development dependency group.</p>
 <p>This option is an alias for <code>--group dev</code>.</p>
-</dd><dt id="uv-add--directory"><a href="#uv-add--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>May also be set with the <code>UV_DEV</code> environment variable.</p></dd><dt id="uv-add--directory"><a href="#uv-add--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-add--editable"><a href="#uv-add--editable"><code>--editable</code></a></dt><dd><p>Add the requirements as editable</p>
@@ -656,7 +656,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-remove--dev"><a href="#uv-remove--dev"><code>--dev</code></a></dt><dd><p>Remove the packages from the development dependency group.</p>
 <p>This option is an alias for <code>--group dev</code>.</p>
-</dd><dt id="uv-remove--directory"><a href="#uv-remove--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>May also be set with the <code>UV_DEV</code> environment variable.</p></dd><dt id="uv-remove--directory"><a href="#uv-remove--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-remove--exclude-newer"><a href="#uv-remove--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -1115,7 +1115,7 @@ uv sync [OPTIONS]
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-sync--no-dev"><a href="#uv-sync--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
-</dd><dt id="uv-sync--no-editable"><a href="#uv-sync--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-sync--no-editable"><a href="#uv-sync--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-sync--no-extra"><a href="#uv-sync--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-sync--no-group"><a href="#uv-sync--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
@@ -1537,7 +1537,7 @@ uv export [OPTIONS]
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-export--no-dev"><a href="#uv-export--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
-</dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Export any editable dependencies, including the project and any workspace members, as non-editable</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Export any editable dependencies, including the project and any workspace members, as non-editable</p>
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-export--no-emit-package"><a href="#uv-export--no-emit-package"><code>--no-emit-package</code></a>, <code>--no-install-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
 <p>By default, all of the project's dependencies are included in the exported requirements file. The <code>--no-emit-package</code> option allows exclusion of specific packages.</p>
 </dd><dt id="uv-export--no-emit-project"><a href="#uv-export--no-emit-project"><code>--no-emit-project</code></a>, <code>--no-install-project</code></dt><dd><p>Do not emit the current project.</p>
@@ -1729,7 +1729,7 @@ uv tree [OPTIONS]
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-tree--no-dev"><a href="#uv-tree--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
-</dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-tree--no-index"><a href="#uv-tree--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
