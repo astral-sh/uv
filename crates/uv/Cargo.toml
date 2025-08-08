@@ -162,6 +162,7 @@ default-tests = [
     "crates-io",
     "git",
     "pypi",
+    "r2",
     "python",
     "python-managed",
     "python-eol",
@@ -174,6 +175,8 @@ crates-io = []
 git = []
 # Introduces a testing dependency on PyPI.
 pypi = []
+# Introduces a testing dependency on R2.
+r2 = []
 # Introduces a testing dependency on a local Python installation.
 python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.

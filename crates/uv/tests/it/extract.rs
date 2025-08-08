@@ -1,3 +1,5 @@
+#![cfg(feature = "r2")]
+
 use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
