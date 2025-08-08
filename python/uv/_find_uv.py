@@ -79,7 +79,7 @@ def _matching_parents(path: str | None, match: str) -> str | None:
         for part, match_part in (
             zip(reversed(parts), reversed(match_parts), strict=False)
             if sys.version_info >= (3, 10)
-            else zip(reversed(parts), reversed(match_parts))
+            else zip(reversed(parts), reversed(match_parts), strict=False)
         )
     ):
         return None
