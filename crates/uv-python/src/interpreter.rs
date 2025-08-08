@@ -51,6 +51,7 @@ pub struct Interpreter {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     tags: OnceLock<Tags>,
@@ -86,6 +87,7 @@ impl Interpreter {
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
+            site_packages: info.site_packages,
             stdlib: info.stdlib,
             standalone: info.standalone,
             tags: OnceLock::new(),
@@ -439,8 +441,12 @@ impl Interpreter {
     }
 
     /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &Vec<PathBuf> {
+    pub fn sys_path(&self) -> &[PathBuf] {
         &self.sys_path
+    }
+    /// Return the `site.getsitepackages` for this Python interpreter.
+    pub fn site_packages_(&self) -> &[PathBuf] {
+        &self.site_packages
     }
 
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
@@ -870,6 +876,7 @@ struct InterpreterInfo {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     pointer_size: PointerSize,
@@ -1245,6 +1252,9 @@ mod tests {
             "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
             "sys_path": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
+                "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+            ],
+            "site_packages": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
