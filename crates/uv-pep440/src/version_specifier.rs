@@ -951,7 +951,7 @@ impl<'a> TildeVersionSpecifier<'a> {
     }
 
     /// Construct a new tilde `VersionSpecifier` with the given patch version appended.
-    pub fn with_patch_version(&self, patch: u64) -> TildeVersionSpecifier {
+    pub fn with_patch_version(&self, patch: u64) -> TildeVersionSpecifier<'_> {
         let mut release = self.inner.version.release().to_vec();
         if self.has_patch() {
             release.pop();

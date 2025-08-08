@@ -251,7 +251,7 @@ dependencies = [
 [[package]]
 name = "async_zip"
 version = "0.0.17"
-source = "git+https://github.com/astral-sh/rs-async-zip?rev=c909fda63fcafe4af496a07bfda28a5aae97e58d#c909fda63fcafe4af496a07bfda28a5aae97e58d"
+source = "git+https://github.com/astral-sh/rs-async-zip?rev=285e48742b74ab109887d62e1ae79e7c15fd4878#285e48742b74ab109887d62e1ae79e7c15fd4878"
 dependencies = [
  "async-compression",
  "crc32fast",
@@ -749,7 +749,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1514,9 +1514,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.7"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccae279728d634d083c00f6099cb58f01cc99c145b84b8be2f6c74618d79922e"
+checksum = "f3c0b69cfcb4e1b9f1bf2f53f95f766e4661169728ec61cd3fe5a0166f2d1386"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -1715,7 +1715,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -1941,7 +1941,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2001,7 +2001,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2872,7 +2872,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3339,7 +3339,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3943,7 +3943,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix 1.0.8",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4655,7 +4655,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4701,6 +4701,7 @@ dependencies = [
  "textwrap",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-util",
  "toml",
  "toml_edit",
  "tracing",
@@ -4823,7 +4824,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "anyhow",
  "uv-build-backend",
@@ -5092,6 +5093,7 @@ dependencies = [
  "anyhow",
  "clap",
  "fs-err",
+ "futures",
  "itertools 0.14.0",
  "markdown",
  "owo-colors",
@@ -5104,8 +5106,10 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tagu",
+ "tempfile",
  "textwrap",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-durations-export",
  "tracing-subscriber",
@@ -5298,6 +5302,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution-filename",
  "uv-pypi-types",
+ "uv-static",
  "xz2",
  "zip",
 ]
@@ -5961,7 +5966,6 @@ version = "0.0.1"
 dependencies = [
  "fs-err",
  "pathdiff",
- "self-replace",
  "serde",
  "thiserror 2.0.12",
  "toml",
@@ -6042,7 +6046,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.8.5"
+version = "0.8.6"
 
 [[package]]
 name = "uv-virtualenv"
@@ -6367,7 +6371,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

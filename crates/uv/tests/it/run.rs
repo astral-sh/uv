@@ -1344,6 +1344,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
         [project.scripts]
         main = "foo:main"
+
+        [project.gui-scripts]
+        main_gui = "foo:main_gui"
         "#
     })?;
 
@@ -1362,10 +1365,19 @@ fn run_with_overlay_interpreter() -> Result<()> {
             base = Path(sys.executable)
             shutil.copyfile(base.with_name("main").with_suffix(base.suffix), sys.argv[1])
 
+        def copy_gui_entrypoint():
+            base = Path(sys.executable)
+            shutil.copyfile(base.with_name("main_gui").with_suffix(base.suffix), sys.argv[1])
+
         def main():
             show_python()
             if len(sys.argv) > 1:
                 copy_entrypoint()
+
+        def main_gui():
+            show_python()
+            if len(sys.argv) > 1:
+                copy_gui_entrypoint()
        "#
     })?;
 
@@ -1388,6 +1400,20 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
+    ");
+
+    // The project's gui entrypoint should be rewritten to use the overlay interpreter.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 
     #[cfg(unix)]
@@ -1439,8 +1465,25 @@ fn run_with_overlay_interpreter() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/pythonw
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
     // Switch to a relocatable virtual environment.
     context.venv().arg("--relocatable").assert().success();
+
+    // Cleanup previous shutil
+    fs_err::remove_file(context.temp_dir.child("main"))?;
+    #[cfg(windows)]
+    fs_err::remove_file(context.temp_dir.child("main_gui"))?;
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @r"
@@ -1448,6 +1491,20 @@ fn run_with_overlay_interpreter() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Resolved 1 package in [TIME]
+    ");
+
+    // The project's gui entrypoint should be rewritten to use the overlay interpreter.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1493,6 +1550,18 @@ fn run_with_overlay_interpreter() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [CACHE_DIR]/builds-v0/[TMP]/python
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/builds-v0/[TMP]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -3336,6 +3405,177 @@ fn run_isolated_incompatible_python() -> Result<()> {
     ----- stderr -----
     error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12` (from `project.requires-python`)
     Use `uv python pin` to update the `.python-version` file to a compatible version
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn run_isolated_does_not_modify_lock() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=3,<5",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        import importlib.metadata
+        print(importlib.metadata.version("anyio"))
+       "#
+    })?;
+
+    // Run with --isolated
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    4.3.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // This should not create a lock file
+    context
+        .temp_dir
+        .child("uv.lock")
+        .assert(predicate::path::missing());
+
+    // Create initial lock with default resolution
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    4.3.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Read the lock file content
+    let pre_uv_lock = context.read("uv.lock");
+
+    // Run with --isolated and --resolution lowest-direct to force different resolution
+    // This should use anyio 3.x but not modify the lock file
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--resolution")
+        .arg("lowest-direct")
+        .arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.0.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Verify the lock file hasn't changed
+    let post_uv_lock = context.read("uv.lock");
+    assert_eq!(
+        pre_uv_lock, post_uv_lock,
+        "Lock file should not be modified with --isolated"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_isolated_with_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=3,<5",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        import importlib.metadata
+        print(importlib.metadata.version("anyio"))
+       "#
+    })?;
+
+    // Create an initial lockfile with lowest-direct resolution
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--resolution")
+        .arg("lowest-direct")
+        .arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.0.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Run with `--isolated` and `--frozen` to use the existing lock
+    // We should not re-resolve to the highest version here
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--frozen")
+        .arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+
+    ----- stderr -----
+    Installed 4 packages in [TIME]
+     + anyio==3.0.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
     ");
 
     Ok(())

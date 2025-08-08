@@ -25,7 +25,7 @@ impl SupportedEnvironments {
     }
 
     /// Returns an iterator over the marker trees.
-    pub fn iter(&self) -> std::slice::Iter<MarkerTree> {
+    pub fn iter(&self) -> std::slice::Iter<'_, MarkerTree> {
         self.0.iter()
     }
 }

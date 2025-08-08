@@ -58,12 +58,12 @@ impl<'a> RegistryWheelIndex<'a> {
     /// Return an iterator over available wheels for a given package.
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
-    pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry> {
+    pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
         self.get_impl(name).iter().rev()
     }
 
     /// Get an entry in the index.
-    fn get_impl(&mut self, name: &'a PackageName) -> &[IndexEntry] {
+    fn get_impl(&mut self, name: &'a PackageName) -> &[IndexEntry<'_>] {
         (match self.index.entry(name) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(Self::index(

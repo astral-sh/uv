@@ -741,6 +741,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     LockMode::Frozen
                 } else if locked {
                     LockMode::Locked(venv.interpreter())
+                } else if isolated {
+                    LockMode::DryRun(venv.interpreter())
                 } else {
                     LockMode::Write(venv.interpreter())
                 };
@@ -1937,7 +1939,15 @@ fn copy_entrypoint(
         return Ok(());
     };
 
-    let launcher = launcher.with_python_path(python_executable.to_path_buf());
+    let is_gui = launcher.python_path.ends_with("pythonw.exe");
+
+    let python_path = if is_gui {
+        python_executable.with_file_name("pythonw.exe")
+    } else {
+        python_executable.to_path_buf()
+    };
+
+    let launcher = launcher.with_python_path(python_path);
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
         .write(true)

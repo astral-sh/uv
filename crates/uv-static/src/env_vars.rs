@@ -166,9 +166,17 @@ impl EnvVars {
     pub const UV_COMPILE_BYTECODE_TIMEOUT: &'static str = "UV_COMPILE_BYTECODE_TIMEOUT";
 
     /// Equivalent to the `--no-editable` command-line argument. If set, uv
-    /// installs any editable dependencies, including the project and any workspace members, as
-    /// non-editable
+    /// installs or exports any editable dependencies, including the project and any workspace
+    /// members, as non-editable.
     pub const UV_NO_EDITABLE: &'static str = "UV_NO_EDITABLE";
+
+    /// Equivalent to the `--dev` command-line argument. If set, uv will include
+    /// development dependencies.
+    pub const UV_DEV: &'static str = "UV_DEV";
+
+    /// Equivalent to the `--no-dev` command-line argument. If set, uv will exclude
+    /// development dependencies.
+    pub const UV_NO_DEV: &'static str = "UV_NO_DEV";
 
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
@@ -237,6 +245,14 @@ impl EnvVars {
 
     /// Equivalent to the `--allow-insecure-host` argument.
     pub const UV_INSECURE_HOST: &'static str = "UV_INSECURE_HOST";
+
+    /// Disable ZIP validation for streamed wheels and ZIP-based source distributions.
+    ///
+    /// WARNING: Disabling ZIP validation can expose your system to security risks by bypassing
+    /// integrity checks and allowing uv to install potentially malicious ZIP files. If uv rejects
+    /// a ZIP file due to failing validation, it is likely that the file is malformed; consider
+    /// filing an issue with the package maintainer.
+    pub const UV_INSECURE_NO_ZIP_VALIDATION: &'static str = "UV_INSECURE_NO_ZIP_VALIDATION";
 
     /// Sets the maximum number of in-flight concurrent downloads that uv will
     /// perform at any given time.

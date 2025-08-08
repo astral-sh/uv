@@ -24,7 +24,7 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, RequiresPython, SourceDist,
+    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, RequiresPython, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
@@ -203,6 +203,7 @@ async fn build_impl(
         no_build_isolation,
         no_build_isolation_package,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade: _,
@@ -350,6 +351,7 @@ async fn build_impl(
             *no_build_isolation,
             no_build_isolation_package,
             extra_build_dependencies,
+            extra_build_variables,
             *index_strategy,
             *keyring_provider,
             exclude_newer.clone(),
@@ -429,6 +431,7 @@ async fn build_package(
     no_build_isolation: bool,
     no_build_isolation_package: &[PackageName],
     extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
     exclude_newer: ExcludeNewer,
@@ -583,6 +586,7 @@ async fn build_package(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &hasher,

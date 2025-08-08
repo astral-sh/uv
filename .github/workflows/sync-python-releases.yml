@@ -7,16 +7,19 @@ on:
   schedule:
     - cron: "0 0 * * *"
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   sync:
     if: github.repository == 'astral-sh/uv'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
         with:
           version: "latest"
@@ -29,7 +32,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync Sysconfig Targets
-        run: ${{ github.workspace }}/crates/uv-dev/sync_sysconfig_targets.sh
+        run: ${GITHUB_WORKSPACE}/crates/uv-dev/sync_sysconfig_targets.sh
         working-directory: ./crates/uv-dev
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

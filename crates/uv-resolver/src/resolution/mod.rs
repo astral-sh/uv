@@ -75,7 +75,7 @@ impl Name for AnnotatedDist {
 }
 
 impl DistributionMetadata for AnnotatedDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         self.dist.version_or_url()
     }
 }

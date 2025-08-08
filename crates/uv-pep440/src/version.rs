@@ -360,7 +360,7 @@ impl Version {
 
     /// Returns the release number part of the version.
     #[inline]
-    pub fn release(&self) -> Release {
+    pub fn release(&self) -> Release<'_> {
         let inner = match &self.inner {
             VersionInner::Small { small } => {
                 // Parse out the version digits.
@@ -423,7 +423,7 @@ impl Version {
 
     /// Returns the local segments in this version, if any exist.
     #[inline]
-    pub fn local(&self) -> LocalVersionSlice {
+    pub fn local(&self) -> LocalVersionSlice<'_> {
         match self.inner {
             VersionInner::Small { ref small } => small.local_slice(),
             VersionInner::Full { ref full } => full.local.as_slice(),
@@ -1405,7 +1405,7 @@ impl VersionSmall {
     }
 
     #[inline]
-    fn local_slice(&self) -> LocalVersionSlice {
+    fn local_slice(&self) -> LocalVersionSlice<'_> {
         if self.suffix_kind() == Self::SUFFIX_LOCAL {
             LocalVersionSlice::Max
         } else {
@@ -2725,7 +2725,7 @@ pub(crate) fn compare_release(this: &[u64], other: &[u64]) -> Ordering {
 /// implementation
 ///
 /// [pep440-suffix-ordering]: https://peps.python.org/pep-0440/#summary-of-permitted-suffixes-and-relative-ordering
-fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersionSlice) {
+fn sortable_tuple(version: &Version) -> (u64, u64, Option<u64>, u64, LocalVersionSlice<'_>) {
     // If the version is a "max" version, use a post version larger than any possible post version.
     let post = if version.max().is_some() {
         Some(u64::MAX)

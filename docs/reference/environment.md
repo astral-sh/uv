@@ -68,6 +68,11 @@ script, to include the name of the wrapper script in the output file.
 Equivalent to the `--default-index` command-line argument. If set, uv will use
 this URL as the default index when searching for packages.
 
+### `UV_DEV`
+
+Equivalent to the `--dev` command-line argument. If set, uv will include
+development dependencies.
+
 ### `UV_DOWNLOAD_URL`
 
 The URL from which to download uv using the standalone installer. By default, installs from
@@ -162,6 +167,15 @@ to use when creating a new project.
 
 Equivalent to the `--allow-insecure-host` argument.
 
+### `UV_INSECURE_NO_ZIP_VALIDATION`
+
+Disable ZIP validation for streamed wheels and ZIP-based source distributions.
+
+WARNING: Disabling ZIP validation can expose your system to security risks by bypassing
+integrity checks and allowing uv to install potentially malicious ZIP files. If uv rejects
+a ZIP file due to failing validation, it is likely that the file is malformed; consider
+filing an issue with the package maintainer.
+
 ### `UV_INSTALLER_GHE_BASE_URL`
 
 The URL from which to download uv using the standalone installer and `self update` feature,
@@ -249,11 +263,16 @@ Equivalent to the `--no-config` command-line argument. If set, uv will not read
 any configuration files from the current directory, parent directories, or user configuration
 directories.
 
+### `UV_NO_DEV`
+
+Equivalent to the `--no-dev` command-line argument. If set, uv will exclude
+development dependencies.
+
 ### `UV_NO_EDITABLE`
 
 Equivalent to the `--no-editable` command-line argument. If set, uv
-installs any editable dependencies, including the project and any workspace members, as
-non-editable
+installs or exports any editable dependencies, including the project and any workspace
+members, as non-editable.
 
 ### `UV_NO_ENV_FILE`
 
