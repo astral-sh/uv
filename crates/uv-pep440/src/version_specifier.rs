@@ -2075,6 +2075,11 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             (2, "1.2.3", "<=1.2.0", "<=1.3.0", 1),
             (3, "1.2.3", "<=1.2.2", "<=1.2.3", 1),
             (4, "1.2.3.4", "<=1.2.3.3", "<=1.2.3.4", 1),
+            (1, "1.2.3", "~=0.9", "~=1.2", 1),
+            (1, "1.2.3", "~=0.9.1", "~=1.2.3", 1),
+            (0, "1.2.3", "~=1.0", "", 0),
+            (2, "1.2.3", "~=1.1.2", "~=1.2.3", 1),
+            (0, "1.2.3", "~=1.2.2", "", 0),
             (1, "1.2.3", "==0.*", "==1.*", 1),
             (2, "1.2.3", "==1.0.*", "==1.2.*", 1),
             (2, "1.2.3", "==1.1.*", "==1.2.*", 1),
@@ -2102,6 +2107,10 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             (2, "1.2.3", ">=1.3.1", ">=1.2.3", 2),
             (3, "1.2.3", ">=1.2.4", ">=1.2.3", 2),
             (4, "1.2.3.4", ">=1.2.3.5", ">=1.2.3.4", 2),
+            (1, "1.2.3", "~=2.0", "~=1.2", 2),
+            (2, "1.2.3", "~=1.3", "~=1.2", 2),
+            (2, "1.2.3", "~=1.3.2", "~=1.2.3", 2),
+            (3, "1.2.3", "~=1.2.5", "~=1.2.3", 2),
             (1, "1.2.3", "==2.*", "==1.*", 2),
             (1, "1.2.3", "==2.0.*", "==1.2.*", 2),
             (1, "1.2.3", "==2.1.*", "==1.2.*", 2),
@@ -2164,16 +2173,16 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             );
             assert_eq!(
                 bumped, should_bump,
-                "[{i}]: did {not}bump {old} to {modified} for {latest}{testcase}"
+                "[{i}]: did {not}bump {old} to {new} for {latest}{testcase}"
             );
             assert!(
                 skipped.is_empty(),
-                "[{i}]: skipped {skipped}: did not bump {old} to {modified} {latest}{testcase}",
+                "[{i}]: skipped {skipped}: did not bump {old} to {new} {latest}{testcase}",
             );
             assert_eq!(
                 upgraded,
                 should_bump && *upgrade == 1,
-                "[{i}]: did not {} {old} to {modified} for {latest}{testcase}",
+                "[{i}]: did not {} {old} to {new} for {latest}{testcase}",
                 if *upgrade == 1 {
                     "upgrade"
                 } else {

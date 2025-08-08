@@ -882,6 +882,7 @@ impl Version {
         let downgrade = ordering == Ordering::Greater
             && (operator == Operator::GreaterThan
                 || operator == Operator::GreaterThanEqual
+                || operator == Operator::TildeEqual
                 || operator == Operator::Equal
                 || operator == Operator::EqualStar)
             || ordering == Ordering::Equal && operator == Operator::GreaterThan;
@@ -894,6 +895,7 @@ impl Version {
         let opeq = operator == Operator::Equal;
         let oplt = operator == Operator::LessThan;
         let ople = operator == Operator::LessThanEqual;
+        let opte = operator == Operator::TildeEqual;
         let orle = ordering != Ordering::Greater;
         let enough_len = old.len() >= new.len();
         let subtract = downgrade && zero && enough_len && !opeq;
@@ -902,7 +904,7 @@ impl Version {
             // set version to 0 (negative delta) or don't change it
             if subtract { *new.last().unwrap() } else { 0 }
         } else {
-            u64::from(!(op_equal || ople && orle && enough_len || opgt)) // add 1 if operator needs
+            u64::from(!(op_equal || opte || ople && orle && enough_len || opgt)) // add 1 if operator needs
         };
         let addsub = |v: u64| if subtract { v - delta } else { v + delta };
         if downgrade || orle {
