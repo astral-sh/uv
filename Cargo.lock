@@ -5084,6 +5084,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "uv-keyring",
  "uv-once-map",
  "uv-redacted",
  "uv-small-str",
