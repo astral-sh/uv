@@ -213,7 +213,7 @@ impl ExtrasSpecificationHistory {
     /// Conceptually this being an empty list should be equivalent to
     /// [`ExtrasSpecification::is_empty`][] when there aren't any defaults set.
     /// When there are defaults the two will disagree, and rightfully so!
-    pub fn as_flags_pretty(&self) -> Vec<Cow<str>> {
+    pub fn as_flags_pretty(&self) -> Vec<Cow<'_, str>> {
         let Self {
             extra,
             no_extra,
@@ -312,7 +312,7 @@ impl IncludeExtras {
     }
 
     /// Iterate over all extras referenced in the [`IncludeExtras`].
-    pub fn names(&self) -> std::slice::Iter<ExtraName> {
+    pub fn names(&self) -> std::slice::Iter<'_, ExtraName> {
         match self {
             Self::Some(extras) => extras.iter(),
             Self::All => [].iter(),

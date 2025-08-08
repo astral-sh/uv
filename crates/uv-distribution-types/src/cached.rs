@@ -183,19 +183,19 @@ impl Name for CachedDist {
 }
 
 impl DistributionMetadata for CachedRegistryDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.filename.version)
     }
 }
 
 impl DistributionMetadata for CachedDirectUrlDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url.verbatim)
     }
 }
 
 impl DistributionMetadata for CachedDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::Url(dist) => dist.version_or_url(),
@@ -204,19 +204,19 @@ impl DistributionMetadata for CachedDist {
 }
 
 impl InstalledMetadata for CachedRegistryDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.filename.version)
     }
 }
 
 impl InstalledMetadata for CachedDirectUrlDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Url(&self.url.verbatim, &self.filename.version)
     }
 }
 
 impl InstalledMetadata for CachedDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         match self {
             Self::Registry(dist) => dist.installed_version(),
             Self::Url(dist) => dist.installed_version(),

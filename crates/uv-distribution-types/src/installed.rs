@@ -403,7 +403,7 @@ impl InstalledDist {
 }
 
 impl DistributionMetadata for InstalledDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(self.version())
     }
 }
@@ -451,37 +451,37 @@ impl Name for InstalledDist {
 }
 
 impl InstalledMetadata for InstalledRegistryDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.version)
     }
 }
 
 impl InstalledMetadata for InstalledDirectUrlDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Url(&self.url, &self.version)
     }
 }
 
 impl InstalledMetadata for InstalledEggInfoFile {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.version)
     }
 }
 
 impl InstalledMetadata for InstalledEggInfoDirectory {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.version)
     }
 }
 
 impl InstalledMetadata for InstalledLegacyEditable {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.version)
     }
 }
 
 impl InstalledMetadata for InstalledDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         match self {
             Self::Registry(dist) => dist.installed_version(),
             Self::Url(dist) => dist.installed_version(),

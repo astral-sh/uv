@@ -153,7 +153,7 @@ impl DerivationChain {
     }
 
     /// Returns an iterator over the steps in the derivation chain.
-    pub fn iter(&self) -> std::slice::Iter<DerivationStep> {
+    pub fn iter(&self) -> std::slice::Iter<'_, DerivationStep> {
         self.0.iter()
     }
 }

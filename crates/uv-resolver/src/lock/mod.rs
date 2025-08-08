@@ -3934,7 +3934,7 @@ enum SourceDist {
 }
 
 impl SourceDist {
-    fn filename(&self) -> Option<Cow<str>> {
+    fn filename(&self) -> Option<Cow<'_, str>> {
         match self {
             Self::Metadata { .. } => None,
             Self::Url { url, .. } => url.filename().ok(),

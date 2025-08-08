@@ -524,7 +524,7 @@ pub fn looks_like_git_repository(url: &Url) -> bool {
 ///
 /// For example, given `file:///home/ferris/project/scripts#hash=somehash`, returns
 /// `("/home/ferris/project/scripts", Some("hash=somehash"))`.
-fn split_fragment(path: &Path) -> (Cow<Path>, Option<&str>) {
+fn split_fragment(path: &Path) -> (Cow<'_, Path>, Option<&str>) {
     let Some(s) = path.to_str() else {
         return (Cow::Borrowed(path), None);
     };
