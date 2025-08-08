@@ -3,6 +3,12 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.8
+
+### Bug fixes
+
+- Fix `find_uv_bin` compatibility with Python <3.10 ([#15177](https://github.com/astral-sh/uv/pull/15177))
+
 ## 0.8.7
 
 ### Python
