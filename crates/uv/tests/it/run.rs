@@ -3411,6 +3411,177 @@ fn run_isolated_incompatible_python() -> Result<()> {
 }
 
 #[test]
+fn run_isolated_does_not_modify_lock() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=3,<5",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        import importlib.metadata
+        print(importlib.metadata.version("anyio"))
+       "#
+    })?;
+
+    // Run with --isolated
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    4.3.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // This should not create a lock file
+    context
+        .temp_dir
+        .child("uv.lock")
+        .assert(predicate::path::missing());
+
+    // Create initial lock with default resolution
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    4.3.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Read the lock file content
+    let pre_uv_lock = context.read("uv.lock");
+
+    // Run with --isolated and --resolution lowest-direct to force different resolution
+    // This should use anyio 3.x but not modify the lock file
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--resolution")
+        .arg("lowest-direct")
+        .arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.0.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Verify the lock file hasn't changed
+    let post_uv_lock = context.read("uv.lock");
+    assert_eq!(
+        pre_uv_lock, post_uv_lock,
+        "Lock file should not be modified with --isolated"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_isolated_with_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=3,<5",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        import importlib.metadata
+        print(importlib.metadata.version("anyio"))
+       "#
+    })?;
+
+    // Create an initial lockfile with lowest-direct resolution
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--resolution")
+        .arg("lowest-direct")
+        .arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.0.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Run with `--isolated` and `--frozen` to use the existing lock
+    // We should not re-resolve to the highest version here
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--frozen")
+        .arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+
+    ----- stderr -----
+    Installed 4 packages in [TIME]
+     + anyio==3.0.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_compiled_python_file() -> Result<()> {
     let context = TestContext::new("3.12");
 
