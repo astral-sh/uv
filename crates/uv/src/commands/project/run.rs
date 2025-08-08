@@ -1075,15 +1075,21 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 requirements_env.site_packages().next().ok_or_else(|| {
                     anyhow!("Requirements environment has no site packages directory")
                 })?;
-            let base_site_packages = base_interpreter.runtime_site_packages();
-            if base_site_packages.is_empty() {
+            let mut base_site_packages = base_interpreter
+                .runtime_site_packages()
+                .iter()
+                .map(|path| Cow::Borrowed(path.as_path()))
+                .chain(base_interpreter.site_packages())
+                .peekable();
+            if base_site_packages.peek().is_none() {
                 return Err(anyhow!("Base environment has no site packages directory"));
             }
 
             let overlay_content = format!(
                 "import site; {}",
-                std::iter::once(requirements_site_packages.as_ref())
-                    .chain(base_site_packages.iter().map(AsRef::as_ref))
+                std::iter::once(requirements_site_packages)
+                    .chain(base_site_packages)
+                    .dedup()
                     .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
                     .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
                     .collect::<Vec<_>>()
