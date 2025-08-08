@@ -36,8 +36,6 @@ on:
       # And the workflow itself
       - .github/workflows/build-docker.yml
 
-permissions: {}
-
 env:
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/uv
   UV_DOCKERHUB_IMAGE: docker.io/astral/uv
@@ -59,13 +57,13 @@ jobs:
           IS_LOCAL_PR: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         id: plan
         run: |
-          if [ "${DRY_RUN}" == "false" ]; then
+          if [ "${{ env.DRY_RUN }}" == "false" ]; then
             echo "login=true" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"
-            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ env.TAG }}" >> "$GITHUB_OUTPUT"
             echo "action=build and publish" >> "$GITHUB_OUTPUT"
           else
-            echo "login=${IS_LOCAL_PR}" >> "$GITHUB_OUTPUT"
+            echo "login=${{ env.IS_LOCAL_PR }}" >> "$GITHUB_OUTPUT"
             echo "push=false" >> "$GITHUB_OUTPUT"
             echo "tag=dry-run" >> "$GITHUB_OUTPUT"
             echo "action=build" >> "$GITHUB_OUTPUT"
@@ -93,7 +91,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
-          persist-credentials: false
 
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
@@ -114,16 +111,14 @@ jobs:
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         run: |
           version=$(grep "version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
-          if [ "${DOCKER_PLAN_OUTPUTS_TAG}" != "${version}" ]; then
+          if [ "${{ needs.docker-plan.outputs.tag }}" != "${version}" ]; then
             echo "The input tag does not match the version from pyproject.toml:" >&2
-            echo "${DOCKER_PLAN_OUTPUTS_TAG}" >&2
+            echo "${{ needs.docker-plan.outputs.tag }}" >&2
             echo "${version}" >&2
             exit 1
           else
             echo "Releasing ${version}"
           fi
-        env:
-          DOCKER_PLAN_OUTPUTS_TAG: ${{ needs.docker-plan.outputs.tag }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -224,12 +219,12 @@ jobs:
           set -euo pipefail
 
           # Extract the image and tags from the matrix variable
-          IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${IMAGE_MAPPING}"
+          IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${{ matrix.image-mapping }}"
 
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
-          COPY --from=${UV_GHCR_IMAGE}:latest /uv /uvx /usr/local/bin/
+          COPY --from=${{ env.UV_GHCR_IMAGE }}:latest /uv /uvx /usr/local/bin/
           ENV UV_TOOL_BIN_DIR="/usr/local/bin"
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
@@ -241,8 +236,8 @@ jobs:
           # Loop through all base tags and append its docker metadata pattern to the list
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
           IFS=','; for TAG in ${BASE_TAGS}; do
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${NEEDS_DOCKER_PLAN_OUTPUTS_TAG}\n"
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${NEEDS_DOCKER_PLAN_OUTPUTS_TAG}\n"
+            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${{ needs.docker-plan.outputs.tag }}\n"
+            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${{ needs.docker-plan.outputs.tag }}\n"
             TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
           done
 
@@ -255,9 +250,6 @@ jobs:
             echo -e "${TAG_PATTERNS}"
             echo EOF
           } >> $GITHUB_ENV
-        env:
-          IMAGE_MAPPING: ${{ matrix.image-mapping }}
-          NEEDS_DOCKER_PLAN_OUTPUTS_TAG: ${{ needs.docker-plan.outputs.tag }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
