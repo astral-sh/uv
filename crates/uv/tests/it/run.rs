@@ -5334,8 +5334,7 @@ fn run_repeated() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    // Re-running as a tool doesn't require reinstalling `typing-extensions`, since the environment
-    // is cached.
+    // Import `iniconfig` in the context of a `tool run` command, which should fail.
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
