@@ -27,7 +27,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
@@ -36,8 +36,8 @@ use uv_python::{
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
-    ResolverOutput,
+    FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
+    ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -52,6 +52,7 @@ use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
@@ -274,7 +275,7 @@ pub(crate) struct ConflictError {
     /// The set from which the conflict was derived.
     pub(crate) set: ConflictSet,
     /// The items from the set that were enabled, and thus create the conflict.
-    pub(crate) conflicts: Vec<ConflictPackage>,
+    pub(crate) conflicts: Vec<ConflictItem>,
     /// Enabled dependency groups with defaults applied.
     pub(crate) groups: DependencyGroupsWithDefaults,
 }
@@ -285,9 +286,10 @@ impl std::fmt::Display for ConflictError {
         let set = self
             .set
             .iter()
-            .map(|item| match item.conflict() {
-                ConflictPackage::Extra(extra) => format!("`{}[{}]`", item.package(), extra),
-                ConflictPackage::Group(group) => format!("`{}:{}`", item.package(), group),
+            .map(|item| match item.kind() {
+                ConflictKind::Project => format!("{}", item.package()),
+                ConflictKind::Extra(extra) => format!("`{}[{}]`", item.package(), extra),
+                ConflictKind::Group(group) => format!("`{}:{}`", item.package(), group),
             })
             .join(", ");
 
@@ -295,7 +297,7 @@ impl std::fmt::Display for ConflictError {
         if self
             .conflicts
             .iter()
-            .all(|conflict| matches!(conflict, ConflictPackage::Extra(..)))
+            .all(|conflict| matches!(conflict.kind(), ConflictKind::Extra(..)))
         {
             write!(
                 f,
@@ -303,9 +305,9 @@ impl std::fmt::Display for ConflictError {
                 conjunction(
                     self.conflicts
                         .iter()
-                        .map(|conflict| match conflict {
-                            ConflictPackage::Extra(extra) => format!("`{extra}`"),
-                            ConflictPackage::Group(..) => unreachable!(),
+                        .map(|conflict| match conflict.kind() {
+                            ConflictKind::Extra(extra) => format!("`{extra}`"),
+                            ConflictKind::Group(..) | ConflictKind::Project => unreachable!(),
                         })
                         .collect()
                 )
@@ -313,7 +315,7 @@ impl std::fmt::Display for ConflictError {
         } else if self
             .conflicts
             .iter()
-            .all(|conflict| matches!(conflict, ConflictPackage::Group(..)))
+            .all(|conflict| matches!(conflict.kind(), ConflictKind::Group(..)))
         {
             let conflict_source = if self.set.is_inferred_conflict() {
                 "transitively inferred"
@@ -326,12 +328,12 @@ impl std::fmt::Display for ConflictError {
                 conjunction(
                     self.conflicts
                         .iter()
-                        .map(|conflict| match conflict {
-                            ConflictPackage::Group(group)
+                        .map(|conflict| match conflict.kind() {
+                            ConflictKind::Group(group)
                                 if self.groups.contains_because_default(group) =>
                                 format!("`{group}` (enabled by default)"),
-                            ConflictPackage::Group(group) => format!("`{group}`"),
-                            ConflictPackage::Extra(..) => unreachable!(),
+                            ConflictKind::Group(group) => format!("`{group}`"),
+                            ConflictKind::Extra(..) | ConflictKind::Project => unreachable!(),
                         })
                         .collect()
                 )
@@ -345,14 +347,17 @@ impl std::fmt::Display for ConflictError {
                         .iter()
                         .enumerate()
                         .map(|(i, conflict)| {
-                            let conflict = match conflict {
-                                ConflictPackage::Extra(extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(group)
+                            let conflict = match conflict.kind() {
+                                ConflictKind::Project => {
+                                    format!("package `{}`", conflict.package())
+                                }
+                                ConflictKind::Extra(extra) => format!("extra `{extra}`"),
+                                ConflictKind::Group(group)
                                     if self.groups.contains_because_default(group) =>
                                 {
                                     format!("group `{group}` (enabled by default)")
                                 }
-                                ConflictPackage::Group(group) => format!("group `{group}`"),
+                                ConflictKind::Group(group) => format!("group `{group}`"),
                             };
                             if i == 0 {
                                 capitalize(&conflict)
@@ -2526,31 +2531,33 @@ pub(crate) fn default_dependency_groups(
 /// are declared as conflicting.
 #[allow(clippy::result_large_err)]
 pub(crate) fn detect_conflicts(
-    lock: &Lock,
+    target: &InstallTarget,
     extras: &ExtrasSpecification,
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<(), ProjectError> {
-    // Note that we need to collect all extras and groups that match in
-    // a particular set, since extras can be declared as conflicting with
-    // groups. So if extra `x` and group `g` are declared as conflicting,
-    // then enabling both of those should result in an error.
+    // Validate that we aren't trying to install extras or groups that
+    // are declared as conflicting. Note that we need to collect all
+    // extras and groups that match in a particular set, since extras
+    // can be declared as conflicting with groups. So if extra `x` and
+    // group `g` are declared as conflicting, then enabling both of
+    // those should result in an error.
+    let lock = target.lock();
+    let packages = target.packages(extras, groups);
     let conflicts = lock.conflicts();
     for set in conflicts.iter() {
-        let mut conflicts: Vec<ConflictPackage> = vec![];
+        let mut conflicts: Vec<ConflictItem> = vec![];
         for item in set.iter() {
-            if item
-                .extra()
-                .map(|extra| extras.contains(extra))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.conflict().clone());
+            if !packages.contains(item.package()) {
+                // Ignore items that are not in the install targets
+                continue;
             }
-            if item
-                .group()
-                .map(|group| groups.contains(group))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.conflict().clone());
+            let is_conflicting = match item.kind() {
+                ConflictKind::Project => groups.prod(),
+                ConflictKind::Extra(extra) => extras.contains(extra),
+                ConflictKind::Group(group1) => groups.contains(group1),
+            };
+            if is_conflicting {
+                conflicts.push(item.clone());
             }
         }
         if conflicts.len() >= 2 {

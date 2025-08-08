@@ -663,7 +663,7 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(target.lock(), extras, groups)?;
+    detect_conflicts(&target, extras, groups)?;
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(extras)?;

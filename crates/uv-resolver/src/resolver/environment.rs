@@ -7,7 +7,7 @@ use tracing::trace;
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictPackage, ResolverMarkerEnvironment};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKind, ResolverMarkerEnvironment};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::resolver::ForkState;
@@ -391,11 +391,12 @@ impl ResolverEnvironment {
                     format!(
                         "{}{}",
                         conflict_item.package(),
-                        match conflict_item.conflict() {
-                            ConflictPackage::Extra(extra) => format!("[{extra}]"),
-                            ConflictPackage::Group(group) => {
+                        match conflict_item.kind() {
+                            ConflictKind::Extra(extra) => format!("[{extra}]"),
+                            ConflictKind::Group(group) => {
                                 format!("[group:{group}]")
                             }
+                            ConflictKind::Project => String::new(),
                         }
                     )
                 };

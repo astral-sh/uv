@@ -48,6 +48,7 @@ impl From<SystemDependency> for PubGrubDependency {
         Self {
             package: PubGrubPackage::from(PubGrubPackageInner::System(value.name)),
             version: Ranges::singleton(value.version),
+            parent: None,
             url: None,
         }
     }

@@ -24,7 +24,7 @@ use uv_distribution_types::{
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pypi_types::{Conflicts, SupportedEnvironments};
+use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::ExtrasResolver;
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
@@ -485,6 +485,19 @@ async fn do_lock(
                 conflicts.expand_transitive_group_includes(&project.name, groups);
             }
         }
+    }
+
+    // Check if any conflicts contain project-level conflicts
+    if !preview.is_enabled(PreviewFeatures::PACKAGE_CONFLICTS)
+        && conflicts.iter().any(|set| {
+            set.iter()
+                .any(|item| matches!(item.kind(), ConflictKind::Project))
+        })
+    {
+        warn_user_once!(
+            "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::PACKAGE_CONFLICTS
+        );
     }
 
     // Collect the list of supported environments.
