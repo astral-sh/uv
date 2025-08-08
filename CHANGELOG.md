@@ -18,6 +18,7 @@ See the [`python-build-standalone` release notes](https://github.com/astral-sh/p
 - Add support for `--prefix` and `--with` installations in `find_uv_bin` ([#14184](https://github.com/astral-sh/uv/pull/14184))
 - Add support for discovering base prefix installations in `find_uv_bin` ([#14181](https://github.com/astral-sh/uv/pull/14181))
 - Improve error messages in `find_uv_bin` ([#14182](https://github.com/astral-sh/uv/pull/14182))
+- Warn when two packages write to the same module ([#13437](https://github.com/astral-sh/uv/pull/13437))
 
 ### Preview features
 
@@ -25,7 +26,7 @@ See the [`python-build-standalone` release notes](https://github.com/astral-sh/p
 
 ### Configuration
 
-- Add `UV_DEV` and `UV_NO_DEV` environment variables ([#15010](https://github.com/astral-sh/uv/pull/15010))
+- Add `UV_DEV` and `UV_NO_DEV` environment variables (for `--dev` and `--no-dev`) ([#15010](https://github.com/astral-sh/uv/pull/15010))
 
 ### Bug fixes
 
@@ -33,7 +34,6 @@ See the [`python-build-standalone` release notes](https://github.com/astral-sh/p
 - Ignore GraalPy devtags ([#15013](https://github.com/astral-sh/uv/pull/15013))
 - Include all site packages directories in ephemeral environment overlays ([#15121](https://github.com/astral-sh/uv/pull/15121))
 - Search in the user scheme scripts directory last in `find_uv_bin` ([#14191](https://github.com/astral-sh/uv/pull/14191))
-- Warn when two packages write to the same module ([#13437](https://github.com/astral-sh/uv/pull/13437))
 
 ### Documentation
 
