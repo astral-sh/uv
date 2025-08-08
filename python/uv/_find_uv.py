@@ -48,7 +48,7 @@ def find_uv_bin() -> str:
 
     raise UvNotFound(
         f"Could not find the uv binary in any of the following locations:\n"
-        f"{os.linesep.join(f' - {target}' for target in seen)}\n"
+        f"{'\n'.join(f' - {target}' for target in seen)}\n"
     )
 
 
