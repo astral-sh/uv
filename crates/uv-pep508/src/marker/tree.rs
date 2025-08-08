@@ -3693,20 +3693,20 @@ mod test {
         let b = ExtraName::from_str("b").unwrap();
 
         let marker = m("extra == 'a' and extra == 'b'");
-        assert!(!marker.evaluate_only_extras(&[a.clone()]));
-        assert!(!marker.evaluate_only_extras(&[b.clone()]));
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&a)));
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&b)));
         assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
 
         let marker = m("(platform_machine == 'inapplicable' and extra == 'b') or extra == 'a'");
-        assert!(marker.evaluate_only_extras(&[a.clone()]));
-        assert!(!marker.evaluate_only_extras(&[b.clone()]));
+        assert!(marker.evaluate_only_extras(std::slice::from_ref(&a)));
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&b)));
         assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
 
         let marker = m(
             "(platform_machine == 'inapplicable' and extra == 'a') or (platform_machine != 'inapplicable' and extra == 'b')",
         );
-        assert!(!marker.evaluate_only_extras(&[a.clone()]));
-        assert!(!marker.evaluate_only_extras(&[b.clone()]));
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&a)));
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&b)));
         assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
     }
 }

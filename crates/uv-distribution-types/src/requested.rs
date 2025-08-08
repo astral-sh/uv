@@ -37,7 +37,7 @@ impl Name for RequestedDist {
 }
 
 impl DistributionMetadata for RequestedDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Installed(dist) => dist.version_or_url(),
             Self::Installable(dist) => dist.version_or_url(),

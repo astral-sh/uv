@@ -546,8 +546,8 @@ impl Deref for SyncEnvironment {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Project(environment) => Deref::deref(environment),
-            Self::Script(environment) => Deref::deref(environment),
+            Self::Project(environment) => environment,
+            Self::Script(environment) => environment,
         }
     }
 }

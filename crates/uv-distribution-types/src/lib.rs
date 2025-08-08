@@ -568,7 +568,7 @@ impl Dist {
     }
 
     /// Convert this distribution into a reference.
-    pub fn as_ref(&self) -> DistRef {
+    pub fn as_ref(&self) -> DistRef<'_> {
         match self {
             Self::Built(dist) => DistRef::Built(dist),
             Self::Source(dist) => DistRef::Source(dist),
@@ -874,61 +874,61 @@ impl Name for CompatibleDist<'_> {
 }
 
 impl DistributionMetadata for RegistryBuiltWheel {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.filename.version)
     }
 }
 
 impl DistributionMetadata for RegistryBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         self.best_wheel().version_or_url()
     }
 }
 
 impl DistributionMetadata for DirectUrlBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for PathBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for RegistrySourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.version)
     }
 }
 
 impl DistributionMetadata for DirectUrlSourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for GitSourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for PathSourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for DirectorySourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for SourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
@@ -940,7 +940,7 @@ impl DistributionMetadata for SourceDist {
 }
 
 impl DistributionMetadata for BuiltDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
@@ -950,7 +950,7 @@ impl DistributionMetadata for BuiltDist {
 }
 
 impl DistributionMetadata for Dist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Built(dist) => dist.version_or_url(),
             Self::Source(dist) => dist.version_or_url(),

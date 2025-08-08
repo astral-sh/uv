@@ -740,7 +740,7 @@ impl Name for Candidate<'_> {
 }
 
 impl DistributionMetadata for Candidate<'_> {
-    fn version_or_url(&self) -> uv_distribution_types::VersionOrUrlRef {
+    fn version_or_url(&self) -> uv_distribution_types::VersionOrUrlRef<'_> {
         uv_distribution_types::VersionOrUrlRef::Version(self.version)
     }
 }

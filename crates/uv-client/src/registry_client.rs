@@ -297,7 +297,10 @@ impl RegistryClient {
     }
 
     /// Return the appropriate index URLs for the given [`PackageName`].
-    fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = IndexMetadataRef> {
+    fn index_urls_for(
+        &self,
+        package_name: &PackageName,
+    ) -> impl Iterator<Item = IndexMetadataRef<'_>> {
         self.torch_backend
             .as_ref()
             .and_then(|torch_backend| {

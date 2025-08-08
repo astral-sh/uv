@@ -225,7 +225,7 @@ impl FlatDependencyGroups {
     }
 
     /// Return the entry for a given group, if any.
-    pub fn entry(&mut self, group: GroupName) -> Entry<GroupName, FlatDependencyGroup> {
+    pub fn entry(&mut self, group: GroupName) -> Entry<'_, GroupName, FlatDependencyGroup> {
         self.0.entry(group)
     }
 

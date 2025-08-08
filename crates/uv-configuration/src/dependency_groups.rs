@@ -252,7 +252,7 @@ impl DependencyGroupsHistory {
     /// Conceptually this being an empty list should be equivalent to
     /// [`DependencyGroups::is_empty`][] when there aren't any defaults set.
     /// When there are defaults the two will disagree, and rightfully so!
-    pub fn as_flags_pretty(&self) -> Vec<Cow<str>> {
+    pub fn as_flags_pretty(&self) -> Vec<Cow<'_, str>> {
         let Self {
             dev_mode,
             group,
@@ -378,7 +378,7 @@ impl IncludeGroups {
     }
 
     /// Iterate over all groups referenced in the [`IncludeGroups`].
-    pub fn names(&self) -> std::slice::Iter<GroupName> {
+    pub fn names(&self) -> std::slice::Iter<'_, GroupName> {
         match self {
             Self::Some(groups) => groups.iter(),
             Self::All => [].iter(),

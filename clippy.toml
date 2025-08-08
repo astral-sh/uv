@@ -8,6 +8,7 @@ doc-valid-idents = [
   "PyTorch",
   "ROCm",
   "XPU",
+  "PowerShell",
   ".." # Include the defaults
 ]
 
