@@ -46,6 +46,12 @@ uv is backed by [Astral](https://astral.sh), the creators of
 
 ## Installation
 
+To install `uv`, you can use the following command:
+
+```bash
+curl -sSL https://install.astral.sh/uv | bash
+```
+
 Install uv with our standalone installers:
 
 ```bash
@@ -327,3 +333,4 @@ additional terms or conditions.
     <img src="https://raw.githubusercontent.com/astral-sh/uv/main/assets/svg/Astral.svg" alt="Made by Astral">
   </a>
 </div>
+uv new my_project
