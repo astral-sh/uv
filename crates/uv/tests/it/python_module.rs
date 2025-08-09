@@ -384,6 +384,61 @@ fn find_uv_bin_user_bin() {
 }
 
 #[test]
+fn find_uv_bin_error_message() {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix()
+        .with_filter(user_scheme_bin_filter())
+        // Target installs always use "bin" on all platforms. On Windows,
+        // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
+        .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
+
+    // Install in a virtual environment
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(context.workspace_root.join("scripts/packages/fake-uv")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/fake-uv)
+    "
+    );
+
+    // Remove the virtual environment executable for some reason
+    fs_err::remove_file(if cfg!(unix) {
+        context.venv.child("bin").child("uv")
+    } else {
+        context.venv.child("Scripts").child("uv.exe")
+    })
+    .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_command()
+        .arg("-c")
+        .arg("import uv; print(uv.find_uv_bin())"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<string>", line 1, in <module>
+      File "[SITE_PACKAGES]/uv/_find_uv.py", line 50, in find_uv_bin
+        raise UvNotFound(
+    uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
+     - [VENV]/[BIN]
+     - [PYTHON-BIN-3.12]
+     - [SITE_PACKAGES]/[BIN]
+     - [USER_SCHEME]/[BIN]
+    "#
+    );
+}
+
+#[test]
 fn find_uv_bin_py38() {
     let context = TestContext::new("3.8")
         .with_filtered_python_names()
