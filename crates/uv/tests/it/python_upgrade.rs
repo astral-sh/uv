@@ -52,6 +52,17 @@ fn python_upgrade() {
 
     ----- stderr -----
     ");
+
+    // Should reinstall on `--reinstall`
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10").arg("--reinstall"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.18 in [TIME]
+     ~ cpython-3.10.18-[PLATFORM] (python3.10)
+    ");
 }
 
 #[test]
