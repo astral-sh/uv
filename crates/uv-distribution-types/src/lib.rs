@@ -167,8 +167,7 @@ impl InstalledVersion<'_> {
     /// If it is a version, return its value.
     pub fn version(&self) -> &Version {
         match self {
-            Self::Version(version) => version,
-            Self::Url(_, version) => version,
+            Self::Version(version) | Self::Url(_, version) => version,
         }
     }
 }

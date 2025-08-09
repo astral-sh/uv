@@ -61,8 +61,7 @@ impl Deref for ProgressBarKind {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Numeric { progress, .. } => progress,
-            Self::Spinner { progress } => progress,
+            Self::Numeric { progress, .. } | Self::Spinner { progress } => progress,
         }
     }
 }
@@ -85,7 +84,7 @@ impl Default for BarState {
     fn default() -> Self {
         Self {
             headers: 0,
-            sizes: Vec::default(),
+            sizes: vec![],
             bars: FxHashMap::default(),
             id: 0,
             // Avoid resizing the progress bar templates too often by starting with a padding
