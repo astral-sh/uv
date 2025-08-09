@@ -232,6 +232,17 @@ jobs:
       - name: "Install required Python versions"
         run: uv python install
 
+      - name: "Install secret service"
+        run: |
+          sudo apt update -y
+          sudo apt install -y gnome-keyring
+
+      - name: "Start gnome-keyring"
+        # run gnome-keyring with 'foobar' as password for the login keyring
+        # this will create a new login keyring and unlock it
+        # the login password doesn't matter, but the keyring must be unlocked for the tests to work
+        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a416ddeedbd372e614cc1386e8b642692f66865e # v2.57.1
         with:
@@ -243,7 +254,7 @@ jobs:
           UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
-            --features python-patch \
+            --features python-patch,keyring-tests,secret-service \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -282,7 +293,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,python-managed,pypi,git,performance,crates-io \
+            --features python,python-managed,pypi,git,performance,crates-io,keyring-tests,apple-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
@@ -334,7 +345,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,pypi,python-managed \
+            --features python,pypi,python-managed,keyring-tests,windows-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
