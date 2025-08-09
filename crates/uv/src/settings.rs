@@ -1019,6 +1019,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) reinstall: bool,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) bin: Option<bool>,
@@ -1051,6 +1052,7 @@ impl PythonUpgradeSettings {
             targets,
             mirror: _,
             pypy_mirror: _,
+            reinstall,
             python_downloads_json_url: _,
         } = args;
 
@@ -1061,6 +1063,7 @@ impl PythonUpgradeSettings {
             registry,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
+            reinstall,
             python_downloads_json_url,
             default,
             bin,
