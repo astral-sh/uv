@@ -76,11 +76,7 @@ def _matching_parents(path: str | None, match: str) -> str | None:
 
     if not all(
         fnmatch(part, match_part)
-        for part, match_part in (
-            zip(reversed(parts), reversed(match_parts), strict=False)
-            if sys.version_info >= (3, 10)
-            else zip(reversed(parts), reversed(match_parts))  # noqa: B905
-        )
+        for part, match_part in zip(reversed(parts), reversed(match_parts))
     ):
         return None
 
