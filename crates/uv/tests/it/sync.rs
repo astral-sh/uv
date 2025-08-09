@@ -12745,7 +12745,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync(), @r#"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
@@ -12756,12 +12756,16 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
          |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
       Dependencies marked with `match-runtime = true` cannot include version specifiers
 
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 11, column 9
-       |
-    11 | child = [{ requirement = "anyio>4", match-runtime = true }]
-       |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    Dependencies marked with `match-runtime = true` cannot include version specifiers
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          `EXPECTED_ANYIO_VERSION` not set
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
     "#);
 
     Ok(())

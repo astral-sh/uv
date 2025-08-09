@@ -639,9 +639,8 @@ pub struct ResolverInstallerOptions {
         default = "[]",
         value_type = "dict",
         example = r#"
-        [extra-build-dependencies]
-        pytest = ["setuptools"]
-    "#
+            extra-build-dependencies = { pytest = ["setuptools"] }
+        "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Extra environment variables to set when building certain packages.
@@ -652,8 +651,7 @@ pub struct ResolverInstallerOptions {
         default = r#"{}"#,
         value_type = r#"dict[str, dict[str, str]]"#,
         example = r#"
-            [tool.uv.extra-build-variables]
-            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+            extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
         "#
     )]
     pub extra_build_variables: Option<ExtraBuildVariables>,
@@ -1178,8 +1176,7 @@ pub struct PipOptions {
         default = "[]",
         value_type = "dict",
         example = r#"
-            [extra-build-dependencies]
-            pytest = ["setuptools"]
+            extra-build-dependencies = { pytest = ["setuptools"] }
         "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
@@ -1191,8 +1188,7 @@ pub struct PipOptions {
         default = r#"{}"#,
         value_type = r#"dict[str, dict[str, str]]"#,
         example = r#"
-            [extra-build-variables]
-            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+            extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
         "#
     )]
     pub extra_build_variables: Option<ExtraBuildVariables>,
