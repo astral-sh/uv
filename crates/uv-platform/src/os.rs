@@ -19,6 +19,10 @@ impl Os {
     pub fn is_windows(&self) -> bool {
         matches!(self.0, target_lexicon::OperatingSystem::Windows)
     }
+
+    pub fn is_macos(&self) -> bool {
+        matches!(self.0, target_lexicon::OperatingSystem::Darwin(_))
+    }
 }
 
 impl Display for Os {
