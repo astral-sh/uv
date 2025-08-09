@@ -764,6 +764,9 @@ fn create_bin_links(
 
     for target in targets {
         let target = bin.join(target);
+        if upgrade && !target.try_exists().unwrap_or_default() {
+            continue;
+        }
         let executable = if upgradeable {
             if let Some(minor_version_link) =
                 PythonMinorVersionLink::from_installation(installation, preview)
