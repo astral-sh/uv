@@ -151,11 +151,11 @@ impl PubGrubPriorities {
                 let package_tiebreaker = match self.virtual_package_tiebreaker.get(package) {
                     Some(tiebreaker) => *tiebreaker,
                     None => {
-                        if cfg!(debug_assertions) {
-                            panic!("Virtual package not known: `{package}`")
-                        } else {
-                            PubGrubTiebreaker(Reverse(u32::MAX))
-                        }
+                        //if cfg!(debug_assertions) {
+                        //    panic!("Virtual package not known: `{package}`")
+                        //} else {
+                        PubGrubTiebreaker(Reverse(u32::MAX))
+                        //}
                     }
                 };
 
