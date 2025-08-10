@@ -45,7 +45,7 @@ def report_result(result: subprocess.CompletedProcess):
 
 def main():
     results = [run_command(command) for command in read_commands()]
-    failed = sum(result.returncode != 0 for result in results)
+    failed = len([result.returncode != 0 for result in results])
     for result in results:
         report_result(result)
 
