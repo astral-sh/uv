@@ -2154,7 +2154,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2173,7 +2173,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     ");
 
     // Ensure that we're resolving to `4.3.0`, the "latest" on PyPI.
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2208,7 +2208,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     // The child should be rebuilt with `3.5` on reinstall, the "latest" on Test PyPI.
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2228,7 +2228,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.5"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6549,7 +6549,7 @@ fn no_binary() -> Result<()> {
      ~ iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY_PACKAGE", "iniconfig"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6562,7 +6562,7 @@ fn no_binary() -> Result<()> {
      ~ iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY", "1"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY, "1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6575,7 +6575,7 @@ fn no_binary() -> Result<()> {
      ~ iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY", "iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY, "iniconfig"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6652,7 +6652,7 @@ fn no_build() -> Result<()> {
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD_PACKAGE", "iniconfig"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "iniconfig"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6705,7 +6705,7 @@ fn no_build_error() -> Result<()> {
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "1"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD, "1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6715,7 +6715,7 @@ fn no_build_error() -> Result<()> {
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD_PACKAGE", "django-allauth"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "django-allauth"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6725,7 +6725,7 @@ fn no_build_error() -> Result<()> {
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "django-allauth"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD, "django-allauth"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -11518,7 +11518,7 @@ fn sync_required_environment_hint() -> Result<()> {
         packse_index_url()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r"
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11533,7 +11533,7 @@ fn sync_required_environment_hint() -> Result<()> {
         "You're on [PLATFORM] (`[TAG]`)",
     ));
 
-    uv_snapshot!(filters, context.sync().env_remove("UV_EXCLUDE_NEWER"), @r"
+    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12563,7 +12563,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12597,7 +12597,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12630,7 +12630,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12650,7 +12650,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12670,7 +12670,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features").arg("extra-build-dependencies")
         .arg("--reinstall-package").arg("child")
-        .env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+        .env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12713,7 +12713,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // This should fail
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.1"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.1"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12824,7 +12824,7 @@ fn sync_extra_build_variables() -> Result<()> {
     ");
 
     // Ensure our build backend is checking the version correctly.
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----

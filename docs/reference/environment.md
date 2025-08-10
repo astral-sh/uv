@@ -652,6 +652,19 @@ See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py
 
 Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
 
+### `RUST_BACKTRACE`
+
+If set, it can be used to display more stack trace details when a panic occurs.
+This is used by uv particularly on windows to show more details during a platform exception.
+
+For example:
+
+* `RUST_BACKTRACE=1` will print a short backtrace.
+* `RUST_BACKTRACE=full` will print a full backtrace.
+
+See the [Rust backtrace documentation](https://doc.rust-lang.org/std/backtrace/index.html)
+for more.
+
 ### `RUST_LOG`
 
 If set, uv will use this value as the log level for its `--verbose` output. Accepts

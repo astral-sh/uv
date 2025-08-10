@@ -44,6 +44,7 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
+use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -166,7 +167,7 @@ pub(crate) async fn pip_compile(
 
     // Respect `UV_PYTHON`
     if python.is_none() && python_version.is_none() {
-        if let Ok(request) = std::env::var("UV_PYTHON") {
+        if let Ok(request) = std::env::var(EnvVars::UV_PYTHON) {
             if !request.is_empty() {
                 python = Some(request);
             }

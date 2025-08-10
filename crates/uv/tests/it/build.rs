@@ -7,6 +7,7 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
+use uv_static::EnvVars;
 use zip::ZipArchive;
 
 #[test]
@@ -1997,7 +1998,7 @@ fn force_pep517() -> Result<()> {
         build-backend = "uv_build"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.build().env("RUST_BACKTRACE", "0"), @r"
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::RUST_BACKTRACE, "0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2008,7 +2009,7 @@ fn force_pep517() -> Result<()> {
       ╰─▶ Expected a Python module at: `src/does_not_exist/__init__.py`
     ");
 
-    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env("RUST_BACKTRACE", "0"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @r"
     success: false
     exit_code: 2
     ----- stdout -----

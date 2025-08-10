@@ -56,7 +56,7 @@ fn missing_venv() -> Result<()> {
     assert!(predicates::path::missing().eval(&context.venv));
 
     // If not "active", we hint to create one
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove(EnvVars::VIRTUAL_ENV), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
