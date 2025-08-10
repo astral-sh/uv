@@ -77,6 +77,14 @@ fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {
         .map(|lit_str| lit_str.value())
 }
 
+fn get_since(attrs: &[Attribute]) -> Option<String> {
+    attrs
+        .iter()
+        .find(|a| a.path().is_ident("attr_since"))
+        .and_then(|attr| attr.parse_args::<LitStr>().ok())
+        .map(|lit_str| lit_str.value())
+}
+
 fn is_hidden(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| attr.path().is_ident("attr_hidden"))
 }
@@ -93,13 +101,15 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
             ImplItem::Const(item) if !is_hidden(&item.attrs) => {
                 let name = item.ident.to_string();
                 let doc = get_doc_comment(&item.attrs);
-                Some((name, doc))
+                let since = get_since(&item.attrs);
+                Some((name, doc, since))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
                 // Extract the environment variable patterns.
                 if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
                     let doc = get_doc_comment(&item.attrs);
-                    Some((pattern, doc))
+                    let since = get_since(&item.attrs);
+                    Some((pattern, doc, since))
                 } else {
                     None // Skip if pattern extraction fails.
                 }
@@ -109,9 +119,11 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         .collect();
 
     let struct_name = &ast.self_ty;
-    let pairs = constants.iter().map(|(name, doc)| {
-        quote! {
-            (#name, #doc)
+    let pairs = constants.iter().map(|(name, doc, since)| {
+        if let Some(s) = since {
+            quote! { (#name, #doc, Some(#s)) }
+        } else {
+            quote! { (#name, #doc, None) }
         }
     });
 
@@ -120,7 +132,7 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
 
         impl #struct_name {
             /// Returns a list of pairs of env var and their documentation defined in this impl block.
-            pub fn metadata<'a>() -> &'a [(&'static str, &'static str)] {
+            pub fn metadata<'a>() -> &'a [(&'static str, &'static str, Option<&'static str>)] {
                 &[#(#pairs),*]
             }
         }
@@ -136,5 +148,10 @@ pub fn attr_hidden(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn attr_env_var_pattern(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+#[proc_macro_attribute]
+pub fn attr_since(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }
