@@ -390,11 +390,33 @@ async fn build_impl(
                     source: String,
                     #[source]
                     cause: anyhow::Error,
+                    #[help]
+                    help: Option<String>,
                 }
+
+                let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
+                    // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                    // encoding everything in strings
+                    if err.to_string().contains("/bin/python")
+                        && std::error::Error::source(err).is_some_and(|err| {
+                            err.to_string().ends_with("outside of the target directory")
+                        })
+                    {
+                        Some(
+                            "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions."
+                                .to_string(),
+                        )
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
+                    help,
                 });
                 anstream::eprint!("{report:?}");
 

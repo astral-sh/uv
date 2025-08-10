@@ -2025,3 +2025,62 @@ fn force_pep517() -> Result<()> {
 
     Ok(())
 }
+
+/// Check that we show a hint when there's a venv in the source distribution.
+///
+/// <https://github.com/astral-sh/uv/issues/15096>
+// Windows uses trampolines instead of symlinks. You don't want those in your source distribution
+// either, but that's for the build backend to catch, we're only checking for the unix error hint
+// in uv here.
+#[cfg(unix)]
+#[test]
+fn venv_included_in_sdist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .init()
+        .arg("--name")
+        .arg("project")
+        .arg("--build-backend")
+        .arg("hatchling")
+        .assert()
+        .success();
+
+    let pyproject_toml = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+
+        [tool.hatch.build.targets.sdist.force-include]
+        ".venv" = ".venv"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#};
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    context.venv().assert().success();
+
+    // context.filters()
+    uv_snapshot!(context.filters(), context.build(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+      × Failed to build `[TEMP_DIR]/`
+      ├─▶ Invalid tar file
+      ├─▶ failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
+      ╰─▶ symlink destination for [PYTHON-3.12] is outside of the target directory
+      help: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
+    ");
+
+    Ok(())
+}
