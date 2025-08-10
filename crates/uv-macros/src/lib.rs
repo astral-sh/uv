@@ -77,6 +77,14 @@ fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {
         .map(|lit_str| lit_str.value())
 }
 
+fn get_added_in(attrs: &[Attribute]) -> Option<String> {
+    attrs
+        .iter()
+        .find(|a| a.path().is_ident("attr_added_in"))
+        .and_then(|attr| attr.parse_args::<LitStr>().ok())
+        .map(|lit_str| lit_str.value())
+}
+
 fn is_hidden(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| attr.path().is_ident("attr_hidden"))
 }
@@ -92,6 +100,7 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         .filter_map(|item| match item {
             ImplItem::Const(item) if !is_hidden(&item.attrs) => {
                 let doc = get_doc_comment(&item.attrs);
+                let added_in = get_added_in(&item.attrs);
                 let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit),
                     ..
@@ -100,13 +109,14 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
                     return None;
                 };
                 let name = lit.value();
-                Some((name, doc))
+                Some((name, doc, added_in))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
                 // Extract the environment variable patterns.
                 if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
                     let doc = get_doc_comment(&item.attrs);
-                    Some((pattern, doc))
+                    let added_in = get_added_in(&item.attrs);
+                    Some((pattern, doc, added_in))
                 } else {
                     None // Skip if pattern extraction fails.
                 }
@@ -116,9 +126,11 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         .collect();
 
     let struct_name = &ast.self_ty;
-    let pairs = constants.iter().map(|(name, doc)| {
-        quote! {
-            (#name, #doc)
+    let pairs = constants.iter().map(|(name, doc, added_in)| {
+        if let Some(added_in) = added_in {
+            quote! { (#name, #doc, Some(#added_in)) }
+        } else {
+            quote! { (#name, #doc, None) }
         }
     });
 
@@ -127,7 +139,7 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
 
         impl #struct_name {
             /// Returns a list of pairs of env var and their documentation defined in this impl block.
-            pub fn metadata<'a>() -> &'a [(&'static str, &'static str)] {
+            pub fn metadata<'a>() -> &'a [(&'static str, &'static str, Option<&'static str>)] {
                 &[#(#pairs),*]
             }
         }
@@ -143,5 +155,10 @@ pub fn attr_hidden(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn attr_env_var_pattern(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+#[proc_macro_attribute]
+pub fn attr_added_in(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }
