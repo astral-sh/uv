@@ -1057,11 +1057,10 @@ fn find_matching_bin_link<'a>(
 
     #[cfg(unix)]
     {
-        let target = if !path.is_symlink() {
+        if !path.is_symlink() {
             return None;
-        } else {
-            fs_err::canonicalize(path).ok()?
-        };
+        }
+        let target = fs_err::canonicalize(path).ok()?;
 
         installations.find(|installation| installation.executable(false) == target)
     }
