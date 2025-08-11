@@ -18,7 +18,6 @@ workspace = true
 [dependencies]
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
-uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }

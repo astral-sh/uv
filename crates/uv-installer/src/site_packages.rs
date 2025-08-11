@@ -8,8 +8,9 @@ use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
-    Diagnostic, InstalledDist, Name, NameRequirementSpecification, Requirement,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist, Name,
+    NameRequirementSpecification, PackageConfigSettings, Requirement, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -295,6 +296,10 @@ impl SitePackages {
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
     ) -> Result<SatisfiesResult> {
         // First, map all unnamed requirements to named requirements.
         let requirements = {
@@ -380,6 +385,10 @@ impl SitePackages {
             constraints.iter().map(|constraint| &constraint.requirement),
             overrides.iter().map(Cow::as_ref),
             markers,
+            config_settings,
+            config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
         )
     }
 
@@ -390,6 +399,10 @@ impl SitePackages {
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: impl Iterator<Item = &'a Requirement>,
         markers: &ResolverMarkerEnvironment,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
     ) -> Result<SatisfiesResult> {
         // Collect the constraints and overrides by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
@@ -443,7 +456,15 @@ impl SitePackages {
                 [distribution] => {
                     // Validate that the requirement is satisfied.
                     if requirement.evaluate_markers(Some(markers), &[]) {
-                        match RequirementSatisfaction::check(distribution, &requirement.source) {
+                        match RequirementSatisfaction::check(
+                            name,
+                            distribution,
+                            &requirement.source,
+                            config_settings,
+                            config_settings_package,
+                            extra_build_requires,
+                            extra_build_variables,
+                        ) {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
                             | RequirementSatisfaction::CacheInvalid => {
@@ -456,7 +477,15 @@ impl SitePackages {
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
                         if constraint.evaluate_markers(Some(markers), &[]) {
-                            match RequirementSatisfaction::check(distribution, &constraint.source) {
+                            match RequirementSatisfaction::check(
+                                name,
+                                distribution,
+                                &constraint.source,
+                                config_settings,
+                                config_settings_package,
+                                extra_build_requires,
+                                extra_build_variables,
+                            ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
                                 | RequirementSatisfaction::CacheInvalid => {

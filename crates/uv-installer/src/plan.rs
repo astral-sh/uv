@@ -120,7 +120,15 @@ impl<'a> Planner<'a> {
                     [] => {}
                     [installed] => {
                         let source = RequirementSource::from(dist);
-                        match RequirementSatisfaction::check(installed, &source) {
+                        match RequirementSatisfaction::check(
+                            dist.name(),
+                            installed,
+                            &source,
+                            config_settings,
+                            config_settings_package,
+                            extra_build_requires,
+                            extra_build_variables,
+                        ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
                                     "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
@@ -221,6 +229,7 @@ impl<'a> Planner<'a> {
                     match HttpArchivePointer::read_from(&cache_entry) {
                         Ok(Some(pointer)) => {
                             let cache_info = pointer.to_cache_info();
+                            let build_info = pointer.to_build_info();
                             let archive = pointer.into_archive();
                             if archive.satisfies(hasher.get(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
@@ -231,6 +240,7 @@ impl<'a> Planner<'a> {
                                     },
                                     hashes: archive.hashes,
                                     cache_info,
+                                    build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
 
@@ -294,6 +304,7 @@ impl<'a> Planner<'a> {
                             Ok(timestamp) => {
                                 if pointer.is_up_to_date(timestamp) {
                                     let cache_info = pointer.to_cache_info();
+                                    let build_info = pointer.to_build_info();
                                     let archive = pointer.into_archive();
                                     if archive.satisfies(hasher.get(dist.as_ref())) {
                                         let cached_dist = CachedDirectUrlDist {
@@ -304,6 +315,7 @@ impl<'a> Planner<'a> {
                                             },
                                             hashes: archive.hashes,
                                             cache_info,
+                                            build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
 

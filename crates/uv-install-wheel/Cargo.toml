@@ -21,7 +21,6 @@ doctest = false
 name = "uv_install_wheel"
 
 [dependencies]
-uv-cache-info = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
