@@ -13175,26 +13175,16 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         child = [{ requirement = "anyio>4", match-runtime = true }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @r#"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 11, column 9
-         |
-      11 | child = [{ requirement = "anyio>4", match-runtime = true }]
-         |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      Dependencies marked with `match-runtime = true` cannot include version specifiers
-
-    error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 11, column 9
-       |
-    11 | child = [{ requirement = "anyio>4", match-runtime = true }]
-       |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    Dependencies marked with `match-runtime = true` cannot include version specifiers
-    "#);
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    error: Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `anyio>4`
+    ");
 
     Ok(())
 }

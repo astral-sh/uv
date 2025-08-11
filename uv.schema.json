@@ -226,7 +226,7 @@
       ]
     },
     "extra-build-dependencies": {
-      "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages, like,\n`pip`, and do not declare them as build dependencies.",
+      "description": "Additional build dependencies for packages.\n\nThis allows extending the PEP 517 build environment for the project's dependencies with\nadditional packages. This is useful for packages that assume the presence of packages like\n`pip`, and do not declare them as build dependencies.",
       "anyOf": [
         {
           "$ref": "#/definitions/ExtraBuildDependencies"

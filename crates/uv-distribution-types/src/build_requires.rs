@@ -13,6 +13,14 @@ pub enum ExtraBuildRequiresError {
         "`{0}` was declared as an extra build dependency with `match-runtime = true`, but was not found in the resolution"
     )]
     NotFound(PackageName),
+    #[error(
+        "Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `{0}{1}`"
+    )]
+    VersionSpecifiersNotAllowed(PackageName, Box<RequirementSource>),
+    #[error(
+        "Dependencies marked with `match-runtime = true` cannot include URL constraints, but found: `{0}{1}`"
+    )]
+    UrlNotAllowed(PackageName, Box<RequirementSource>),
 }
 
 /// Lowered extra build dependencies with source resolution applied.
@@ -83,6 +91,26 @@ impl ExtraBuildRequires {
                             requirement,
                             match_runtime: true,
                         } => {
+                            // Reject requirements with `match-runtime = true` that include any form
+                            // of constraint.
+                            if let RequirementSource::Registry { specifier, .. } =
+                                &requirement.source
+                            {
+                                if !specifier.is_empty() {
+                                    return Err(
+                                        ExtraBuildRequiresError::VersionSpecifiersNotAllowed(
+                                            requirement.name.clone(),
+                                            Box::new(requirement.source.clone()),
+                                        ),
+                                    );
+                                }
+                            } else {
+                                return Err(ExtraBuildRequiresError::VersionSpecifiersNotAllowed(
+                                    requirement.name.clone(),
+                                    Box::new(requirement.source.clone()),
+                                ));
+                            }
+
                             let dist = resolution
                                 .distributions()
                                 .find(|dist| dist.name() == &requirement.name)

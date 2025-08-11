@@ -22,14 +22,14 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use uv_build_backend::BuildBackendSettings;
-use uv_distribution_types::{ExtraBuildVariables, Index, IndexName, RequirementSource};
+use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
@@ -428,35 +428,6 @@ pub struct ToolUv {
     )]
     pub dependency_groups: Option<ToolUvDependencyGroups>,
 
-    /// Additional build dependencies for packages.
-    ///
-    /// This allows extending the PEP 517 build environment for the project's dependencies with
-    /// additional packages. This is useful for packages that assume the presence of packages, like,
-    /// `pip`, and do not declare them as build dependencies.
-    #[option(
-        default = "[]",
-        value_type = "dict",
-        example = r#"
-            [tool.uv.extra-build-dependencies]
-            pytest = ["pip"]
-        "#
-    )]
-    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
-
-    /// Extra environment variables to set when building certain packages.
-    ///
-    /// Environment variables will be added to the environment when building the
-    /// specified packages.
-    #[option(
-        default = r#"{}"#,
-        value_type = r#"dict[str, dict[str, str]]"#,
-        example = r#"
-            [tool.uv.extra-build-variables]
-            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
-        "#
-    )]
-    pub extra_build_variables: Option<ExtraBuildVariables>,
-
     /// The project's development dependencies.
     ///
     /// Development dependencies will be installed by default in `uv run` and `uv sync`, but will
@@ -785,7 +756,7 @@ pub enum ExtraBuildDependencyWire {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     deny_unknown_fields,
-    try_from = "ExtraBuildDependencyWire",
+    from = "ExtraBuildDependencyWire",
     into = "ExtraBuildDependencyWire"
 )]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -800,38 +771,19 @@ impl From<ExtraBuildDependency> for uv_pep508::Requirement<VerbatimParsedUrl> {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum ExtraBuildDependencyError {
-    #[error("Dependencies marked with `match-runtime = true` cannot include version specifiers")]
-    VersionSpecifiersNotAllowed,
-    #[error("Dependencies marked with `match-runtime = true` cannot include URL constraints")]
-    UrlNotAllowed,
-}
-
-impl TryFrom<ExtraBuildDependencyWire> for ExtraBuildDependency {
-    type Error = ExtraBuildDependencyError;
-
-    fn try_from(wire: ExtraBuildDependencyWire) -> Result<Self, ExtraBuildDependencyError> {
+impl From<ExtraBuildDependencyWire> for ExtraBuildDependency {
+    fn from(wire: ExtraBuildDependencyWire) -> Self {
         match wire {
-            ExtraBuildDependencyWire::Unannotated(requirement) => Ok(Self {
+            ExtraBuildDependencyWire::Unannotated(requirement) => Self {
                 requirement,
                 match_runtime: false,
-            }),
+            },
             ExtraBuildDependencyWire::Annotated {
                 requirement,
                 match_runtime,
-            } => match requirement.version_or_url {
-                // If `match-runtime = true`, reject additional constraints.
-                Some(VersionOrUrl::VersionSpecifier(..)) if match_runtime => {
-                    Err(ExtraBuildDependencyError::VersionSpecifiersNotAllowed)
-                }
-                Some(VersionOrUrl::Url(..)) if match_runtime => {
-                    Err(ExtraBuildDependencyError::UrlNotAllowed)
-                }
-                _ => Ok(Self {
-                    requirement,
-                    match_runtime,
-                }),
+            } => Self {
+                requirement,
+                match_runtime,
             },
         }
     }
