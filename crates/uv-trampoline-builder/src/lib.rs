@@ -70,6 +70,7 @@ impl Launcher {
             let mut path_str = path.as_os_str().encode_wide().collect::<Vec<_>>();
             path_str.push(0);
 
+            // SAFETY: winapi call; null-terminated strings
             #[allow(unsafe_code)]
             let Some(module) = (unsafe {
                 LoadLibraryExW(
@@ -107,6 +108,7 @@ impl Launcher {
                 }))
             })();
 
+            // SAFETY: winapi call; handle is known to be valid.
             #[allow(unsafe_code)]
             unsafe {
                 windows::Win32::Foundation::FreeLibrary(module)
@@ -245,6 +247,7 @@ fn write_resources(path: &Path, resources: &[(&str, &[u8])]) -> Result<(), Error
     }
     #[cfg(windows)]
     {
+        // SAFETY: winapi calls; null-terminated strings
         #[allow(unsafe_code)]
         unsafe {
             use std::os::windows::ffi::OsStrExt;
@@ -282,6 +285,7 @@ fn write_resources(path: &Path, resources: &[(&str, &[u8])]) -> Result<(), Error
 #[cfg(windows)]
 /// Safely reads a resource from a PE file
 fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Option<Vec<u8>> {
+    // SAFETY: winapi calls; null-terminated strings; all pointers are checked.
     #[allow(unsafe_code)]
     unsafe {
         use windows::Win32::System::LibraryLoader::{
@@ -293,12 +297,17 @@ fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Opt
             windows::core::PCWSTR(name.encode_utf16().collect::<Vec<_>>().as_ptr()),
             windows::core::PCWSTR(RT_RCDATA as *const _),
         );
+        if resource.is_invalid() {
+            return None;
+        }
 
         // Get resource size and data
         let size = SizeofResource(Some(handle), resource);
         let data = LoadResource(Some(handle), resource).ok()?;
-        let ptr = LockResource(data);
-        let ptr = ptr.cast::<u8>();
+        let ptr = LockResource(data) as *const u8;
+        if ptr.is_null() {
+            return None;
+        }
 
         // Copy the resource data into a Vec
         Some(std::slice::from_raw_parts(ptr, size as usize).to_vec())

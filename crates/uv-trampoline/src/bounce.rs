@@ -59,6 +59,7 @@ impl TrampolineKind {
 
 /// Safely loads a resource from the current module
 fn load_resource(resource_id: &str) -> Option<Vec<u8>> {
+    // SAFETY: winapi calls; null-terminated strings; all pointers are checked.
     unsafe {
         let mut resource_id_null_term = resource_id.encode_utf16().collect::<Vec<_>>();
         resource_id_null_term.push(0);
@@ -68,12 +69,20 @@ fn load_resource(resource_id: &str) -> Option<Vec<u8>> {
             windows::core::PCWSTR(resource_id_null_term.as_ptr()),
             windows::core::PCWSTR(RT_RCDATA as *const _),
         );
+        if resource.is_invalid() {
+            return None;
+        }
 
         // Get resource size and data
         let size = SizeofResource(None, resource);
+        if size == 0 {
+            return None;
+        }
         let data = LoadResource(None, resource).ok();
-
         let ptr = LockResource(data?) as *const u8;
+        if ptr.is_null() {
+            return None;
+        }
 
         // Copy the resource data into a Vec
         Some(std::slice::from_raw_parts(ptr, size as usize).to_vec())
