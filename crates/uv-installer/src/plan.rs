@@ -64,8 +64,16 @@ impl<'a> Planner<'a> {
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
-        let mut registry_index =
-            RegistryWheelIndex::new(cache, tags, index_locations, hasher, config_settings);
+        let mut registry_index = RegistryWheelIndex::new(
+            cache,
+            tags,
+            index_locations,
+            hasher,
+            config_settings,
+            config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
+        );
         let built_index = BuiltWheelIndex::new(
             cache,
             tags,

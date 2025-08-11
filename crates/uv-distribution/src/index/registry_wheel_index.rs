@@ -1,11 +1,15 @@
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_key::cache_digest;
-use uv_configuration::ConfigSettings;
-use uv_distribution_types::{CachedRegistryDist, Hashed, Index, IndexLocations, IndexUrl};
+use uv_configuration::{ConfigSettings, PackageConfigSettings};
+use uv_distribution_types::{
+    BuildVariables, CachedRegistryDist, ExtraBuildRequirement, ExtraBuildRequires,
+    ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
+};
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -33,7 +37,10 @@ pub struct RegistryWheelIndex<'a> {
     index_locations: &'a IndexLocations,
     hasher: &'a HashStrategy,
     index: FxHashMap<&'a PackageName, Vec<IndexEntry<'a>>>,
-    build_configuration: &'a ConfigSettings,
+    config_settings: &'a ConfigSettings,
+    config_settings_package: &'a PackageConfigSettings,
+    extra_build_requires: &'a ExtraBuildRequires,
+    extra_build_variables: &'a ExtraBuildVariables,
 }
 
 impl<'a> RegistryWheelIndex<'a> {
@@ -43,14 +50,20 @@ impl<'a> RegistryWheelIndex<'a> {
         tags: &'a Tags,
         index_locations: &'a IndexLocations,
         hasher: &'a HashStrategy,
-        build_configuration: &'a ConfigSettings,
+        config_settings: &'a ConfigSettings,
+        config_settings_package: &'a PackageConfigSettings,
+        extra_build_requires: &'a ExtraBuildRequires,
+        extra_build_variables: &'a ExtraBuildVariables,
     ) -> Self {
         Self {
             cache,
             tags,
             index_locations,
             hasher,
-            build_configuration,
+            config_settings,
+            config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
             index: FxHashMap::default(),
         }
     }
@@ -72,7 +85,10 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.tags,
                 self.index_locations,
                 self.hasher,
-                self.build_configuration,
+                self.config_settings,
+                self.config_settings_package,
+                self.extra_build_requires,
+                self.extra_build_variables,
             )),
         }) as _
     }
@@ -84,7 +100,10 @@ impl<'a> RegistryWheelIndex<'a> {
         tags: &Tags,
         index_locations: &'index IndexLocations,
         hasher: &HashStrategy,
-        build_configuration: &ConfigSettings,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
     ) -> Vec<IndexEntry<'index>> {
         let mut entries = vec![];
 
@@ -198,10 +217,26 @@ impl<'a> RegistryWheelIndex<'a> {
                     let cache_shard = cache_shard.shard(revision.id());
 
                     // If there are build settings, we need to scope to a cache shard.
-                    let cache_shard = if build_configuration.is_empty() {
+                    let extra_build_deps =
+                        Self::extra_build_requires_for(package, extra_build_requires);
+                    let extra_build_vars =
+                        Self::extra_build_variables_for(package, extra_build_variables);
+                    let config_settings = Self::config_settings_for(
+                        package,
+                        config_settings,
+                        config_settings_package,
+                    );
+                    let cache_shard = if config_settings.is_empty()
+                        && extra_build_deps.is_empty()
+                        && extra_build_vars.is_none()
+                    {
                         cache_shard
                     } else {
-                        cache_shard.shard(cache_digest(build_configuration))
+                        cache_shard.shard(cache_digest(&(
+                            &config_settings,
+                            extra_build_deps,
+                            extra_build_vars,
+                        )))
                     };
 
                     for wheel_dir in uv_fs::entries(cache_shard).ok().into_iter().flatten() {
@@ -251,5 +286,37 @@ impl<'a> RegistryWheelIndex<'a> {
         });
 
         entries
+    }
+
+    /// Determine the [`ConfigSettings`] for the given package name.
+    fn config_settings_for<'settings>(
+        name: &PackageName,
+        config_settings: &'settings ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+    ) -> Cow<'settings, ConfigSettings> {
+        if let Some(package_settings) = config_settings_package.get(name) {
+            Cow::Owned(package_settings.clone().merge(config_settings.clone()))
+        } else {
+            Cow::Borrowed(config_settings)
+        }
+    }
+
+    /// Determine the extra build requirements for the given package name.
+    fn extra_build_requires_for<'settings>(
+        name: &PackageName,
+        extra_build_requires: &'settings ExtraBuildRequires,
+    ) -> &'settings [ExtraBuildRequirement] {
+        extra_build_requires
+            .get(name)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Determine the extra build variables for the given package name.
+    fn extra_build_variables_for<'settings>(
+        name: &PackageName,
+        extra_build_variables: &'settings ExtraBuildVariables,
+    ) -> Option<&'settings BuildVariables> {
+        extra_build_variables.get(name)
     }
 }
