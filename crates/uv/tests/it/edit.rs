@@ -12690,7 +12690,7 @@ fn add_package_set_unset_system_keyring_credentials() -> Result<()> {
     "
     );
 
-    // Remove package so we can unset credentials and try again
+    // Remove package and clean so we can unset credentials and try again
     uv_snapshot!(context.remove().arg("anyio"), @r"
     success: true
     exit_code: 0
@@ -12702,6 +12702,15 @@ fn add_package_set_unset_system_keyring_credentials() -> Result<()> {
      - anyio==4.3.0
      - idna==3.6
      - sniffio==1.3.1
+    "
+    );
+
+    uv_snapshot!(context.clean(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
     "
     );
 
