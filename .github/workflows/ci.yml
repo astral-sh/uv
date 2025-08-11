@@ -221,7 +221,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -259,7 +259,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -493,7 +493,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -520,7 +520,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -547,7 +547,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - name: "Setup musl"
         run: |
@@ -579,7 +579,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -605,7 +605,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -716,7 +716,7 @@ jobs:
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
-        uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+        uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - run: cargo +${MSRV} build
         env:
