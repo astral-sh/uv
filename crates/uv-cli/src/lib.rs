@@ -5196,6 +5196,13 @@ pub struct PythonUpgradeArgs {
     #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
     pub pypy_mirror: Option<String>,
 
+    /// Reinstall the latest Python patch, if it's already installed.
+    ///
+    /// By default, uv will exit successfully if the latest patch is already
+    /// installed.
+    #[arg(long, short)]
+    pub reinstall: bool,
+
     /// URL pointing to JSON of custom Python installations.
     ///
     /// Note that currently, only local paths are supported.
