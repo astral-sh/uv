@@ -12711,7 +12711,7 @@ fn add_package_set_unset_system_keyring_credentials() -> Result<()> {
     );
 
     // Unset credentials for index
-    uv_snapshot!(context.unset()
+    uv_snapshot!(context.auth_unset()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
         .arg("public"), @r"
