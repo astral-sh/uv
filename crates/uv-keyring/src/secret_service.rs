@@ -382,26 +382,31 @@ impl SsCredential {
     /// (This is useful if [`delete_credential`](SsCredential::delete_credential)
     /// returns an [`Ambiguous`](ErrorCode::Ambiguous) error.)
     pub async fn delete_all_passwords(&self) -> Result<()> {
-        let ss = SecretService::connect(EncryptionType::Dh)
-            .await
-            .map_err(platform_failure)?;
-        match self.matching_items(&ss).await {
-            Ok(items) => {
-                for item in &items {
-                    delete_item(item).await?;
-                }
-                Ok(())
-            }
-            Err(ErrorCode::NoEntry) => {
-                let collection = ss.get_default_collection().await.map_err(decode_error)?;
-                let items = self.find_legacy_items(&collection).await?;
-                for item in &items {
-                    delete_item(item).await?;
-                }
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
+        // JACK: We're calling the async map_matching_items with an async closure here.
+        self.map_matching_items(delete_item, false).await?;
+        Ok(())
+
+        //// JACK: Commented out new code
+        // let ss = SecretService::connect(EncryptionType::Dh)
+        //     .await
+        //     .map_err(platform_failure)?;
+        // match self.matching_items(&ss).await {
+        //     Ok(items) => {
+        //         for item in &items {
+        //             delete_item(item).await?;
+        //         }
+        //         Ok(())
+        //     }
+        //     Err(ErrorCode::NoEntry) => {
+        //         let collection = ss.get_default_collection().await.map_err(decode_error)?;
+        //         let items = self.find_legacy_items(&collection).await?;
+        //         for item in &items {
+        //             delete_item(item).await?;
+        //         }
+        //         Ok(())
+        //     }
+        //     Err(err) => Err(err),
+        // }
     }
 
     /// Find and unlock items matching this credential.
@@ -448,6 +453,79 @@ impl SsCredential {
                 Err(ErrorCode::Ambiguous(creds))
             }
         }
+    }
+
+    /// JACK
+    async fn map_matching_items<F, Fut, T>(&self, f: F, require_unique: bool) -> Result<Vec<T>>
+    where
+        F: for<'a> Fn(&'a Item<'_>) -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+        T: Sized,
+    {
+        let ss = SecretService::connect(EncryptionType::Dh).await.map_err(platform_failure)?;
+        let attributes: HashMap<&str, &str> = self.search_attributes(false).into_iter().collect();
+        let search = ss.search_items(attributes).await.map_err(decode_error)?;
+        let count = search.locked.len() + search.unlocked.len();
+        if count == 0 {
+            if let Some("default") = self.target.as_deref() {
+                return self.map_matching_legacy_items(&ss, f, require_unique).await;
+            }
+        }
+        if require_unique {
+            if count == 0 {
+                return Err(ErrorCode::NoEntry);
+            } else if count > 1 {
+                let mut creds: Vec<Box<Credential>> = vec![];
+                for item in search.locked.iter().chain(search.unlocked.iter()) {
+                    let cred = Self::new_from_item(item).await?;
+                    creds.push(Box::new(cred))
+                }
+                return Err(ErrorCode::Ambiguous(creds));
+            }
+        }
+        let mut results: Vec<T> = vec![];
+        for item in search.unlocked.iter() {
+            results.push(f(item).await?);
+        }
+        for item in search.locked.iter() {
+            item.unlock().await.map_err(decode_error)?;
+            results.push(f(item).await?);
+        }
+        Ok(results)
+    }
+
+    /// JACK
+    pub async fn map_matching_legacy_items<F, Fut, T>(
+        &self,
+        ss: &SecretService<'_>,
+        f: F,
+        require_unique: bool,
+    ) -> Result<Vec<T>>
+    where
+        F: Fn(&Item) -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+        T: Sized,
+    {
+        let collection = ss.get_default_collection().await.map_err(decode_error)?;
+        let attributes = self.search_attributes(true);
+        let search = collection.search_items(attributes).await.map_err(decode_error)?;
+        if require_unique {
+            if search.is_empty() && require_unique {
+                return Err(ErrorCode::NoEntry);
+            } else if search.len() > 1 {
+                let mut creds: Vec<Box<Credential>> = vec![];
+                for item in search.iter() {
+                    let cred = Self::new_from_item(item).await?;
+                    creds.push(Box::new(cred))
+                }
+                return Err(ErrorCode::Ambiguous(creds));
+            }
+        }
+        let mut results: Vec<T> = vec![];
+        for item in search.iter() {
+            results.push(f(item).await?);
+        }
+        Ok(results)
     }
 
     /// Find legacy items in the given collection if the credential being searched has
