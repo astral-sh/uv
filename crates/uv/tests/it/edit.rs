@@ -12690,30 +12690,6 @@ fn add_package_set_unset_system_keyring_credentials() -> Result<()> {
     "
     );
 
-    // Remove package and clean so we can unset credentials and try again
-    uv_snapshot!(context.remove().arg("anyio"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Uninstalled 3 packages in [TIME]
-     - anyio==4.3.0
-     - idna==3.6
-     - sniffio==1.3.1
-    "
-    );
-
-    uv_snapshot!(context.clean(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    "
-    );
-
     // Unset credentials for index
     uv_snapshot!(context.auth_unset()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
@@ -12728,7 +12704,7 @@ fn add_package_set_unset_system_keyring_credentials() -> Result<()> {
     );
 
     // Authentication should fail again.
-    uv_snapshot!(context.add().arg("anyio").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+    uv_snapshot!(context.add().arg("iniconfig==2.0.0").arg("--default-index").arg("https://public@pypi-proxy.fly.dev/basic-auth/simple"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
