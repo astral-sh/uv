@@ -1170,6 +1170,22 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv auth set` command.
+    pub fn auth_set(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("auth").arg("set");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv auth unset` command.
+    pub fn auth_unset(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("auth").arg("unset");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     pub fn interpreter(&self) -> PathBuf {
         let venv = &self.venv;
         if cfg!(unix) {
