@@ -19,7 +19,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::SitePackages;
@@ -788,12 +788,39 @@ pub(super) async fn do_sync(
 
     let site_packages = SitePackages::from_environment(venv)?;
 
+    // When --no-sources is used, force reinstall of URL-based packages
+    // to ensure they are replaced with registry versions
+    let reinstall = if matches!(sources, uv_configuration::SourceStrategy::Disabled) {
+        tracing::debug!("Sources are disabled, checking for URL-based packages to reinstall");
+        let mut updated_reinstall = reinstall.clone();
+
+        for dist in site_packages.iter() {
+            if matches!(dist, uv_distribution_types::InstalledDist::Url(_)) {
+                tracing::debug!("Marking URL-based package for reinstall: {}", dist.name());
+                updated_reinstall = match updated_reinstall {
+                    uv_configuration::Reinstall::None => {
+                        uv_configuration::Reinstall::Packages(vec![dist.name().clone()], Vec::new())
+                    }
+                    uv_configuration::Reinstall::All => updated_reinstall,
+                    uv_configuration::Reinstall::Packages(mut packages, paths) => {
+                        packages.push(dist.name().clone());
+                        uv_configuration::Reinstall::Packages(packages, paths)
+                    }
+                };
+            }
+        }
+
+        updated_reinstall
+    } else {
+        reinstall.clone()
+    };
+
     // Sync the environment.
     operations::install(
         &resolution,
         site_packages,
         modifications,
-        reinstall,
+        &reinstall,
         build_options,
         link_mode,
         compile_bytecode,
