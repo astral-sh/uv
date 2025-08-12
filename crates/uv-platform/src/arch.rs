@@ -244,18 +244,21 @@ pub(crate) mod test_support {
         MOCK_ARCH.with(|mock| *mock.borrow_mut() = arch);
     }
 
-    pub(crate) struct MockArchGuard;
+    pub(crate) struct MockArchGuard {
+        previous: Option<Arch>,
+    }
 
     impl MockArchGuard {
         pub(crate) fn new(arch: Arch) -> Self {
+            let previous = get_mock_arch();
             set_mock_arch(Some(arch));
-            Self
+            Self { previous }
         }
     }
 
     impl Drop for MockArchGuard {
         fn drop(&mut self) {
-            set_mock_arch(None);
+            set_mock_arch(self.previous);
         }
     }
 
@@ -269,7 +272,6 @@ pub(crate) mod test_support {
         f()
     }
 
-    /// Helper to create common architectures for testing
     pub(crate) fn x86_64() -> Arch {
         Arch::new(target_lexicon::Architecture::X86_64, None)
     }

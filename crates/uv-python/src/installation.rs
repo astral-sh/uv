@@ -679,39 +679,82 @@ impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uv_platform::ArchVariant;
 
     #[test]
     fn test_python_installation_key_from_str() {
         // Test basic parsing
         let key = PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64-gnu").unwrap();
-        assert_eq!(key.implementation.to_string(), "cpython");
+        assert_eq!(
+            key.implementation,
+            LenientImplementationName::Known(ImplementationName::CPython)
+        );
         assert_eq!(key.major, 3);
         assert_eq!(key.minor, 12);
         assert_eq!(key.patch, 0);
-        assert_eq!(key.platform.to_string(), "linux-x86_64-gnu");
+        assert_eq!(
+            key.platform.os,
+            Os::new(target_lexicon::OperatingSystem::Linux)
+        );
+        assert_eq!(
+            key.platform.arch,
+            Arch::new(target_lexicon::Architecture::X86_64, None)
+        );
+        assert_eq!(
+            key.platform.libc,
+            Libc::Some(target_lexicon::Environment::Gnu)
+        );
 
         // Test with architecture variant
         let key = PythonInstallationKey::from_str("cpython-3.11.2-linux-x86_64_v3-musl").unwrap();
-        assert_eq!(key.implementation.to_string(), "cpython");
+        assert_eq!(
+            key.implementation,
+            LenientImplementationName::Known(ImplementationName::CPython)
+        );
         assert_eq!(key.major, 3);
         assert_eq!(key.minor, 11);
         assert_eq!(key.patch, 2);
-        assert_eq!(key.platform.to_string(), "linux-x86_64_v3-musl");
+        assert_eq!(
+            key.platform.os,
+            Os::new(target_lexicon::OperatingSystem::Linux)
+        );
+        assert_eq!(
+            key.platform.arch,
+            Arch::new(target_lexicon::Architecture::X86_64, Some(ArchVariant::V3))
+        );
+        assert_eq!(
+            key.platform.libc,
+            Libc::Some(target_lexicon::Environment::Musl)
+        );
 
         // Test with Python variant (freethreaded)
         let key = PythonInstallationKey::from_str("cpython-3.13.0+freethreaded-macos-aarch64-none")
             .unwrap();
-        assert_eq!(key.implementation.to_string(), "cpython");
+        assert_eq!(
+            key.implementation,
+            LenientImplementationName::Known(ImplementationName::CPython)
+        );
         assert_eq!(key.major, 3);
         assert_eq!(key.minor, 13);
         assert_eq!(key.patch, 0);
         assert_eq!(key.variant, PythonVariant::Freethreaded);
-        assert_eq!(key.platform.to_string(), "macos-aarch64-none");
+        assert_eq!(
+            key.platform.os,
+            Os::new(target_lexicon::OperatingSystem::Darwin(None))
+        );
+        assert_eq!(
+            key.platform.arch,
+            Arch::new(
+                target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                None
+            )
+        );
+        assert_eq!(key.platform.libc, Libc::None);
 
         // Test error cases
-        assert!(PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64").is_err()); // Missing libc
-        assert!(PythonInstallationKey::from_str("cpython-3.12.0").is_err()); // Missing platform
-        assert!(PythonInstallationKey::from_str("cpython").is_err()); // Missing everything
+        assert!(PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64").is_err());
+        assert!(PythonInstallationKey::from_str("cpython-3.12.0").is_err());
+        assert!(PythonInstallationKey::from_str("cpython").is_err());
     }
 
     #[test]

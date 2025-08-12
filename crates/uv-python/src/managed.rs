@@ -263,7 +263,7 @@ impl ManagedPythonInstallations {
 
         let iter = Self::from_settings(None)?
             .find_all()?
-            .filter(move |installation| platform.supports(installation.key.platform()));
+            .filter(move |installation| platform.supports(installation.platform()));
 
         Ok(iter)
     }
@@ -440,6 +440,10 @@ impl ManagedPythonInstallation {
 
     pub fn key(&self) -> &PythonInstallationKey {
         &self.key
+    }
+
+    pub fn platform(&self) -> &Platform {
+        self.key.platform()
     }
 
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {

@@ -350,7 +350,7 @@ fn python_executables_from_installed<'a>(
                             debug!("Skipping managed installation `{installation}`: does not satisfy `{version}`");
                             return false;
                         }
-                        if !platform.matches(installation.key().platform()) {
+                        if !platform.matches(installation.platform()) {
                             debug!("Skipping managed installation `{installation}`: does not satisfy `{platform}`");
                             return false;
                         }
