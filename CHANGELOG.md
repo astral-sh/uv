@@ -3,6 +3,22 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.9
+
+### Enhancements
+
+- Add `--reinstall` flag to `uv python upgrade` ([#15194](https://github.com/astral-sh/uv/pull/15194))
+
+### Bug fixes
+
+- Include build settings in cache key for registry source distribution lookups ([#15225](https://github.com/astral-sh/uv/pull/15225))
+- Avoid creating bin links on `uv python upgrade` if they don't already exist ([#15192](https://github.com/astral-sh/uv/pull/15192))
+- Respect system proxies on macOS and Windows ([#15221](https://github.com/astral-sh/uv/pull/15221))
+
+### Documentation
+
+- Add the 3.14 classifier ([#15187](https://github.com/astral-sh/uv/pull/15187))
+
 ## 0.8.8
 
 ### Bug fixes
