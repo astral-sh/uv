@@ -901,7 +901,6 @@ mod tests {
     async fn delete_collection(name: &str) {
         let ss = SecretService::connect(EncryptionType::Dh)
             .await
-            .await
             .expect("Can't connect to secret service");
         let collection = super::get_collection(&ss, name)
             .await
@@ -915,7 +914,6 @@ mod tests {
         let cred = SsCredential::new_with_no_target(name, name)
             .expect("Can't create credential with no target");
         let ss = SecretService::connect(EncryptionType::Dh)
-            .await
             .await
             .expect("Can't connect to secret service");
         let collection = ss
