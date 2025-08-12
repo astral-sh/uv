@@ -12995,13 +12995,12 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 3 packages in [TIME]
      - anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-     ~ test-no-sources==0.0.1 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())
