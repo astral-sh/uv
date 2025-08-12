@@ -464,7 +464,7 @@ impl SsCredential {
 
 /// The builder for secret-service credentials
 #[derive(Debug, Default)]
-pub struct SsCredentialBuilder {}
+pub struct SsCredentialBuilder;
 
 /// Returns an instance of the secret-service credential builder.
 ///
