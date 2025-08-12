@@ -751,7 +751,7 @@ fn create_bin_links(
     // from a `.python-version` file.
     let targets = if (default
         || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT)))
-        && first_request.matches_installation(installation)
+        && first_request.download.key() == installation.key()
     {
         vec![
             installation.key().executable_name_minor(),
