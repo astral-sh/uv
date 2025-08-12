@@ -158,6 +158,8 @@ use std::collections::HashMap;
 pub use credential::{Credential, CredentialBuilder};
 pub use error::{Error, Result};
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+mod blocking;
 pub mod mock;
 
 //

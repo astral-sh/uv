@@ -56,9 +56,16 @@ impl CredentialApi for MacCredential {
     /// Since there is only one credential with a given _account_ and _user_
     /// in any given keychain, there is no chance of ambiguity.
     async fn set_password(&self, password: &str) -> Result<()> {
-        get_keychain(self)?
-            .set_generic_password(&self.service, &self.account, password.as_bytes())
-            .map_err(decode_error)?;
+        let service = self.service.clone();
+        let account = self.account.clone();
+        let domain = self.domain;
+        let password = password.to_string();
+        crate::blocking::spawn_blocking(move || {
+            get_keychain(domain)?
+                .set_generic_password(&service, &account, password.as_bytes())
+                .map_err(decode_error)
+        })
+        .await?;
         Ok(())
     }
 
@@ -68,9 +75,16 @@ impl CredentialApi for MacCredential {
     /// Since there is only one credential with a given _account_ and _user_
     /// in any given keychain, there is no chance of ambiguity.
     async fn set_secret(&self, secret: &[u8]) -> Result<()> {
-        get_keychain(self)?
-            .set_generic_password(&self.service, &self.account, secret)
-            .map_err(decode_error)?;
+        let service = self.service.clone();
+        let account = self.account.clone();
+        let domain = self.domain;
+        let secret = secret.to_vec();
+        crate::blocking::spawn_blocking(move || {
+            get_keychain(domain)?
+                .set_generic_password(&service, &account, &secret)
+                .map_err(decode_error)
+        })
+        .await?;
         Ok(())
     }
 
@@ -79,10 +93,19 @@ impl CredentialApi for MacCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_password(&self) -> Result<String> {
-        let (password_bytes, _) =
-            find_generic_password(Some(&[get_keychain(self)?]), &self.service, &self.account)
+        let service = self.service.clone();
+        let account = self.account.clone();
+        let domain = self.domain;
+
+        let password_bytes = crate::blocking::spawn_blocking(move || -> Result<Vec<u8>> {
+            let keychain = get_keychain(domain)?;
+            let (password_bytes, _) = find_generic_password(Some(&[keychain]), &service, &account)
                 .map_err(decode_error)?;
-        decode_password(password_bytes.to_owned())
+            Ok(password_bytes.to_owned())
+        })
+        .await?;
+
+        decode_password(password_bytes)
     }
 
     /// Look up the secret for this entry, if any.
@@ -90,10 +113,19 @@ impl CredentialApi for MacCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_secret(&self) -> Result<Vec<u8>> {
-        let (password_bytes, _) =
-            find_generic_password(Some(&[get_keychain(self)?]), &self.service, &self.account)
+        let service = self.service.clone();
+        let account = self.account.clone();
+        let domain = self.domain;
+
+        let password_bytes = crate::blocking::spawn_blocking(move || -> Result<Vec<u8>> {
+            let keychain = get_keychain(domain)?;
+            let (password_bytes, _) = find_generic_password(Some(&[keychain]), &service, &account)
                 .map_err(decode_error)?;
-        Ok(password_bytes.to_owned())
+            Ok(password_bytes.to_owned())
+        })
+        .await?;
+
+        Ok(password_bytes)
     }
 
     /// Delete the underlying generic credential for this entry, if any.
@@ -101,10 +133,18 @@ impl CredentialApi for MacCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn delete_credential(&self) -> Result<()> {
-        let (_, item) =
-            find_generic_password(Some(&[get_keychain(self)?]), &self.service, &self.account)
+        let service = self.service.clone();
+        let account = self.account.clone();
+        let domain = self.domain;
+
+        crate::blocking::spawn_blocking(move || {
+            let keychain = get_keychain(domain)?;
+            let (_, item) = find_generic_password(Some(&[keychain]), &service, &account)
                 .map_err(decode_error)?;
-        item.delete();
+            item.delete();
+            Ok(())
+        })
+        .await?;
         Ok(())
     }
 
@@ -126,10 +166,17 @@ impl MacCredential {
     /// On Mac, this is basically a no-op, because we represent any attributes
     /// other than the ones we use to find the generic credential.
     /// But at least this checks whether the underlying credential exists.
-    pub fn get_credential(&self) -> Result<Self> {
-        let (_, _) =
-            find_generic_password(Some(&[get_keychain(self)?]), &self.service, &self.account)
+    pub async fn get_credential(&self) -> Result<Self> {
+        let service = self.service.clone();
+        let account = self.account.clone();
+        let domain = self.domain;
+        let keychain = get_keychain(domain)?;
+        crate::blocking::spawn_blocking(move || -> Result<()> {
+            let (_, _) = find_generic_password(Some(&[keychain]), &service, &account)
                 .map_err(decode_error)?;
+            Ok(())
+        })
+        .await?;
         Ok(self.clone())
     }
 
@@ -209,7 +256,7 @@ impl CredentialBuilderApi for MacCredentialBuilder {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// The four pre-defined Mac keychains.
 pub enum MacKeychainDomain {
     User,
@@ -255,8 +302,8 @@ impl std::str::FromStr for MacKeychainDomain {
     }
 }
 
-fn get_keychain(cred: &MacCredential) -> Result<SecKeychain> {
-    let domain = match cred.domain {
+fn get_keychain(domain: MacKeychainDomain) -> Result<SecKeychain> {
+    let domain = match domain {
         MacKeychainDomain::User => SecPreferencesDomain::User,
         MacKeychainDomain::System => SecPreferencesDomain::System,
         MacKeychainDomain::Common => SecPreferencesDomain::Common,
@@ -361,14 +408,14 @@ mod tests {
             .downcast_ref()
             .expect("Not a mac credential");
         assert!(
-            credential.get_credential().is_err(),
+            credential.get_credential().await.is_err(),
             "Platform credential shouldn't exist yet!"
         );
         entry
             .set_password("test get_credential")
             .await
             .expect("Can't set password for get_credential");
-        assert!(credential.get_credential().is_ok());
+        assert!(credential.get_credential().await.is_ok());
         entry
             .delete_credential()
             .await
