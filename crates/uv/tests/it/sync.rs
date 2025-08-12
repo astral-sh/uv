@@ -12904,3 +12904,93 @@ fn sync_extra_build_variables() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that `uv sync --only-group` installs the project with entry points, addressing issue #15215.
+#[test]
+fn sync_only_group_installs_project_with_entry_points() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "test-app"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.scripts]
+        test-cli = "test_app.cli:main"
+
+        [dependency-groups]
+        dev = ["requests"]
+
+        [build-system]
+        requires = ["setuptools>=64"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Create the CLI module
+    let init_py = context.temp_dir.child("src/test_app/__init__.py");
+    init_py.write_str("")?;
+
+    let cli_py = context.temp_dir.child("src/test_app/cli.py");
+    cli_py.write_str(
+        r#"
+def main():
+    print("Hello from test-cli!")
+
+if __name__ == "__main__":
+    main()
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test that regular sync installs the project
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + test-app==0.1.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    ");
+
+    // Test that --only-group dev installs the project AND dev dependencies
+    // This is the key test case from issue #15215
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
+    ");
+
+    // Test that --no-install-project --only-group dev excludes the project
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--only-group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - test-app==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
