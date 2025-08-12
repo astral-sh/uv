@@ -199,7 +199,7 @@ impl CredentialApi for SsCredential {
         // Convert to owned data to avoid lifetime issues
         let attributes_owned: HashMap<String, String> = attributes
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
 
         self.map_matching_items(
@@ -247,7 +247,7 @@ impl SsCredential {
     ///
     /// Creating this credential does not create a matching item.
     /// If there isn't already one there, it will be created only
-    /// when [set_password](SsCredential::set_password) is
+    /// when [`set_password`](SsCredential::set_password) is
     /// called.
     pub fn new_with_target(target: Option<&str>, service: &str, user: &str) -> Result<Self> {
         if let Some("") = target {
@@ -316,7 +316,7 @@ impl SsCredential {
 
     /// If there are multiple matching items for this credential, get all of their passwords.
     ///
-    /// (This is useful if [get_password](SsCredential::get_password)
+    /// (This is useful if [`get_password`](SsCredential::get_password)
     /// returns an [Ambiguous](ErrorCode::Ambiguous) error.)
     pub async fn get_all_passwords(&self) -> Result<Vec<String>> {
         self.map_matching_items(get_item_password, false).await
@@ -324,7 +324,7 @@ impl SsCredential {
 
     /// If there are multiple matching items for this credential, delete all of them.
     ///
-    /// (This is useful if [delete_credential](SsCredential::delete_credential)
+    /// (This is useful if [`delete_credential`](SsCredential::delete_credential)
     /// returns an [Ambiguous](ErrorCode::Ambiguous) error.)
     pub async fn delete_all_passwords(&self) -> Result<()> {
         self.map_matching_items(delete_item, false).await?;
@@ -336,7 +336,7 @@ impl SsCredential {
     /// Items are unlocked before the function is applied.
     ///
     /// If `require_unique` is true, and there are no matching items, then
-    /// a [NoEntry](ErrorCode::NoEntry) error is returned.
+    /// a [`NoEntry`](ErrorCode::NoEntry) error is returned.
     /// If `require_unique` is true, and there are multiple matches,
     /// then an [Ambiguous](ErrorCode::Ambiguous) error is returned
     /// with a vector containing one
@@ -364,16 +364,16 @@ impl SsCredential {
                 let mut creds: Vec<Box<Credential>> = vec![];
                 for item in search.locked.iter().chain(search.unlocked.iter()) {
                     let cred = Self::new_from_item(item).await?;
-                    creds.push(Box::new(cred))
+                    creds.push(Box::new(cred));
                 }
                 return Err(ErrorCode::Ambiguous(creds));
             }
         }
         let mut results: Vec<T> = vec![];
-        for item in search.unlocked.iter() {
+        for item in &search.unlocked {
             results.push(f(item).await?);
         }
-        for item in search.locked.iter() {
+        for item in &search.locked {
             item.unlock().await.map_err(decode_error)?;
             results.push(f(item).await?);
         }
@@ -424,15 +424,15 @@ impl SsCredential {
                 return Err(ErrorCode::NoEntry);
             } else if search.len() > 1 {
                 let mut creds: Vec<Box<Credential>> = vec![];
-                for item in search.iter() {
+                for item in &search {
                     let cred = Self::new_from_item(item).await?;
-                    creds.push(Box::new(cred))
+                    creds.push(Box::new(cred));
                 }
                 return Err(ErrorCode::Ambiguous(creds));
             }
         }
         let mut results: Vec<T> = vec![];
-        for item in search.iter() {
+        for item in &search {
             results.push(f(item).await?);
         }
         Ok(results)
@@ -449,7 +449,7 @@ impl SsCredential {
             .collect()
     }
 
-    /// Similar to [all_attributes](SsCredential::all_attributes),
+    /// Similar to [`all_attributes`](SsCredential::all_attributes),
     /// but this just selects the ones we search on
     fn search_attributes(&self, omit_target: bool) -> HashMap<&str, &str> {
         let mut result: HashMap<&str, &str> = HashMap::new();
@@ -475,7 +475,7 @@ pub fn default_credential_builder() -> Box<CredentialBuilder> {
 }
 
 impl CredentialBuilderApi for SsCredentialBuilder {
-    /// Build an [SsCredential] for the given target, service, and user.
+    /// Build an [`SsCredential`] for the given target, service, and user.
     fn build(&self, target: Option<&str>, service: &str, user: &str) -> Result<Box<Credential>> {
         Ok(Box::new(SsCredential::new_with_target(
             target, service, user,
@@ -483,7 +483,7 @@ impl CredentialBuilderApi for SsCredentialBuilder {
     }
 
     /// Return the underlying builder object with an `Any` type so that it can
-    /// be downgraded to an [SsCredentialBuilder] for platform-specific processing.
+    /// be downgraded to an [`SsCredentialBuilder`] for platform-specific processing.
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -573,10 +573,10 @@ pub async fn update_item_attributes(
 ) -> Result<()> {
     let existing = item.get_attributes().await.map_err(decode_error)?;
     let mut updated: HashMap<&str, &str> = HashMap::new();
-    for (k, v) in existing.iter() {
+    for (k, v) in &existing {
         updated.insert(k, v);
     }
-    for (k, v) in attributes.iter() {
+    for (k, v) in attributes {
         if k.eq(&"target") || k.eq(&"service") || k.eq(&"username") {
             continue;
         }
