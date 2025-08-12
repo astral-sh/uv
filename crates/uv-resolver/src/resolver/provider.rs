@@ -67,11 +67,11 @@ impl MetadataUnavailable {
     /// formatting system is more custom.
     pub(crate) fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            MetadataUnavailable::Offline => None,
-            MetadataUnavailable::InvalidMetadata(err) => Some(err),
-            MetadataUnavailable::InconsistentMetadata(err) => Some(err),
-            MetadataUnavailable::InvalidStructure(err) => Some(err),
-            MetadataUnavailable::RequiresPython(_, _) => None,
+            Self::Offline => None,
+            Self::InvalidMetadata(err) => Some(err),
+            Self::InconsistentMetadata(err) => Some(err),
+            Self::InvalidStructure(err) => Some(err),
+            Self::RequiresPython(_, _) => None,
         }
     }
 }

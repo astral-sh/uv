@@ -42,6 +42,17 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::child::run_to_completion;
+
+/// GitHub Gist API response structure
+#[derive(serde::Deserialize)]
+struct GistResponse {
+    files: std::collections::HashMap<String, GistFile>,
+}
+
+#[derive(serde::Deserialize)]
+struct GistFile {
+    raw_url: String,
+}
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
@@ -360,7 +371,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
             if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
                 let script_extra_build_requires =
-                    script_extra_build_requires((&script).into(), &settings.resolver)?;
+                    script_extra_build_requires((&script).into(), &settings.resolver)?.into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
@@ -1102,6 +1113,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                                 &entry.path().display()
                             );
                         }
+                        Err(CopyEntrypointError::Io(err))
+                            if err.kind() == std::io::ErrorKind::PermissionDenied =>
+                        {
+                            trace!(
+                                "Skipping copy of entrypoint `{}`: permission denied",
+                                &entry.path().display()
+                            );
+                        }
                         Err(err) => return Err(err.into()),
                     }
                 }
@@ -1588,6 +1607,66 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
+/// Resolve a GitHub Gist URL to its raw file URL using the GitHub API.
+async fn resolve_gist_url(
+    url: &DisplaySafeUrl,
+    network_settings: &NetworkSettings,
+) -> anyhow::Result<DisplaySafeUrl> {
+    // Extract the Gist ID from the URL.
+    let gist_id = url
+        .path_segments()
+        .and_then(|mut segments| segments.nth(1))
+        .ok_or_else(|| anyhow!("Invalid Gist URL format"))?;
+
+    // Build the API URL.
+    let api_url = format!("https://api.github.com/gists/{gist_id}");
+
+    let client = BaseClientBuilder::new()
+        .retries_from_env()?
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .build();
+
+    // Build the request with appropriate headers.
+    let api_url_parsed = DisplaySafeUrl::parse(&api_url)?;
+    let mut request = client
+        .for_host(&api_url_parsed)
+        .get(Url::from(api_url_parsed));
+    request = request.header("Accept", "application/vnd.github.v3+json");
+
+    // Add GitHub token, if available.
+    if let Ok(token) = std::env::var(EnvVars::UV_GITHUB_TOKEN) {
+        request = request.header("Authorization", format!("Bearer {token}"));
+    }
+
+    // Make the API request.
+    let response = request.send().await?;
+    response.error_for_status_ref()?;
+
+    // Parse the response
+    let gist_data: GistResponse = response.json().await?;
+
+    // Get the raw URL of the first `.py` file (or just the first file).
+    let raw_url = gist_data
+        .files
+        .iter()
+        .filter(|(name, _)| {
+            Path::new(name)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+        })
+        .map(|(_, file)| &file.raw_url)
+        .next()
+        // If no `.py` file is found, use the first file.
+        .or_else(|| gist_data.files.values().next().map(|file| &file.raw_url))
+        .ok_or_else(|| anyhow!("No files found in the Gist"))?;
+
+    let url = DisplaySafeUrl::parse(raw_url)?;
+
+    Ok(url)
+}
+
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
     #[allow(clippy::fn_params_excessive_bools)]
@@ -1625,7 +1704,12 @@ impl RunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
+                let mut url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
+
+                // If it's a Gist URL, use the GitHub API to get the raw URL.
+                if url.host_str() == Some("gist.github.com") {
+                    url = resolve_gist_url(&url, &network_settings).await?;
+                }
 
                 let file_stem = url
                     .path_segments()

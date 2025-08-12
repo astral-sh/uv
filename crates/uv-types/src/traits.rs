@@ -12,8 +12,8 @@ use uv_configuration::{
 };
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, DistributionId, IndexCapabilities, IndexLocations,
-    InstalledDist, IsBuildBackendError, Requirement, Resolution, SourceDist,
+    CachedDist, DependencyMetadata, DistributionId, ExtraBuildRequires, IndexCapabilities,
+    IndexLocations, InstalledDist, IsBuildBackendError, Requirement, Resolution, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
@@ -103,8 +103,8 @@ pub trait BuildContext {
     /// Workspace discovery caching.
     fn workspace_cache(&self) -> &WorkspaceCache;
 
-    /// Get the extra build dependencies.
-    fn extra_build_dependencies(&self) -> &uv_workspace::pyproject::ExtraBuildDependencies;
+    /// Get the extra build requirements.
+    fn extra_build_requires(&self) -> &ExtraBuildRequires;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(

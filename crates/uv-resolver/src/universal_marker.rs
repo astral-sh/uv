@@ -85,30 +85,27 @@ pub struct UniversalMarker {
 
 impl UniversalMarker {
     /// A constant universal marker that always evaluates to `true`.
-    pub(crate) const TRUE: UniversalMarker = UniversalMarker {
+    pub(crate) const TRUE: Self = Self {
         marker: MarkerTree::TRUE,
         pep508: MarkerTree::TRUE,
     };
 
     /// A constant universal marker that always evaluates to `false`.
-    pub(crate) const FALSE: UniversalMarker = UniversalMarker {
+    pub(crate) const FALSE: Self = Self {
         marker: MarkerTree::FALSE,
         pep508: MarkerTree::FALSE,
     };
 
     /// Creates a new universal marker from its constituent pieces.
-    pub(crate) fn new(
-        mut pep508_marker: MarkerTree,
-        conflict_marker: ConflictMarker,
-    ) -> UniversalMarker {
+    pub(crate) fn new(mut pep508_marker: MarkerTree, conflict_marker: ConflictMarker) -> Self {
         pep508_marker.and(conflict_marker.marker);
-        UniversalMarker::from_combined(pep508_marker)
+        Self::from_combined(pep508_marker)
     }
 
     /// Creates a new universal marker from a marker that has already been
     /// combined from a PEP 508 and conflict marker.
-    pub(crate) fn from_combined(marker: MarkerTree) -> UniversalMarker {
-        UniversalMarker {
+    pub(crate) fn from_combined(marker: MarkerTree) -> Self {
+        Self {
             marker,
             pep508: marker.without_extras(),
         }
@@ -117,7 +114,7 @@ impl UniversalMarker {
     /// Combine this universal marker with the one given in a way that unions
     /// them. That is, the updated marker will evaluate to `true` if `self` or
     /// `other` evaluate to `true`.
-    pub(crate) fn or(&mut self, other: UniversalMarker) {
+    pub(crate) fn or(&mut self, other: Self) {
         self.marker.or(other.marker);
         self.pep508.or(other.pep508);
     }
@@ -125,7 +122,7 @@ impl UniversalMarker {
     /// Combine this universal marker with the one given in a way that
     /// intersects them. That is, the updated marker will evaluate to `true` if
     /// `self` and `other` evaluate to `true`.
-    pub(crate) fn and(&mut self, other: UniversalMarker) {
+    pub(crate) fn and(&mut self, other: Self) {
         self.marker.and(other.marker);
         self.pep508.and(other.pep508);
     }
@@ -230,7 +227,7 @@ impl UniversalMarker {
     ///
     /// Two universal markers are disjoint when it is impossible for them both
     /// to evaluate to `true` simultaneously.
-    pub(crate) fn is_disjoint(self, other: UniversalMarker) -> bool {
+    pub(crate) fn is_disjoint(self, other: Self) -> bool {
         self.marker.is_disjoint(other.marker)
     }
 
@@ -321,26 +318,26 @@ pub struct ConflictMarker {
 
 impl ConflictMarker {
     /// A constant conflict marker that always evaluates to `true`.
-    pub const TRUE: ConflictMarker = ConflictMarker {
+    pub const TRUE: Self = Self {
         marker: MarkerTree::TRUE,
     };
 
     /// A constant conflict marker that always evaluates to `false`.
-    pub const FALSE: ConflictMarker = ConflictMarker {
+    pub const FALSE: Self = Self {
         marker: MarkerTree::FALSE,
     };
 
     /// Creates a new conflict marker from the declared conflicts provided.
-    pub fn from_conflicts(conflicts: &Conflicts) -> ConflictMarker {
+    pub fn from_conflicts(conflicts: &Conflicts) -> Self {
         if conflicts.is_empty() {
-            return ConflictMarker::TRUE;
+            return Self::TRUE;
         }
-        let mut marker = ConflictMarker::TRUE;
+        let mut marker = Self::TRUE;
         for set in conflicts.iter() {
             for (item1, item2) in set.iter().tuple_combinations() {
-                let pair = ConflictMarker::from_conflict_item(item1)
+                let pair = Self::from_conflict_item(item1)
                     .negate()
-                    .or(ConflictMarker::from_conflict_item(item2).negate());
+                    .or(Self::from_conflict_item(item2).negate());
                 marker = marker.and(pair);
             }
         }
@@ -349,37 +346,37 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given extra or
     /// group (for a specific package) is activated.
-    pub fn from_conflict_item(item: &ConflictItem) -> ConflictMarker {
+    pub fn from_conflict_item(item: &ConflictItem) -> Self {
         match *item.conflict() {
-            ConflictPackage::Extra(ref extra) => ConflictMarker::extra(item.package(), extra),
-            ConflictPackage::Group(ref group) => ConflictMarker::group(item.package(), group),
+            ConflictPackage::Extra(ref extra) => Self::extra(item.package(), extra),
+            ConflictPackage::Group(ref group) => Self::group(item.package(), group),
         }
     }
 
     /// Create a conflict marker that is true only when the given extra for the
     /// given package is activated.
-    pub fn extra(package: &PackageName, extra: &ExtraName) -> ConflictMarker {
+    pub fn extra(package: &PackageName, extra: &ExtraName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_extra(package, extra));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
         let marker = MarkerTree::expression(expr);
-        ConflictMarker { marker }
+        Self { marker }
     }
 
     /// Create a conflict marker that is true only when the given group for the
     /// given package is activated.
-    pub fn group(package: &PackageName, group: &GroupName) -> ConflictMarker {
+    pub fn group(package: &PackageName, group: &GroupName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_group(package, group));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
         let marker = MarkerTree::expression(expr);
-        ConflictMarker { marker }
+        Self { marker }
     }
 
     /// Returns a new conflict marker that is the negation of this one.
     #[must_use]
-    pub fn negate(self) -> ConflictMarker {
-        ConflictMarker {
+    pub fn negate(self) -> Self {
+        Self {
             marker: self.marker.negate(),
         }
     }
@@ -387,19 +384,19 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the union of `self` and
     /// `other`.
     #[must_use]
-    pub fn or(self, other: ConflictMarker) -> ConflictMarker {
+    pub fn or(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.or(other.marker);
-        ConflictMarker { marker }
+        Self { marker }
     }
 
     /// Returns a new conflict marker corresponding to the intersection of
     /// `self` and `other`.
     #[must_use]
-    pub fn and(self, other: ConflictMarker) -> ConflictMarker {
+    pub fn and(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.and(other.marker);
-        ConflictMarker { marker }
+        Self { marker }
     }
 
     /// Returns a new conflict marker corresponding to the logical implication
@@ -408,10 +405,10 @@ impl ConflictMarker {
     /// If the conflict marker returned is always `true`, then it can be said
     /// that `self` implies `consequent`.
     #[must_use]
-    pub fn implies(self, other: ConflictMarker) -> ConflictMarker {
+    pub fn implies(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.implies(other.marker);
-        ConflictMarker { marker }
+        Self { marker }
     }
 
     /// Returns true if this conflict marker will always evaluate to `true`.
@@ -526,7 +523,7 @@ enum ParsedRawExtra<'a> {
 }
 
 impl<'a> ParsedRawExtra<'a> {
-    fn parse(raw_extra: &'a ExtraName) -> Result<ParsedRawExtra<'a>, ResolveError> {
+    fn parse(raw_extra: &'a ExtraName) -> Result<Self, ResolveError> {
         fn mkerr(raw_extra: &ExtraName, reason: impl Into<String>) -> ResolveError {
             let raw_extra = raw_extra.to_owned();
             let reason = reason.into();

@@ -26,7 +26,7 @@ enum NetrcMode {
 
 impl Default for NetrcMode {
     fn default() -> Self {
-        NetrcMode::Automatic(LazyLock::new(|| match Netrc::new() {
+        Self::Automatic(LazyLock::new(|| match Netrc::new() {
             Ok(netrc) => Some(netrc),
             Err(netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                 debug!("No netrc file found");
@@ -44,9 +44,9 @@ impl NetrcMode {
     /// Get the parsed netrc file if enabled.
     fn get(&self) -> Option<&Netrc> {
         match self {
-            NetrcMode::Automatic(lock) => lock.as_ref(),
-            NetrcMode::Enabled(netrc) => Some(netrc),
-            NetrcMode::Disabled => None,
+            Self::Automatic(lock) => lock.as_ref(),
+            Self::Enabled(netrc) => Some(netrc),
+            Self::Disabled => None,
         }
     }
 }
@@ -129,7 +129,7 @@ impl AuthMiddleware {
 
 impl Default for AuthMiddleware {
     fn default() -> Self {
-        AuthMiddleware::new()
+        Self::new()
     }
 }
 

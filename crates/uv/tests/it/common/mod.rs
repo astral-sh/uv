@@ -1360,7 +1360,7 @@ impl TestContext {
     /// the new one is then returned.
     ///
     /// This assumes that a lock has already been performed.
-    pub fn diff_lock(&self, change: impl Fn(&TestContext) -> Command) -> String {
+    pub fn diff_lock(&self, change: impl Fn(&Self) -> Command) -> String {
         static TRIM_TRAILING_WHITESPACE: std::sync::LazyLock<Regex> =
             std::sync::LazyLock::new(|| Regex::new(r"(?m)^\s+$").unwrap());
 

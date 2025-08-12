@@ -889,9 +889,31 @@
       "additionalProperties": {
         "type": "array",
         "items": {
-          "$ref": "#/definitions/Requirement"
+          "$ref": "#/definitions/ExtraBuildDependency"
         }
       }
+    },
+    "ExtraBuildDependency": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Requirement"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "match-runtime": {
+              "type": "boolean"
+            },
+            "requirement": {
+              "$ref": "#/definitions/Requirement"
+            }
+          },
+          "required": [
+            "requirement",
+            "match-runtime"
+          ]
+        }
+      ]
     },
     "ExtraName": {
       "description": "The normalized name of an extra dependency.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee:\n- <https://peps.python.org/pep-0685/#specification/>\n- <https://packaging.python.org/en/latest/specifications/name-normalization/>",

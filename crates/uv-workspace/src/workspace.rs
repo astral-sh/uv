@@ -149,7 +149,7 @@ impl Workspace {
         path: &Path,
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
-    ) -> Result<Workspace, WorkspaceError> {
+    ) -> Result<Self, WorkspaceError> {
         let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
@@ -763,7 +763,7 @@ impl Workspace {
         current_project: Option<WorkspaceMember>,
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
-    ) -> Result<Workspace, WorkspaceError> {
+    ) -> Result<Self, WorkspaceError> {
         let cache_key = WorkspaceCacheKey {
             workspace_root: workspace_root.clone(),
             discovery_options: options.clone(),
@@ -833,7 +833,7 @@ impl Workspace {
             &workspace_pyproject_toml,
         );
 
-        Ok(Workspace {
+        Ok(Self {
             install_path: workspace_root,
             packages: workspace_members,
             required_members,
@@ -1691,14 +1691,14 @@ impl VirtualProject {
     /// Return the [`PackageName`] of the project, if available.
     pub fn project_name(&self) -> Option<&PackageName> {
         match self {
-            VirtualProject::Project(project) => Some(project.project_name()),
-            VirtualProject::NonProject(_) => None,
+            Self::Project(project) => Some(project.project_name()),
+            Self::NonProject(_) => None,
         }
     }
 
     /// Returns `true` if the project is a virtual workspace root.
     pub fn is_non_project(&self) -> bool {
-        matches!(self, VirtualProject::NonProject(_))
+        matches!(self, Self::NonProject(_))
     }
 }
 

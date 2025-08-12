@@ -22,7 +22,7 @@ use uv_configuration::{
     PreviewFeatures, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, VersionId,
@@ -436,23 +436,26 @@ pub(crate) async fn add(
                 FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
             };
 
-            // Create a build dispatch.
+            // Lower the extra build dependencies, if any.
             let extra_build_requires = if let AddTarget::Project(project, _) = &target {
-                uv_distribution::ExtraBuildRequires::from_workspace(
+                LoweredExtraBuildDependencies::from_workspace(
                     settings.resolver.extra_build_dependencies.clone(),
                     project.workspace(),
                     &settings.resolver.index_locations,
                     settings.resolver.sources,
                 )?
             } else {
-                uv_distribution::ExtraBuildRequires::from_lowered(
+                LoweredExtraBuildDependencies::from_non_lowered(
                     settings.resolver.extra_build_dependencies.clone(),
                 )
-            };
+            }
+            .into_inner();
+
+            // Create a build dispatch.
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
-                build_constraints,
+                &build_constraints,
                 target.interpreter(),
                 &settings.resolver.index_locations,
                 &flat_index,

@@ -276,19 +276,19 @@ impl Deref for VerbatimUrl {
 
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
-        VerbatimUrl::from_url(DisplaySafeUrl::from(url))
+        Self::from_url(DisplaySafeUrl::from(url))
     }
 }
 
 impl From<DisplaySafeUrl> for VerbatimUrl {
     fn from(url: DisplaySafeUrl) -> Self {
-        VerbatimUrl::from_url(url)
+        Self::from_url(url)
     }
 }
 
 impl From<VerbatimUrl> for Url {
     fn from(url: VerbatimUrl) -> Self {
-        Url::from(url.url)
+        Self::from(url.url)
     }
 }
 
@@ -304,12 +304,12 @@ impl serde::Serialize for VerbatimUrl {
 
 #[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for VerbatimUrl {
-    fn deserialize<D>(deserializer: D) -> Result<VerbatimUrl, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let url = DisplaySafeUrl::deserialize(deserializer)?;
-        Ok(VerbatimUrl::from_url(url))
+        Ok(Self::from_url(url))
     }
 }
 
@@ -338,21 +338,19 @@ impl Pep508Url for VerbatimUrl {
                         let path = normalize_url_path(path);
 
                         if let Some(working_dir) = working_dir {
-                            return Ok(
-                                VerbatimUrl::from_path(path.as_ref(), working_dir)?.with_given(url)
-                            );
+                            return Ok(Self::from_path(path.as_ref(), working_dir)?.with_given(url));
                         }
 
-                        Ok(VerbatimUrl::from_absolute_path(path.as_ref())?.with_given(url))
+                        Ok(Self::from_absolute_path(path.as_ref())?.with_given(url))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
-                    Ok(VerbatimUrl::parse_url(expanded)?.with_given(url))
+                    Ok(Self::parse_url(expanded)?.with_given(url))
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
                 Some(_) => {
                     // Ex) `https://download.pytorch.org/whl/torch_stable.html`
-                    Ok(VerbatimUrl::parse_url(expanded.as_ref())?.with_given(url))
+                    Ok(Self::parse_url(expanded.as_ref())?.with_given(url))
                 }
 
                 // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
@@ -360,11 +358,12 @@ impl Pep508Url for VerbatimUrl {
                     #[cfg(feature = "non-pep508-extensions")]
                     {
                         if let Some(working_dir) = working_dir {
-                            return Ok(VerbatimUrl::from_path(expanded.as_ref(), working_dir)?
-                                .with_given(url));
+                            return Ok(
+                                Self::from_path(expanded.as_ref(), working_dir)?.with_given(url)
+                            );
                         }
 
-                        Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url))
+                        Ok(Self::from_absolute_path(expanded.as_ref())?.with_given(url))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
                     Err(Self::Err::NotAUrl(expanded.to_string()))
@@ -375,12 +374,10 @@ impl Pep508Url for VerbatimUrl {
             #[cfg(feature = "non-pep508-extensions")]
             {
                 if let Some(working_dir) = working_dir {
-                    return Ok(
-                        VerbatimUrl::from_path(expanded.as_ref(), working_dir)?.with_given(url)
-                    );
+                    return Ok(Self::from_path(expanded.as_ref(), working_dir)?.with_given(url));
                 }
 
-                Ok(VerbatimUrl::from_absolute_path(expanded.as_ref())?.with_given(url))
+                Ok(Self::from_absolute_path(expanded.as_ref())?.with_given(url))
             }
 
             #[cfg(not(feature = "non-pep508-extensions"))]

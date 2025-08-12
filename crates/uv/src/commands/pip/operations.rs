@@ -1,19 +1,20 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{Context, anyhow};
-use itertools::Itertools;
-use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use anyhow::{Context, anyhow};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
-    ExtrasSpecification, Overrides, PackageConfigSettings, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExtrasSpecification,
+    Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -21,9 +22,7 @@ use uv_distribution_types::{
     CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification, Requirement,
     ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
-};
+use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
@@ -439,9 +438,6 @@ pub(crate) async fn install(
     build_options: &BuildOptions,
     link_mode: LinkMode,
     compile: bool,
-    index_urls: &IndexLocations,
-    config_settings: &ConfigSettings,
-    config_settings_package: &PackageConfigSettings,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -465,9 +461,10 @@ pub(crate) async fn install(
             reinstall,
             build_options,
             hasher,
-            index_urls,
-            config_settings,
-            config_settings_package,
+            build_dispatch.locations(),
+            build_dispatch.config_settings(),
+            build_dispatch.config_settings_package(),
+            build_dispatch.extra_build_requires(),
             cache,
             venv,
             tags,

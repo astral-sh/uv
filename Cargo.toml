@@ -112,6 +112,7 @@ glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
 goblin = { version = "0.10.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
+h2 = { version = "<=0.4.7" }
 hashbrown = { version = "0.15.1" }
 hex = { version = "0.4.3" }
 home = { version = "0.5.9" }
@@ -213,7 +214,7 @@ test-log = { version = "0.2.16", features = ["trace"], default-features = false 
 whoami = { version = "1.6.0" }
 
 [workspace.metadata.cargo-shear]
-ignored = ["flate2", "xz2"]
+ignored = ["flate2", "xz2", "h2"]
 
 [workspace.lints.rust]
 unsafe_code = "warn"
@@ -249,6 +250,7 @@ rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 if_not_else = "allow"
+use_self = "warn"
 
 # Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
 large_stack_arrays = "allow"

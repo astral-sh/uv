@@ -1051,7 +1051,7 @@ pub struct ManagedClient<'a> {
 
 impl<'a> ManagedClient<'a> {
     /// Create a new `ManagedClient` using the given client and concurrency limit.
-    fn new(client: &'a RegistryClient, concurrency: usize) -> ManagedClient<'a> {
+    fn new(client: &'a RegistryClient, concurrency: usize) -> Self {
         ManagedClient {
             unmanaged: client,
             control: Semaphore::new(concurrency),
@@ -1176,7 +1176,7 @@ impl LocalArchivePointer {
     /// Read an [`LocalArchivePointer`] from the cache.
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::read(path) {
-            Ok(cached) => Ok(Some(rmp_serde::from_slice::<LocalArchivePointer>(&cached)?)),
+            Ok(cached) => Ok(Some(rmp_serde::from_slice::<Self>(&cached)?)),
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(Error::CacheRead(err)),
         }

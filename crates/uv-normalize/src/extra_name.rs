@@ -26,8 +26,8 @@ impl serde::Serialize for DefaultExtras {
         S: serde::Serializer,
     {
         match self {
-            DefaultExtras::All => serializer.serialize_str("all"),
-            DefaultExtras::List(extras) => {
+            Self::All => serializer.serialize_str("all"),
+            Self::List(extras) => {
                 let mut seq = serializer.serialize_seq(Some(extras.len()))?;
                 for extra in extras {
                     seq.serialize_element(&extra)?;
@@ -40,7 +40,7 @@ impl serde::Serialize for DefaultExtras {
 
 /// Deserialize a "all" or list of [`ExtraName`] into a [`DefaultExtras`] enum.
 impl<'de> serde::Deserialize<'de> for DefaultExtras {
-    fn deserialize<D>(deserializer: D) -> Result<DefaultExtras, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -85,7 +85,7 @@ impl<'de> serde::Deserialize<'de> for DefaultExtras {
 
 impl Default for DefaultExtras {
     fn default() -> Self {
-        DefaultExtras::List(Vec::new())
+        Self::List(Vec::new())
     }
 }
 

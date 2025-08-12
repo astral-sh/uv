@@ -25,7 +25,7 @@ use uv_client::{BaseClient, WrappedReqwestError, is_extended_transient_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
-use uv_platform::{self as platform, Arch, Libc, Os};
+use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
@@ -121,12 +121,12 @@ impl Error {
         // Unfortunately different variants of `Error` track retry counts in different ways. We
         // could consider unifying the variants we handle here in `Error::from_reqwest_middleware`
         // instead, but both approaches will be fragile as new variants get added over time.
-        if let Error::NetworkErrorWithRetries { retries, .. } = self {
+        if let Self::NetworkErrorWithRetries { retries, .. } = self {
             return retries + 1;
         }
         // TODO(jack): let-chains are stable as of Rust 1.88. We should use them here as soon as
         // our rust-version is high enough.
-        if let Error::NetworkMiddlewareError(_, anyhow_error) = self {
+        if let Self::NetworkMiddlewareError(_, anyhow_error) = self {
             if let Some(RetryError::WithRetries { retries, .. }) =
                 anyhow_error.downcast_ref::<RetryError>()
             {
@@ -171,22 +171,22 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
-    /// Check if this platform request is satisfied by an installation key.
-    pub fn matches(&self, key: &PythonInstallationKey) -> bool {
+    /// Check if this platform request is satisfied by a platform.
+    pub fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os {
-            if key.os != os {
+            if !platform.os.supports(os) {
                 return false;
             }
         }
 
         if let Some(arch) = self.arch {
-            if !arch.satisfied_by(key.arch) {
+            if !arch.satisfied_by(platform) {
                 return false;
             }
         }
 
         if let Some(libc) = self.libc {
-            if key.libc != libc {
+            if platform.libc != libc {
                 return false;
             }
         }
@@ -220,10 +220,14 @@ impl Display for ArchRequest {
 }
 
 impl ArchRequest {
-    pub(crate) fn satisfied_by(self, arch: Arch) -> bool {
+    pub(crate) fn satisfied_by(self, platform: &Platform) -> bool {
         match self {
-            Self::Explicit(request) => request == arch,
-            Self::Environment(env) => env.supports(arch),
+            Self::Explicit(request) => request == platform.arch,
+            Self::Environment(env) => {
+                // Check if the environment's platform can run the target platform
+                let env_platform = Platform::new(platform.os, env, platform.libc);
+                env_platform.supports(platform)
+            }
         }
     }
 
@@ -327,14 +331,15 @@ impl PythonDownloadRequest {
     ///
     /// Platform information is pulled from the environment.
     pub fn fill_platform(mut self) -> Result<Self, Error> {
+        let platform = Platform::from_env()?;
         if self.arch.is_none() {
-            self.arch = Some(ArchRequest::Environment(Arch::from_env()));
+            self.arch = Some(ArchRequest::Environment(platform.arch));
         }
         if self.os.is_none() {
-            self.os = Some(Os::from_env());
+            self.os = Some(platform.os);
         }
         if self.libc.is_none() {
-            self.libc = Some(Libc::from_env()?);
+            self.libc = Some(platform.libc);
         }
         Ok(self)
     }
@@ -378,33 +383,16 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
-        let key_is_emscripten = key.os().is_emscripten();
-        let target_is_windows = self.os().filter(|x| x.is_windows()).is_some();
-        // Emscripten is not compatible with windows
-        if key_is_emscripten && target_is_windows {
+        // Check platform requirements
+        let request = PlatformRequest {
+            os: self.os,
+            arch: self.arch,
+            libc: self.libc,
+        };
+        if !request.matches(key.platform()) {
             return false;
         }
-        // Emscripten is compatible with all other platforms so skip platform
-        // check in this case.
-        if !key_is_emscripten {
-            if let Some(os) = &self.os {
-                if key.os != *os {
-                    return false;
-                }
-            }
 
-            if let Some(arch) = &self.arch {
-                if !arch.satisfied_by(key.arch) {
-                    return false;
-                }
-            }
-
-            if let Some(libc) = &self.libc {
-                if key.libc != *libc {
-                    return false;
-                }
-            }
-        }
         if let Some(implementation) = &self.implementation {
             if key.implementation != LenientImplementationName::from(*implementation) {
                 return false;
@@ -462,6 +450,14 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
+        let platform = self.platform();
+        let interpreter_platform = Platform::from(interpreter.platform());
+        if !platform.matches(&interpreter_platform) {
+            debug!(
+                "Skipping interpreter at `{executable}`: platform `{interpreter_platform}` does not match request `{platform}`",
+            );
+            return false;
+        }
         if let Some(implementation) = self.implementation() {
             let interpreter_implementation = interpreter.implementation_name();
             if LenientImplementationName::from(interpreter_implementation)
@@ -471,42 +467,6 @@ impl PythonDownloadRequest {
                     "Skipping interpreter at `{executable}`: implementation `{interpreter_implementation}` does not match request `{implementation}`"
                 );
                 return false;
-            }
-        }
-        let interpreter_os = Os::from(interpreter.platform().os());
-        let interp_is_emscripten = interpreter_os.is_emscripten();
-        let target_is_windows = self.os().filter(|os| os.is_windows()).is_some();
-        // Emscripten does not work on windows
-        if interp_is_emscripten && target_is_windows {
-            return false;
-        }
-        // Emscripten works on all other platforms
-        if !interp_is_emscripten {
-            if let Some(os) = self.os() {
-                if &interpreter_os != os {
-                    debug!(
-                        "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
-                    );
-                    return false;
-                }
-            }
-            if let Some(arch) = self.arch() {
-                let interpreter_arch = Arch::from(&interpreter.platform().arch());
-                if !arch.satisfied_by(interpreter_arch) {
-                    debug!(
-                        "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
-                    );
-                    return false;
-                }
-            }
-            if let Some(libc) = self.libc() {
-                let interpreter_libc = Libc::from(interpreter.platform().os());
-                if &interpreter_libc != libc {
-                    debug!(
-                        "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
-                    );
-                    return false;
-                }
             }
         }
         true
@@ -533,9 +493,9 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
                     "Managed Python installations are expected to always have known implementation names, found {name}"
                 ),
             },
-            Some(ArchRequest::Explicit(key.arch)),
-            Some(key.os),
-            Some(key.libc),
+            Some(ArchRequest::Explicit(*key.arch())),
+            Some(*key.os()),
+            Some(*key.libc()),
             Some(key.prerelease.is_some()),
         )
     }
@@ -651,7 +611,7 @@ impl ManagedPythonDownload {
     pub fn from_request(
         request: &PythonDownloadRequest,
         python_downloads_json_url: Option<&str>,
-    ) -> Result<&'static ManagedPythonDownload, Error> {
+    ) -> Result<&'static Self, Error> {
         if let Some(download) = request.iter_downloads(python_downloads_json_url)?.next() {
             return Ok(download);
         }
@@ -677,7 +637,7 @@ impl ManagedPythonDownload {
     /// so `python_downloads_json_url` is only used in the first call to this function.
     pub fn iter_all(
         python_downloads_json_url: Option<&str>,
-    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
+    ) -> Result<impl Iterator<Item = &'static Self>, Error> {
         let downloads = PYTHON_DOWNLOADS.get_or_try_init(|| {
             let json_downloads: HashMap<String, JsonPythonDownload> = if let Some(json_source) =
                 python_downloads_json_url
@@ -1220,9 +1180,7 @@ fn parse_json_downloads(
                 key: PythonInstallationKey::new_from_version(
                     implementation,
                     &version,
-                    os,
-                    arch,
-                    libc,
+                    Platform::new(os, arch, libc),
                     variant,
                 ),
                 url,
@@ -1280,8 +1238,8 @@ pub enum Direction {
 impl Direction {
     fn as_str(&self) -> &str {
         match self {
-            Direction::Download => "download",
-            Direction::Extract => "extract",
+            Self::Download => "download",
+            Self::Extract => "extract",
         }
     }
 }

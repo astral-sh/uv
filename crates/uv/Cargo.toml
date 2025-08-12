@@ -85,6 +85,7 @@ owo-colors = { workspace = true }
 petgraph = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+h2 = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
@@ -138,6 +139,7 @@ nix = { workspace = true }
 [package.metadata.cargo-shear]
 ignored = [
     "flate2",
+    "h2",
     "uv-performance-memory-allocator",
 ]
 

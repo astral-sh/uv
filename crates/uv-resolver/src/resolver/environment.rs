@@ -122,9 +122,9 @@ impl ResolverEnvironment {
     /// This enables `uv pip`-style resolutions. That is, the resolution
     /// returned is only guaranteed to be installable for this specific marker
     /// environment.
-    pub fn specific(marker_env: ResolverMarkerEnvironment) -> ResolverEnvironment {
+    pub fn specific(marker_env: ResolverMarkerEnvironment) -> Self {
         let kind = Kind::Specific { marker_env };
-        ResolverEnvironment { kind }
+        Self { kind }
     }
 
     /// Create a resolver environment for producing a multi-platform
@@ -145,14 +145,14 @@ impl ResolverEnvironment {
     /// the order of dependencies specified is also significant but has no
     /// specific guarantees around it). Changing the ordering can help when our
     /// custom fork prioritization fails.
-    pub fn universal(initial_forks: Vec<MarkerTree>) -> ResolverEnvironment {
+    pub fn universal(initial_forks: Vec<MarkerTree>) -> Self {
         let kind = Kind::Universal {
             initial_forks: initial_forks.into(),
             markers: MarkerTree::TRUE,
             include: Arc::new(crate::FxHashbrownSet::default()),
             exclude: Arc::new(crate::FxHashbrownSet::default()),
         };
-        ResolverEnvironment { kind }
+        Self { kind }
     }
 
     /// Returns the marker environment corresponding to this resolver
@@ -217,7 +217,7 @@ impl ResolverEnvironment {
     ///
     /// This panics if the resolver environment corresponds to one and only one
     /// specific marker environment. i.e., "pip"-style resolution.
-    fn narrow_environment(&self, rhs: MarkerTree) -> ResolverEnvironment {
+    fn narrow_environment(&self, rhs: MarkerTree) -> Self {
         match self.kind {
             Kind::Specific { .. } => {
                 unreachable!("environment narrowing only happens in universal resolution")
@@ -236,7 +236,7 @@ impl ResolverEnvironment {
                     include: Arc::clone(include),
                     exclude: Arc::clone(exclude),
                 };
-                ResolverEnvironment { kind }
+                Self { kind }
             }
         }
     }
@@ -263,7 +263,7 @@ impl ResolverEnvironment {
     pub(crate) fn filter_by_group(
         &self,
         rules: impl IntoIterator<Item = Result<ConflictItem, ConflictItem>>,
-    ) -> Option<ResolverEnvironment> {
+    ) -> Option<Self> {
         match self.kind {
             Kind::Specific { .. } => {
                 unreachable!("environment narrowing only happens in universal resolution")
@@ -298,7 +298,7 @@ impl ResolverEnvironment {
                     include: Arc::new(include),
                     exclude: Arc::new(exclude),
                 };
-                Some(ResolverEnvironment { kind })
+                Some(Self { kind })
             }
         }
     }
@@ -453,10 +453,7 @@ pub(crate) enum ForkingPossibility<'d> {
 }
 
 impl<'d> ForkingPossibility<'d> {
-    pub(crate) fn new(
-        env: &ResolverEnvironment,
-        dep: &'d PubGrubDependency,
-    ) -> ForkingPossibility<'d> {
+    pub(crate) fn new(env: &ResolverEnvironment, dep: &'d PubGrubDependency) -> Self {
         let marker = dep.package.marker();
         if !env.included_by_marker(marker) {
             ForkingPossibility::DependencyAlwaysExcluded
@@ -479,7 +476,7 @@ pub(crate) struct Forker<'d> {
     marker: MarkerTree,
 }
 
-impl<'d> Forker<'d> {
+impl Forker<'_> {
     /// Attempt a fork based on the given resolver environment.
     ///
     /// If a fork is possible, then a new forker and at least one new
@@ -490,7 +487,7 @@ impl<'d> Forker<'d> {
     pub(crate) fn fork(
         &self,
         env: &ResolverEnvironment,
-    ) -> Option<(Forker<'d>, Vec<ResolverEnvironment>)> {
+    ) -> Option<(Self, Vec<ResolverEnvironment>)> {
         if !env.included_by_marker(self.marker) {
             return None;
         }

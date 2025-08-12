@@ -723,9 +723,9 @@ impl Readme {
     /// If the readme is a file, return the path to the file.
     pub(crate) fn path(&self) -> Option<&Path> {
         match self {
-            Readme::String(path) => Some(path),
-            Readme::File { file, .. } => Some(file),
-            Readme::Text { .. } => None,
+            Self::String(path) => Some(path),
+            Self::File { file, .. } => Some(file),
+            Self::Text { .. } => None,
         }
     }
 }
