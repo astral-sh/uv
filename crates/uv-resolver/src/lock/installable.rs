@@ -106,11 +106,12 @@ pub trait Installable<'lock> {
                 })?;
 
             // Add the workspace package to the graph.
-            let index = petgraph.add_node(if dev.prod() {
-                self.package_to_node(dist, tags, build_options, install_options)?
-            } else {
-                self.non_installable_node(dist, tags)?
-            });
+            let index = petgraph.add_node(self.package_to_node(
+                dist,
+                tags,
+                build_options,
+                install_options,
+            )?);
             inverse.insert(&dist.id, index);
 
             // Add an edge from the root.
@@ -225,11 +226,12 @@ pub trait Installable<'lock> {
                 })?;
 
             // Add the package to the graph.
-            let index = petgraph.add_node(if dev.prod() {
-                self.package_to_node(dist, tags, build_options, install_options)?
-            } else {
-                self.non_installable_node(dist, tags)?
-            });
+            let index = petgraph.add_node(self.package_to_node(
+                dist,
+                tags,
+                build_options,
+                install_options,
+            )?);
             inverse.insert(&dist.id, index);
 
             // Add the edge.
