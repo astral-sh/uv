@@ -749,9 +749,20 @@ fn create_bin_links(
     // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
     // it. In particular, it may be confusing because it does not apply when versions are loaded
     // from a `.python-version` file.
+    let installation_satisfies_request =
+        if default && !first_request.matches_installation(installation) {
+            // When --default is used but the installation doesn't match the original request
+            // (e.g., because the request was for "3.14" but we installed "3.14.0rc1"),
+            // check if this installation was downloaded for the current request.
+            changelog.installed.contains(installation.key())
+                && first_request.download.key() == installation.key()
+        } else {
+            first_request.matches_installation(installation)
+        };
+
     let targets = if (default
         || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT)))
-        && first_request.download.key() == installation.key()
+        && installation_satisfies_request
     {
         vec![
             installation.key().executable_name_minor(),
