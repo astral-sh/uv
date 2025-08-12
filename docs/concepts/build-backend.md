@@ -41,7 +41,7 @@ build-backend = "uv_build"
     as uv. Including an upper bound on the `uv_build` version ensures that your package continues to
     build correctly as new versions are released.
 
-To create a new project that uses the uv build backend, use `uv init`:
+To create a new project that use the uv build backend, use `uv init`:
 
 ```console
 $ uv init
