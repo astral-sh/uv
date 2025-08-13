@@ -18,7 +18,7 @@ use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
 use uv_platform::Error as PlatformError;
-use uv_platform::{Arch, Libc, LibcDetectionError, Os};
+use uv_platform::{LibcDetectionError, Platform};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, windows_python_launcher};
@@ -259,20 +259,11 @@ impl ManagedPythonInstallations {
     pub fn find_matching_current_platform(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
-        let os = Os::from_env();
-        let arch = Arch::from_env();
-        let libc = Libc::from_env()?;
+        let platform = Platform::from_env()?;
 
         let iter = Self::from_settings(None)?
             .find_all()?
-            .filter(move |installation| {
-                installation.key.os == os
-                    && (arch.supports(installation.key.arch)
-                        // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
-                        // implement this yet. See https://github.com/astral-sh/uv/pull/9788
-                        || arch.family() == installation.key.arch.family())
-                    && installation.key.libc == libc
-            });
+            .filter(move |installation| platform.supports(installation.platform()));
 
         Ok(iter)
     }
@@ -451,6 +442,10 @@ impl ManagedPythonInstallation {
         &self.key
     }
 
+    pub fn platform(&self) -> &Platform {
+        self.key.platform()
+    }
+
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
         PythonInstallationMinorVersionKey::ref_cast(&self.key)
     }
@@ -544,7 +539,7 @@ impl ManagedPythonInstallation {
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
         // Construct the path to the `stdlib` directory.
-        let stdlib = if self.key.os.is_windows() {
+        let stdlib = if self.key.os().is_windows() {
             self.python_dir().join("Lib")
         } else {
             let lib_suffix = self.key.variant.suffix();
@@ -588,7 +583,7 @@ impl ManagedPythonInstallation {
     /// See <https://github.com/astral-sh/uv/issues/10598> for more information.
     pub fn ensure_dylib_patched(&self) -> Result<(), macos_dylib::Error> {
         if cfg!(target_os = "macos") {
-            if self.key().os.is_like_darwin() {
+            if self.key().os().is_like_darwin() {
                 if *self.implementation() == ImplementationName::CPython {
                     let dylib_path = self.python_dir().join("lib").join(format!(
                         "{}python{}{}{}",
@@ -890,10 +885,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 // TODO(zanieb): Only used in tests now.
 /// Generate a platform portion of a key from the environment.
 pub fn platform_key_from_env() -> Result<String, Error> {
-    let os = Os::from_env();
-    let arch = Arch::from_env();
-    let libc = Libc::from_env()?;
-    Ok(format!("{os}-{arch}-{libc}").to_lowercase())
+    Ok(Platform::from_env()?.to_string().to_lowercase())
 }
 
 impl fmt::Display for ManagedPythonInstallation {

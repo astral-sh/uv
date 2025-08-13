@@ -25,7 +25,7 @@ use uv_client::{BaseClient, WrappedReqwestError, is_extended_transient_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
-use uv_platform::{self as platform, Arch, Libc, Os};
+use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
@@ -171,22 +171,22 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
-    /// Check if this platform request is satisfied by an installation key.
-    pub fn matches(&self, key: &PythonInstallationKey) -> bool {
+    /// Check if this platform request is satisfied by a platform.
+    pub fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os {
-            if key.os != os {
+            if platform.os != os {
                 return false;
             }
         }
 
         if let Some(arch) = self.arch {
-            if !arch.satisfied_by(key.arch) {
+            if !arch.satisfied_by(platform) {
                 return false;
             }
         }
 
         if let Some(libc) = self.libc {
-            if key.libc != libc {
+            if platform.libc != libc {
                 return false;
             }
         }
@@ -220,10 +220,14 @@ impl Display for ArchRequest {
 }
 
 impl ArchRequest {
-    pub(crate) fn satisfied_by(self, arch: Arch) -> bool {
+    pub(crate) fn satisfied_by(self, platform: &Platform) -> bool {
         match self {
-            Self::Explicit(request) => request == arch,
-            Self::Environment(env) => env.supports(arch),
+            Self::Explicit(request) => request == platform.arch,
+            Self::Environment(env) => {
+                // Check if the environment's platform can run the target platform
+                let env_platform = Platform::new(platform.os, env, platform.libc);
+                env_platform.supports(platform)
+            }
         }
     }
 
@@ -327,14 +331,15 @@ impl PythonDownloadRequest {
     ///
     /// Platform information is pulled from the environment.
     pub fn fill_platform(mut self) -> Result<Self, Error> {
+        let platform = Platform::from_env()?;
         if self.arch.is_none() {
-            self.arch = Some(ArchRequest::Environment(Arch::from_env()));
+            self.arch = Some(ArchRequest::Environment(platform.arch));
         }
         if self.os.is_none() {
-            self.os = Some(Os::from_env());
+            self.os = Some(platform.os);
         }
         if self.libc.is_none() {
-            self.libc = Some(Libc::from_env()?);
+            self.libc = Some(platform.libc);
         }
         Ok(self)
     }
@@ -378,23 +383,16 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
-        if let Some(os) = &self.os {
-            if key.os != *os {
-                return false;
-            }
+        // Check platform requirements
+        let request = PlatformRequest {
+            os: self.os,
+            arch: self.arch,
+            libc: self.libc,
+        };
+        if !request.matches(key.platform()) {
+            return false;
         }
 
-        if let Some(arch) = &self.arch {
-            if !arch.satisfied_by(key.arch) {
-                return false;
-            }
-        }
-
-        if let Some(libc) = &self.libc {
-            if key.libc != *libc {
-                return false;
-            }
-        }
         if let Some(implementation) = &self.implementation {
             if key.implementation != LenientImplementationName::from(*implementation) {
                 return false;
@@ -453,19 +451,20 @@ impl PythonDownloadRequest {
             }
         }
         if let Some(os) = self.os() {
-            let interpreter_os = Os::from(interpreter.platform().os());
-            if &interpreter_os != os {
+            if &interpreter.os() != os {
                 debug!(
-                    "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
+                    "Skipping interpreter at `{executable}`: operating system `{}` does not match request `{os}`",
+                    interpreter.os()
                 );
                 return false;
             }
         }
         if let Some(arch) = self.arch() {
-            let interpreter_arch = Arch::from(&interpreter.platform().arch());
-            if !arch.satisfied_by(interpreter_arch) {
+            let interpreter_platform = Platform::from(interpreter.platform());
+            if !arch.satisfied_by(&interpreter_platform) {
                 debug!(
-                    "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
+                    "Skipping interpreter at `{executable}`: architecture `{}` does not match request `{arch}`",
+                    interpreter.arch()
                 );
                 return false;
             }
@@ -482,10 +481,10 @@ impl PythonDownloadRequest {
             }
         }
         if let Some(libc) = self.libc() {
-            let interpreter_libc = Libc::from(interpreter.platform().os());
-            if &interpreter_libc != libc {
+            if &interpreter.libc() != libc {
                 debug!(
-                    "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
+                    "Skipping interpreter at `{executable}`: libc `{}` does not match request `{libc}`",
+                    interpreter.libc()
                 );
                 return false;
             }
@@ -514,9 +513,9 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
                     "Managed Python installations are expected to always have known implementation names, found {name}"
                 ),
             },
-            Some(ArchRequest::Explicit(key.arch)),
-            Some(key.os),
-            Some(key.libc),
+            Some(ArchRequest::Explicit(*key.arch())),
+            Some(*key.os()),
+            Some(*key.libc()),
             Some(key.prerelease.is_some()),
         )
     }
@@ -1184,9 +1183,7 @@ fn parse_json_downloads(
                 key: PythonInstallationKey::new_from_version(
                     implementation,
                     &version,
-                    os,
-                    arch,
-                    libc,
+                    Platform::new(os, arch, libc),
                     variant,
                 ),
                 url,

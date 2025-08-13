@@ -22,8 +22,7 @@ use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::Platform;
-use uv_platform_tags::{Tags, TagsError};
+use uv_platform_tags::{Platform, Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
@@ -205,9 +204,7 @@ impl Interpreter {
             self.python_minor(),
             self.python_patch(),
             self.python_version().pre(),
-            self.os(),
-            self.arch(),
-            self.libc(),
+            uv_platform::Platform::new(self.os(), self.arch(), self.libc()),
             self.variant(),
         )
     }
