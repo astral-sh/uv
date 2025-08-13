@@ -212,6 +212,9 @@ impl Display for MissingHeaderCause {
                         "--no-build-isolation".green(),
                     )
                 } else if let Some(version_id) = &self.version_id {
+                    let normalized_version_id = version_id
+                        .split_once(' ')
+                        .map_or(version_id.as_str(), |(first, _)| first);
                     write!(
                         f,
                         "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
@@ -222,12 +225,12 @@ impl Display for MissingHeaderCause {
                             \"{}\" = [\"{}\"]\n\
                         \n\
                         or `{}` into the environment and re-run with `{}`.",
-                        version_id.cyan(),
+                        normalized_version_id.cyan(),
                         package.cyan(),
-                        version_id.cyan(),
+                        normalized_version_id.cyan(),
                         package.cyan(),
                         "build-system.requires".green(),
-                        version_id.cyan(),
+                        normalized_version_id.cyan(),
                         package.cyan(),
                         format!("uv pip install {package}").green(),
                         "--no-build-isolation".green(),
