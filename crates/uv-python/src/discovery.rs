@@ -342,7 +342,8 @@ fn python_executables_from_installed<'a>(
                     installed_installations.root().user_display()
                 );
                 let installations = installed_installations.find_matching_current_platform()?;
-                // Check that the Python version and platform satisfy the request to avoid unnecessary interpreter queries later
+                // Check that the Python version and platform satisfy the request to avoid
+                // unnecessary interpreter queries later
                 Ok(installations
                     .into_iter()
                     .filter(move |installation| {
@@ -351,7 +352,7 @@ fn python_executables_from_installed<'a>(
                             return false;
                         }
                         if !platform.matches(installation.platform()) {
-                            debug!("Skipping managed installation `{installation}`: does not satisfy `{platform}`");
+                            debug!("Skipping managed installation `{installation}`: does not satisfy requested platform `{platform}`");
                             return false;
                         }
                         true
@@ -1259,6 +1260,7 @@ pub(crate) fn find_python_installation(
     let mut first_prerelease = None;
     let mut first_managed = None;
     let mut first_error = None;
+    let mut emscripten_installation = None;
     for result in installations {
         // Iterate until the first critical error or happy result
         if !result.as_ref().err().is_none_or(Error::is_critical) {
@@ -1275,6 +1277,15 @@ pub(crate) fn find_python_installation(
         let Ok(Ok(ref installation)) = result else {
             return result;
         };
+
+        if installation.os().is_emscripten() {
+            // We want to pick a native Python over an Emscripten Python if we
+            // can find any native Python.
+            if emscripten_installation.is_none() {
+                emscripten_installation = Some(installation.clone());
+            }
+            continue;
+        }
 
         // Check if we need to skip the interpreter because it is "not allowed", e.g., if it is a
         // pre-release version or an alternative implementation, using it requires opt-in.
@@ -1350,6 +1361,10 @@ pub(crate) fn find_python_installation(
             installation.key()
         );
         return Ok(Ok(installation));
+    }
+
+    if let Some(emscripten_python) = emscripten_installation {
+        return Ok(Ok(emscripten_python));
     }
 
     // If we found a Python, but it was unusable for some reason, report that instead of saying we

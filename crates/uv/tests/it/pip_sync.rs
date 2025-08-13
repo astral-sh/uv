@@ -5411,7 +5411,7 @@ fn target_system() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5422,7 +5422,7 @@ fn target_system() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that the package is present in the target directory.
     assert!(context.temp_dir.child("target").child("iniconfig").is_dir());

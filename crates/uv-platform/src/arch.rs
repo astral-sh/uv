@@ -94,6 +94,10 @@ impl Arch {
     pub fn is_arm(&self) -> bool {
         matches!(self.family, target_lexicon::Architecture::Arm(_))
     }
+
+    pub fn is_wasm(&self) -> bool {
+        matches!(self.family, target_lexicon::Architecture::Wasm32)
+    }
 }
 
 impl std::fmt::Display for Arch {

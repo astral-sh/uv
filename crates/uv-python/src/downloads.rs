@@ -176,7 +176,7 @@ impl PlatformRequest {
     /// Check if this platform request is satisfied by a platform.
     pub fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os {
-            if platform.os != os {
+            if !platform.os.supports(os) {
                 return false;
             }
         }
@@ -452,24 +452,13 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
-        if let Some(os) = self.os() {
-            if &interpreter.os() != os {
-                debug!(
-                    "Skipping interpreter at `{executable}`: operating system `{}` does not match request `{os}`",
-                    interpreter.os()
-                );
-                return false;
-            }
-        }
-        if let Some(arch) = self.arch() {
-            let interpreter_platform = Platform::from(interpreter.platform());
-            if !arch.satisfied_by(&interpreter_platform) {
-                debug!(
-                    "Skipping interpreter at `{executable}`: architecture `{}` does not match request `{arch}`",
-                    interpreter.arch()
-                );
-                return false;
-            }
+        let platform = self.platform();
+        let interpreter_platform = Platform::from(interpreter.platform());
+        if !platform.matches(&interpreter_platform) {
+            debug!(
+                "Skipping interpreter at `{executable}`: platform `{interpreter_platform}` does not match request `{platform}`",
+            );
+            return false;
         }
         if let Some(implementation) = self.implementation() {
             let interpreter_implementation = interpreter.implementation_name();
@@ -478,15 +467,6 @@ impl PythonDownloadRequest {
             {
                 debug!(
                     "Skipping interpreter at `{executable}`: implementation `{interpreter_implementation}` does not match request `{implementation}`"
-                );
-                return false;
-            }
-        }
-        if let Some(libc) = self.libc() {
-            if &interpreter.libc() != libc {
-                debug!(
-                    "Skipping interpreter at `{executable}`: libc `{}` does not match request `{libc}`",
-                    interpreter.libc()
                 );
                 return false;
             }
@@ -1066,13 +1046,32 @@ impl ManagedPythonDownload {
         // If the distribution is a `full` archive, the Python installation is in the `install` directory.
         if extracted.join("install").is_dir() {
             extracted = extracted.join("install");
+        // If the distribution is a Pyodide archive, the Python installation is in the `pyodide-root/dist` directory.
+        } else if self.os().is_emscripten() {
+            extracted = extracted.join("pyodide-root").join("dist");
         }
 
-        // If the distribution is missing a `python`-to-`pythonX.Y` symlink, add it. PEP 394 permits
-        // it, and python-build-standalone releases after `20240726` include it, but releases prior
-        // to that date do not.
         #[cfg(unix)]
         {
+            // Pyodide distributions require all of the supporting files to be alongside the Python
+            // executable, so they don't have a `bin` directory. We create it and link
+            // `bin/pythonX.Y` to `dist/python`.
+            if self.os().is_emscripten() {
+                fs_err::create_dir_all(extracted.join("bin"))?;
+                fs_err::os::unix::fs::symlink(
+                    "../python",
+                    extracted
+                        .join("bin")
+                        .join(format!("python{}.{}", self.key.major, self.key.minor)),
+                )?;
+            }
+
+            // If the distribution is missing a `python` -> `pythonX.Y` symlink, add it.
+            //
+            // Pyodide releases never contain this link by default.
+            //
+            // PEP 394 permits it, and python-build-standalone releases after `20240726` include it,
+            // but releases prior to that date do not.
             match fs_err::os::unix::fs::symlink(
                 format!("python{}.{}", self.key.major, self.key.minor),
                 extracted.join("bin").join("python"),

@@ -10511,6 +10511,22 @@
     "sha256": "e5a904ecfb4061389773dd655d3b5665447c80cbf2948fcb1c07e92716eed955",
     "variant": null
   },
+  "cpython-3.13.2-emscripten-wasm32-musl": {
+    "name": "cpython",
+    "arch": {
+      "family": "wasm32",
+      "variant": null
+    },
+    "os": "emscripten",
+    "libc": "musl",
+    "major": 3,
+    "minor": 13,
+    "patch": 2,
+    "prerelease": "",
+    "url": "https://github.com/pyodide/pyodide/releases/download/0.28.0/xbuildenv-0.28.0.tar.bz2",
+    "sha256": null,
+    "variant": null
+  },
   "cpython-3.13.2-linux-aarch64-gnu": {
     "name": "cpython",
     "arch": {
@@ -15055,6 +15071,22 @@
     "sha256": "848405b92bda20fad1f9bba99234c7d3f11e0b31e46f89835d1cb3d735e932aa",
     "variant": null
   },
+  "cpython-3.12.7-emscripten-wasm32-musl": {
+    "name": "cpython",
+    "arch": {
+      "family": "wasm32",
+      "variant": null
+    },
+    "os": "emscripten",
+    "libc": "musl",
+    "major": 3,
+    "minor": 12,
+    "patch": 7,
+    "prerelease": "",
+    "url": "https://github.com/pyodide/pyodide/releases/download/0.27.7/xbuildenv-0.27.7.tar.bz2",
+    "sha256": null,
+    "variant": null
+  },
   "cpython-3.12.7-linux-aarch64-gnu": {
     "name": "cpython",
     "arch": {
@@ -17101,6 +17133,22 @@
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-apple-darwin-install_only.tar.gz",
     "sha256": "eca96158c1568dedd9a0b3425375637a83764d1fa74446438293089a8bfac1f8",
+    "variant": null
+  },
+  "cpython-3.12.1-emscripten-wasm32-musl": {
+    "name": "cpython",
+    "arch": {
+      "family": "wasm32",
+      "variant": null
+    },
+    "os": "emscripten",
+    "libc": "musl",
+    "major": 3,
+    "minor": 12,
+    "patch": 1,
+    "prerelease": "",
+    "url": "https://github.com/pyodide/pyodide/releases/download/0.26.4/xbuildenv-0.26.4.tar.bz2",
+    "sha256": null,
     "variant": null
   },
   "cpython-3.12.1-linux-aarch64-gnu": {
@@ -21437,6 +21485,22 @@
     "prerelease": "",
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-apple-darwin-install_only.tar.gz",
     "sha256": "f710b8d60621308149c100d5175fec39274ed0b9c99645484fd93d1716ef4310",
+    "variant": null
+  },
+  "cpython-3.11.3-emscripten-wasm32-musl": {
+    "name": "cpython",
+    "arch": {
+      "family": "wasm32",
+      "variant": null
+    },
+    "os": "emscripten",
+    "libc": "musl",
+    "major": 3,
+    "minor": 11,
+    "patch": 3,
+    "prerelease": "",
+    "url": "https://github.com/pyodide/pyodide/releases/download/0.25.1/xbuildenv-0.25.1.tar.bz2",
+    "sha256": null,
     "variant": null
   },
   "cpython-3.11.3-linux-aarch64-gnu": {

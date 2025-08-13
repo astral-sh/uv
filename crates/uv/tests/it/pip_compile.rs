@@ -1790,14 +1790,14 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("3.13")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 3.13 in [PYTHON SOURCES]
-    "###
+    "
     );
 
     // `UV_PYTHON` is ignored if `--python-version` is set

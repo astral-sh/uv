@@ -1493,7 +1493,7 @@ jobs:
           # newer versions.
           ./uv pip install -p venv-native/bin/python pyodide-build==0.30.3 pip
 
-      - name: "Install pyodide interpreter"
+      - name: "Install Pyodide interpreter"
         run: |
           source ./venv-native/bin/activate
           pyodide xbuildenv install 0.27.5
@@ -1502,12 +1502,24 @@ jobs:
           echo "PYODIDE_PYTHON=$PYODIDE_PYTHON" >> $GITHUB_ENV
           echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
 
-      - name: "Create pyodide virtual environment"
+      - name: "Create Pyodide virtual environment"
         run: |
           ./uv venv -p $PYODIDE_PYTHON venv-pyodide
           source ./venv-pyodide/bin/activate
           ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
           python -c 'import numpy'
+
+      - name: "Install Pyodide with uv python"
+        run: |
+          ./uv python install cpython-3.13.2-emscripten-wasm32-musl
+
+      - name: "Create a Pyodide virtual environment using uv installed Python"
+        run: |
+          ./uv venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide2
+          # TODO: be able to install Emscripten wheels here...
+          source ./venv-pyodide2/bin/activate
+          ./uv pip install packaging
+          python -c 'import packaging'
 
   integration-test-github-actions:
     timeout-minutes: 10

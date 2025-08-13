@@ -4,6 +4,7 @@ use std::cmp;
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
+use tracing::trace;
 
 pub use crate::arch::{Arch, ArchVariant};
 pub use crate::libc::{Libc, LibcDetectionError, LibcVersion};
@@ -68,13 +69,20 @@ impl Platform {
             return true;
         }
 
-        // OS must match exactly
-        if self.os != other.os {
+        if !self.os.supports(other.os) {
+            trace!(
+                "Operating system `{}` is not compatible with `{}`",
+                self.os, other.os
+            );
             return false;
         }
 
-        // Libc must match exactly
-        if self.libc != other.libc {
+        // Libc must match exactly, unless we're on emscripten — in which case it doesn't matter
+        if self.libc != other.libc && !(other.os.is_emscripten() || self.os.is_emscripten()) {
+            trace!(
+                "Libc `{}` is not compatible with `{}`",
+                self.libc, other.libc
+            );
             return false;
         }
 
@@ -94,10 +102,23 @@ impl Platform {
             return true;
         }
 
+        // Wasm32 can run on any architecture
+        if other.arch.is_wasm() {
+            return true;
+        }
+
         // TODO: Allow inequal variants, as we don't implement variant support checks yet.
         // See https://github.com/astral-sh/uv/pull/9788
         // For now, allow same architecture family as a fallback
-        self.arch.family() == other.arch.family()
+        if self.arch.family() != other.arch.family() {
+            trace!(
+                "Architecture `{}` is not compatible with `{}`",
+                self.arch, other.arch
+            );
+            return false;
+        }
+
+        true
     }
 }
 
