@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.8.4"
+version = "0.8.9"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -79,13 +79,13 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+h2 = { workspace = true }
 jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
-h2 = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
@@ -94,6 +94,7 @@ tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
@@ -161,6 +162,7 @@ default-tests = [
     "crates-io",
     "git",
     "pypi",
+    "r2",
     "python",
     "python-managed",
     "python-eol",
@@ -173,6 +175,8 @@ crates-io = []
 git = []
 # Introduces a testing dependency on PyPI.
 pypi = []
+# Introduces a testing dependency on R2.
+r2 = []
 # Introduces a testing dependency on a local Python installation.
 python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.

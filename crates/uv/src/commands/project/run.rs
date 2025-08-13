@@ -741,6 +741,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     LockMode::Frozen
                 } else if locked {
                     LockMode::Locked(venv.interpreter())
+                } else if isolated {
+                    LockMode::DryRun(venv.interpreter())
                 } else {
                     LockMode::Write(venv.interpreter())
                 };
@@ -1075,16 +1077,28 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 requirements_env.site_packages().next().ok_or_else(|| {
                     anyhow!("Requirements environment has no site packages directory")
                 })?;
-            let base_site_packages = base_interpreter
-                .site_packages()
-                .next()
-                .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
+            let mut base_site_packages = base_interpreter
+                .runtime_site_packages()
+                .iter()
+                .map(|path| Cow::Borrowed(path.as_path()))
+                .chain(base_interpreter.site_packages())
+                .peekable();
+            if base_site_packages.peek().is_none() {
+                return Err(anyhow!("Base environment has no site packages directory"));
+            }
 
-            ephemeral_env.set_overlay(format!(
-                "import site; site.addsitedir(\"{}\"); site.addsitedir(\"{}\");",
-                requirements_site_packages.escape_for_python(),
-                base_site_packages.escape_for_python(),
-            ))?;
+            let overlay_content = format!(
+                "import site; {}",
+                std::iter::once(requirements_site_packages)
+                    .chain(base_site_packages)
+                    .dedup()
+                    .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
+                    .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+
+            ephemeral_env.set_overlay(overlay_content)?;
 
             // N.B. The order here matters — earlier interpreters take precedence over the
             // later ones.
@@ -1937,7 +1951,15 @@ fn copy_entrypoint(
         return Ok(());
     };
 
-    let launcher = launcher.with_python_path(python_executable.to_path_buf());
+    let is_gui = launcher.python_path.ends_with("pythonw.exe");
+
+    let python_path = if is_gui {
+        python_executable.with_file_name("pythonw.exe")
+    } else {
+        python_executable.to_path_buf()
+    };
+
+    let launcher = launcher.with_python_path(python_path);
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
         .write(true)

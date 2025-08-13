@@ -24,9 +24,9 @@ use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, ExtraBuildRequires, Identifier, IndexCapabilities,
-    IndexLocations, IsBuildBackendError, Name, Requirement, Resolution, SourceDist,
-    VersionOrUrlRef,
+    CachedDist, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables, Identifier,
+    IndexCapabilities, IndexLocations, IsBuildBackendError, Name, Requirement, Resolution,
+    SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -90,6 +90,7 @@ pub struct BuildDispatch<'a> {
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
     extra_build_requires: &'a ExtraBuildRequires,
+    extra_build_variables: &'a ExtraBuildVariables,
     link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
@@ -119,6 +120,7 @@ impl<'a> BuildDispatch<'a> {
         config_settings_package: &'a PackageConfigSettings,
         build_isolation: BuildIsolation<'a>,
         extra_build_requires: &'a ExtraBuildRequires,
+        extra_build_variables: &'a ExtraBuildVariables,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
@@ -142,6 +144,7 @@ impl<'a> BuildDispatch<'a> {
             config_settings_package,
             build_isolation,
             extra_build_requires,
+            extra_build_variables,
             link_mode,
             build_options,
             hasher,
@@ -225,6 +228,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn extra_build_requires(&self) -> &ExtraBuildRequires {
         self.extra_build_requires
+    }
+
+    fn extra_build_variables(&self) -> &ExtraBuildVariables {
+        self.extra_build_variables
     }
 
     async fn resolve<'data>(
@@ -312,6 +319,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.config_settings,
             self.config_settings_package,
             self.extra_build_requires(),
+            self.extra_build_variables,
             self.cache(),
             venv,
             tags,
@@ -446,6 +454,18 @@ impl BuildContext for BuildDispatch<'_> {
             self.config_settings.clone()
         };
 
+        // Get package-specific environment variables if available.
+        let mut environment_variables = self.build_extra_env_vars.clone();
+        if let Some(name) = dist_name {
+            if let Some(package_vars) = self.extra_build_variables.get(name) {
+                environment_variables.extend(
+                    package_vars
+                        .iter()
+                        .map(|(key, value)| (OsString::from(key), OsString::from(value))),
+                );
+            }
+        }
+
         let builder = SourceBuild::setup(
             source,
             subdirectory,
@@ -464,7 +484,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.extra_build_requires(),
             &build_stack,
             build_kind,
-            self.build_extra_env_vars.clone(),
+            environment_variables,
             build_output,
             self.concurrency.builds,
             self.preview,

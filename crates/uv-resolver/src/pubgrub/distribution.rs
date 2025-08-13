@@ -29,7 +29,7 @@ impl Name for PubGrubDistribution<'_> {
 }
 
 impl DistributionMetadata for PubGrubDistribution<'_> {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Registry(_, version) => VersionOrUrlRef::Version(version),
             Self::Url(_, url) => VersionOrUrlRef::Url(&url.verbatim),

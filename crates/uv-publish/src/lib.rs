@@ -27,8 +27,8 @@ use url::Url;
 use uv_auth::Credentials;
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, DEFAULT_RETRIES, MetadataFormat, OwnedArchive, RegistryClientBuilder,
-    RequestBuilder, UvRetryableStrategy,
+    BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, RequestBuilder,
+    RetryParsingError, UvRetryableStrategy, retries_from_env,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -78,6 +78,8 @@ pub enum PublishError {
     },
     #[error("Hash is missing in index for {0}")]
     MissingHash(Box<DistFilename>),
+    #[error(transparent)]
+    RetryParsing(#[from] RetryParsingError),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -397,7 +399,7 @@ pub async fn upload(
     let mut n_past_retries = 0;
     let start_time = SystemTime::now();
     // N.B. We cannot use the client policy here because it is set to zero retries
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(DEFAULT_RETRIES);
+    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(retries_from_env()?);
     loop {
         let (request, idx) = build_request(
             file,

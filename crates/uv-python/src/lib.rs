@@ -272,6 +272,9 @@ mod tests {
                         "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/lib/python{VERSION}",
                         "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
                     ],
+                    "site_packages": [
+                        "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
+                    ],
                     "stdlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}",
                     "scheme": {
                         "data": "/home/ferris/.pyenv/versions/{FULL_VERSION}",

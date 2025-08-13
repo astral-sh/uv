@@ -1,6 +1,6 @@
+use std::hint::black_box;
 use std::str::FromStr;
 
-use std::hint::black_box;
 use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
@@ -92,7 +92,7 @@ mod resolver {
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
-        DependencyMetadata, ExtraBuildRequires, IndexLocations, RequiresPython,
+        DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables, IndexLocations, RequiresPython,
     };
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
@@ -144,6 +144,7 @@ mod resolver {
     ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
         let extra_build_requires = ExtraBuildRequires::default();
+        let extra_build_variables = ExtraBuildVariables::default();
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
@@ -193,6 +194,7 @@ mod resolver {
             &config_settings_package,
             build_isolation,
             &extra_build_requires,
+            &extra_build_variables,
             LinkMode::default(),
             &build_options,
             &hashes,

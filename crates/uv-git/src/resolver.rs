@@ -45,7 +45,7 @@ impl GitResolver {
     }
 
     /// Returns the [`GitOid`] for the given [`RepositoryReference`], if it exists.
-    fn get(&self, reference: &RepositoryReference) -> Option<Ref<RepositoryReference, GitOid>> {
+    fn get(&self, reference: &RepositoryReference) -> Option<Ref<'_, RepositoryReference, GitOid>> {
         self.0.get(reference)
     }
 

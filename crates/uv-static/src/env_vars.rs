@@ -166,9 +166,17 @@ impl EnvVars {
     pub const UV_COMPILE_BYTECODE_TIMEOUT: &'static str = "UV_COMPILE_BYTECODE_TIMEOUT";
 
     /// Equivalent to the `--no-editable` command-line argument. If set, uv
-    /// installs any editable dependencies, including the project and any workspace members, as
-    /// non-editable
+    /// installs or exports any editable dependencies, including the project and any workspace
+    /// members, as non-editable.
     pub const UV_NO_EDITABLE: &'static str = "UV_NO_EDITABLE";
+
+    /// Equivalent to the `--dev` command-line argument. If set, uv will include
+    /// development dependencies.
+    pub const UV_DEV: &'static str = "UV_DEV";
+
+    /// Equivalent to the `--no-dev` command-line argument. If set, uv will exclude
+    /// development dependencies.
+    pub const UV_NO_DEV: &'static str = "UV_NO_DEV";
 
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
@@ -237,6 +245,14 @@ impl EnvVars {
 
     /// Equivalent to the `--allow-insecure-host` argument.
     pub const UV_INSECURE_HOST: &'static str = "UV_INSECURE_HOST";
+
+    /// Disable ZIP validation for streamed wheels and ZIP-based source distributions.
+    ///
+    /// WARNING: Disabling ZIP validation can expose your system to security risks by bypassing
+    /// integrity checks and allowing uv to install potentially malicious ZIP files. If uv rejects
+    /// a ZIP file due to failing validation, it is likely that the file is malformed; consider
+    /// filing an issue with the package maintainer.
+    pub const UV_INSECURE_NO_ZIP_VALIDATION: &'static str = "UV_INSECURE_NO_ZIP_VALIDATION";
 
     /// Sets the maximum number of in-flight concurrent downloads that uv will
     /// perform at any given time.
@@ -546,6 +562,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_ALLOW_PROTOCOL: &'static str = "GIT_ALLOW_PROTOCOL";
 
+    /// Sets the SSH command used when Git tries to establish a connection using SSH.
+    #[attr_hidden]
+    pub const GIT_SSH_COMMAND: &'static str = "GIT_SSH_COMMAND";
+
     /// Disable interactive git prompts in terminals, e.g., for credentials. Does not disable
     /// GUI prompts.
     #[attr_hidden]
@@ -626,6 +646,18 @@ impl EnvVars {
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
 
+    /// If set, it can be used to display more stack trace details when a panic occurs.
+    /// This is used by uv particularly on windows to show more details during a platform exception.
+    ///
+    /// For example:
+    ///
+    /// * `RUST_BACKTRACE=1` will print a short backtrace.
+    /// * `RUST_BACKTRACE=full` will print a full backtrace.
+    ///
+    /// See the [Rust backtrace documentation](https://doc.rust-lang.org/std/backtrace/index.html)
+    /// for more.
+    pub const RUST_BACKTRACE: &'static str = "RUST_BACKTRACE";
+
     /// Add additional context and structure to log messages.
     ///
     /// If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
@@ -686,6 +718,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const ROOT_PATH: &'static str = "ROOT_PATH";
 
+    /// Used in testing extra build dependencies.
+    #[attr_hidden]
+    pub const EXPECTED_ANYIO_VERSION: &'static str = "EXPECTED_ANYIO_VERSION";
+
     /// Used to set test credentials for keyring tests.
     #[attr_hidden]
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
@@ -700,6 +736,14 @@ impl EnvVars {
     /// Used to set an index url for tests.
     #[attr_hidden]
     pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
+
+    /// Used for testing named indexes in tests.
+    #[attr_hidden]
+    pub const UV_INDEX_MY_INDEX_USERNAME: &'static str = "UV_INDEX_MY_INDEX_USERNAME";
+
+    /// Used for testing named indexes in tests.
+    #[attr_hidden]
+    pub const UV_INDEX_MY_INDEX_PASSWORD: &'static str = "UV_INDEX_MY_INDEX_PASSWORD";
 
     /// Used to set the GitHub fast-path url for tests.
     #[attr_hidden]

@@ -420,7 +420,7 @@ impl PrioritizedDist {
     }
 
     /// Return the highest-priority distribution for the package version, if any.
-    pub fn get(&self) -> Option<CompatibleDist> {
+    pub fn get(&self) -> Option<CompatibleDist<'_>> {
         let best_wheel = self.0.best_wheel_index.map(|i| &self.0.wheels[i]);
         match (&best_wheel, &self.0.source) {
             // If both are compatible, break ties based on the hash outcome. For example, prefer a
@@ -620,15 +620,15 @@ impl PrioritizedDist {
 impl<'a> CompatibleDist<'a> {
     /// Return the [`ResolvedDistRef`] to use during resolution.
     pub fn for_resolution(&self) -> ResolvedDistRef<'a> {
-        match *self {
-            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
-            CompatibleDist::SourceDist { sdist, prioritized } => {
+        match self {
+            Self::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
+            Self::SourceDist { sdist, prioritized } => {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
-            CompatibleDist::CompatibleWheel {
+            Self::CompatibleWheel {
                 wheel, prioritized, ..
             } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
-            CompatibleDist::IncompatibleWheel {
+            Self::IncompatibleWheel {
                 wheel, prioritized, ..
             } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
         }
@@ -636,15 +636,15 @@ impl<'a> CompatibleDist<'a> {
 
     /// Return the [`ResolvedDistRef`] to use during installation.
     pub fn for_installation(&self) -> ResolvedDistRef<'a> {
-        match *self {
-            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
-            CompatibleDist::SourceDist { sdist, prioritized } => {
+        match self {
+            Self::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
+            Self::SourceDist { sdist, prioritized } => {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
-            CompatibleDist::CompatibleWheel {
+            Self::CompatibleWheel {
                 wheel, prioritized, ..
             } => ResolvedDistRef::InstallableRegistryBuiltDist { wheel, prioritized },
-            CompatibleDist::IncompatibleWheel {
+            Self::IncompatibleWheel {
                 sdist, prioritized, ..
             } => ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized },
         }

@@ -1306,7 +1306,7 @@ impl PylockTomlPackage {
 
 impl PylockTomlWheel {
     /// Return the [`WheelFilename`] for this wheel.
-    fn filename(&self, name: &PackageName) -> Result<Cow<WheelFilename>, PylockTomlErrorKind> {
+    fn filename(&self, name: &PackageName) -> Result<Cow<'_, WheelFilename>, PylockTomlErrorKind> {
         if let Some(name) = self.name.as_ref() {
             Ok(Cow::Borrowed(name))
         } else if let Some(path) = self.path.as_ref() {

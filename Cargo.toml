@@ -82,7 +82,7 @@ async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.9.1" }
-async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["bzip2", "deflate", "lzma", "tokio", "xz", "zstd"] }
+async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "285e48742b74ab109887d62e1ae79e7c15fd4878", features = ["bzip2", "deflate", "lzma", "tokio", "xz", "zstd"] }
 axoupdater = { version = "0.9.0", default-features = false }
 backon = { version = "1.3.0" }
 base64 = { version = "0.22.1" }
@@ -112,7 +112,7 @@ glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
 goblin = { version = "0.10.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
-h2 = { version = "<=0.4.7" }
+h2 = { version = "0.4.7" }
 hashbrown = { version = "0.15.1" }
 hex = { version = "0.4.3" }
 home = { version = "0.5.9" }
@@ -145,7 +145,7 @@ ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
-reqwest = { version = "0.12.22", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
+reqwest = { version = "0.12.22", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
 reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8", features = ["multipart"] }
 reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }

@@ -546,8 +546,8 @@ impl Deref for SyncEnvironment {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Project(environment) => Deref::deref(environment),
-            Self::Script(environment) => Deref::deref(environment),
+            Self::Project(environment) => environment,
+            Self::Script(environment) => environment,
         }
     }
 }
@@ -586,6 +586,7 @@ pub(super) async fn do_sync(
         no_build_isolation,
         no_build_isolation_package,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -631,6 +632,7 @@ pub(super) async fn do_sync(
                 no_build_isolation,
                 no_build_isolation_package: no_build_isolation_package.to_vec(),
                 extra_build_dependencies: extra_build_dependencies.clone(),
+                extra_build_variables: extra_build_variables.clone(),
                 prerelease: PrereleaseMode::default(),
                 resolution: ResolutionMode::default(),
                 sources,
@@ -661,7 +663,7 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(target.lock(), extras, groups)?;
+    detect_conflicts(&target, extras, groups)?;
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(extras)?;
@@ -773,6 +775,7 @@ pub(super) async fn do_sync(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &build_hasher,

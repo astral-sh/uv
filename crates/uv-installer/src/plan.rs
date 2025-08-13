@@ -12,8 +12,9 @@ use uv_distribution::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, ExtraBuildRequires, Hashed,
-    IndexLocations, InstalledDist, Name, RequirementSource, Resolution, ResolvedDist, SourceDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, ExtraBuildRequires,
+    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, RequirementSource,
+    Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
@@ -57,13 +58,22 @@ impl<'a> Planner<'a> {
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
-        let mut registry_index =
-            RegistryWheelIndex::new(cache, tags, index_locations, hasher, config_settings);
+        let mut registry_index = RegistryWheelIndex::new(
+            cache,
+            tags,
+            index_locations,
+            hasher,
+            config_settings,
+            config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
+        );
         let built_index = BuiltWheelIndex::new(
             cache,
             tags,
@@ -71,6 +81,7 @@ impl<'a> Planner<'a> {
             config_settings,
             config_settings_package,
             extra_build_requires,
+            extra_build_variables,
         );
 
         let mut cached = vec![];

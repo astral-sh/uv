@@ -519,7 +519,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Resul
     uv_snapshot!(context.filters(), context
         .add()
         .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
-        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12336,8 +12336,8 @@ fn add_auth_policy_always_with_credentials() -> Result<()> {
     })?;
 
     uv_snapshot!(context.add().arg("anyio")
-        .env("UV_INDEX_MY_INDEX_USERNAME", "public")
-        .env("UV_INDEX_MY_INDEX_PASSWORD", "heron"), @r"
+        .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12496,8 +12496,8 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
     })?;
 
     uv_snapshot!(context.add().arg("anyio")
-        .env("UV_INDEX_MY_INDEX_USERNAME", "public")
-        .env("UV_INDEX_MY_INDEX_PASSWORD", "heron"), @r"
+        .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
