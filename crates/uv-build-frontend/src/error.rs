@@ -47,8 +47,9 @@ static WHEEL_NOT_FOUND_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
 
 /// e.g. `ModuleNotFoundError`
-static MODULE_NOT_FOUND: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new("No module named ['\"]([^'\"]+)['\"]").unwrap());
+static MODULE_NOT_FOUND: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new("ModuleNotFoundError: No module named ['\"]([^'\"]+)['\"]").unwrap()
+});
 
 /// e.g. `ModuleNotFoundError: No module named 'distutils'`
 static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
