@@ -3890,7 +3890,7 @@ fn config_settings_registry() {
         .arg("iniconfig")
         .arg("--no-binary")
         .arg("iniconfig")
-        .arg("-C=global-option=build_ext"), @r###"
+        .arg("--config-settings=global-option=build_ext"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3920,7 +3920,7 @@ fn config_settings_registry() {
         .arg("iniconfig")
         .arg("--no-binary")
         .arg("iniconfig")
-        .arg("-C=global-option=build_ext"), @r"
+        .arg("-config-settings=global-option=build_ext"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4003,7 +4003,7 @@ fn config_settings_path() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("-C")
+        .arg("--config-settings")
         .arg("editable_mode=compat")
         , @r###"
     success: true
@@ -4032,7 +4032,7 @@ fn config_settings_path() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("-C")
+        .arg("--config-settings")
         .arg("editable_mode=compat")
         , @r###"
     success: true
