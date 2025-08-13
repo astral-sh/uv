@@ -3,6 +3,20 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.10
+
+### Python
+
+- Add support for installing Pyodide versions ([#14518](https://github.com/astral-sh/uv/pull/14518))
+
+### Enhancements
+
+- Allow Python requests with missing segments, e.g., just `aarch64` ([#14399](https://github.com/astral-sh/uv/pull/14399))
+
+### Preview
+
+- Move warnings for conflicting modules into preview ([#15253](https://github.com/astral-sh/uv/pull/15253))
+
 ## 0.8.9
 
 ### Enhancements
