@@ -12486,9 +12486,32 @@ fn overlapping_packages_warning() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    // Check that overlapping packages show a warning
+    // Check that overlapping packages don't show a warning by default
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
+        .arg(&built_by_uv)
+        .arg(also_build_by_uv.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
+    "
+    );
+
+    // Clean up for the next test
+    context.venv().arg("--clear").assert().success();
+
+    // Check that overlapping packages show a warning when preview feature is enabled
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg("--preview-features")
+        .arg("detect-module-conflicts")
         .arg(&built_by_uv)
         .arg(also_build_by_uv.path()), @r"
     success: true

@@ -7,7 +7,7 @@ use tokio::sync::oneshot;
 use tracing::instrument;
 
 use uv_cache::Cache;
-use uv_configuration::RAYON_INITIALIZE;
+use uv_configuration::{Preview, RAYON_INITIALIZE};
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
 use uv_python::PythonEnvironment;
@@ -21,11 +21,13 @@ pub struct Installer<'a> {
     name: Option<String>,
     /// The metadata associated with the [`Installer`].
     metadata: bool,
+    /// Preview settings for the installer.
+    preview: Preview,
 }
 
 impl<'a> Installer<'a> {
     /// Initialize a new installer.
-    pub fn new(venv: &'a PythonEnvironment) -> Self {
+    pub fn new(venv: &'a PythonEnvironment, preview: Preview) -> Self {
         Self {
             venv,
             link_mode: LinkMode::default(),
@@ -33,6 +35,7 @@ impl<'a> Installer<'a> {
             reporter: None,
             name: Some("uv".to_string()),
             metadata: true,
+            preview,
         }
     }
 
@@ -88,6 +91,7 @@ impl<'a> Installer<'a> {
             reporter,
             name: installer_name,
             metadata: installer_metadata,
+            preview,
         } = self;
 
         if cache.is_some_and(Cache::is_temporary) {
@@ -113,6 +117,7 @@ impl<'a> Installer<'a> {
                 reporter.as_ref(),
                 relocatable,
                 installer_metadata,
+                preview,
             );
 
             // This may fail if the main task was cancelled.
@@ -143,6 +148,7 @@ impl<'a> Installer<'a> {
             self.reporter.as_ref(),
             self.venv.relocatable(),
             self.metadata,
+            self.preview,
         )
     }
 }
@@ -157,10 +163,11 @@ fn install(
     reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
+    preview: Preview,
 ) -> Result<Vec<CachedDist>> {
     // Initialize the threadpool with the user settings.
     LazyLock::force(&RAYON_INITIALIZE);
-    let locks = uv_install_wheel::Locks::default();
+    let locks = uv_install_wheel::Locks::new(preview);
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::install_wheel(
             layout,

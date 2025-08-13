@@ -809,6 +809,7 @@ pub(super) async fn do_sync(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 

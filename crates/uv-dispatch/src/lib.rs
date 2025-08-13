@@ -390,7 +390,7 @@ impl BuildContext for BuildDispatch<'_> {
                 if wheels.len() == 1 { "" } else { "s" },
                 wheels.iter().map(ToString::to_string).join(", ")
             );
-            wheels = Installer::new(venv)
+            wheels = Installer::new(venv, self.preview)
                 .with_link_mode(self.link_mode)
                 .with_cache(self.cache)
                 .install(wheels)

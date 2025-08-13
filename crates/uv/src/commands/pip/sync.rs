@@ -550,6 +550,7 @@ pub(crate) async fn pip_sync(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await
     {

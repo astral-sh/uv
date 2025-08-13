@@ -611,6 +611,7 @@ pub(crate) async fn pip_install(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await
     {

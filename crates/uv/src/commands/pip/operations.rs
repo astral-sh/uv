@@ -450,6 +450,7 @@ pub(crate) async fn install(
     installer_metadata: bool,
     dry_run: DryRun,
     printer: Printer,
+    preview: uv_configuration::Preview,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
@@ -571,7 +572,7 @@ pub(crate) async fn install(
     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !installs.is_empty() {
         let start = std::time::Instant::now();
-        installs = uv_installer::Installer::new(venv)
+        installs = uv_installer::Installer::new(venv, preview)
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)

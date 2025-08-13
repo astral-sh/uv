@@ -16,6 +16,7 @@ bitflags::bitflags! {
         const ADD_BOUNDS = 1 << 4;
         const PACKAGE_CONFLICTS = 1 << 5;
         const EXTRA_BUILD_DEPENDENCIES = 1 << 6;
+        const DETECT_MODULE_CONFLICTS = 1 << 7;
     }
 }
 
@@ -32,6 +33,7 @@ impl PreviewFeatures {
             Self::ADD_BOUNDS => "add-bounds",
             Self::PACKAGE_CONFLICTS => "package-conflicts",
             Self::EXTRA_BUILD_DEPENDENCIES => "extra-build-dependencies",
+            Self::DETECT_MODULE_CONFLICTS => "detect-module-conflicts",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -76,6 +78,7 @@ impl FromStr for PreviewFeatures {
                 "add-bounds" => Self::ADD_BOUNDS,
                 "package-conflicts" => Self::PACKAGE_CONFLICTS,
                 "extra-build-dependencies" => Self::EXTRA_BUILD_DEPENDENCIES,
+                "detect-module-conflicts" => Self::DETECT_MODULE_CONFLICTS,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -245,6 +248,10 @@ mod tests {
         assert_eq!(
             PreviewFeatures::EXTRA_BUILD_DEPENDENCIES.flag_as_str(),
             "extra-build-dependencies"
+        );
+        assert_eq!(
+            PreviewFeatures::DETECT_MODULE_CONFLICTS.flag_as_str(),
+            "detect-module-conflicts"
         );
     }
 
