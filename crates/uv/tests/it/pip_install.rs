@@ -3920,7 +3920,7 @@ fn config_settings_registry() {
         .arg("iniconfig")
         .arg("--no-binary")
         .arg("iniconfig")
-        .arg("-config-settings=global-option=build_ext"), @r"
+        .arg("--config-settings=global-option=build_ext"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
