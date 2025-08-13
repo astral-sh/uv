@@ -1190,11 +1190,7 @@ pub fn find_python_installations<'a>(
                 cache,
                 preview,
             )
-            .filter_ok(|(_source, interpreter)| {
-                interpreter
-                    .implementation_name()
-                    .eq_ignore_ascii_case(implementation.into())
-            })
+            .filter_ok(|(_source, interpreter)| implementation.matches_interpreter(interpreter))
             .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
@@ -1212,11 +1208,7 @@ pub fn find_python_installations<'a>(
                     cache,
                     preview,
                 )
-                .filter_ok(|(_source, interpreter)| {
-                    interpreter
-                        .implementation_name()
-                        .eq_ignore_ascii_case(implementation.into())
-                })
+                .filter_ok(|(_source, interpreter)| implementation.matches_interpreter(interpreter))
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
@@ -1260,7 +1252,6 @@ pub(crate) fn find_python_installation(
     let mut first_prerelease = None;
     let mut first_managed = None;
     let mut first_error = None;
-    let mut emscripten_installation = None;
     for result in installations {
         // Iterate until the first critical error or happy result
         if !result.as_ref().err().is_none_or(Error::is_critical) {
@@ -1277,15 +1268,6 @@ pub(crate) fn find_python_installation(
         let Ok(Ok(ref installation)) = result else {
             return result;
         };
-
-        if installation.os().is_emscripten() {
-            // We want to pick a native Python over an Emscripten Python if we
-            // can find any native Python.
-            if emscripten_installation.is_none() {
-                emscripten_installation = Some(installation.clone());
-            }
-            continue;
-        }
 
         // Check if we need to skip the interpreter because it is "not allowed", e.g., if it is a
         // pre-release version or an alternative implementation, using it requires opt-in.
@@ -1361,10 +1343,6 @@ pub(crate) fn find_python_installation(
             installation.key()
         );
         return Ok(Ok(installation));
-    }
-
-    if let Some(emscripten_python) = emscripten_installation {
-        return Ok(Ok(emscripten_python));
     }
 
     // If we found a Python, but it was unusable for some reason, report that instead of saying we
@@ -1964,8 +1942,10 @@ impl PythonRequest {
             Self::Any => true,
             Self::Version(_) => false,
             Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
-            Self::Implementation(_) => true,
-            Self::ImplementationVersion(_, _) => true,
+            Self::Implementation(implementation)
+            | Self::ImplementationVersion(implementation, _) => {
+                !matches!(implementation, ImplementationName::CPython)
+            }
             Self::Key(request) => request.allows_alternative_implementations(),
         }
     }
@@ -3680,6 +3660,7 @@ mod tests {
             "any",
             &[
                 "python", "python3", "cpython", "cpython3", "pypy", "pypy3", "graalpy", "graalpy3",
+                "pyodide", "pyodide3",
             ],
         );
 
