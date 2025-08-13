@@ -4355,7 +4355,7 @@ fn valid_conflicts() -> anyhow::Result<()> {
         ]
     "#})?;
     uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

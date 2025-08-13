@@ -238,7 +238,7 @@ fn python_install_automatic() {
 
     // With downloads disabled, the automatic install should fail
     uv_snapshot!(context.filters(), context.run()
-        .env_remove("VIRTUAL_ENV")
+        .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("--no-python-downloads")
         .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r"
     success: false
@@ -253,7 +253,7 @@ fn python_install_automatic() {
 
     // Otherwise, we should fetch the latest Python version
     uv_snapshot!(context.filters(), context.run()
-        .env_remove("VIRTUAL_ENV")
+        .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
     success: true
     exit_code: 0
@@ -265,7 +265,7 @@ fn python_install_automatic() {
 
     // Subsequently, we can use the interpreter even with downloads disabled
     uv_snapshot!(context.filters(), context.run()
-        .env_remove("VIRTUAL_ENV")
+        .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("--no-python-downloads")
         .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
     success: true
@@ -278,7 +278,7 @@ fn python_install_automatic() {
 
     // We should respect the Python request
     uv_snapshot!(context.filters(), context.run()
-    .env_remove("VIRTUAL_ENV")
+    .env_remove(EnvVars::VIRTUAL_ENV)
     .arg("-p").arg("3.12")
     .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
     success: true
@@ -291,7 +291,7 @@ fn python_install_automatic() {
 
     // But some requests cannot be mapped to a download
     uv_snapshot!(context.filters(), context.run()
-       .env_remove("VIRTUAL_ENV")
+       .env_remove(EnvVars::VIRTUAL_ENV)
        .arg("-p").arg("foobar")
        .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
     success: false
@@ -322,9 +322,9 @@ fn python_install_automatic() {
 
         // We should ignore the broken executable and download a version still
         uv_snapshot!(context.filters(), context.run()
-            .env_remove("VIRTUAL_ENV")
+            .env_remove(EnvVars::VIRTUAL_ENV)
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str())
+            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str())
             .arg("-p").arg("3.11")
             .arg("python").arg("-c").arg("import sys; print(sys.version_info[:2])"), @r###"
         success: true
@@ -361,7 +361,7 @@ fn regression_cpython() {
 
     // We should respect the Python request
     uv_snapshot!(context.filters(), context.run()
-        .env_remove("VIRTUAL_ENV")
+        .env_remove(EnvVars::VIRTUAL_ENV)
         .arg("-p").arg("3.12")
         .arg("mre.py"), @r###"
     success: true
@@ -2156,7 +2156,7 @@ fn python_install_314() {
 #[test]
 fn python_install_cached() {
     // Skip this test if the developer has set `UV_PYTHON_CACHE_DIR` locally since it's slow
-    if env::var_os("UV_PYTHON_CACHE_DIR").is_some() && env::var_os("CI").is_none() {
+    if env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).is_some() && env::var_os(EnvVars::CI).is_none() {
         debug!("Skipping test because `UV_PYTHON_CACHE_DIR` is set");
         return;
     }
@@ -2250,7 +2250,7 @@ fn python_install_cached() {
 #[test]
 fn python_install_no_cache() {
     // Skip this test if the developer has set `UV_PYTHON_CACHE_DIR` locally since it's slow
-    if env::var_os("UV_PYTHON_CACHE_DIR").is_some() && env::var_os("CI").is_none() {
+    if env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).is_some() && env::var_os(EnvVars::CI).is_none() {
         debug!("Skipping test because `UV_PYTHON_CACHE_DIR` is set");
         return;
     }

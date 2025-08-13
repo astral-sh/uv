@@ -2101,7 +2101,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
-        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2636,7 +2636,7 @@ fn install_no_binary_env() {
     let context = TestContext::new("3.12");
 
     let mut command = context.pip_install();
-    command.arg("anyio").env("UV_NO_BINARY", "1");
+    command.arg("anyio").env(EnvVars::UV_NO_BINARY, "1");
     uv_snapshot!(
         command,
         @r###"
@@ -2658,7 +2658,7 @@ fn install_no_binary_env() {
     command
         .arg("anyio")
         .arg("--reinstall")
-        .env("UV_NO_BINARY", "anyio");
+        .env(EnvVars::UV_NO_BINARY, "anyio");
     uv_snapshot!(
         command,
         @r###"
@@ -2684,7 +2684,7 @@ fn install_no_binary_env() {
         .arg("anyio")
         .arg("--reinstall")
         .arg("idna")
-        .env("UV_NO_BINARY_PACKAGE", "idna");
+        .env(EnvVars::UV_NO_BINARY_PACKAGE, "idna");
     uv_snapshot!(
         command,
         @r###"
@@ -8352,7 +8352,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8379,7 +8379,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -11955,7 +11955,7 @@ fn install_python_preference() {
 
     // This also works with `VIRTUAL_ENV` unset
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("anyio").arg("--no-managed-python").env_remove("VIRTUAL_ENV"), @r"
+        .arg("anyio").arg("--no-managed-python").env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12329,7 +12329,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12363,7 +12363,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12397,7 +12397,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12417,7 +12417,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12438,7 +12438,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
         .arg("--preview-features").arg("extra-build-dependencies")
         .arg("--reinstall-package").arg("child")
-        .env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+        .env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
