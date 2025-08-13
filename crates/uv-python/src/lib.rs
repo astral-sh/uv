@@ -363,6 +363,9 @@ mod tests {
                         "/lib/python{VERSION}/lib-dynload",
                         "/lib/python{VERSION}/site-packages"
                     ],
+                    "site_packages": [
+                        "/lib/python{VERSION}/site-packages"
+                    ],
                     "stdlib": "//lib/python{VERSION}",
                     "scheme": {
                         "platlib": "//lib/python{VERSION}/site-packages",

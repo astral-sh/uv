@@ -2987,3 +2987,94 @@ fn uninstall_last_patch() {
     "#
     );
 }
+
+#[cfg(unix)] // Pyodide cannot be used on Windows
+#[test]
+fn python_install_pyodide() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.13.2-emscripten-wasm32-musl"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.2 in [TIME]
+     + cpython-3.13.2-[PLATFORM] (python3.13)
+    ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX));
+
+    // The executable should be installed in the bin directory
+    bin_python.assert(predicate::path::exists());
+
+    // On Unix, it should be a link
+    #[cfg(unix)]
+    bin_python.assert(predicate::path::is_symlink());
+
+    // The link should be a path to the binary
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.2-[PLATFORM]/bin/python3.13"
+        );
+    });
+
+    // The executable should "work"
+    uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
+        .arg("-c").arg("import subprocess; print('hello world')"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello world
+
+    ----- stderr -----
+    "###);
+
+    // We should be able to find the Pyodide interpreter
+    uv_snapshot!(context.filters(), context.python_find().arg("cpython-3.13.2-emscripten-wasm32-musl").arg("-vv"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    DEBUG Using Python request `cpython-3.13.2-[PLATFORM]` from explicit request
+    DEBUG Searching for cpython-3.13.2-[PLATFORM] in virtual environments, managed installations, or search path
+    DEBUG Searching for managed installations at `managed`
+    TRACE Libc `none` is not compatible with `musl`
+    DEBUG Skipping managed installation `cpython-3.13.2-[PLATFORM]`: not support by current platform `macos-aarch64-none`
+    TRACE Searching PATH for executables: cpython3.13.2, cpython3.13, cpython3, cpython, python3.13.2, python3.13, python3, python
+    TRACE Error trace: No interpreter found for cpython-3.13.2-[PLATFORM] in virtual environments, managed installations, or search path
+    error: No interpreter found for cpython-3.13.2-[PLATFORM] in virtual environments, managed installations, or search path
+    ");
+
+    // We should be able to create a virtual environment with it
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("cpython-3.13.2-emscripten-wasm32-musl"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.2
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    // We should be able to run the Python in the virtual environment
+    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import subprocess; print('hello world')"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello world
+
+    ----- stderr -----
+    ");
+}

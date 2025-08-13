@@ -34,6 +34,9 @@ impl Os {
         if other.is_emscripten() {
             return !self.is_windows();
         }
+        if self.is_windows() && other.is_emscripten() {
+            return false;
+        }
 
         // Otherwise, we require an exact match
         *self == other

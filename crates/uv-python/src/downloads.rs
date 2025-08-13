@@ -768,7 +768,7 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let url = self.download_url(python_install_mirror, pypy_install_mirror)?;
-        let mut path = installation_dir.join(self.key().to_string());
+        let path = installation_dir.join(self.key().to_string());
 
         // If it is not a reinstall and the dir already exists, return it.
         if !reinstall && path.is_dir() {
@@ -892,24 +892,39 @@ impl ManagedPythonDownload {
         // If the distribution is a `full` archive, the Python installation is in the `install` directory.
         if extracted.join("install").is_dir() {
             extracted = extracted.join("install");
+        // If the distribution is a Pyodide archive, the Python installation is in the `pyodide-root/dist` directory.
+        } else if self.os().is_emscripten() {
+            extracted = extracted.join("pyodide-root").join("dist");
         }
-
-        let is_emscripten: bool = self.os().is_emscripten();
 
         #[cfg(unix)]
         {
-            let discard_already_exists_error = |res: io::Result<()>| match res {
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => Ok(()),
-                _ => res,
-            };
-            if !is_emscripten {
-                // If the distribution is missing a `python`-to-`pythonX.Y` symlink, add it. PEP 394 permits
-                // it, and python-build-standalone releases after `20240726` include it, but releases prior
-                // to that date do not.
-                discard_already_exists_error(fs_err::os::unix::fs::symlink(
-                    format!("python{}.{}", self.key.major, self.key.minor),
-                    extracted.join("bin").join("python"),
-                ))?;
+            // Pyodide distributions require all of the supporting files to be alongside the Python
+            // executable, so they don't have a `bin` directory. We create it and link
+            // `bin/pythonX.Y` to `dist/python`.
+            if self.os().is_emscripten() {
+                fs_err::create_dir_all(&extracted.join("bin"))?;
+                fs_err::os::unix::fs::symlink(
+                    "../python",
+                    extracted
+                        .join("bin")
+                        .join(format!("python{}.{}", self.key.major, self.key.minor)),
+                )?;
+            }
+
+            // If the distribution is missing a `python` -> `pythonX.Y` symlink, add it.
+            //
+            // Pyodide releases never contain this link by default.
+            //
+            // PEP 394 permits it, and python-build-standalone releases after `20240726` include it,
+            // but releases prior to that date do not.
+            match fs_err::os::unix::fs::symlink(
+                format!("python{}.{}", self.key.major, self.key.minor),
+                extracted.join("bin").join("python"),
+            ) {
+                Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(err) => return Err(err.into()),
             }
         }
 
@@ -917,16 +932,6 @@ impl ManagedPythonDownload {
         if path.is_dir() {
             debug!("Removing existing directory: {}", path.user_display());
             fs_err::tokio::remove_dir_all(&path).await?;
-        }
-
-        if is_emscripten {
-            fs_err::create_dir(&path)?;
-            extracted.push("pyodide-root/dist");
-            path.push("bin");
-            fs_err::copy(
-                extracted.join("python"),
-                extracted.join(format!("python{}.{}", self.key.major, self.key.minor)),
-            )?;
         }
 
         // Persist it to the target.
@@ -938,9 +943,6 @@ impl ManagedPythonDownload {
                 err,
             })?;
 
-        if is_emscripten {
-            path.pop();
-        }
         Ok(DownloadResult::Fetched(path))
     }
 

@@ -263,7 +263,13 @@ impl ManagedPythonInstallations {
 
         let iter = Self::from_settings(None)?
             .find_all()?
-            .filter(move |installation| platform.supports(installation.platform()));
+            .filter(move |installation| {
+                if !platform.supports(installation.platform()) {
+                    debug!("Skipping managed installation `{installation}`: not support by current platform `{platform}`");
+                    return false;
+                }
+                true
+            });
 
         Ok(iter)
     }
