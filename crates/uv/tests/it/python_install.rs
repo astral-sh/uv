@@ -2987,3 +2987,139 @@ fn uninstall_last_patch() {
     "#
     );
 }
+
+#[test]
+fn python_install_default_prerelease() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filter((
+            r"Python 3\.14\.\d+(\w+\d+)?".to_string(),
+            "Python 3.14.[VERSION]".to_string(),
+        ))
+        .with_filter((
+            r"cpython-3\.14\.\d+(\w+\d+)?".to_string(),
+            "cpython-3.14.[VERSION]".to_string(),
+        ));
+
+    let bin_python_minor = context
+        .bin_dir
+        .child(format!("python3.14{}", std::env::consts::EXE_SUFFIX));
+
+    let bin_python_major = context
+        .bin_dir
+        .child(format!("python3{}", std::env::consts::EXE_SUFFIX));
+
+    let bin_python_default = context
+        .bin_dir
+        .child(format!("python{}", std::env::consts::EXE_SUFFIX));
+
+    // Install Python 3.14 (prerelease) with --default flag
+    // This should create default executables (python, python3) even though
+    // the installed version is a prerelease that doesn't strictly match the request
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
+    Installed Python 3.14.[VERSION] in [TIME]
+     + cpython-3.14.[VERSION]-[PLATFORM] (python, python3, python3.14)
+    ");
+
+    // All the executables should exist
+    bin_python_minor.assert(predicate::path::exists());
+    bin_python_major.assert(predicate::path::exists());
+    bin_python_default.assert(predicate::path::exists());
+
+    // Install Python 3.14 again without --default to verify it doesn't create default links
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.14
+    Uninstalled Python 3.14.[VERSION] in [TIME]
+     - cpython-3.14.[VERSION]-[PLATFORM] (python, python3, python3.14)
+    ");
+
+    // All executables should be removed
+    bin_python_minor.assert(predicate::path::missing());
+    bin_python_major.assert(predicate::path::missing());
+    bin_python_default.assert(predicate::path::missing());
+
+    // Install Python 3.14 without --default flag
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.[VERSION] in [TIME]
+     + cpython-3.14.[VERSION]-[PLATFORM] (python3.14)
+    ");
+
+    // Only the minor versioned executable should exist
+    bin_python_minor.assert(predicate::path::exists());
+    bin_python_major.assert(predicate::path::missing());
+    bin_python_default.assert(predicate::path::missing());
+
+    // Install again with --default to test upgrading from non-default to default
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
+    Installed Python 3.14.[VERSION] in [TIME]
+     + cpython-3.14.[VERSION]-[PLATFORM] (python, python3)
+    ");
+
+    // Now all the executables should exist
+    bin_python_minor.assert(predicate::path::exists());
+    bin_python_major.assert(predicate::path::exists());
+    bin_python_default.assert(predicate::path::exists());
+}
+
+#[test]
+fn python_install_default_explicit_prerelease() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    let bin_python_minor = context
+        .bin_dir
+        .child(format!("python3.14{}", std::env::consts::EXE_SUFFIX));
+
+    let bin_python_major = context
+        .bin_dir
+        .child(format!("python3{}", std::env::consts::EXE_SUFFIX));
+
+    let bin_python_default = context
+        .bin_dir
+        .child(format!("python{}", std::env::consts::EXE_SUFFIX));
+
+    // Install an explicit prerelease version with --default flag
+    uv_snapshot!(context.filters(), context.python_install().arg("--default").arg("3.14.0rc1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
+    Installed Python 3.14.0rc1 in [TIME]
+     + cpython-3.14.0rc1-[PLATFORM] (python, python3, python3.14)
+    ");
+
+    // All the executables should exist
+    bin_python_minor.assert(predicate::path::exists());
+    bin_python_major.assert(predicate::path::exists());
+    bin_python_default.assert(predicate::path::exists());
+}
