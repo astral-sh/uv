@@ -46,6 +46,14 @@ static LD_NOT_FOUND_RE: LazyLock<Regex> = LazyLock::new(|| {
 static WHEEL_NOT_FOUND_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
 
+/// e.g. `ModuleNotFoundError: No module named 'setuptools'`
+static SETUPTOOLS_NOT_FOUND_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'setuptools'").unwrap());
+
+/// e.g. `ModuleNotFoundError: No module named 'pip'`
+static PIP_NOT_FOUND_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'pip'").unwrap());
+
 /// e.g. `ModuleNotFoundError: No module named 'torch'`
 static TORCH_NOT_FOUND_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'torch'").unwrap());
@@ -192,24 +200,42 @@ impl Display for MissingHeaderCause {
                 {
                     write!(
                         f,
-                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. If `{}` is a first-party package, consider adding `{}` to its `{}`. Otherwise, `{}` into the environment and re-run with `{}`.",
+                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
+                        If `{}` is a first-party package, consider adding `{}` to its `{}`. \
+                        Otherwise, either add it to your `pyproject.toml` under:\n\
+                        \n\
+                            [tool.uv.extra-build-dependencies]\n\
+                            \"{}\" = [\"{}\"]\n\
+                        \n\
+                        or `{}` into the environment and re-run with `{}`.",
                         format!("{package_name}@{package_version}").cyan(),
                         package.cyan(),
                         package_name.cyan(),
                         package.cyan(),
                         "build-system.requires".green(),
+                        package_name.cyan(),
+                        package.cyan(),
                         format!("uv pip install {package}").green(),
                         "--no-build-isolation".green(),
                     )
                 } else if let Some(version_id) = &self.version_id {
                     write!(
                         f,
-                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. If `{}` is a first-party package, consider adding `{}` to its `{}`. Otherwise, `{}` into the environment and re-run with `{}`.",
+                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
+                        If `{}` is a first-party package, consider adding `{}` to its `{}`. \
+                        Otherwise, either add it to your `pyproject.toml` under:\n\
+                        \n\
+                            [tool.uv.extra-build-dependencies]\n\
+                            \"{}\" = [\"{}\"]\n\
+                        \n\
+                        or `{}` into the environment and re-run with `{}`.",
                         version_id.cyan(),
                         package.cyan(),
                         version_id.cyan(),
                         package.cyan(),
                         "build-system.requires".green(),
+                        version_id.cyan(),
+                        package.cyan(),
                         format!("uv pip install {package}").green(),
                         "--no-build-isolation".green(),
                     )
@@ -347,6 +373,10 @@ impl Error {
                 Some(MissingLibrary::Linker(library.to_string()))
             } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::BuildDependency("wheel".to_string()))
+            } else if SETUPTOOLS_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::BuildDependency("setuptools".to_string()))
+            } else if PIP_NOT_FOUND_RE.is_match(line.trim()) {
+                Some(MissingLibrary::BuildDependency("pip".to_string()))
             } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::BuildDependency("torch".to_string()))
             } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
@@ -565,7 +595,7 @@ mod test {
             .to_string()
             .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
-        insta::assert_snapshot!(formatted, @r###"
+        insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
 
         [stderr]
@@ -576,8 +606,13 @@ mod test {
 
         error: invalid command 'bdist_wheel'
 
-        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
-        "###);
+        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+        [tool.uv.extra-build-dependencies]
+        "pygraphviz-1.11" = ["wheel"]
+
+        or `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
+        "#);
     }
 
     #[test]
