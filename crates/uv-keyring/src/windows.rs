@@ -162,6 +162,7 @@ impl CredentialApi for WinCredential {
         self.validate_attributes(None, None)?;
         let target_name = to_wstr(&self.target_name);
         let cred_type = CRED_TYPE_GENERIC;
+        // SAFETY: Calling Windows API
         match crate::blocking::spawn_blocking(move || unsafe {
             Ok(CredDeleteW(target_name.as_ptr(), cred_type, 0))
         })
@@ -273,7 +274,7 @@ impl WinCredential {
                 TargetAlias: target_alias.as_mut_ptr(),
                 UserName: username.as_mut_ptr(),
             };
-            // Call windows API
+            // SAFETY: Calling Windows API
             let result = match unsafe { CredWriteW(&raw const credential, 0) } {
                 0 => Err(decode_error()),
                 _ => Ok(()),
@@ -304,19 +305,22 @@ impl WinCredential {
             // at this point, p_credential is just a pointer to nowhere.
             // The allocation happens in the `CredReadW` call below.
             let cred_type = CRED_TYPE_GENERIC;
+            // SAFETY: Calling windows API
             let result =
                 unsafe { CredReadW(target_name.as_ptr(), cred_type, 0, &raw mut p_credential) };
             if result == 0 {
                 // `CredReadW` failed, so no allocation has been done, so no free needs to be done
                 Err(decode_error())
             } else {
-                // `CredReadW` succeeded, so p_credential points at an allocated credential. Apply
+                // SAFETY: `CredReadW` succeeded, so p_credential points at an allocated credential. Apply
                 // the passed extractor function to it.
                 let ref_cred: &mut CREDENTIALW = unsafe { &mut *p_credential };
                 let result = f(ref_cred);
                 // Finally, we erase the secret and free the allocated credential.
                 erase_secret(ref_cred);
                 let p_credential = p_credential;
+                // SAFETY: `CredReadW` succeeded, so p_credential points at an allocated credential.
+                // Free the allocation.
                 unsafe { CredFree(p_credential.cast()) }
                 result
             }
@@ -493,6 +497,7 @@ impl std::error::Error for Error {
 
 /// Map the last encountered Windows API error to a crate error with appropriate annotation.
 pub fn decode_error() -> ErrorCode {
+    // SAFETY: Calling Windows API
     match unsafe { GetLastError() } {
         ERROR_NOT_FOUND => ErrorCode::NoEntry,
         ERROR_NO_SUCH_LOGON_SESSION => {
