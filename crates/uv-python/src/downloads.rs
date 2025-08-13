@@ -261,7 +261,17 @@ impl PythonDownloadRequest {
 
     #[must_use]
     pub fn with_implementation(mut self, implementation: ImplementationName) -> Self {
-        self.implementation = Some(implementation);
+        match implementation {
+            // Pyodide is actually CPython with an Emscripten OS, we paper over that for usability
+            ImplementationName::Pyodide => {
+                self = self.with_os(Os::new(target_lexicon::OperatingSystem::Emscripten));
+                self = self.with_arch(Arch::new(target_lexicon::Architecture::Wasm32, None));
+                self = self.with_libc(Libc::Some(target_lexicon::Environment::Musl));
+            }
+            _ => {
+                self.implementation = Some(implementation);
+            }
+        }
         self
     }
 
@@ -438,7 +448,9 @@ impl PythonDownloadRequest {
 
     /// Whether this download request opts-in to alternative Python implementations.
     pub fn allows_alternative_implementations(&self) -> bool {
-        self.implementation.is_some()
+        self.implementation
+            .is_some_and(|implementation| !matches!(implementation, ImplementationName::CPython))
+            || self.os.is_some_and(|os| os.is_emscripten())
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
@@ -461,12 +473,10 @@ impl PythonDownloadRequest {
             return false;
         }
         if let Some(implementation) = self.implementation() {
-            let interpreter_implementation = interpreter.implementation_name();
-            if LenientImplementationName::from(interpreter_implementation)
-                != LenientImplementationName::from(*implementation)
-            {
+            if !implementation.matches_interpreter(interpreter) {
                 debug!(
-                    "Skipping interpreter at `{executable}`: implementation `{interpreter_implementation}` does not match request `{implementation}`"
+                    "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
+                    interpreter.implementation_name(),
                 );
                 return false;
             }
@@ -552,13 +562,13 @@ impl FromStr for PythonDownloadRequest {
         impl Position {
             pub(crate) fn next(&self) -> Self {
                 match self {
-                    Position::Start => Position::Implementation,
-                    Position::Implementation => Position::Version,
-                    Position::Version => Position::Os,
-                    Position::Os => Position::Arch,
-                    Position::Arch => Position::Libc,
-                    Position::Libc => Position::End,
-                    Position::End => Position::End,
+                    Self::Start => Self::Implementation,
+                    Self::Implementation => Self::Version,
+                    Self::Version => Self::Os,
+                    Self::Os => Self::Arch,
+                    Self::Arch => Self::Libc,
+                    Self::Libc => Self::End,
+                    Self::End => Self::End,
                 }
             }
         }
@@ -1512,13 +1522,16 @@ mod tests {
             request.version,
             Some(VersionRequest::from_str("3.12.0").unwrap())
         );
-        assert_eq!(request.os, Some(Os(target_lexicon::OperatingSystem::Linux)));
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Linux))
+        );
         assert_eq!(
             request.arch,
-            Some(ArchRequest::Explicit(Arch {
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            }))
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
         );
         assert_eq!(
             request.libc,
@@ -1540,10 +1553,10 @@ mod tests {
         assert_eq!(request.os, None);
         assert_eq!(
             request.arch,
-            Some(ArchRequest::Explicit(Arch {
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            }))
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
         );
         assert_eq!(request.libc, None);
     }
@@ -1556,7 +1569,10 @@ mod tests {
 
         assert_eq!(request.implementation, Some(ImplementationName::PyPy));
         assert_eq!(request.version, None);
-        assert_eq!(request.os, Some(Os(target_lexicon::OperatingSystem::Linux)));
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Linux))
+        );
         assert_eq!(request.arch, None);
         assert_eq!(request.libc, None);
     }
@@ -1598,14 +1614,14 @@ mod tests {
         assert_eq!(request.version, None);
         assert_eq!(
             request.os,
-            Some(Os(target_lexicon::OperatingSystem::Windows))
+            Some(Os::new(target_lexicon::OperatingSystem::Windows))
         );
         assert_eq!(
             request.arch,
-            Some(ArchRequest::Explicit(Arch {
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            }))
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
         );
         assert_eq!(request.libc, None);
     }
@@ -1669,10 +1685,10 @@ mod tests {
         assert_eq!(request.os, None);
         assert_eq!(
             request.arch,
-            Some(ArchRequest::Explicit(Arch {
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            }))
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
         );
         assert_eq!(request.libc, None);
     }

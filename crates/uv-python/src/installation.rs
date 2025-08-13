@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -310,7 +311,7 @@ impl PythonInstallation {
         !matches!(
             self.implementation(),
             LenientImplementationName::Known(ImplementationName::CPython)
-        )
+        ) || self.os().is_emscripten()
     }
 
     /// Return the [`Arch`] of the Python installation as reported by its interpreter.
@@ -394,8 +395,12 @@ impl PythonInstallationKey {
         }
     }
 
-    pub fn implementation(&self) -> &LenientImplementationName {
-        &self.implementation
+    pub fn implementation(&self) -> Cow<'_, LenientImplementationName> {
+        if self.os().is_emscripten() {
+            Cow::Owned(LenientImplementationName::from(ImplementationName::Pyodide))
+        } else {
+            Cow::Borrowed(&self.implementation)
+        }
     }
 
     pub fn version(&self) -> PythonVersion {
@@ -484,7 +489,7 @@ impl fmt::Display for PythonInstallationKey {
         write!(
             f,
             "{}-{}.{}.{}{}{}-{}",
-            self.implementation,
+            self.implementation(),
             self.major,
             self.minor,
             self.patch,

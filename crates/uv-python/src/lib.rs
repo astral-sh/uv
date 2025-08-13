@@ -457,7 +457,7 @@ mod tests {
 
         fn add_pyodide_version(&mut self, version: &'static str) -> Result<()> {
             let path = self.new_search_path_directory(format!("pyodide-{version}"))?;
-            let python = format!("python{}", env::consts::EXE_SUFFIX);
+            let python = format!("pyodide{}", env::consts::EXE_SUFFIX);
             Self::create_mock_pyodide_interpreter(
                 &path.join(python),
                 &PythonVersion::from_str(version).unwrap(),
@@ -2705,7 +2705,9 @@ mod tests {
         let mut context = TestContext::new()?;
 
         context.add_pyodide_version("3.13.2")?;
-        let python = context.run(|| {
+
+        // We should not find the Pyodide interpreter by default
+        let result = context.run(|| {
             find_python_installation(
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
@@ -2713,14 +2715,28 @@ mod tests {
                 &context.cache,
                 Preview::default(),
             )
+        })?;
+        assert!(
+            result.is_err(),
+            "We should not find an python; got {result:?}"
+        );
+
+        // With `Any`, it should be discoverable
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Any,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+                Preview::default(),
+            )
         })??;
-        // We should find the Pyodide interpreter
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.13.2"
         );
 
-        // We should prefer any native Python to the Pyodide Python
+        // We should prefer the native Python to the Pyodide Python
         context.add_python_versions(&["3.15.7"])?;
 
         let python = context.run(|| {
