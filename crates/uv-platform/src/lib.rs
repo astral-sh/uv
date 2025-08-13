@@ -110,7 +110,7 @@ impl Platform {
         // TODO: Allow inequal variants, as we don't implement variant support checks yet.
         // See https://github.com/astral-sh/uv/pull/9788
         // For now, allow same architecture family as a fallback
-        if self.arch.family() == other.arch.family() {
+        if self.arch.family() != other.arch.family() {
             trace!(
                 "Architecture `{}` is not compatible with `{}`",
                 self.arch, other.arch

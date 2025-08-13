@@ -903,7 +903,7 @@ impl ManagedPythonDownload {
             // executable, so they don't have a `bin` directory. We create it and link
             // `bin/pythonX.Y` to `dist/python`.
             if self.os().is_emscripten() {
-                fs_err::create_dir_all(&extracted.join("bin"))?;
+                fs_err::create_dir_all(extracted.join("bin"))?;
                 fs_err::os::unix::fs::symlink(
                     "../python",
                     extracted
