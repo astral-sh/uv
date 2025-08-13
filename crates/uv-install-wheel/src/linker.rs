@@ -62,12 +62,12 @@ impl Locks {
             warn_user!(
                 "The module `{}` is provided by more than one package, \
                 which causes an install race condition and can result in a broken module. \
-                Consider removing your dependency on either `{}` (v{}) or `{}` (v{}).",
+                Consider removing your dependency on either `{}` ({}) or `{}` ({}).",
                 module.simplified_display().green(),
                 wheel_a.name.cyan(),
-                wheel_a.version.cyan(),
+                format!("v{}", wheel_a.version).cyan(),
                 wheel_b.name.cyan(),
-                wheel_b.version.cyan(),
+                format!("v{}", wheel_b.version).cyan()
             );
         }
     }
