@@ -142,7 +142,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: depot/build-push-action@2583627a84956d07561420dcc1d0eb1f2af3fac0 # v1.15.0
+        uses: depot/build-push-action@0b7423b11016b0349604e22d7ea01b078bed6c70 # v1.16.0
         with:
           project: 7hd4vdzmw5 # astral-sh/uv
           context: .
@@ -275,7 +275,7 @@ jobs:
 
       - name: Build and push
         id: build-and-push
-        uses: depot/build-push-action@2583627a84956d07561420dcc1d0eb1f2af3fac0 # v1.15.0
+        uses: depot/build-push-action@0b7423b11016b0349604e22d7ea01b078bed6c70 # v1.16.0
         with:
           context: .
           project: 7hd4vdzmw5 # astral-sh/uv
