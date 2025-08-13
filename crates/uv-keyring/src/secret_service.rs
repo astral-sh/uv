@@ -638,10 +638,9 @@ fn wrap(err: Error) -> Box<dyn std::error::Error + Send + Sync> {
 #[cfg(test)]
 mod tests {
     use crate::credential::CredentialPersistence;
-    use crate::{default_credential_builder, Entry, Error, tests::generate_random_string};
     use crate::secret_service::{EncryptionType, SecretService, SsCredential};
+    use crate::{Entry, Error, default_credential_builder, tests::generate_random_string};
     use std::collections::HashMap;
-
 
     #[test]
     fn test_persistence() {

@@ -31,7 +31,7 @@ pub trait CredentialApi {
     /// Retrieve the password (a string) from the underlying credential.
     ///
     /// This has no effect on the underlying store. If there is no credential
-    /// for this entry, a [NoEntry](crate::Error::NoEntry) error is returned.
+    /// for this entry, a [`NoEntry`](crate::Error::NoEntry) error is returned.
     async fn get_password(&self) -> Result<String> {
         let secret = self.get_secret().await?;
         crate::error::decode_password(secret)
@@ -81,8 +81,8 @@ pub trait CredentialApi {
     /// Delete the underlying credential, if there is one.
     ///
     /// This is not idempotent if the credential existed!
-    /// A second call to delete_credential will return
-    /// a [NoEntry](crate::Error::NoEntry) error.
+    /// A second call to `delete_credential` will return
+    /// a [`NoEntry`](crate::Error::NoEntry) error.
     async fn delete_credential(&self) -> Result<()>;
 
     /// Return the underlying concrete object cast to [Any].
@@ -93,15 +93,15 @@ pub trait CredentialApi {
     /// query its attributes in the underlying store).
     fn as_any(&self) -> &dyn Any;
 
-    /// The Debug trait call for the object.
+    /// The `Debug` trait call for the object.
     ///
-    /// This is used to implement the Debug trait on this type; it
+    /// This is used to implement the `Debug` trait on this type; it
     /// allows generic code to provide debug printing as provided by
     /// the underlying concrete object.
     ///
     /// We provide a (useless) default implementation for backward
     /// compatibility with existing implementors who may have not
-    /// implemented the Debug trait for their credential objects
+    /// implemented the `Debug` trait for their credential objects
     fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Debug::fmt(self.as_any(), f)
     }

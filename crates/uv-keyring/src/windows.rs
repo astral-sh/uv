@@ -102,7 +102,7 @@ impl CredentialApi for WinCredential {
     /// there is no chance of ambiguity.
     async fn set_secret(&self, secret: &[u8]) -> Result<()> {
         self.validate_attributes(Some(secret), None)?;
-        self.save_credential(secret)
+        self.save_credential(secret).await
     }
 
     /// Look up the password for this entry, if any.
@@ -110,7 +110,7 @@ impl CredentialApi for WinCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_password(&self) -> Result<String> {
-        self.extract_from_platform(extract_password)
+        self.extract_from_platform(extract_password).await
     }
 
     /// Look up the secret for this entry, if any.
@@ -118,7 +118,7 @@ impl CredentialApi for WinCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_secret(&self) -> Result<Vec<u8>> {
-        self.extract_from_platform(extract_secret)
+        self.extract_from_platform(extract_secret).await
     }
 
     /// Get the attributes from the credential for this entry, if it exists.
@@ -126,7 +126,7 @@ impl CredentialApi for WinCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_attributes(&self) -> Result<HashMap<String, String>> {
-        let cred = self.extract_from_platform(Self::extract_credential)?;
+        let cred = self.extract_from_platform(Self::extract_credential).await?;
         let mut attributes: HashMap<String, String> = HashMap::new();
         attributes.insert("comment".to_string(), cred.comment.clone());
         attributes.insert("target_alias".to_string(), cred.target_alias.clone());
@@ -139,8 +139,8 @@ impl CredentialApi for WinCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
-        let secret = self.extract_from_platform(extract_secret)?;
-        let mut cred = self.extract_from_platform(Self::extract_credential)?;
+        let secret = self.extract_from_platform(extract_secret).await?;
+        let mut cred = self.extract_from_platform(Self::extract_credential).await?;
         if let Some(comment) = attributes.get(&"comment") {
             cred.comment = (*comment).to_string();
         }
@@ -151,7 +151,7 @@ impl CredentialApi for WinCredential {
             cred.username = (*username).to_string();
         }
         cred.validate_attributes(Some(&secret), None)?;
-        cred.save_credential(&secret)
+        cred.save_credential(&secret).await
     }
 
     /// Delete the underlying generic credential for this entry, if any.
@@ -162,7 +162,11 @@ impl CredentialApi for WinCredential {
         self.validate_attributes(None, None)?;
         let target_name = to_wstr(&self.target_name);
         let cred_type = CRED_TYPE_GENERIC;
-        match unsafe { CredDeleteW(target_name.as_ptr(), cred_type, 0) } {
+        match crate::blocking::spawn_blocking(move || unsafe {
+            Ok(CredDeleteW(target_name.as_ptr(), cred_type, 0))
+        })
+        .await?
+        {
             0 => Err(decode_error()),
             _ => Ok(()),
         }
@@ -237,80 +241,87 @@ impl WinCredential {
     ///
     /// You must always have validated attributes before you call this!
     #[allow(clippy::cast_possible_truncation)]
-    fn save_credential(&self, secret: &[u8]) -> Result<()> {
+    async fn save_credential(&self, secret: &[u8]) -> Result<()> {
         let mut username = to_wstr(&self.username);
         let mut target_name = to_wstr(&self.target_name);
         let mut target_alias = to_wstr(&self.target_alias);
         let mut comment = to_wstr(&self.comment);
         let mut blob = secret.to_vec();
         let blob_len = blob.len() as u32;
-        let flags = CRED_FLAGS::default();
-        let cred_type = CRED_TYPE_GENERIC;
-        let persist = CRED_PERSIST_ENTERPRISE;
-        // Ignored by CredWriteW
-        let last_written = FILETIME {
-            dwLowDateTime: 0,
-            dwHighDateTime: 0,
-        };
-        let attribute_count = 0;
-        let attributes: *mut CREDENTIAL_ATTRIBUTEW = std::ptr::null_mut();
-        let credential = CREDENTIALW {
-            Flags: flags,
-            Type: cred_type,
-            TargetName: target_name.as_mut_ptr(),
-            Comment: comment.as_mut_ptr(),
-            LastWritten: last_written,
-            CredentialBlobSize: blob_len,
-            CredentialBlob: blob.as_mut_ptr(),
-            Persist: persist,
-            AttributeCount: attribute_count,
-            Attributes: attributes,
-            TargetAlias: target_alias.as_mut_ptr(),
-            UserName: username.as_mut_ptr(),
-        };
-        // Call windows API
-        let result = match unsafe { CredWriteW(&raw const credential, 0) } {
-            0 => Err(decode_error()),
-            _ => Ok(()),
-        };
-        // erase the copy of the secret
-        blob.zeroize();
-        result
+        crate::blocking::spawn_blocking(move || {
+            let flags = CRED_FLAGS::default();
+            let cred_type = CRED_TYPE_GENERIC;
+            let persist = CRED_PERSIST_ENTERPRISE;
+            // Ignored by CredWriteW
+            let last_written = FILETIME {
+                dwLowDateTime: 0,
+                dwHighDateTime: 0,
+            };
+            let attribute_count = 0;
+            let attributes: *mut CREDENTIAL_ATTRIBUTEW = std::ptr::null_mut();
+            let credential = CREDENTIALW {
+                Flags: flags,
+                Type: cred_type,
+                TargetName: target_name.as_mut_ptr(),
+                Comment: comment.as_mut_ptr(),
+                LastWritten: last_written,
+                CredentialBlobSize: blob_len,
+                CredentialBlob: blob.as_mut_ptr(),
+                Persist: persist,
+                AttributeCount: attribute_count,
+                Attributes: attributes,
+                TargetAlias: target_alias.as_mut_ptr(),
+                UserName: username.as_mut_ptr(),
+            };
+            // Call windows API
+            let result = match unsafe { CredWriteW(&raw const credential, 0) } {
+                0 => Err(decode_error()),
+                _ => Ok(()),
+            };
+            // erase the copy of the secret
+            blob.zeroize();
+            result
+        })
+        .await
     }
 
     /// Construct a credential from this credential's underlying Generic credential.
     ///
     /// This can be useful for seeing modifications made by a third party.
-    pub fn get_credential(&self) -> Result<Self> {
-        self.extract_from_platform(Self::extract_credential)
+    pub async fn get_credential(&self) -> Result<Self> {
+        self.extract_from_platform(Self::extract_credential).await
     }
 
-    fn extract_from_platform<F, T>(&self, f: F) -> Result<T>
+    async fn extract_from_platform<F, T>(&self, f: F) -> Result<T>
     where
-        F: FnOnce(&CREDENTIALW) -> Result<T>,
+        F: FnOnce(&CREDENTIALW) -> Result<T> + Send + 'static,
+        T: Send + 'static,
     {
         self.validate_attributes(None, None)?;
-        let mut p_credential = std::ptr::null_mut();
-        // at this point, p_credential is just a pointer to nowhere.
-        // The allocation happens in the `CredReadW` call below.
-        let result = {
+        let target_name = to_wstr(&self.target_name);
+        crate::blocking::spawn_blocking(move || {
+            let mut p_credential = std::ptr::null_mut();
+            // at this point, p_credential is just a pointer to nowhere.
+            // The allocation happens in the `CredReadW` call below.
             let cred_type = CRED_TYPE_GENERIC;
-            let target_name = to_wstr(&self.target_name);
-            unsafe { CredReadW(target_name.as_ptr(), cred_type, 0, &raw mut p_credential) }
-        };
-        if result == 0 {
-            // `CredReadW` failed, so no allocation has been done, so no free needs to be done
-            Err(decode_error())
-        } else {
-            // `CredReadW` succeeded, so p_credential points at an allocated credential. Apply
-            // the passed extractor function to it.
-            let ref_cred: &mut CREDENTIALW = unsafe { &mut *p_credential };
-            let result = f(ref_cred);
-            // Finally, we erase the secret and free the allocated credential.
-            erase_secret(ref_cred);
-            unsafe { CredFree(p_credential.cast()) };
-            result
-        }
+            let result =
+                unsafe { CredReadW(target_name.as_ptr(), cred_type, 0, &raw mut p_credential) };
+            if result == 0 {
+                // `CredReadW` failed, so no allocation has been done, so no free needs to be done
+                Err(decode_error())
+            } else {
+                // `CredReadW` succeeded, so p_credential points at an allocated credential. Apply
+                // the passed extractor function to it.
+                let ref_cred: &mut CREDENTIALW = unsafe { &mut *p_credential };
+                let result = f(ref_cred);
+                // Finally, we erase the secret and free the allocated credential.
+                erase_secret(ref_cred);
+                let p_credential = p_credential;
+                unsafe { CredFree(p_credential.cast()) }
+                result
+            }
+        })
+        .await
     }
 
     #[allow(clippy::unnecessary_wraps)]
@@ -742,7 +753,10 @@ mod tests {
             .get_credential()
             .downcast_ref()
             .expect("Not a windows credential");
-        let actual = credential.get_credential().expect("Can't read credential");
+        let actual = credential
+            .get_credential()
+            .await
+            .expect("Can't read credential");
         assert_eq!(
             actual.username, credential.username,
             "Usernames don't match"
