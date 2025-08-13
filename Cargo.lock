@@ -5443,6 +5443,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "uv-cache-info",
+ "uv-configuration",
  "uv-distribution-filename",
  "uv-fs",
  "uv-normalize",

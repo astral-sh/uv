@@ -10,20 +10,33 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument, trace};
+use uv_configuration::{Preview, PreviewFeatures};
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_warnings::{warn_user, warn_user_once};
 use walkdir::WalkDir;
 
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Default)]
 pub struct Locks {
     /// The parent directory of a file in a synchronized copy
     copy_dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
     /// Top level modules (excluding namespaces) we write to.
     modules: Mutex<FxHashMap<OsString, WheelFilename>>,
+    /// Preview settings for feature flags.
+    preview: Preview,
 }
 
 impl Locks {
+    /// Create a new Locks instance with the given preview settings.
+    pub fn new(preview: Preview) -> Self {
+        Self {
+            copy_dir_locks: Mutex::new(FxHashMap::default()),
+            modules: Mutex::new(FxHashMap::default()),
+            preview,
+        }
+    }
+
     /// Warn when a module exists in multiple packages.
     fn warn_module_conflict(&self, module: &OsStr, wheel_a: &WheelFilename) {
         if let Some(wheel_b) = self
@@ -32,6 +45,14 @@ impl Locks {
             .unwrap()
             .insert(module.to_os_string(), wheel_a.clone())
         {
+            // Only warn if the preview feature is enabled
+            if !self
+                .preview
+                .is_enabled(PreviewFeatures::DETECT_MODULE_CONFLICTS)
+            {
+                return;
+            }
+
             // Sort for consistent output, at least with two packages
             let (wheel_a, wheel_b) = if wheel_b.name > wheel_a.name {
                 (&wheel_b, wheel_a)
