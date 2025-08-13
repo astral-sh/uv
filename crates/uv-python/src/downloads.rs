@@ -552,13 +552,13 @@ impl FromStr for PythonDownloadRequest {
         impl Position {
             pub(crate) fn next(&self) -> Self {
                 match self {
-                    Position::Start => Position::Implementation,
-                    Position::Implementation => Position::Version,
-                    Position::Version => Position::Os,
-                    Position::Os => Position::Arch,
-                    Position::Arch => Position::Libc,
-                    Position::Libc => Position::End,
-                    Position::End => Position::End,
+                    Self::Start => Self::Implementation,
+                    Self::Implementation => Self::Version,
+                    Self::Version => Self::Os,
+                    Self::Os => Self::Arch,
+                    Self::Arch => Self::Libc,
+                    Self::Libc => Self::End,
+                    Self::End => Self::End,
                 }
             }
         }
