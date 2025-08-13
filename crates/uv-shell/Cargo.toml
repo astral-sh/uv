@@ -23,3 +23,7 @@ tracing = { workspace = true }
 windows-registry = { workspace = true }
 windows-result = { workspace = true }
 windows-sys = { workspace = true }
+
+[dev-dependencies]
+fs-err = { workspace = true }
+tempfile = { workspace = true }
