@@ -265,7 +265,7 @@ impl ManagedPythonInstallations {
             .find_all()?
             .filter(move |installation| {
                 if !platform.supports(installation.platform()) {
-                    debug!("Skipping managed installation `{installation}`: not support by current platform `{platform}`");
+                    debug!("Skipping managed installation `{installation}`: not supported by current platform `{platform}`");
                     return false;
                 }
                 true

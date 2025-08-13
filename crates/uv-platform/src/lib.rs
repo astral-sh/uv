@@ -78,7 +78,7 @@ impl Platform {
         }
 
         // Libc must match exactly, unless we're on emscripten — in which case it doesn't matter
-        if self.libc != other.libc || (other.os.is_emscripten() && self.os.is_emscripten()) {
+        if self.libc != other.libc && !(other.os.is_emscripten() || self.os.is_emscripten()) {
             trace!(
                 "Libc `{}` is not compatible with `{}`",
                 self.libc, other.libc

@@ -342,7 +342,7 @@ fn python_executables_from_installed<'a>(
                     installed_installations.root().user_display()
                 );
                 let installations = installed_installations.find_matching_current_platform()?;
-                // Check that the Python version and platform satisfy the request to avoid unnecessary interpreter queries later
+                // Check that the Python version satisfies the request to avoid unnecessary interpreter queries later
                 Ok(installations
                     .into_iter()
                     .filter(move |installation| {
@@ -351,7 +351,7 @@ fn python_executables_from_installed<'a>(
                             return false;
                         }
                         if !platform.matches(installation.platform()) {
-                            debug!("Skipping managed installation `{installation}`: does not satisfy `{platform}`");
+                            debug!("Skipping managed installation `{installation}`: does not satisfy requested platform `{platform}`");
                             return false;
                         }
                         true

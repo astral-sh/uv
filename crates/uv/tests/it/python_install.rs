@@ -3039,21 +3039,13 @@ fn python_install_pyodide() {
     "###);
 
     // We should be able to find the Pyodide interpreter
-    uv_snapshot!(context.filters(), context.python_find().arg("cpython-3.13.2-emscripten-wasm32-musl").arg("-vv"), @r"
-    success: false
-    exit_code: 2
+    uv_snapshot!(context.filters(), context.python_find().arg("cpython-3.13.2-emscripten-wasm32-musl"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.2-[PLATFORM]/bin/python3.13
 
     ----- stderr -----
-    DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Using Python request `cpython-3.13.2-[PLATFORM]` from explicit request
-    DEBUG Searching for cpython-3.13.2-[PLATFORM] in virtual environments, managed installations, or search path
-    DEBUG Searching for managed installations at `managed`
-    TRACE Libc `none` is not compatible with `musl`
-    DEBUG Skipping managed installation `cpython-3.13.2-[PLATFORM]`: not support by current platform `macos-aarch64-none`
-    TRACE Searching PATH for executables: cpython3.13.2, cpython3.13, cpython3, cpython, python3.13.2, python3.13, python3, python
-    TRACE Error trace: No interpreter found for cpython-3.13.2-[PLATFORM] in virtual environments, managed installations, or search path
-    error: No interpreter found for cpython-3.13.2-[PLATFORM] in virtual environments, managed installations, or search path
     ");
 
     // We should be able to create a virtual environment with it
