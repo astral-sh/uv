@@ -3,6 +3,7 @@
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
 mod error;
+mod pipreqs;
 
 use std::borrow::Cow;
 use std::ffi::OsString;
