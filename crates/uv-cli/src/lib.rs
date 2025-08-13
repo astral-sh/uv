@@ -349,7 +349,7 @@ pub struct GlobalArgs {
     /// See `--directory` to change the working directory entirely.
     ///
     /// This setting has no effect when used in the `uv pip` interface.
-    #[arg(global = true, long, env = EnvVars::UV_PROJECT)]
+    #[arg(global = true, long, short = 'C', env = EnvVars::UV_PROJECT)]
     pub project: Option<PathBuf>,
 }
 
@@ -4753,12 +4753,7 @@ pub struct ToolUpgradeArgs {
     pub fork_strategy: Option<ForkStrategy>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(
-        long,
-        short = 'C',
-        alias = "config-settings",
-        help_heading = "Build options"
-    )]
+    #[arg(long, alias = "config-settings", help_heading = "Build options")]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
@@ -5575,12 +5570,7 @@ pub struct InstallerArgs {
     pub keyring_provider: Option<KeyringProviderType>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(
-        long,
-        short = 'C',
-        alias = "config-settings",
-        help_heading = "Build options"
-    )]
+    #[arg(long, alias = "config-settings", help_heading = "Build options")]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
@@ -5784,12 +5774,7 @@ pub struct ResolverArgs {
     pub fork_strategy: Option<ForkStrategy>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(
-        long,
-        short = 'C',
-        alias = "config-settings",
-        help_heading = "Build options"
-    )]
+    #[arg(long, alias = "config-settings", help_heading = "Build options")]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
@@ -5995,12 +5980,7 @@ pub struct ResolverInstallerArgs {
     pub fork_strategy: Option<ForkStrategy>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
-    #[arg(
-        long,
-        short = 'C',
-        alias = "config-settings",
-        help_heading = "Build options"
-    )]
+    #[arg(long, alias = "config-settings", help_heading = "Build options")]
     pub config_setting: Option<Vec<ConfigSettingEntry>>,
 
     /// Settings to pass to the PEP 517 build backend for a specific package, specified as `PACKAGE:KEY=VALUE` pairs.
