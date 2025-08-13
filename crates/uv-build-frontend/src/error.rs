@@ -46,17 +46,9 @@ static LD_NOT_FOUND_RE: LazyLock<Regex> = LazyLock::new(|| {
 static WHEEL_NOT_FOUND_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
 
-/// e.g. `ModuleNotFoundError: No module named 'setuptools'`
-static SETUPTOOLS_NOT_FOUND_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'setuptools'").unwrap());
-
-/// e.g. `ModuleNotFoundError: No module named 'pip'`
-static PIP_NOT_FOUND_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'pip'").unwrap());
-
-/// e.g. `ModuleNotFoundError: No module named 'torch'`
-static TORCH_NOT_FOUND_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'torch'").unwrap());
+/// e.g. `ModuleNotFoundError`
+static MODULE_NOT_FOUND: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("No module named ['\"]([^'\"]+)['\"]").unwrap());
 
 /// e.g. `ModuleNotFoundError: No module named 'distutils'`
 static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
@@ -373,17 +365,22 @@ impl Error {
                 Some(MissingLibrary::Linker(library.to_string()))
             } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::BuildDependency("wheel".to_string()))
-            } else if SETUPTOOLS_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::BuildDependency("setuptools".to_string()))
-            } else if PIP_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::BuildDependency("pip".to_string()))
-            } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::BuildDependency("torch".to_string()))
             } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::DeprecatedModule(
                     "distutils".to_string(),
                     Version::new([3, 12]),
                 ))
+            } else if let Some(caps) = MODULE_NOT_FOUND.captures(line.trim()) {
+                if let Some(module_match) = caps.get(1) {
+                    let module_name = module_match.as_str();
+                    let package_name = match crate::pipreqs::MODULE_MAPPING.lookup(module_name) {
+                        Some(package) => package.to_string(),
+                        None => module_name.to_string(),
+                    };
+                    Some(MissingLibrary::BuildDependency(package_name))
+                } else {
+                    None
+                }
             } else {
                 None
             }
