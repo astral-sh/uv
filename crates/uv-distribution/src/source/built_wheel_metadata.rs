@@ -27,6 +27,40 @@ pub(crate) struct BuiltWheelMetadata {
 }
 
 impl BuiltWheelMetadata {
+    /// Create a [`BuiltWheelMetadata`] from a [`BuiltWheelFile`].
+    pub(crate) fn from_file(
+        file: BuiltWheelFile,
+        hashes: HashDigests,
+        cache_info: CacheInfo,
+    ) -> Self {
+        Self {
+            path: file.path,
+            target: file.target,
+            filename: file.filename,
+            hashes,
+            cache_info,
+        }
+    }
+}
+
+impl Hashed for BuiltWheelMetadata {
+    fn hashes(&self) -> &[HashDigest] {
+        self.hashes.as_slice()
+    }
+}
+
+/// The path to a built wheel file, along with its parsed filename.
+#[derive(Debug, Clone)]
+pub(crate) struct BuiltWheelFile {
+    /// The path to the built wheel.
+    pub(crate) path: Box<Path>,
+    /// The expected path to the downloaded wheel's entry in the cache.
+    pub(crate) target: Box<Path>,
+    /// The parsed filename.
+    pub(crate) filename: WheelFilename,
+}
+
+impl BuiltWheelFile {
     /// Find a compatible wheel in the cache.
     pub(crate) fn find_in_cache(
         tags: &Tags,
@@ -51,26 +85,12 @@ impl BuiltWheelMetadata {
             target: cache_shard.join(filename.stem()).into_boxed_path(),
             path: path.into_boxed_path(),
             filename,
-            cache_info: CacheInfo::default(),
-            hashes: HashDigests::empty(),
         })
-    }
-
-    #[must_use]
-    pub(crate) fn with_hashes(mut self, hashes: HashDigests) -> Self {
-        self.hashes = hashes;
-        self
     }
 
     /// Returns `true` if the wheel matches the given package name and version.
     pub(crate) fn matches(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
         name.is_none_or(|name| self.filename.name == *name)
             && version.is_none_or(|version| self.filename.version == *version)
-    }
-}
-
-impl Hashed for BuiltWheelMetadata {
-    fn hashes(&self) -> &[HashDigest] {
-        self.hashes.as_slice()
     }
 }
