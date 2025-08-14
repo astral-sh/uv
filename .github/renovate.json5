@@ -1,142 +1,186 @@
 {
-  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   dependencyDashboard: true,
-  suppressNotifications: ["prEditedNotification"],
-  extends: [
-    "config:recommended",
-    // For tool versions defined in GitHub Actions:
-    "customManagers:githubActionsVersions",
+  suppressNotifications: [
+    'prEditedNotification',
   ],
-  labels: ["internal"],
-  schedule: ["before 4am on Monday"],
-  semanticCommits: "disabled",
+  extends: [
+    'config:recommended',
+    'customManagers:githubActionsVersions',
+  ],
+  labels: [
+    'internal',
+  ],
+  schedule: [
+    'before 4am on Monday',
+  ],
+  semanticCommits: 'disabled',
   separateMajorMinor: false,
   prHourlyLimit: 10,
-  enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
+  enabledManagers: [
+    'github-actions',
+    'pre-commit',
+    'cargo',
+    'custom.regex',
+  ],
   cargo: {
-    // See https://docs.renovatebot.com/configuration-options/#rangestrategy
-    rangeStrategy: "update-lockfile",
-    fileMatch: ["^crates/.*Cargo\\.toml$"],
+    rangeStrategy: 'update-lockfile',
+    managerFilePatterns: [
+      '/^crates/.*Cargo\\.toml$/',
+    ],
   },
-  "pre-commit": {
+  'pre-commit': {
     enabled: true,
   },
   packageRules: [
-    // Pin GitHub Actions to immutable SHAs.
     {
-      matchDepTypes: ["action"],
+      matchDepTypes: [
+        'action',
+      ],
       pinDigests: true,
     },
-    // Annotate GitHub Actions SHAs with a SemVer version.
     {
-      extends: ["helpers:pinGitHubActionDigests"],
-      extractVersion: "^(?<version>v?\\d+\\.\\d+\\.\\d+)$",
-      versioning: "regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$",
+      extends: [
+        'helpers:pinGitHubActionDigests',
+      ],
+      extractVersion: '^(?<version>v?\\d+\\.\\d+\\.\\d+)$',
+      versioning: 'regex:^v?(?<major>\\d+)(\\.(?<minor>\\d+)\\.(?<patch>\\d+))?$',
     },
     {
-      // Disable updates of `zip-rs`; intentionally pinned for now due to ownership change
-      // See: https://github.com/astral-sh/uv/issues/3642
-      matchPackageNames: ["/zip/"],
-      matchManagers: ["cargo"],
+      matchPackageNames: [
+        '/zip/',
+      ],
+      matchManagers: [
+        'cargo',
+      ],
       enabled: false,
     },
     {
-      // Create dedicated branches to update references to dependencies in the documentation.
-      matchFileNames: ["docs/**/*.md"],
-      commitMessageTopic: "documentation references to {{{depName}}}",
-      semanticCommitType: "docs",
+      matchFileNames: [
+        'docs/**/*.md',
+      ],
+      commitMessageTopic: 'documentation references to {{{depName}}}',
+      semanticCommitType: 'docs',
       semanticCommitScope: null,
-      additionalBranchPrefix: "docs-",
+      additionalBranchPrefix: 'docs-',
     },
     {
-      // Group upload/download artifact updates, the versions are dependent
-      groupName: "Artifact GitHub Actions dependencies",
-      matchManagers: ["github-actions"],
-      matchDatasources: ["gitea-tags", "github-tags"],
-      matchPackageNames: ["/actions/.*-artifact/"],
-      description: "Weekly update of artifact-related GitHub Actions dependencies",
+      groupName: 'Artifact GitHub Actions dependencies',
+      matchManagers: [
+        'github-actions',
+      ],
+      matchDatasources: [
+        'gitea-tags',
+        'github-tags',
+      ],
+      matchPackageNames: [
+        '/actions/.*-artifact/',
+      ],
+      description: 'Weekly update of artifact-related GitHub Actions dependencies',
     },
     {
-      // This package rule disables updates for GitHub runners:
-      // we'd only pin them to a specific version
-      // if there was a deliberate reason to do so
-      groupName: "GitHub runners",
-      matchManagers: ["github-actions"],
-      matchDatasources: ["github-runners"],
+      groupName: 'GitHub runners',
+      matchManagers: [
+        'github-actions',
+      ],
+      matchDatasources: [
+        'github-runners',
+      ],
       description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
       enabled: false,
     },
     {
-      groupName: "pre-commit dependencies",
-      matchManagers: ["pre-commit"],
-      description: "Weekly update of pre-commit dependencies",
+      groupName: 'pre-commit dependencies',
+      matchManagers: [
+        'pre-commit',
+      ],
+      description: 'Weekly update of pre-commit dependencies',
     },
     {
-      groupName: "Rust dev-dependencies",
-      matchManagers: ["cargo"],
-      matchDepTypes: ["devDependencies"],
-      description: "Weekly update of Rust development dependencies",
+      groupName: 'Rust dev-dependencies',
+      matchManagers: [
+        'cargo',
+      ],
+      matchDepTypes: [
+        'devDependencies',
+      ],
+      description: 'Weekly update of Rust development dependencies',
     },
     {
-      // We don't really use PyO3 in this project; it's pulled in as an optional feature
-      // of the PEP 440 and PEP 508 crates, which we vendored and forked.
-      groupName: "pyo3",
-      matchManagers: ["cargo"],
-      matchPackageNames: ["/pyo3/"],
-      description: "Weekly update of pyo3 dependencies",
+      groupName: 'pyo3',
+      matchManagers: [
+        'cargo',
+      ],
+      matchPackageNames: [
+        '/pyo3/',
+      ],
+      description: 'Weekly update of pyo3 dependencies',
       enabled: false,
     },
     {
-      commitMessageTopic: "MSRV",
-      matchManagers: ["regex"],
-      matchDepNames: ["msrv"],
-      // We have a rolling support policy for the MSRV
-      // 2 releases back * 6 weeks per release * 7 days per week + 1
-      minimumReleaseAge: "85 days",
-      internalChecksFilter: "strict",
-      groupName: "MSRV",
+      commitMessageTopic: 'MSRV',
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchDepNames: [
+        'msrv',
+      ],
+      minimumReleaseAge: '85 days',
+      internalChecksFilter: 'strict',
+      groupName: 'MSRV',
     },
     {
-      matchManagers: ["regex"],
-      matchDepNames: ["rust"],
-      commitMessageTopic: "Rust",
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchDepNames: [
+        'rust',
+      ],
+      commitMessageTopic: 'Rust',
     },
   ],
   customManagers: [
-    // Update major GitHub actions references in documentation.
     {
-      customType: "regex",
-      fileMatch: ["^docs/.*\\.md$"],
-      matchStrings: [
-        "\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s",
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^docs/.*\\.md$/',
       ],
-      datasourceTemplate: "github-tags",
-      versioningTemplate: "regex:^v(?<major>\\d+)$",
+      matchStrings: [
+        '\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s',
+      ],
+      datasourceTemplate: 'github-tags',
+      versioningTemplate: 'regex:^v(?<major>\\d+)$',
     },
-    // Minimum supported Rust toolchain version
     {
-      customType: "regex",
-      fileMatch: ["(^|/)Cargo\\.toml?$"],
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)Cargo\\.toml?$/',
+      ],
       matchStrings: [
         'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
-      depNameTemplate: "msrv",
-      lookupNameTemplate: "rust-lang/rust",
-      datasourceTemplate: "github-releases",
+      depNameTemplate: 'msrv',
+      packageNameTemplate: 'rust-lang/rust',
+      datasourceTemplate: 'github-releases',
     },
-    // Rust toolchain version
     {
-      fileMatch: ["(^|/)rust-toolchain\\.toml?$"],
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)rust-toolchain\\.toml?$/',
+      ],
       matchStrings: [
         'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
       ],
-      depNameTemplate: "rust",
-      lookupNameTemplate: "rust-lang/rust",
-      datasourceTemplate: "github-releases",
+      depNameTemplate: 'rust',
+      packageNameTemplate: 'rust-lang/rust',
+      datasourceTemplate: 'github-releases',
     },
   ],
   vulnerabilityAlerts: {
-    commitMessageSuffix: "",
-    labels: ["internal", "security"],
+    commitMessageSuffix: '',
+    labels: [
+      'internal',
+      'security',
+    ],
   },
 }
