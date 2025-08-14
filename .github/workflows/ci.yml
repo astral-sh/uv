@@ -1011,6 +1011,54 @@ jobs:
         run: |
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
+  integration-test-nushell:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | activate nushell venv"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install nushell
+        env:
+          # This token only needs read access to the GitHub repository nushell/nushell.
+          # This token is used (via gh-cli) to avoid hitting GitHub REST API rate limits.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |-
+          # get latest nushell tag name
+          nu_latest=$(gh release list --repo nushell/nushell --limit 1 --exclude-pre-releases --exclude-drafts --json "tagName" --jq '.[0].tagName')
+          # trim any trailing whitespace from output
+          nu_tag=${nu_latest%%[[:space:]]*}
+
+          # download binary for x86_64-unknown-linux-gnu target
+          gh release download ${nu_tag} --repo nushell/nushell --pattern "nu-${nu_tag}-x86_64-unknown-linux-gnu.tar.gz"
+
+          # extract nu binary from tar.gz
+          tar -xf "nu-${nu_tag}-x86_64-unknown-linux-gnu.tar.gz"
+          # make the binary executable
+          chmod +x "./nu-${nu_tag}-x86_64-unknown-linux-gnu/nu"
+          # add it to PATH
+          echo "${{ github.workspace }}/nu-${nu_tag}-x86_64-unknown-linux-gnu" >> "${GITHUB_PATH}"
+
+      - name: Download binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: Prepare binary
+        run: chmod +x ./uv
+
+      - name: Create venv
+        # The python version is arbitrary for this test.
+        # We only want to ensure the activation script behaves properly
+        run: ./uv venv
+
+      - name: Activate venv
+        shell: nu {0}
+        run: overlay use ${{ github.workspace }}/.venv/bin/activate.nu
+
   integration-test-conda:
     timeout-minutes: 10
     needs: build-binary-linux-libc
