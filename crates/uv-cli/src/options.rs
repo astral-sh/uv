@@ -1,7 +1,7 @@
 use anstream::eprintln;
 
 use uv_cache::Refresh;
-use uv_configuration::{ConfigSettings, PackageConfigSettings};
+use uv_distribution_types::{ConfigSettings, PackageConfigSettings};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;

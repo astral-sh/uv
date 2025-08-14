@@ -7,14 +7,12 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, ConfigSettings, PackageConfigSettings, SourceStrategy,
-};
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, SourceStrategy};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, DistributionId, ExtraBuildRequires, ExtraBuildVariables,
-    IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError, Requirement, Resolution,
-    SourceDist,
+    CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
+    ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
+    PackageConfigSettings, Requirement, Resolution, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_pep508::PackageName;

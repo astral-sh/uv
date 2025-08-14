@@ -13,16 +13,15 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
-    SourceStrategy, Upgrade,
+    BuildOptions, Concurrency, Constraints, ExportFormat, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
-    NameRequirementSpecification, Origin, Requirement, RequiresPython,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
+    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
     UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};

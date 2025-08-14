@@ -29,11 +29,11 @@ use uv_cache_key::cache_digest;
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildVariables, BuildableSource, DirectorySourceUrl, ExtraBuildRequirement, GitSourceUrl,
-    HashPolicy, Hashed, IndexUrl, PathSourceUrl, SourceDist, SourceUrl,
+    BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl, ExtraBuildRequirement,
+    GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};

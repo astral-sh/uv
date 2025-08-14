@@ -86,13 +86,13 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy,
-        PackageConfigSettings, Preview, SourceStrategy,
+        BuildOptions, Concurrency, Constraints, IndexStrategy, Preview, SourceStrategy,
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
-        DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables, IndexLocations, RequiresPython,
+        ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
+        IndexLocations, PackageConfigSettings, RequiresPython,
     };
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;

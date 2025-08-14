@@ -1,7 +1,6 @@
 pub use authentication::*;
 pub use build_options::*;
 pub use concurrency::*;
-pub use config_settings::*;
 pub use constraints::*;
 pub use dependency_groups::*;
 pub use dry_run::*;
@@ -26,7 +25,6 @@ pub use vcs::*;
 mod authentication;
 mod build_options;
 mod concurrency;
-mod config_settings;
 mod constraints;
 mod dependency_groups;
 mod dry_run;

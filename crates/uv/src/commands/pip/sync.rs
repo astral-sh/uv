@@ -8,15 +8,15 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
-    SourceStrategy, Upgrade,
+    BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification, HashCheckingMode,
+    IndexStrategy, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Origin, Resolution,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Origin,
+    PackageConfigSettings, Resolution,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
