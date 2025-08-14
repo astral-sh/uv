@@ -212,9 +212,21 @@ impl Display for MissingHeaderCause {
                         "--no-build-isolation".green(),
                     )
                 } else if let Some(version_id) = &self.version_id {
-                    let normalized_version_id = version_id
-                        .split_once(' ')
-                        .map_or(version_id.as_str(), |(first, _)| first);
+                    // https://peps.python.org/pep-0508/#names
+                    // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
+                    // Since we're only using this for a hint, we're more lenient than what we would be doing if this was used for parsing
+                    let end = version_id
+                        .char_indices()
+                        .take_while(|(_, char)| matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))
+                        .last()
+                        .map_or(0, |(i, c)| i + c.len_utf8());
+
+                    let normalized_version_id = if end == 0 {
+                        version_id
+                    } else {
+                        &version_id[..end]
+                    };
+
                     write!(
                         f,
                         "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
