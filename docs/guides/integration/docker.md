@@ -71,6 +71,22 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.10-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.9-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.8-bookworm-slim`
+- Based on `python3.x-trixie`:
+    - `ghcr.io/astral-sh/uv:python3.14-rc-trixie`
+    - `ghcr.io/astral-sh/uv:python3.13-trixie`
+    - `ghcr.io/astral-sh/uv:python3.12-trixie`
+    - `ghcr.io/astral-sh/uv:python3.11-trixie`
+    - `ghcr.io/astral-sh/uv:python3.10-trixie`
+    - `ghcr.io/astral-sh/uv:python3.9-trixie`
+    - `ghcr.io/astral-sh/uv:python3.8-trixie`
+- Based on `python3.x-slim-trixie`:
+    - `ghcr.io/astral-sh/uv:python3.14-rc-trixie-slim`
+    - `ghcr.io/astral-sh/uv:python3.13-trixie-slim`
+    - `ghcr.io/astral-sh/uv:python3.12-trixie-slim`
+    - `ghcr.io/astral-sh/uv:python3.11-trixie-slim`
+    - `ghcr.io/astral-sh/uv:python3.10-trixie-slim`
+    - `ghcr.io/astral-sh/uv:python3.9-trixie-slim`
+    - `ghcr.io/astral-sh/uv:python3.8-trixie-slim`
 <!-- prettier-ignore-end -->
 
 As with the distroless image, each derived image is published with uv version tags as
@@ -89,14 +105,14 @@ Use one of the above images with uv pre-installed or install uv by copying the b
 official distroless Docker image:
 
 ```dockerfile title="Dockerfile"
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-trixie
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 ```
 
 Or, with the installer:
 
 ```dockerfile title="Dockerfile"
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-trixie
 
 # The installer requires curl (and certificates) to download the release archive
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
