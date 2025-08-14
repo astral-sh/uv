@@ -4972,7 +4972,7 @@ fn no_build_isolation() -> Result<()> {
           hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
           [tool.uv.extra-build-dependencies]
-          "anyio" = ["setuptools"]
+          anyio = ["setuptools"]
 
           or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
     "#
@@ -5045,7 +5045,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
           hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
           [tool.uv.extra-build-dependencies]
-          "anyio" = ["setuptools"]
+          anyio = ["setuptools"]
 
           or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
     "#
@@ -8691,7 +8691,7 @@ fn install_build_isolation_package() -> Result<()> {
           hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
           [tool.uv.extra-build-dependencies]
-          "iniconfig" = ["hatchling"]
+          iniconfig = ["hatchling"]
 
           or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#

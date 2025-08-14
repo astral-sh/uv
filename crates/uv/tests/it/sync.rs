@@ -2407,7 +2407,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
           hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
           [tool.uv.extra-build-dependencies]
-          "child" = ["anyio"]
+          child = ["anyio"]
 
           or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
       help: `child` was included because `parent` (v0.1.0) depends on `child`
@@ -2475,7 +2475,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
           hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
           [tool.uv.extra-build-dependencies]
-          "child" = ["scikit-learn"]
+          child = ["scikit-learn"]
 
           or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
       help: `child` was included because `parent` (v0.1.0) depends on `child`

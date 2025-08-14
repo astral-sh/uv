@@ -131,6 +131,59 @@ pub struct MissingHeaderCause {
     version_id: Option<String>,
 }
 
+/// Extract the package name from a version specifier string.
+/// Uses PEP 508 naming rules but more lenient for hinting purposes.
+fn extract_package_name(version_id: &str) -> &str {
+    // https://peps.python.org/pep-0508/#names
+    // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
+    // Since we're only using this for a hint, we're more lenient than what we would be doing if this was used for parsing
+    let end = version_id
+        .char_indices()
+        .take_while(|(_, char)| matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))
+        .last()
+        .map_or(0, |(i, c)| i + c.len_utf8());
+
+    if end == 0 {
+        version_id
+    } else {
+        &version_id[..end]
+    }
+}
+
+/// Write a hint about missing build dependencies.
+fn hint_build_dependency(
+    f: &mut std::fmt::Formatter<'_>,
+    display_name: &str,
+    package_name: &str,
+    package: &str,
+) -> std::fmt::Result {
+    let table_key = if package_name.contains('.') {
+        format!("\"{package_name}\"")
+    } else {
+        package_name.to_string()
+    };
+    write!(
+        f,
+        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
+        If `{}` is a first-party package, consider adding `{}` to its `{}`. \
+        Otherwise, either add it to your `pyproject.toml` under:\n\
+        \n\
+            [tool.uv.extra-build-dependencies]\n\
+            {} = [\"{}\"]\n\
+        \n\
+        or `{}` into the environment and re-run with `{}`.",
+        display_name.cyan(),
+        package.cyan(),
+        package_name.cyan(),
+        package.cyan(),
+        "build-system.requires".green(),
+        table_key.cyan(),
+        package.cyan(),
+        format!("uv pip install {package}").green(),
+        "--no-build-isolation".green(),
+    )
+}
+
 impl Display for MissingHeaderCause {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.missing_library {
@@ -191,62 +244,15 @@ impl Display for MissingHeaderCause {
                 if let (Some(package_name), Some(package_version)) =
                     (&self.package_name, &self.package_version)
                 {
-                    write!(
+                    hint_build_dependency(
                         f,
-                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
-                        If `{}` is a first-party package, consider adding `{}` to its `{}`. \
-                        Otherwise, either add it to your `pyproject.toml` under:\n\
-                        \n\
-                            [tool.uv.extra-build-dependencies]\n\
-                            \"{}\" = [\"{}\"]\n\
-                        \n\
-                        or `{}` into the environment and re-run with `{}`.",
-                        format!("{package_name}@{package_version}").cyan(),
-                        package.cyan(),
-                        package_name.cyan(),
-                        package.cyan(),
-                        "build-system.requires".green(),
-                        package_name.cyan(),
-                        package.cyan(),
-                        format!("uv pip install {package}").green(),
-                        "--no-build-isolation".green(),
+                        &format!("{package_name}@{package_version}"),
+                        package_name.as_str(),
+                        package,
                     )
                 } else if let Some(version_id) = &self.version_id {
-                    // https://peps.python.org/pep-0508/#names
-                    // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
-                    // Since we're only using this for a hint, we're more lenient than what we would be doing if this was used for parsing
-                    let end = version_id
-                        .char_indices()
-                        .take_while(|(_, char)| matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))
-                        .last()
-                        .map_or(0, |(i, c)| i + c.len_utf8());
-
-                    let normalized_version_id = if end == 0 {
-                        version_id
-                    } else {
-                        &version_id[..end]
-                    };
-
-                    write!(
-                        f,
-                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
-                        If `{}` is a first-party package, consider adding `{}` to its `{}`. \
-                        Otherwise, either add it to your `pyproject.toml` under:\n\
-                        \n\
-                            [tool.uv.extra-build-dependencies]\n\
-                            \"{}\" = [\"{}\"]\n\
-                        \n\
-                        or `{}` into the environment and re-run with `{}`.",
-                        normalized_version_id.cyan(),
-                        package.cyan(),
-                        normalized_version_id.cyan(),
-                        package.cyan(),
-                        "build-system.requires".green(),
-                        normalized_version_id.cyan(),
-                        package.cyan(),
-                        format!("uv pip install {package}").green(),
-                        "--no-build-isolation".green(),
-                    )
+                    let package_name = extract_package_name(version_id);
+                    hint_build_dependency(f, package_name, package_name, package)
                 } else {
                     write!(
                         f,
