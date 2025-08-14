@@ -34,7 +34,8 @@ use uv_configuration::Preview;
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildRequires, IndexLocations, Requirement, Resolution,
+    ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
+    Resolution,
 };
 use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
@@ -326,13 +327,28 @@ impl SourceBuild {
             .or(fallback_package_version)
             .cloned();
 
-        let extra_build_dependencies: Vec<Requirement> = package_name
+        let extra_build_dependencies = package_name
             .as_ref()
             .and_then(|name| extra_build_requires.get(name).cloned())
             .unwrap_or_default()
             .into_iter()
-            .map(Requirement::from)
-            .collect();
+            .map(|requirement| {
+                match requirement {
+                    ExtraBuildRequirement {
+                        requirement,
+                        match_runtime: true,
+                    } if requirement.source.is_empty() => {
+                        Err(Error::UnmatchedRuntime(
+                            requirement.name.clone(),
+                            // SAFETY: if `package_name` is `None`, the iterator is empty.
+                            package_name.clone().unwrap(),
+                        ))
+                    }
+                    requirement => Ok(requirement),
+                }
+            })
+            .map_ok(Requirement::from)
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
