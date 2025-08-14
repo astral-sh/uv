@@ -10,10 +10,11 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
+use uv_pypi_types::HashDigests;
 use uv_types::HashStrategy;
 
 use crate::Error;
-use crate::index::cached_wheel::CachedWheel;
+use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
 /// A local index of built distributions for a specific source distribution.
@@ -92,7 +93,9 @@ impl<'a> BuiltWheelIndex<'a> {
             )))
         };
 
-        Ok(self.find(&cache_shard))
+        Ok(self.find(&cache_shard).map(|wheel| {
+            CachedWheel::from_entry(wheel, revision.into_hashes(), CacheInfo::default())
+        }))
     }
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
     pub fn path(&self, source_dist: &PathSourceDist) -> Result<Option<CachedWheel>, Error> {
@@ -141,7 +144,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         Ok(self
             .find(&cache_shard)
-            .map(|wheel| wheel.with_cache_info(cache_info)))
+            .map(|wheel| CachedWheel::from_entry(wheel, revision.into_hashes(), cache_info)))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution built from a
@@ -199,7 +202,7 @@ impl<'a> BuiltWheelIndex<'a> {
 
         Ok(self
             .find(&cache_shard)
-            .map(|wheel| wheel.with_cache_info(cache_info)))
+            .map(|wheel| CachedWheel::from_entry(wheel, revision.into_hashes(), cache_info)))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
@@ -234,6 +237,7 @@ impl<'a> BuiltWheelIndex<'a> {
         };
 
         self.find(&cache_shard)
+            .map(|wheel| CachedWheel::from_entry(wheel, HashDigests::empty(), CacheInfo::default()))
     }
 
     /// Find the "best" distribution in the index for a given source distribution.
@@ -252,8 +256,8 @@ impl<'a> BuiltWheelIndex<'a> {
     /// ```
     ///
     /// The `shard` should be `built-wheels-v0/pypi/django-allauth-0.51.0.tar.gz`.
-    fn find(&self, shard: &CacheShard) -> Option<CachedWheel> {
-        let mut candidate: Option<CachedWheel> = None;
+    fn find(&self, shard: &CacheShard) -> Option<ResolvedWheel> {
+        let mut candidate: Option<ResolvedWheel> = None;
 
         // Unzipped wheels are stored as symlinks into the archive directory.
         for wheel_dir in uv_fs::entries(shard).ok().into_iter().flatten() {
@@ -265,7 +269,7 @@ impl<'a> BuiltWheelIndex<'a> {
                 continue;
             }
 
-            match CachedWheel::from_built_source(&wheel_dir, self.cache) {
+            match ResolvedWheel::from_built_source(&wheel_dir, self.cache) {
                 None => {}
                 Some(dist_info) => {
                     // Pick the wheel with the highest priority

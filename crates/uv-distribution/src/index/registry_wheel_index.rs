@@ -4,6 +4,7 @@ use std::collections::hash_map::Entry;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_cache_info::CacheInfo;
 use uv_cache_key::cache_digest;
 use uv_distribution_types::{
     BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
@@ -14,7 +15,7 @@ use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
-use crate::index::cached_wheel::CachedWheel;
+use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
 /// An entry in the [`RegistryWheelIndex`].
@@ -247,13 +248,18 @@ impl<'a> RegistryWheelIndex<'a> {
                             continue;
                         }
 
-                        if let Some(wheel) = CachedWheel::from_built_source(wheel_dir, cache) {
+                        if let Some(wheel) = ResolvedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
                                 if revision.satisfies(
                                     hasher
                                         .get_package(&wheel.filename.name, &wheel.filename.version),
                                 ) {
+                                    let wheel = CachedWheel::from_entry(
+                                        wheel,
+                                        revision.hashes().into(),
+                                        CacheInfo::default(),
+                                    );
                                     entries.push(IndexEntry {
                                         dist: wheel.into_registry_dist(),
                                         index,
