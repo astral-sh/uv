@@ -2870,6 +2870,35 @@ impl ForkState {
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
     ) {
+        for dependency in &dependencies {
+            let PubGrubDependency {
+                package,
+                version,
+                parent: _,
+                url: _,
+            } = dependency;
+
+            let base_package = match &**package {
+                PubGrubPackageInner::Root(_)
+                | PubGrubPackageInner::Python(_)
+                | PubGrubPackageInner::System(_)
+                | PubGrubPackageInner::Package { .. } => continue,
+                PubGrubPackageInner::Extra { .. } | PubGrubPackageInner::Dev { .. } => {
+                    // TODO(konsti): This incompatibility should still work when using
+                    // tool.uv.conflicts, why does it give false positives?
+                    continue;
+                }
+                PubGrubPackageInner::Marker { name, .. } => {
+                    PubGrubPackage::from_package(name.clone(), None, None, MarkerTree::TRUE)
+                }
+            };
+
+            let proxy_package = self.pubgrub.package_store.alloc(package.clone());
+            let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
+            self.pubgrub
+                .add_proxy_package(proxy_package, base_package_id, version.clone());
+        }
+
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),
