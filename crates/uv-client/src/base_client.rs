@@ -85,6 +85,8 @@ pub struct BaseClientBuilder<'a> {
     ///
     /// A policy allowing propagation is insecure and should only be available for test code.
     cross_origin_credential_policy: CrossOriginCredentialsPolicy,
+    /// Optional custom reqwest client to use instead of creating a new one.
+    custom_client: Option<Client>,
 }
 
 /// The policy for handling HTTP redirects.
@@ -143,11 +145,22 @@ impl BaseClientBuilder<'_> {
             proxies: vec![],
             redirect_policy: RedirectPolicy::default(),
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
+            custom_client: None,
         }
     }
 }
 
 impl<'a> BaseClientBuilder<'a> {
+    /// Use a custom reqwest client instead of creating a new one.
+    ///
+    /// This allows you to provide your own reqwest client with custom configuration.
+    /// Note that some configuration options from this builder will still be applied
+    /// to the client via middleware.
+    #[must_use]
+    pub fn with_custom_client(mut self, client: Client) -> Self {
+        self.custom_client = Some(client);
+        self
+    }
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.keyring = keyring_type;
@@ -267,29 +280,6 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     pub fn build(&self) -> BaseClient {
-        // Create user agent.
-        let mut user_agent_string = format!("uv/{}", version());
-
-        // Add linehaul metadata.
-        if let Some(markers) = self.markers {
-            let linehaul = LineHaul::new(markers, self.platform);
-            if let Ok(output) = serde_json::to_string(&linehaul) {
-                let _ = write!(user_agent_string, " {output}");
-            }
-        }
-
-        // Check for the presence of an `SSL_CERT_FILE`.
-        let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-            let path_exists = Path::new(&path).exists();
-            if !path_exists {
-                warn_user_once!(
-                    "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                    path.simplified_display().cyan()
-                );
-            }
-            path_exists
-        });
-
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
         let timeout = env::var(EnvVars::UV_HTTP_TIMEOUT)
@@ -307,23 +297,55 @@ impl<'a> BaseClientBuilder<'a> {
             .unwrap_or(self.default_timeout);
         debug!("Using request timeout of {}s", timeout.as_secs());
 
-        // Create a secure client that validates certificates.
-        let raw_client = self.create_client(
-            &user_agent_string,
-            timeout,
-            ssl_cert_file_exists,
-            Security::Secure,
-            self.redirect_policy,
-        );
+        // Use the custom client if provided, otherwise create a new one
+        let (raw_client, raw_dangerous_client) = if let Some(client) = &self.custom_client {
+            debug!("Using custom reqwest client");
+            // Use the provided client for both secure and insecure clients
+            (client.clone(), client.clone())
+        } else {
+            // Create user agent.
+            let mut user_agent_string = format!("uv/{}", version());
 
-        // Create an insecure client that accepts invalid certificates.
-        let raw_dangerous_client = self.create_client(
-            &user_agent_string,
-            timeout,
-            ssl_cert_file_exists,
-            Security::Insecure,
-            self.redirect_policy,
-        );
+            // Add linehaul metadata.
+            if let Some(markers) = self.markers {
+                let linehaul = LineHaul::new(markers, self.platform);
+                if let Ok(output) = serde_json::to_string(&linehaul) {
+                    let _ = write!(user_agent_string, " {output}");
+                }
+            }
+
+            // Check for the presence of an `SSL_CERT_FILE`.
+            let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
+                let path_exists = Path::new(&path).exists();
+                if !path_exists {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                        path.simplified_display().cyan()
+                    );
+                }
+                path_exists
+            });
+
+            // Create a secure client that validates certificates.
+            let raw_client = self.create_client(
+                &user_agent_string,
+                timeout,
+                ssl_cert_file_exists,
+                Security::Secure,
+                self.redirect_policy,
+            );
+
+            // Create an insecure client that accepts invalid certificates.
+            let raw_dangerous_client = self.create_client(
+                &user_agent_string,
+                timeout,
+                ssl_cert_file_exists,
+                Security::Insecure,
+                self.redirect_policy,
+            );
+
+            (raw_client, raw_dangerous_client)
+        };
 
         // Wrap in any relevant middleware and handle connectivity.
         let client = RedirectClientWithMiddleware {
