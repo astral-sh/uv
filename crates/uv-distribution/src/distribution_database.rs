@@ -140,7 +140,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
 
         let metadata = dist
-            .metadata()
+            .read_metadata()
             .map_err(|err| Error::ReadInstalled(Box::new(dist.clone()), err))?;
 
         Ok(ArchiveMetadata::from_metadata23(metadata))

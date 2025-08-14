@@ -222,7 +222,7 @@ impl SitePackages {
                 };
 
                 // Determine the dependencies for the given package.
-                let Ok(metadata) = distribution.metadata() else {
+                let Ok(metadata) = distribution.read_metadata() else {
                     diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
                         package: package.clone(),
                         path: distribution.install_path().to_owned(),
@@ -471,7 +471,7 @@ impl SitePackages {
 
                     // Recurse into the dependencies.
                     let metadata = distribution
-                        .metadata()
+                        .read_metadata()
                         .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
 
                     // Add the dependencies to the queue.

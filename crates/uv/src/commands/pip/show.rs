@@ -98,7 +98,7 @@ pub(crate) fn pip_show(
     let mut requires_map = FxHashMap::default();
     // For Requires field
     for dist in &distributions {
-        if let Ok(metadata) = dist.metadata() {
+        if let Ok(metadata) = dist.read_metadata() {
             requires_map.insert(
                 dist.name(),
                 Box::into_iter(metadata.requires_dist)
@@ -116,7 +116,7 @@ pub(crate) fn pip_show(
             if requires_map.contains_key(installed.name()) {
                 continue;
             }
-            if let Ok(metadata) = installed.metadata() {
+            if let Ok(metadata) = installed.read_metadata() {
                 let requires = Box::into_iter(metadata.requires_dist)
                     .filter(|req| req.evaluate_markers(&markers, &[]))
                     .map(|req| req.name)

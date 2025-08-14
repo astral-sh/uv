@@ -74,7 +74,7 @@ pub(crate) async fn pip_tree(
             packages
                 .entry(package.name())
                 .or_default()
-                .push(package.metadata()?);
+                .push(package.read_metadata()?);
         }
         packages
     };
