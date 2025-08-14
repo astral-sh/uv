@@ -4954,7 +4954,7 @@ fn no_build_isolation() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .arg("--no-build-isolation"), @r###"
+        .arg("--no-build-isolation"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4969,8 +4969,13 @@ fn no_build_isolation() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          anyio = ["setuptools"]
+
+          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `setuptools` and `wheel`.
@@ -5022,7 +5027,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
+        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5037,8 +5042,13 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          anyio = ["setuptools"]
+
+          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `setuptools` and `wheel`.
@@ -8663,7 +8673,7 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8678,8 +8688,13 @@ fn install_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          iniconfig = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `hatchinling`, `hatch-vs` for iniconfig

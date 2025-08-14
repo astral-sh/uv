@@ -1410,7 +1410,12 @@ fn sync_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          source-distribution = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
       help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
     "#);
 
@@ -1500,7 +1505,12 @@ fn sync_build_isolation_extra() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          source-distribution = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "#);
 
@@ -1521,7 +1531,12 @@ fn sync_build_isolation_extra() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          source-distribution = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "#);
 
@@ -2323,6 +2338,176 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
           hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `project` (v0.1.0) depends on `child`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_build_dependencies_module_error_hints() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r"
+        import sys
+
+        from hatchling.build import *
+        import anyio
+    "})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+            File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
+              import anyio
+          ModuleNotFoundError: No module named 'anyio'
+
+          hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          child = ["anyio"]
+
+          or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    "#);
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Assert pipreqs module name to package name lookup works.
+    build_backend.write_str(indoc! {r"
+        import sys
+
+        from hatchling.build import *
+        import anyio
+        import sklearn
+    "})?;
+
+    context.venv().arg("--clear").assert().success();
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+            File "[TEMP_DIR]/child/build_backend.py", line 5, in <module>
+              import sklearn
+          ModuleNotFoundError: No module named 'sklearn'
+
+          hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          child = ["scikit-learn"]
+
+          or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    "#);
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio", "scikit-learn"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
     Ok(())
