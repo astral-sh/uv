@@ -161,6 +161,7 @@ impl<'a> BaseClientBuilder<'a> {
         self.custom_client = Some(client);
         self
     }
+
     #[must_use]
     pub fn keyring(mut self, keyring_type: KeyringProviderType) -> Self {
         self.keyring = keyring_type;
@@ -298,53 +299,9 @@ impl<'a> BaseClientBuilder<'a> {
         debug!("Using request timeout of {}s", timeout.as_secs());
 
         // Use the custom client if provided, otherwise create a new one
-        let (raw_client, raw_dangerous_client) = if let Some(client) = &self.custom_client {
-            debug!("Using custom reqwest client");
-            // Use the provided client for both secure and insecure clients
-            (client.clone(), client.clone())
-        } else {
-            // Create user agent.
-            let mut user_agent_string = format!("uv/{}", version());
-
-            // Add linehaul metadata.
-            if let Some(markers) = self.markers {
-                let linehaul = LineHaul::new(markers, self.platform);
-                if let Ok(output) = serde_json::to_string(&linehaul) {
-                    let _ = write!(user_agent_string, " {output}");
-                }
-            }
-
-            // Check for the presence of an `SSL_CERT_FILE`.
-            let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-                let path_exists = Path::new(&path).exists();
-                if !path_exists {
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                        path.simplified_display().cyan()
-                    );
-                }
-                path_exists
-            });
-
-            // Create a secure client that validates certificates.
-            let raw_client = self.create_client(
-                &user_agent_string,
-                timeout,
-                ssl_cert_file_exists,
-                Security::Secure,
-                self.redirect_policy,
-            );
-
-            // Create an insecure client that accepts invalid certificates.
-            let raw_dangerous_client = self.create_client(
-                &user_agent_string,
-                timeout,
-                ssl_cert_file_exists,
-                Security::Insecure,
-                self.redirect_policy,
-            );
-
-            (raw_client, raw_dangerous_client)
+        let (raw_client, raw_dangerous_client) = match &self.custom_client {
+            Some(client) => (client.clone(), client.clone()),
+            None => self.create_secure_and_insecure_clients(timeout),
         };
 
         // Wrap in any relevant middleware and handle connectivity.
@@ -395,6 +352,51 @@ impl<'a> BaseClientBuilder<'a> {
             raw_dangerous_client: existing.raw_dangerous_client.clone(),
             timeout: existing.timeout,
         }
+    }
+
+    fn create_secure_and_insecure_clients(&self, timeout: Duration) -> (Client, Client) {
+        // Create user agent.
+        let mut user_agent_string = format!("uv/{}", version());
+
+        // Add linehaul metadata.
+        if let Some(markers) = self.markers {
+            let linehaul = LineHaul::new(markers, self.platform);
+            if let Ok(output) = serde_json::to_string(&linehaul) {
+                let _ = write!(user_agent_string, " {output}");
+            }
+        }
+
+        // Check for the presence of an `SSL_CERT_FILE`.
+        let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
+            let path_exists = Path::new(&path).exists();
+            if !path_exists {
+                warn_user_once!(
+                    "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                    path.simplified_display().cyan()
+                );
+            }
+            path_exists
+        });
+
+        // Create a secure client that validates certificates.
+        let raw_client = self.create_client(
+            &user_agent_string,
+            timeout,
+            ssl_cert_file_exists,
+            Security::Secure,
+            self.redirect_policy,
+        );
+
+        // Create an insecure client that accepts invalid certificates.
+        let raw_dangerous_client = self.create_client(
+            &user_agent_string,
+            timeout,
+            ssl_cert_file_exists,
+            Security::Insecure,
+            self.redirect_policy,
+        );
+
+        (raw_client, raw_dangerous_client)
     }
 
     fn create_client(
