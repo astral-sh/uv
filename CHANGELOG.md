@@ -3,6 +3,28 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.11
+
+### Python
+
+- Add Python 3.14.0rc2
+- Update Pyodide to 0.28.1
+
+### Enhancements
+
+- Add Debian 13 trixie to published Docker images ([#15269](https://github.com/astral-sh/uv/pull/15269))
+- Add `extra-build-dependencies` hint for any missing module on build failure ([#15252](https://github.com/astral-sh/uv/pull/15252))
+- Make 'v' prefix cyan in overlap warnings ([#15259](https://github.com/astral-sh/uv/pull/15259))
+
+### Bug fixes
+
+- Fix missing uv version in extended Docker image tags ([#15263](https://github.com/astral-sh/uv/pull/15263))
+- Persist cache info when re-installing cached wheels ([#15274](https://github.com/astral-sh/uv/pull/15274))
+
+### Rust API
+
+- Allow passing custom `reqwest` clients to `RegistryClient` ([#15281](https://github.com/astral-sh/uv/pull/15281))
+
 ## 0.8.10
 
 ### Python
