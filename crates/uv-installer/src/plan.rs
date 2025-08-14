@@ -436,7 +436,8 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     match built_index.directory(sdist) {
                         Ok(Some(wheel)) => {
-                            if wheel.filename.name == sdist.name {
+                            if false {
+                                // wheel.filename.name == sdist.name {
                                 let cached_dist = wheel.into_directory_dist(sdist);
                                 debug!(
                                     "Directory source requirement already cached: {cached_dist}"
