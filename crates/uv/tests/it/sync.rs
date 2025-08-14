@@ -2363,12 +2363,12 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
         build-backend = "build_backend"
     "#})?;
     let build_backend = child.child("build_backend.py");
-    build_backend.write_str(indoc! {r#"
+    build_backend.write_str(indoc! {r"
         import sys
 
         from hatchling.build import *
         import anyio
-    "#})?;
+    "})?;
     child.child("src/child/__init__.py").touch()?;
 
     let parent = &context.temp_dir;
@@ -2443,13 +2443,13 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     ");
 
     // Assert pipreqs module name to package name lookup works.
-    build_backend.write_str(indoc! {r#"
+    build_backend.write_str(indoc! {r"
         import sys
 
         from hatchling.build import *
         import anyio
         import sklearn
-    "#})?;
+    "})?;
 
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
