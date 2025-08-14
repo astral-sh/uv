@@ -144,6 +144,7 @@ pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: &'static str,
     sha256: Option<&'static str>,
+    build: &'static str,
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
@@ -753,6 +754,7 @@ struct JsonPythonDownload {
     url: String,
     sha256: Option<String>,
     variant: Option<String>,
+    build: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -767,7 +769,25 @@ pub enum DownloadResult {
     Fetched(PathBuf),
 }
 
+/// A wrapper type to display a `ManagedPythonDownload` with its build information.
+pub struct ManagedPythonDownloadWithBuild<'a>(&'a ManagedPythonDownload);
+
+impl Display for ManagedPythonDownloadWithBuild<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.build.is_empty() {
+            write!(f, "{}", self.0.key)
+        } else {
+            write!(f, "{}+{}", self.0.key, self.0.build)
+        }
+    }
+}
+
 impl ManagedPythonDownload {
+    /// Return a display type that includes the build information.
+    pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
+        ManagedPythonDownloadWithBuild(self)
+    }
+
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
     ///
     /// If there is no stable version matching the request, a compatible pre-release version will
@@ -850,6 +870,10 @@ impl ManagedPythonDownload {
 
     pub fn sha256(&self) -> Option<&'static str> {
         self.sha256
+    }
+
+    pub fn build(&self) -> &'static str {
+        self.build
     }
 
     /// Download and extract a Python distribution, retrying on failure.
@@ -1341,6 +1365,7 @@ fn parse_json_downloads(
             let sha256 = entry
                 .sha256
                 .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
+            let build = Box::leak(entry.build.into_boxed_str()) as &'static str;
 
             Some(ManagedPythonDownload {
                 key: PythonInstallationKey::new_from_version(
@@ -1351,6 +1376,7 @@ fn parse_json_downloads(
                 ),
                 url,
                 sha256,
+                build,
             })
         })
         .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
