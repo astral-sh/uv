@@ -136,9 +136,9 @@ impl InstalledDist {
 
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version)?;
-            let cache_info = Self::cache_info(path)?;
+            let cache_info = Self::read_cache_info(path)?;
 
-            return if let Some(direct_url) = Self::direct_url(path)? {
+            return if let Some(direct_url) = Self::read_direct_url(path)? {
                 match Url::try_from(&direct_url) {
                     Ok(url) => Ok(Some(Self::Url(InstalledDirectUrlDist {
                         name,
@@ -304,7 +304,7 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    pub fn direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
+    pub fn read_direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
         let path = path.join("direct_url.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -317,7 +317,7 @@ impl InstalledDist {
     }
 
     /// Read the `uv_cache.json` file from a `.dist-info` directory.
-    pub fn cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
+    pub fn read_cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
         let path = path.join("uv_cache.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -330,7 +330,7 @@ impl InstalledDist {
     }
 
     /// Read the `METADATA` file from a `.dist-info` directory.
-    pub fn metadata(&self) -> Result<uv_pypi_types::ResolutionMetadata, InstalledDistError> {
+    pub fn read_metadata(&self) -> Result<uv_pypi_types::ResolutionMetadata, InstalledDistError> {
         match self {
             Self::Registry(_) | Self::Url(_) => {
                 let path = self.install_path().join("METADATA");
@@ -362,7 +362,7 @@ impl InstalledDist {
     }
 
     /// Return the `INSTALLER` of the distribution.
-    pub fn installer(&self) -> Result<Option<String>, InstalledDistError> {
+    pub fn read_installer(&self) -> Result<Option<String>, InstalledDistError> {
         let path = self.install_path().join("INSTALLER");
         match fs::read_to_string(path) {
             Ok(installer) => Ok(Some(installer.trim().to_owned())),
