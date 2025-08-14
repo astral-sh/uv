@@ -21,14 +21,14 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
-    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, ProjectBuildBackend,
-    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
-    Upgrade, VersionControlSystem,
+    BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, ExportFormat,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
+    NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
-    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl, Requirement,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
+    PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{PackageName, PipGroupName};

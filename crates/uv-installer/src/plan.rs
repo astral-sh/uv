@@ -6,15 +6,15 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
-use uv_configuration::{BuildOptions, ConfigSettings, PackageConfigSettings, Reinstall};
+use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, RequirementSource,
-    Resolution, ResolvedDist, SourceDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
+    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
+    RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};

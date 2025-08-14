@@ -5,10 +5,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_key::cache_digest;
-use uv_configuration::{ConfigSettings, PackageConfigSettings};
 use uv_distribution_types::{
-    BuildVariables, CachedRegistryDist, ExtraBuildRequirement, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
+    BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
+    ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl, PackageConfigSettings,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;

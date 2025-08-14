@@ -4,11 +4,12 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, PackageConfigSettings,
-    RequiredVersion, TargetTriple, TrustedPublishing,
+    ExportFormat, IndexStrategy, KeyringProviderType, RequiredVersion, TargetTriple,
+    TrustedPublishing,
 };
 use uv_distribution_types::{
-    ExtraBuildVariables, Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
+    PipFindLinks, PipIndex,
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};

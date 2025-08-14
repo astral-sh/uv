@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageConfigSettings,
-    PackageNameSpecifier, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing,
+    IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion, TargetTriple,
+    TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
-    ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex,
-    StaticMetadata,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
+    PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -24,7 +24,8 @@ use uv_resolver::{
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
-use uv_workspace::{pyproject::ExtraBuildDependencies, pyproject_mut::AddBoundsKind};
+use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]

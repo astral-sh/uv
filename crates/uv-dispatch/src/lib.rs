@@ -17,16 +17,15 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PackageConfigSettings,
-    Preview, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, Constraints, IndexStrategy, Preview, Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables, Identifier,
-    IndexCapabilities, IndexLocations, IsBuildBackendError, Name, Requirement, Resolution,
-    SourceDist, VersionOrUrlRef,
+    CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
+    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};

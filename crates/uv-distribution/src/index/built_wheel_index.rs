@@ -3,10 +3,10 @@ use std::borrow::Cow;
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::cache_digest;
-use uv_configuration::{ConfigSettings, PackageConfigSettings};
 use uv_distribution_types::{
-    BuildVariables, DirectUrlSourceDist, DirectorySourceDist, ExtraBuildRequirement,
-    ExtraBuildRequires, ExtraBuildVariables, GitSourceDist, Hashed, PathSourceDist,
+    BuildVariables, ConfigSettings, DirectUrlSourceDist, DirectorySourceDist,
+    ExtraBuildRequirement, ExtraBuildRequires, ExtraBuildVariables, GitSourceDist, Hashed,
+    PackageConfigSettings, PathSourceDist,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;

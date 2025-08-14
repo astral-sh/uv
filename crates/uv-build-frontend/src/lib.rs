@@ -30,9 +30,11 @@ use tracing::{Instrument, debug, info_span, instrument, warn};
 
 use uv_cache_key::cache_digest;
 use uv_configuration::Preview;
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution::BuildRequires;
-use uv_distribution_types::{ExtraBuildRequires, IndexLocations, Requirement, Resolution};
+use uv_distribution_types::{
+    ConfigSettings, ExtraBuildRequires, IndexLocations, Requirement, Resolution,
+};
 use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
