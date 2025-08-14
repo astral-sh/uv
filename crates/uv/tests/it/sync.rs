@@ -1413,7 +1413,7 @@ fn sync_build_isolation_package() -> Result<()> {
           hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
           [tool.uv.extra-build-dependencies]
-          "source-distribution" = ["hatchling"]
+          source-distribution = ["hatchling"]
 
           or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
       help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
@@ -1508,7 +1508,7 @@ fn sync_build_isolation_extra() -> Result<()> {
           hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
           [tool.uv.extra-build-dependencies]
-          "source-distribution" = ["hatchling"]
+          source-distribution = ["hatchling"]
 
           or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
@@ -1534,7 +1534,7 @@ fn sync_build_isolation_extra() -> Result<()> {
           hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
           [tool.uv.extra-build-dependencies]
-          "source-distribution" = ["hatchling"]
+          source-distribution = ["hatchling"]
 
           or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
