@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -248,6 +248,53 @@ impl ArchRequest {
     }
 }
 
+/// Get the environment variable name for the build constraint for a given implementation.
+pub fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
+    match implementation {
+        ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
+        ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
+        ImplementationName::GraalPy => EnvVars::UV_PYTHON_GRAALPY_BUILD,
+        ImplementationName::Pyodide => EnvVars::UV_PYTHON_PYODIDE_BUILD,
+    }
+}
+
+/// Get the build version number from the environment variable for a given implementation.
+pub fn python_build_version_from_env(
+    implementation: ImplementationName,
+) -> Result<Option<String>, Error> {
+    let variable = python_build_version_variable(implementation);
+
+    let Some(build_os) = env::var_os(variable) else {
+        return Ok(None);
+    };
+
+    let build = build_os
+        .into_string()
+        .map_err(|_| Error::InvalidBuildTarget {
+            variable,
+            err: anyhow!("not valid UTF-8"),
+        })?;
+
+    let trimmed = build.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(trimmed.to_string()))
+}
+
+/// Get the build version numbers for all Python implementations.
+pub fn python_build_versions_from_env() -> Result<BTreeMap<ImplementationName, String>, Error> {
+    let mut versions = BTreeMap::new();
+    for implementation in ImplementationName::iter_all() {
+        let Some(build) = python_build_version_from_env(implementation)? else {
+            continue;
+        };
+        versions.insert(implementation, build);
+    }
+    Ok(versions)
+}
+
 impl PythonDownloadRequest {
     pub fn new(
         version: Option<VersionRequest>,
@@ -376,23 +423,11 @@ impl PythonDownloadRequest {
         if self.build.is_some() {
             return Ok(self);
         }
-
-        let variable = match self.implementation.unwrap_or_default() {
-            ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
-            ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
-            ImplementationName::GraalPy => EnvVars::UV_PYTHON_GRAALPY_BUILD,
-            ImplementationName::Pyodide => EnvVars::UV_PYTHON_PYODIDE_BUILD,
-        };
-
-        let Some(build) = env::var_os(variable) else {
+        let Some(implementation) = self.implementation else {
             return Ok(self);
         };
 
-        self.build = Some(build.into_string().map_err(|_| Error::InvalidBuildTarget {
-            variable,
-            err: anyhow!("not valid UTF-8"),
-        })?);
-
+        self.build = python_build_version_from_env(implementation)?;
         Ok(self)
     }
 

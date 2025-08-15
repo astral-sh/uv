@@ -469,6 +469,11 @@ impl ManagedPythonInstallation {
         self.key.platform()
     }
 
+    /// The build version of this installation, if available.
+    pub fn build(&self) -> Option<&str> {
+        self.build.map(|s| s as &str)
+    }
+
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
         PythonInstallationMinorVersionKey::ref_cast(&self.key)
     }

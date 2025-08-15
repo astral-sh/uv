@@ -21,7 +21,7 @@ use uv_pep440::{
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-use crate::downloads::{PlatformRequest, PythonDownloadRequest};
+use crate::downloads::{PlatformRequest, PythonDownloadRequest, python_build_versions_from_env};
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
@@ -248,6 +248,10 @@ pub enum Error {
     #[error(transparent)]
     VirtualEnv(#[from] crate::virtualenv::Error),
 
+    /// An error was encountered with Python download configuration.
+    #[error(transparent)]
+    Download(#[from] crate::downloads::Error),
+
     #[cfg(windows)]
     #[error("Failed to query installed Python versions from the Windows registry")]
     RegistryError(#[from] windows_result::Error),
@@ -342,6 +346,9 @@ fn python_executables_from_installed<'a>(
                     installed_installations.root().user_display()
                 );
                 let installations = installed_installations.find_matching_current_platform()?;
+
+                let build_versions = python_build_versions_from_env()?;
+
                 // Check that the Python version and platform satisfy the request to avoid
                 // unnecessary interpreter queries later
                 Ok(installations
@@ -355,6 +362,22 @@ fn python_executables_from_installed<'a>(
                             debug!("Skipping managed installation `{installation}`: does not satisfy requested platform `{platform}`");
                             return false;
                         }
+
+                        if let Some(requested_build) = build_versions.get(&installation.implementation()) {
+                            let Some(installation_build) = installation.build() else {
+                                debug!(
+                                    "Skipping managed installation `{installation}`: a build version was requested but is not recorded for this installation"
+                                );
+                                return false;
+                            };
+                            if installation_build != requested_build {
+                                debug!(
+                                    "Skipping managed installation `{installation}`: requested build version `{requested_build}` does not match installation build version `{installation_build}`"
+                                );
+                                return false;
+                            }
+                        }
+
                         true
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
@@ -1218,6 +1241,14 @@ pub fn find_python_installations<'a>(
                     return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
                 }
             }
+
+            // Check if we need to fill build from environment
+            // We'll clone the request and fill it, then use it in the closure
+            let filled_request = match request.clone().fill_build_from_env() {
+                Ok(req) => req,
+                Err(err) => return Box::new(iter::once(Err(Error::from(err)))),
+            };
+
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(
@@ -1229,7 +1260,9 @@ pub fn find_python_installations<'a>(
                     cache,
                     preview,
                 )
-                .filter_ok(|(_source, interpreter)| request.satisfied_by_interpreter(interpreter))
+                .filter_ok(move |(_source, interpreter)| {
+                    filled_request.satisfied_by_interpreter(interpreter)
+                })
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
