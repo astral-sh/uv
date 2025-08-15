@@ -10,13 +10,14 @@ use thiserror::Error;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures,
-    SourceStrategy,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, IndexStrategy, KeyringProviderType,
+    NoBinary, NoBuild, Preview, PreviewFeatures, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
-use uv_distribution_types::{ExtraBuildRequires, Requirement};
+use uv_distribution_types::{
+    ConfigSettings, DependencyMetadata, ExtraBuildRequires, Index, IndexLocations,
+    PackageConfigSettings, Requirement,
+};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;

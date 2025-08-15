@@ -21,6 +21,7 @@ use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
     InstallOptions, Preview,
 };
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
@@ -70,7 +71,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -1077,16 +1078,28 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 requirements_env.site_packages().next().ok_or_else(|| {
                     anyhow!("Requirements environment has no site packages directory")
                 })?;
-            let base_site_packages = base_interpreter
-                .site_packages()
-                .next()
-                .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
+            let mut base_site_packages = base_interpreter
+                .runtime_site_packages()
+                .iter()
+                .map(|path| Cow::Borrowed(path.as_path()))
+                .chain(base_interpreter.site_packages())
+                .peekable();
+            if base_site_packages.peek().is_none() {
+                return Err(anyhow!("Base environment has no site packages directory"));
+            }
 
-            ephemeral_env.set_overlay(format!(
-                "import site; site.addsitedir(\"{}\"); site.addsitedir(\"{}\");",
-                requirements_site_packages.escape_for_python(),
-                base_site_packages.escape_for_python(),
-            ))?;
+            let overlay_content = format!(
+                "import site; {}",
+                std::iter::once(requirements_site_packages)
+                    .chain(base_site_packages)
+                    .dedup()
+                    .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
+                    .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+
+            ephemeral_env.set_overlay(overlay_content)?;
 
             // N.B. The order here matters — earlier interpreters take precedence over the
             // later ones.
@@ -1321,15 +1334,39 @@ fn can_skip_ephemeral(
     site_packages: &SitePackages,
     settings: &ResolverInstallerSettings,
 ) -> bool {
-    if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
+    // Extract the build settings.
+    let ResolverInstallerSettings {
+        resolver:
+            ResolverSettings {
+                config_setting,
+                config_settings_package,
+                extra_build_dependencies,
+                extra_build_variables,
+                ..
+            },
+        reinstall,
+        ..
+    } = settings;
+
+    // If any packages were marked for reinstallation, we cannot skip the ephemeral environment.
+    if !reinstall.is_none() {
         return false;
     }
+
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires =
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
 
     match site_packages.satisfies_spec(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
         &interpreter.resolver_marker_environment(),
+        config_setting,
+        config_settings_package,
+        &extra_build_requires,
+        extra_build_variables,
     ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {

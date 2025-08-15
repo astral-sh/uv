@@ -14,9 +14,8 @@ use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    PackageConfigSettings, Preview, SourceStrategy,
+    BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints, DependencyGroupsWithDefaults,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, Preview, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -24,7 +23,8 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, RequiresPython, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    PackageConfigSettings, RequiresPython, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;

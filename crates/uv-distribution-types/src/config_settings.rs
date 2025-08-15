@@ -55,7 +55,7 @@ impl FromStr for ConfigSettingPackageEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
 enum ConfigSettingValue {
     /// The value consists of a single string.
@@ -108,7 +108,7 @@ impl<'de> serde::Deserialize<'de> for ConfigSettingValue {
 /// list of strings.
 ///
 /// See: <https://peps.python.org/pep-0517/#config-settings>
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Hash, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ConfigSettings(BTreeMap<String, ConfigSettingValue>);
 

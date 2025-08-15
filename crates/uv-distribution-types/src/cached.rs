@@ -6,8 +6,8 @@ use uv_normalize::PackageName;
 use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::{
-    BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
-    ParsedUrl, SourceDist, VersionOrUrlRef,
+    BuildInfo, BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion,
+    Name, ParsedUrl, SourceDist, VersionOrUrlRef,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
@@ -26,6 +26,7 @@ pub struct CachedRegistryDist {
     pub path: Box<Path>,
     pub hashes: HashDigests,
     pub cache_info: CacheInfo,
+    pub build_info: Option<BuildInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -35,6 +36,7 @@ pub struct CachedDirectUrlDist {
     pub path: Box<Path>,
     pub hashes: HashDigests,
     pub cache_info: CacheInfo,
+    pub build_info: Option<BuildInfo>,
 }
 
 impl CachedDist {
@@ -44,6 +46,7 @@ impl CachedDist {
         filename: WheelFilename,
         hashes: HashDigests,
         cache_info: CacheInfo,
+        build_info: Option<BuildInfo>,
         path: Box<Path>,
     ) -> Self {
         match remote {
@@ -52,6 +55,7 @@ impl CachedDist {
                 path,
                 hashes,
                 cache_info,
+                build_info,
             }),
             Dist::Built(BuiltDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
@@ -61,6 +65,7 @@ impl CachedDist {
                 },
                 hashes,
                 cache_info,
+                build_info,
                 path,
             }),
             Dist::Built(BuiltDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
@@ -71,6 +76,7 @@ impl CachedDist {
                 },
                 hashes,
                 cache_info,
+                build_info,
                 path,
             }),
             Dist::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
@@ -78,6 +84,7 @@ impl CachedDist {
                 path,
                 hashes,
                 cache_info,
+                build_info,
             }),
             Dist::Source(SourceDist::DirectUrl(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
@@ -87,6 +94,7 @@ impl CachedDist {
                 },
                 hashes,
                 cache_info,
+                build_info,
                 path,
             }),
             Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
@@ -97,6 +105,7 @@ impl CachedDist {
                 },
                 hashes,
                 cache_info,
+                build_info,
                 path,
             }),
             Dist::Source(SourceDist::Path(dist)) => Self::Url(CachedDirectUrlDist {
@@ -107,6 +116,7 @@ impl CachedDist {
                 },
                 hashes,
                 cache_info,
+                build_info,
                 path,
             }),
             Dist::Source(SourceDist::Directory(dist)) => Self::Url(CachedDirectUrlDist {
@@ -117,6 +127,7 @@ impl CachedDist {
                 },
                 hashes,
                 cache_info,
+                build_info,
                 path,
             }),
         }
@@ -135,6 +146,14 @@ impl CachedDist {
         match self {
             Self::Registry(dist) => &dist.cache_info,
             Self::Url(dist) => &dist.cache_info,
+        }
+    }
+
+    /// Return the [`BuildInfo`] of the distribution.
+    pub fn build_info(&self) -> Option<&BuildInfo> {
+        match self {
+            Self::Registry(dist) => dist.build_info.as_ref(),
+            Self::Url(dist) => dist.build_info.as_ref(),
         }
     }
 

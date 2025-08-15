@@ -3553,9 +3553,9 @@ fn tool_install_python() {
     // Install `python`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3567,9 +3567,9 @@ fn tool_install_python() {
     // Install `python@<version>`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python@3.12")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3849,9 +3849,9 @@ fn tool_install_with_executables_from() {
         .arg("--with-executables-from")
         .arg("ansible-core,black")
         .arg("ansible==9.3.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3914,9 +3914,9 @@ fn tool_install_with_executables_from() {
 
     uv_snapshot!(context.filters(), context.tool_uninstall()
         .arg("ansible")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3940,9 +3940,9 @@ fn tool_install_with_executables_from_no_entrypoints() {
         .arg("--with-executables-from")
         .arg("requests")
         .arg("flask")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

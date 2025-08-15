@@ -145,7 +145,7 @@ ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
-reqwest = { version = "0.12.22", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
+reqwest = { version = "0.12.22", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
 reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8", features = ["multipart"] }
 reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }

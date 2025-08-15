@@ -23,14 +23,14 @@ fn python_find() {
     ");
 
     // We find the first interpreter on the path
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Request Python 3.12
     uv_snapshot!(context.filters(), context.python_find().arg("3.12"), @r###"
@@ -53,14 +53,14 @@ fn python_find() {
     "###);
 
     // Request CPython
-    uv_snapshot!(context.filters(), context.python_find().arg("cpython"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("cpython"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Request CPython 3.12
     uv_snapshot!(context.filters(), context.python_find().arg("cpython@3.12"), @r###"
@@ -119,14 +119,14 @@ fn python_find() {
     // Swap the order of the Python versions
     context.python_versions.reverse();
 
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.12]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Request Python 3.11
     uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r###"
@@ -174,14 +174,14 @@ fn python_find_pin() {
     "###);
 
     // Or `--no-config` is used
-    uv_snapshot!(context.filters(), context.python_find().arg("--no-config"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-config"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
-    "###);
+    ");
 
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all().unwrap();
@@ -308,14 +308,14 @@ fn python_find_project() {
         .unwrap();
 
     // We should respect the project's required version, not the first on the path
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Unless explicitly requested
     uv_snapshot!(context.filters(), context.python_find().arg("3.10"), @r"
@@ -329,14 +329,14 @@ fn python_find_project() {
     ");
 
     // Or `--no-project` is used
-    uv_snapshot!(context.filters(), context.python_find().arg("--no-project"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-project"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.10]
 
     ----- stderr -----
-    "###);
+    ");
 
     // But a pin should take precedence
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
@@ -393,14 +393,14 @@ fn python_find_project() {
     "#})
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @r###"
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
@@ -517,14 +517,14 @@ fn python_find_venv() {
     fs_err::remove_dir_all(context.temp_dir.child(".venv")).unwrap();
 
     // And query from there... we should not find the child virtual environment
-    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    uv_snapshot!(context.filters(), context.python_find(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Unless, it is requested by path
     #[cfg(not(windows))]
@@ -588,14 +588,14 @@ fn python_find_venv() {
         )
         .unwrap();
 
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r"
         success: true
         exit_code: 0
         ----- stdout -----
         [PYTHON-3.11]
 
         ----- stderr -----
-        "###);
+        ");
     }
 }
 

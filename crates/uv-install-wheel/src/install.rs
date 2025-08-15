@@ -8,7 +8,6 @@ use fs_err as fs;
 use fs_err::File;
 use tracing::{instrument, trace};
 
-use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, Metadata10};
@@ -28,13 +27,14 @@ use crate::{Error, Layout};
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
 #[instrument(skip_all, fields(wheel = %filename))]
-pub fn install_wheel(
+pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     layout: &Layout,
     relocatable: bool,
     wheel: impl AsRef<Path>,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
-    cache_info: Option<&CacheInfo>,
+    cache_info: Option<&Cache>,
+    build_info: Option<&Build>,
     installer: Option<&str>,
     installer_metadata: bool,
     link_mode: LinkMode,
@@ -143,6 +143,7 @@ pub fn install_wheel(
             true,
             direct_url,
             cache_info,
+            build_info,
             installer,
             &mut record,
         )?;

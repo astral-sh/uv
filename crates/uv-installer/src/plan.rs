@@ -6,15 +6,15 @@ use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
-use uv_configuration::{BuildOptions, ConfigSettings, PackageConfigSettings, Reinstall};
+use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, RequirementSource,
-    Resolution, ResolvedDist, SourceDist,
+    BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
+    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
+    RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
@@ -64,8 +64,16 @@ impl<'a> Planner<'a> {
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
-        let mut registry_index =
-            RegistryWheelIndex::new(cache, tags, index_locations, hasher, config_settings);
+        let mut registry_index = RegistryWheelIndex::new(
+            cache,
+            tags,
+            index_locations,
+            hasher,
+            config_settings,
+            config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
+        );
         let built_index = BuiltWheelIndex::new(
             cache,
             tags,
@@ -112,7 +120,15 @@ impl<'a> Planner<'a> {
                     [] => {}
                     [installed] => {
                         let source = RequirementSource::from(dist);
-                        match RequirementSatisfaction::check(installed, &source) {
+                        match RequirementSatisfaction::check(
+                            dist.name(),
+                            installed,
+                            &source,
+                            config_settings,
+                            config_settings_package,
+                            extra_build_requires,
+                            extra_build_variables,
+                        ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
                                     "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
@@ -213,6 +229,7 @@ impl<'a> Planner<'a> {
                     match HttpArchivePointer::read_from(&cache_entry) {
                         Ok(Some(pointer)) => {
                             let cache_info = pointer.to_cache_info();
+                            let build_info = pointer.to_build_info();
                             let archive = pointer.into_archive();
                             if archive.satisfies(hasher.get(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
@@ -223,6 +240,7 @@ impl<'a> Planner<'a> {
                                     },
                                     hashes: archive.hashes,
                                     cache_info,
+                                    build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
 
@@ -286,6 +304,7 @@ impl<'a> Planner<'a> {
                             Ok(timestamp) => {
                                 if pointer.is_up_to_date(timestamp) {
                                     let cache_info = pointer.to_cache_info();
+                                    let build_info = pointer.to_build_info();
                                     let archive = pointer.into_archive();
                                     if archive.satisfies(hasher.get(dist.as_ref())) {
                                         let cached_dist = CachedDirectUrlDist {
@@ -296,6 +315,7 @@ impl<'a> Planner<'a> {
                                             },
                                             hashes: archive.hashes,
                                             cache_info,
+                                            build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
 

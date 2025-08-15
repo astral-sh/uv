@@ -10,11 +10,13 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, ConfigSettingPackageEntry, ExportFormat, IndexStrategy,
-    KeyringProviderType, PackageNameSpecifier, PreviewFeatures, ProjectBuildBackend, TargetTriple,
-    TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PreviewFeatures,
+    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
-use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
+use uv_distribution_types::{
+    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
+    PipFindLinks, PipIndex,
+};
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
@@ -5195,6 +5197,13 @@ pub struct PythonUpgradeArgs {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
     pub pypy_mirror: Option<String>,
+
+    /// Reinstall the latest Python patch, if it's already installed.
+    ///
+    /// By default, uv will exit successfully if the latest patch is already
+    /// installed.
+    #[arg(long, short)]
+    pub reinstall: bool,
 
     /// URL pointing to JSON of custom Python installations.
     ///

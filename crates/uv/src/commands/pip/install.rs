@@ -9,16 +9,16 @@ use tracing::{Level, debug, enabled, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
-    SourceStrategy, Upgrade,
+    BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification, HashCheckingMode,
+    IndexStrategy, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, NameRequirementSpecification,
-    Origin, Requirement, Resolution, UnresolvedRequirementSpecification,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -216,6 +216,11 @@ pub(crate) async fn pip_install(
         environment
     };
 
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires =
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
         debug!(
@@ -282,7 +287,16 @@ pub(crate) async fn pip_install(
         && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
+        match site_packages.satisfies_spec(
+            &requirements,
+            &constraints,
+            &overrides,
+            &marker_env,
+            config_settings,
+            config_settings_package,
+            &extra_build_requires,
+            extra_build_variables,
+        )? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -425,11 +439,6 @@ pub(crate) async fn pip_install(
 
     // Initialize any shared state.
     let state = SharedState::default();
-
-    // Lower the extra build dependencies, if any.
-    let extra_build_requires =
-        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-            .into_inner();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -611,6 +620,7 @@ pub(crate) async fn pip_install(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await
     {

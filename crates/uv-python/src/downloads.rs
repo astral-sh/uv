@@ -25,7 +25,7 @@ use uv_client::{BaseClient, WrappedReqwestError, is_extended_transient_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
-use uv_platform::{self as platform, Arch, Libc, Os};
+use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
@@ -48,6 +48,8 @@ pub enum Error {
     MissingExtension(String, ExtensionError),
     #[error("Invalid Python version: {0}")]
     InvalidPythonVersion(String),
+    #[error("Invalid request key (empty request)")]
+    EmptyRequest,
     #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
     #[error("Failed to download {0}")]
@@ -171,22 +173,22 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
-    /// Check if this platform request is satisfied by an installation key.
-    pub fn matches(&self, key: &PythonInstallationKey) -> bool {
+    /// Check if this platform request is satisfied by a platform.
+    pub fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os {
-            if key.os != os {
+            if !platform.os.supports(os) {
                 return false;
             }
         }
 
         if let Some(arch) = self.arch {
-            if !arch.satisfied_by(key.arch) {
+            if !arch.satisfied_by(platform) {
                 return false;
             }
         }
 
         if let Some(libc) = self.libc {
-            if key.libc != libc {
+            if platform.libc != libc {
                 return false;
             }
         }
@@ -220,10 +222,14 @@ impl Display for ArchRequest {
 }
 
 impl ArchRequest {
-    pub(crate) fn satisfied_by(self, arch: Arch) -> bool {
+    pub(crate) fn satisfied_by(self, platform: &Platform) -> bool {
         match self {
-            Self::Explicit(request) => request == arch,
-            Self::Environment(env) => env.supports(arch),
+            Self::Explicit(request) => request == platform.arch,
+            Self::Environment(env) => {
+                // Check if the environment's platform can run the target platform
+                let env_platform = Platform::new(platform.os, env, platform.libc);
+                env_platform.supports(platform)
+            }
         }
     }
 
@@ -255,7 +261,17 @@ impl PythonDownloadRequest {
 
     #[must_use]
     pub fn with_implementation(mut self, implementation: ImplementationName) -> Self {
-        self.implementation = Some(implementation);
+        match implementation {
+            // Pyodide is actually CPython with an Emscripten OS, we paper over that for usability
+            ImplementationName::Pyodide => {
+                self = self.with_os(Os::new(target_lexicon::OperatingSystem::Emscripten));
+                self = self.with_arch(Arch::new(target_lexicon::Architecture::Wasm32, None));
+                self = self.with_libc(Libc::Some(target_lexicon::Environment::Musl));
+            }
+            _ => {
+                self.implementation = Some(implementation);
+            }
+        }
         self
     }
 
@@ -327,14 +343,15 @@ impl PythonDownloadRequest {
     ///
     /// Platform information is pulled from the environment.
     pub fn fill_platform(mut self) -> Result<Self, Error> {
+        let platform = Platform::from_env()?;
         if self.arch.is_none() {
-            self.arch = Some(ArchRequest::Environment(Arch::from_env()));
+            self.arch = Some(ArchRequest::Environment(platform.arch));
         }
         if self.os.is_none() {
-            self.os = Some(Os::from_env());
+            self.os = Some(platform.os);
         }
         if self.libc.is_none() {
-            self.libc = Some(Libc::from_env()?);
+            self.libc = Some(platform.libc);
         }
         Ok(self)
     }
@@ -378,23 +395,16 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
-        if let Some(os) = &self.os {
-            if key.os != *os {
-                return false;
-            }
+        // Check platform requirements
+        let request = PlatformRequest {
+            os: self.os,
+            arch: self.arch,
+            libc: self.libc,
+        };
+        if !request.matches(key.platform()) {
+            return false;
         }
 
-        if let Some(arch) = &self.arch {
-            if !arch.satisfied_by(key.arch) {
-                return false;
-            }
-        }
-
-        if let Some(libc) = &self.libc {
-            if key.libc != *libc {
-                return false;
-            }
-        }
         if let Some(implementation) = &self.implementation {
             if key.implementation != LenientImplementationName::from(*implementation) {
                 return false;
@@ -438,7 +448,9 @@ impl PythonDownloadRequest {
 
     /// Whether this download request opts-in to alternative Python implementations.
     pub fn allows_alternative_implementations(&self) -> bool {
-        self.implementation.is_some()
+        self.implementation
+            .is_some_and(|implementation| !matches!(implementation, ImplementationName::CPython))
+            || self.os.is_some_and(|os| os.is_emscripten())
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
@@ -452,40 +464,19 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
-        if let Some(os) = self.os() {
-            let interpreter_os = Os::from(interpreter.platform().os());
-            if &interpreter_os != os {
-                debug!(
-                    "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
-                );
-                return false;
-            }
-        }
-        if let Some(arch) = self.arch() {
-            let interpreter_arch = Arch::from(&interpreter.platform().arch());
-            if !arch.satisfied_by(interpreter_arch) {
-                debug!(
-                    "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
-                );
-                return false;
-            }
+        let platform = self.platform();
+        let interpreter_platform = Platform::from(interpreter.platform());
+        if !platform.matches(&interpreter_platform) {
+            debug!(
+                "Skipping interpreter at `{executable}`: platform `{interpreter_platform}` does not match request `{platform}`",
+            );
+            return false;
         }
         if let Some(implementation) = self.implementation() {
-            let interpreter_implementation = interpreter.implementation_name();
-            if LenientImplementationName::from(interpreter_implementation)
-                != LenientImplementationName::from(*implementation)
-            {
+            if !implementation.matches_interpreter(interpreter) {
                 debug!(
-                    "Skipping interpreter at `{executable}`: implementation `{interpreter_implementation}` does not match request `{implementation}`"
-                );
-                return false;
-            }
-        }
-        if let Some(libc) = self.libc() {
-            let interpreter_libc = Libc::from(interpreter.platform().os());
-            if &interpreter_libc != libc {
-                debug!(
-                    "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
+                    "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
+                    interpreter.implementation_name(),
                 );
                 return false;
             }
@@ -514,9 +505,9 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
                     "Managed Python installations are expected to always have known implementation names, found {name}"
                 ),
             },
-            Some(ArchRequest::Explicit(key.arch)),
-            Some(key.os),
-            Some(key.libc),
+            Some(ArchRequest::Explicit(*key.arch())),
+            Some(*key.os()),
+            Some(*key.libc()),
             Some(key.prerelease.is_some()),
         )
     }
@@ -553,42 +544,194 @@ impl Display for PythonDownloadRequest {
         write!(f, "{}", parts.join("-"))
     }
 }
-
 impl FromStr for PythonDownloadRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        #[derive(Debug, Clone)]
+        enum Position {
+            Start,
+            Implementation,
+            Version,
+            Os,
+            Arch,
+            Libc,
+            End,
+        }
+
+        impl Position {
+            pub(crate) fn next(&self) -> Self {
+                match self {
+                    Self::Start => Self::Implementation,
+                    Self::Implementation => Self::Version,
+                    Self::Version => Self::Os,
+                    Self::Os => Self::Arch,
+                    Self::Arch => Self::Libc,
+                    Self::Libc => Self::End,
+                    Self::End => Self::End,
+                }
+            }
+        }
+
+        #[derive(Debug)]
+        struct State<'a, P: Iterator<Item = &'a str>> {
+            parts: P,
+            part: Option<&'a str>,
+            position: Position,
+            error: Option<Error>,
+            count: usize,
+        }
+
+        impl<'a, P: Iterator<Item = &'a str>> State<'a, P> {
+            fn new(parts: P) -> Self {
+                Self {
+                    parts,
+                    part: None,
+                    position: Position::Start,
+                    error: None,
+                    count: 0,
+                }
+            }
+
+            fn next_part(&mut self) {
+                self.next_position();
+                self.part = self.parts.next();
+                self.count += 1;
+                self.error.take();
+            }
+
+            fn next_position(&mut self) {
+                self.position = self.position.next();
+            }
+
+            fn record_err(&mut self, err: Error) {
+                // For now, we only record the first error encountered. We could record all of the
+                // errors for a given part, then pick the most appropriate one later.
+                self.error.get_or_insert(err);
+            }
+        }
+
+        if s.is_empty() {
+            return Err(Error::EmptyRequest);
+        }
+
         let mut parts = s.split('-');
-        let mut version = None;
+
         let mut implementation = None;
+        let mut version = None;
         let mut os = None;
         let mut arch = None;
         let mut libc = None;
 
-        let mut position = 0;
+        let mut state = State::new(parts.by_ref());
+        state.next_part();
+
         loop {
-            // Consume each part
-            let Some(part) = parts.next() else { break };
-            position += 1;
-
-            if part.eq_ignore_ascii_case("any") {
-                continue;
-            }
-
-            match position {
-                1 => implementation = Some(ImplementationName::from_str(part)?),
-                2 => {
-                    version = Some(
-                        VersionRequest::from_str(part)
-                            .map_err(|_| Error::InvalidPythonVersion(part.to_string()))?,
-                    );
+            let Some(part) = state.part else { break };
+            match state.position {
+                Position::Start => unreachable!("We start before the loop"),
+                Position::Implementation => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match ImplementationName::from_str(part) {
+                        Ok(val) => {
+                            implementation = Some(val);
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err.into());
+                        }
+                    }
                 }
-                3 => os = Some(Os::from_str(part)?),
-                4 => arch = Some(ArchRequest::Explicit(Arch::from_str(part)?)),
-                5 => libc = Some(Libc::from_str(part)?),
-                _ => return Err(Error::TooManyParts(s.to_string())),
+                Position::Version => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match VersionRequest::from_str(part)
+                        .map_err(|_| Error::InvalidPythonVersion(part.to_string()))
+                    {
+                        // Err(err) if !first_part => return Err(err),
+                        Ok(val) => {
+                            version = Some(val);
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err);
+                        }
+                    }
+                }
+                Position::Os => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match Os::from_str(part) {
+                        Ok(val) => {
+                            os = Some(val);
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err.into());
+                        }
+                    }
+                }
+                Position::Arch => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match Arch::from_str(part) {
+                        Ok(val) => {
+                            arch = Some(ArchRequest::Explicit(val));
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err.into());
+                        }
+                    }
+                }
+                Position::Libc => {
+                    if part.eq_ignore_ascii_case("any") {
+                        state.next_part();
+                        continue;
+                    }
+                    match Libc::from_str(part) {
+                        Ok(val) => {
+                            libc = Some(val);
+                            state.next_part();
+                        }
+                        Err(err) => {
+                            state.next_position();
+                            state.record_err(err.into());
+                        }
+                    }
+                }
+                Position::End => {
+                    if state.count > 5 {
+                        return Err(Error::TooManyParts(s.to_string()));
+                    }
+
+                    // Throw the first error for the current part
+                    //
+                    // TODO(zanieb): It's plausible another error variant is a better match but it
+                    // sounds hard to explain how? We could peek at the next item in the parts, and
+                    // see if that informs the type of this one, or we could use some sort of
+                    // similarity or common error matching, but this sounds harder.
+                    if let Some(err) = state.error {
+                        return Err(err);
+                    }
+                    state.next_part();
+                }
             }
         }
+
         Ok(Self::new(version, implementation, arch, os, libc, None))
     }
 }
@@ -913,13 +1056,32 @@ impl ManagedPythonDownload {
         // If the distribution is a `full` archive, the Python installation is in the `install` directory.
         if extracted.join("install").is_dir() {
             extracted = extracted.join("install");
+        // If the distribution is a Pyodide archive, the Python installation is in the `pyodide-root/dist` directory.
+        } else if self.os().is_emscripten() {
+            extracted = extracted.join("pyodide-root").join("dist");
         }
 
-        // If the distribution is missing a `python`-to-`pythonX.Y` symlink, add it. PEP 394 permits
-        // it, and python-build-standalone releases after `20240726` include it, but releases prior
-        // to that date do not.
         #[cfg(unix)]
         {
+            // Pyodide distributions require all of the supporting files to be alongside the Python
+            // executable, so they don't have a `bin` directory. We create it and link
+            // `bin/pythonX.Y` to `dist/python`.
+            if self.os().is_emscripten() {
+                fs_err::create_dir_all(extracted.join("bin"))?;
+                fs_err::os::unix::fs::symlink(
+                    "../python",
+                    extracted
+                        .join("bin")
+                        .join(format!("python{}.{}", self.key.major, self.key.minor)),
+                )?;
+            }
+
+            // If the distribution is missing a `python` -> `pythonX.Y` symlink, add it.
+            //
+            // Pyodide releases never contain this link by default.
+            //
+            // PEP 394 permits it, and python-build-standalone releases after `20240726` include it,
+            // but releases prior to that date do not.
             match fs_err::os::unix::fs::symlink(
                 format!("python{}.{}", self.key.major, self.key.minor),
                 extracted.join("bin").join("python"),
@@ -1184,9 +1346,7 @@ fn parse_json_downloads(
                 key: PythonInstallationKey::new_from_version(
                     implementation,
                     &version,
-                    os,
-                    arch,
-                    libc,
+                    Platform::new(os, arch, libc),
                     variant,
                 ),
                 url,
@@ -1344,5 +1504,222 @@ async fn read_url(
             .into_async_read();
 
         Ok((Either::Right(stream.compat()), size))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Parse a request with all of its fields.
+    #[test]
+    fn test_python_download_request_from_str_complete() {
+        let request = PythonDownloadRequest::from_str("cpython-3.12.0-linux-x86_64-gnu")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::CPython));
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.12.0").unwrap())
+        );
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Linux))
+        );
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
+        );
+        assert_eq!(
+            request.libc,
+            Some(Libc::Some(target_lexicon::Environment::Gnu))
+        );
+    }
+
+    /// Parse a request with `any` in various positions.
+    #[test]
+    fn test_python_download_request_from_str_with_any() {
+        let request = PythonDownloadRequest::from_str("any-3.11-any-x86_64-any")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.11").unwrap())
+        );
+        assert_eq!(request.os, None);
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
+        );
+        assert_eq!(request.libc, None);
+    }
+
+    /// Parse a request with `any` implied by the omission of segments.
+    #[test]
+    fn test_python_download_request_from_str_missing_segment() {
+        let request =
+            PythonDownloadRequest::from_str("pypy-linux").expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::PyPy));
+        assert_eq!(request.version, None);
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Linux))
+        );
+        assert_eq!(request.arch, None);
+        assert_eq!(request.libc, None);
+    }
+
+    #[test]
+    fn test_python_download_request_from_str_version_only() {
+        let request =
+            PythonDownloadRequest::from_str("3.10.5").expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.10.5").unwrap())
+        );
+        assert_eq!(request.os, None);
+        assert_eq!(request.arch, None);
+        assert_eq!(request.libc, None);
+    }
+
+    #[test]
+    fn test_python_download_request_from_str_implementation_only() {
+        let request =
+            PythonDownloadRequest::from_str("cpython").expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::CPython));
+        assert_eq!(request.version, None);
+        assert_eq!(request.os, None);
+        assert_eq!(request.arch, None);
+        assert_eq!(request.libc, None);
+    }
+
+    /// Parse a request with the OS and architecture specified.
+    #[test]
+    fn test_python_download_request_from_str_os_arch() {
+        let request = PythonDownloadRequest::from_str("windows-x86_64")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(request.version, None);
+        assert_eq!(
+            request.os,
+            Some(Os::new(target_lexicon::OperatingSystem::Windows))
+        );
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
+        );
+        assert_eq!(request.libc, None);
+    }
+
+    /// Parse a request with a pre-release version.
+    #[test]
+    fn test_python_download_request_from_str_prerelease() {
+        let request = PythonDownloadRequest::from_str("cpython-3.13.0rc1")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, Some(ImplementationName::CPython));
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.13.0rc1").unwrap())
+        );
+        assert_eq!(request.os, None,);
+        assert_eq!(request.arch, None,);
+        assert_eq!(request.libc, None);
+    }
+
+    /// We fail on extra parts in the request.
+    #[test]
+    fn test_python_download_request_from_str_too_many_parts() {
+        let result = PythonDownloadRequest::from_str("cpython-3.12-linux-x86_64-gnu-extra");
+
+        assert!(matches!(result, Err(Error::TooManyParts(_))));
+    }
+
+    /// We don't allow an empty request.
+    #[test]
+    fn test_python_download_request_from_str_empty() {
+        let result = PythonDownloadRequest::from_str("");
+
+        assert!(matches!(result, Err(Error::EmptyRequest)), "{result:?}");
+    }
+
+    /// Parse a request with all "any" segments.
+    #[test]
+    fn test_python_download_request_from_str_all_any() {
+        let request = PythonDownloadRequest::from_str("any-any-any-any-any")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(request.version, None);
+        assert_eq!(request.os, None);
+        assert_eq!(request.arch, None);
+        assert_eq!(request.libc, None);
+    }
+
+    /// Test that "any" is case-insensitive in various positions.
+    #[test]
+    fn test_python_download_request_from_str_case_insensitive_any() {
+        let request = PythonDownloadRequest::from_str("ANY-3.11-Any-x86_64-aNy")
+            .expect("Test request should be parsed");
+
+        assert_eq!(request.implementation, None);
+        assert_eq!(
+            request.version,
+            Some(VersionRequest::from_str("3.11").unwrap())
+        );
+        assert_eq!(request.os, None);
+        assert_eq!(
+            request.arch,
+            Some(ArchRequest::Explicit(Arch::new(
+                target_lexicon::Architecture::X86_64,
+                None
+            )))
+        );
+        assert_eq!(request.libc, None);
+    }
+
+    /// Parse a request with an invalid leading segment.
+    #[test]
+    fn test_python_download_request_from_str_invalid_leading_segment() {
+        let result = PythonDownloadRequest::from_str("foobar-3.14-windows");
+
+        assert!(
+            matches!(result, Err(Error::ImplementationError(_))),
+            "{result:?}"
+        );
+    }
+
+    /// Parse a request with segments in an invalid order.
+    #[test]
+    fn test_python_download_request_from_str_out_of_order() {
+        let result = PythonDownloadRequest::from_str("3.12-cpython");
+
+        assert!(
+            matches!(result, Err(Error::InvalidRequestPlatform(_))),
+            "{result:?}"
+        );
+    }
+
+    /// Parse a request with too many "any" segments.
+    #[test]
+    fn test_python_download_request_from_str_too_many_any() {
+        let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
+
+        assert!(matches!(result, Err(Error::TooManyParts(_))));
     }
 }

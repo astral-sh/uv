@@ -2173,6 +2173,7 @@ pub(crate) async fn sync_environment(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 
@@ -2274,7 +2275,16 @@ pub(crate) async fn update_environment(
         && source_trees.is_empty()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
+        match site_packages.satisfies_spec(
+            &requirements,
+            &constraints,
+            &overrides,
+            &marker_env,
+            config_setting,
+            config_settings_package,
+            &extra_build_requires,
+            extra_build_variables,
+        )? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -2434,6 +2444,7 @@ pub(crate) async fn update_environment(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 

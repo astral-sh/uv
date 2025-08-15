@@ -21,14 +21,14 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
-    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, ProjectBuildBackend,
-    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
-    Upgrade, VersionControlSystem,
+    BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, ExportFormat,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
+    NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
-    DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl, Requirement,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
+    PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{PackageName, PipGroupName};
@@ -1019,6 +1019,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) reinstall: bool,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) bin: Option<bool>,
@@ -1051,6 +1052,7 @@ impl PythonUpgradeSettings {
             targets,
             mirror: _,
             pypy_mirror: _,
+            reinstall,
             python_downloads_json_url: _,
         } = args;
 
@@ -1061,6 +1063,7 @@ impl PythonUpgradeSettings {
             registry,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
+            reinstall,
             python_downloads_json_url,
             default,
             bin,

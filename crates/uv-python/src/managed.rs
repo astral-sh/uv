@@ -17,8 +17,8 @@ use uv_configuration::{Preview, PreviewFeatures};
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
-use uv_platform::Error as PlatformError;
-use uv_platform::{Arch, Libc, LibcDetectionError, Os};
+use uv_platform::{Error as PlatformError, Os};
+use uv_platform::{LibcDetectionError, Platform};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, windows_python_launcher};
@@ -259,19 +259,16 @@ impl ManagedPythonInstallations {
     pub fn find_matching_current_platform(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
-        let os = Os::from_env();
-        let arch = Arch::from_env();
-        let libc = Libc::from_env()?;
+        let platform = Platform::from_env()?;
 
         let iter = Self::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
-                installation.key.os == os
-                    && (arch.supports(installation.key.arch)
-                        // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
-                        // implement this yet. See https://github.com/astral-sh/uv/pull/9788
-                        || arch.family() == installation.key.arch.family())
-                    && installation.key.libc == libc
+                if !platform.supports(installation.platform()) {
+                    debug!("Skipping managed installation `{installation}`: not supported by current platform `{platform}`");
+                    return false;
+                }
+                true
             });
 
         Ok(iter)
@@ -361,8 +358,6 @@ impl ManagedPythonInstallation {
     /// If windowed is true, `pythonw.exe` is selected over `python.exe` on windows, with no changes
     /// on non-windows.
     pub fn executable(&self, windowed: bool) -> PathBuf {
-        let implementation = self.implementation().executable_name();
-
         let version = match self.implementation() {
             ImplementationName::CPython => {
                 if cfg!(unix) {
@@ -373,12 +368,14 @@ impl ManagedPythonInstallation {
             }
             // PyPy uses a full version number, even on Windows.
             ImplementationName::PyPy => format!("{}.{}", self.key.major, self.key.minor),
+            // Pyodide and GraalPy do not have a version suffix.
+            ImplementationName::Pyodide => String::new(),
             ImplementationName::GraalPy => String::new(),
         };
 
         // On Windows, the executable is just `python.exe` even for alternative variants
         // GraalPy always uses `graalpy.exe` as the main executable
-        let variant = if *self.implementation() == ImplementationName::GraalPy {
+        let variant = if self.implementation() == ImplementationName::GraalPy {
             ""
         } else if cfg!(unix) {
             self.key.variant.suffix()
@@ -391,13 +388,15 @@ impl ManagedPythonInstallation {
 
         let name = format!(
             "{implementation}{version}{variant}{exe}",
+            implementation = self.implementation().executable_name(),
             exe = std::env::consts::EXE_SUFFIX
         );
 
         let executable = executable_path_from_base(
             self.python_dir().as_path(),
             &name,
-            &LenientImplementationName::from(*self.implementation()),
+            &LenientImplementationName::from(self.implementation()),
+            *self.key.os(),
         );
 
         // Workaround for python-build-standalone v20241016 which is missing the standard
@@ -434,8 +433,8 @@ impl ManagedPythonInstallation {
         self.key.version()
     }
 
-    pub fn implementation(&self) -> &ImplementationName {
-        match self.key.implementation() {
+    pub fn implementation(&self) -> ImplementationName {
+        match self.key.implementation().into_owned() {
             LenientImplementationName::Known(implementation) => implementation,
             LenientImplementationName::Unknown(_) => {
                 panic!("Managed Python installations should have a known implementation")
@@ -449,6 +448,10 @@ impl ManagedPythonInstallation {
 
     pub fn key(&self) -> &PythonInstallationKey {
         &self.key
+    }
+
+    pub fn platform(&self) -> &Platform {
+        self.key.platform()
     }
 
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
@@ -465,10 +468,10 @@ impl ManagedPythonInstallation {
                 .file_name()
                 .is_some_and(|filename| filename.to_string_lossy() == *name),
             PythonRequest::Implementation(implementation) => {
-                implementation == self.implementation()
+                *implementation == self.implementation()
             }
             PythonRequest::ImplementationVersion(implementation, version) => {
-                implementation == self.implementation() && version.matches_version(&self.version())
+                *implementation == self.implementation() && version.matches_version(&self.version())
             }
             PythonRequest::Version(version) => version.matches_version(&self.version()),
             PythonRequest::Key(request) => request.satisfied_by_key(self.key()),
@@ -543,8 +546,13 @@ impl ManagedPythonInstallation {
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
+        if self.key.os().is_emscripten() {
+            // Emscripten's stdlib is a zip file so we can't put an
+            // EXTERNALLY-MANAGED inside.
+            return Ok(());
+        }
         // Construct the path to the `stdlib` directory.
-        let stdlib = if self.key.os.is_windows() {
+        let stdlib = if self.key.os().is_windows() {
             self.python_dir().join("Lib")
         } else {
             let lib_suffix = self.key.variant.suffix();
@@ -568,7 +576,12 @@ impl ManagedPythonInstallation {
     /// Ensure that the `sysconfig` data is patched to match the installation path.
     pub fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
         if cfg!(unix) {
-            if *self.implementation() == ImplementationName::CPython {
+            if self.key.os().is_emscripten() {
+                // Emscripten's stdlib is a zip file so we can't update the
+                // sysconfig directly
+                return Ok(());
+            }
+            if self.implementation() == ImplementationName::CPython {
                 sysconfig::update_sysconfig(
                     self.path(),
                     self.key.major,
@@ -588,8 +601,8 @@ impl ManagedPythonInstallation {
     /// See <https://github.com/astral-sh/uv/issues/10598> for more information.
     pub fn ensure_dylib_patched(&self) -> Result<(), macos_dylib::Error> {
         if cfg!(target_os = "macos") {
-            if self.key().os.is_like_darwin() {
-                if *self.implementation() == ImplementationName::CPython {
+            if self.key().os().is_like_darwin() {
+                if self.implementation() == ImplementationName::CPython {
                     let dylib_path = self.python_dir().join("lib").join(format!(
                         "{}python{}{}{}",
                         std::env::consts::DLL_PREFIX,
@@ -705,7 +718,7 @@ impl PythonMinorVersionLink {
     ) -> Option<Self> {
         let implementation = key.implementation();
         if !matches!(
-            implementation,
+            implementation.as_ref(),
             LenientImplementationName::Known(ImplementationName::CPython)
         ) {
             // We don't currently support transparent upgrades for PyPy or GraalPy.
@@ -744,7 +757,8 @@ impl PythonMinorVersionLink {
         let symlink_executable = executable_path_from_base(
             symlink_directory.as_path(),
             &executable_name.to_string_lossy(),
-            implementation,
+            &implementation,
+            *key.os(),
         );
         let minor_version_link = Self {
             symlink_directory,
@@ -828,18 +842,28 @@ fn executable_path_from_base(
     base: &Path,
     executable_name: &str,
     implementation: &LenientImplementationName,
+    os: Os,
 ) -> PathBuf {
-    if cfg!(unix)
+    if matches!(
+        implementation,
+        &LenientImplementationName::Known(ImplementationName::GraalPy)
+    ) {
+        // GraalPy is always in `bin/` regardless of the os
+        base.join("bin").join(executable_name)
+    } else if os.is_emscripten()
         || matches!(
             implementation,
-            &LenientImplementationName::Known(ImplementationName::GraalPy)
+            &LenientImplementationName::Known(ImplementationName::Pyodide)
         )
     {
-        base.join("bin").join(executable_name)
-    } else if cfg!(windows) {
+        // Emscripten's canonical executable is in the base directory
+        base.join(executable_name)
+    } else if os.is_windows() {
+        // On Windows, the executable is in the base directory
         base.join(executable_name)
     } else {
-        unimplemented!("Only Windows and Unix systems are supported.")
+        // On Unix, the executable is in `bin/`
+        base.join("bin").join(executable_name)
     }
 }
 
@@ -890,10 +914,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 // TODO(zanieb): Only used in tests now.
 /// Generate a platform portion of a key from the environment.
 pub fn platform_key_from_env() -> Result<String, Error> {
-    let os = Os::from_env();
-    let arch = Arch::from_env();
-    let libc = Libc::from_env()?;
-    Ok(format!("{os}-{arch}-{libc}").to_lowercase())
+    Ok(Platform::from_env()?.to_string().to_lowercase())
 }
 
 impl fmt::Display for ManagedPythonInstallation {

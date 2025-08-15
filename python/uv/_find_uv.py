@@ -46,9 +46,9 @@ def find_uv_bin() -> str:
         if os.path.isfile(path):
             return path
 
+    locations = "\n".join(f" - {target}" for target in seen)
     raise UvNotFound(
-        f"Could not find the uv binary in any of the following locations:\n"
-        f"{'\n'.join(f' - {target}' for target in seen)}\n"
+        f"Could not find the uv binary in any of the following locations:\n{locations}\n"
     )
 
 
@@ -76,9 +76,7 @@ def _matching_parents(path: str | None, match: str) -> str | None:
 
     if not all(
         fnmatch(part, match_part)
-        for part, match_part in zip(
-            reversed(parts), reversed(match_parts), strict=False
-        )
+        for part, match_part in zip(reversed(parts), reversed(match_parts))
     ):
         return None
 

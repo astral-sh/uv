@@ -4105,7 +4105,7 @@ fn run_linked_environment_path() -> Result<()> {
 
     // `sys.prefix` and `sys.executable` should be from the `target` directory
     uv_snapshot!(context.filters(), context.run()
-        .env_remove("VIRTUAL_ENV")  // Ignore the test context's active virtual environment
+        .env_remove(EnvVars::VIRTUAL_ENV)  // Ignore the test context's active virtual environment
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target")
         .arg("python").arg("-c").arg("import sys; print(sys.prefix); print(sys.executable)"), @r"
     success: true
@@ -5334,8 +5334,7 @@ fn run_repeated() -> Result<()> {
     Resolved 1 package in [TIME]
     "###);
 
-    // Re-running as a tool doesn't require reinstalling `typing-extensions`, since the environment
-    // is cached.
+    // Import `iniconfig` in the context of a `tool run` command, which should fail.
     uv_snapshot!(
         context.filters(),
         context.tool_run().arg("--with").arg("typing-extensions").arg("python").arg("-c").arg("import typing_extensions; import iniconfig"), @r#"
@@ -5448,7 +5447,7 @@ fn detect_infinite_recursion() -> Result<()> {
     context.add_shared_env(&mut cmd, false);
 
     // Set the max recursion depth to a lower amount to speed up testing.
-    cmd.env("UV_RUN_MAX_RECURSION_DEPTH", "5");
+    cmd.env(EnvVars::UV_RUN_MAX_RECURSION_DEPTH, "5");
 
     uv_snapshot!(context.filters(), cmd, @r###"
     success: false
@@ -5950,7 +5949,7 @@ fn run_python_preference_no_project() {
     ");
 
     // If we remove the `VIRTUAL_ENV` variable, we should get the unmanaged Python
-    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version").env_remove("VIRTUAL_ENV"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("--no-managed-python").arg("python").arg("--version").env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: true
     exit_code: 0
     ----- stdout -----

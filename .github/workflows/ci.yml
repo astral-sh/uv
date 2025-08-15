@@ -221,7 +221,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -231,6 +231,17 @@ jobs:
       - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
       - name: "Install required Python versions"
         run: uv python install
+
+      - name: "Install secret service"
+        run: |
+          sudo apt update -y
+          sudo apt install -y gnome-keyring
+
+      - name: "Start gnome-keyring"
+        # run gnome-keyring with 'foobar' as password for the login keyring
+        # this will create a new login keyring and unlock it
+        # the login password doesn't matter, but the keyring must be unlocked for the tests to work
+        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a416ddeedbd372e614cc1386e8b642692f66865e # v2.57.1
@@ -243,7 +254,7 @@ jobs:
           UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
-            --features python-patch \
+            --features python-patch,keyring-tests,secret-service \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -259,7 +270,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -282,7 +293,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,python-managed,pypi,git,performance,crates-io \
+            --features python,python-managed,pypi,git,performance,crates-io,keyring-tests,apple-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
@@ -334,7 +345,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,pypi,python-managed \
+            --features python,pypi,python-managed,keyring-tests,windows-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -493,7 +504,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -520,7 +531,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -547,7 +558,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - name: "Setup musl"
         run: |
@@ -579,7 +590,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -605,7 +616,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -716,7 +727,7 @@ jobs:
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
-        uses: rui314/setup-mold@702b1908b5edf30d71a8d1666b724e0f0c6fa035 # v1
+        uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - run: cargo +${MSRV} build
         env:
@@ -1493,7 +1504,7 @@ jobs:
           # newer versions.
           ./uv pip install -p venv-native/bin/python pyodide-build==0.30.3 pip
 
-      - name: "Install pyodide interpreter"
+      - name: "Install Pyodide interpreter"
         run: |
           source ./venv-native/bin/activate
           pyodide xbuildenv install 0.27.5
@@ -1502,12 +1513,24 @@ jobs:
           echo "PYODIDE_PYTHON=$PYODIDE_PYTHON" >> $GITHUB_ENV
           echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
 
-      - name: "Create pyodide virtual environment"
+      - name: "Create Pyodide virtual environment"
         run: |
           ./uv venv -p $PYODIDE_PYTHON venv-pyodide
           source ./venv-pyodide/bin/activate
           ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
           python -c 'import numpy'
+
+      - name: "Install Pyodide with uv python"
+        run: |
+          ./uv python install cpython-3.13.2-emscripten-wasm32-musl
+
+      - name: "Create a Pyodide virtual environment using uv installed Python"
+        run: |
+          ./uv venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide2
+          # TODO: be able to install Emscripten wheels here...
+          source ./venv-pyodide2/bin/activate
+          ./uv pip install packaging
+          python -c 'import packaging'
 
   integration-test-github-actions:
     timeout-minutes: 10
@@ -1695,7 +1718,7 @@ jobs:
           credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
 
       - name: "Set up GCP SDK"
-        uses: "google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9"
+        uses: "google-github-actions/setup-gcloud@cb1e50a9932213ecece00a606661ae9ca44f3397"
 
       - name: "Get GCP Artifact Registry token"
         id: get_token
@@ -1916,7 +1939,7 @@ jobs:
           persist-credentials: false
 
       - name: "Install Python"
-        run: apt-get update && apt-get install -y python3.11 python3-pip python3.11-venv
+        run: apt-get update && apt-get install -y python3.11 python3-pip python3.11-venv python3-debian
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -1931,6 +1954,11 @@ jobs:
 
       - name: "Validate global Python install"
         run: python3.11 scripts/check_system_python.py --uv ./uv --externally-managed
+
+      - name: "Test `uv run` with system Python"
+        run: |
+          ./uv run -p python3.11 -v python -c "import debian"
+          ./uv run -p python3.11 -v --with anyio python -c "import debian"
 
   system-test-fedora:
     timeout-minutes: 10

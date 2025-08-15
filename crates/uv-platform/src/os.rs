@@ -19,6 +19,28 @@ impl Os {
     pub fn is_windows(&self) -> bool {
         matches!(self.0, target_lexicon::OperatingSystem::Windows)
     }
+
+    pub fn is_emscripten(&self) -> bool {
+        matches!(self.0, target_lexicon::OperatingSystem::Emscripten)
+    }
+
+    pub fn is_macos(&self) -> bool {
+        matches!(self.0, target_lexicon::OperatingSystem::Darwin(_))
+    }
+
+    /// Whether this OS can run the other OS.
+    pub fn supports(&self, other: Self) -> bool {
+        // Emscripten cannot run on Windows, but all other OSes can run Emscripten.
+        if other.is_emscripten() {
+            return !self.is_windows();
+        }
+        if self.is_windows() && other.is_emscripten() {
+            return false;
+        }
+
+        // Otherwise, we require an exact match
+        *self == other
+    }
 }
 
 impl Display for Os {

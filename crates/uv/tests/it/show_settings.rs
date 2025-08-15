@@ -4355,7 +4355,7 @@ fn valid_conflicts() -> anyhow::Result<()> {
         ]
     "#})?;
     uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7720,7 +7720,7 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES,
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS,
             ),
         },
         python_preference: Managed,
@@ -7946,7 +7946,7 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES,
+                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS,
             ),
         },
         python_preference: Managed,

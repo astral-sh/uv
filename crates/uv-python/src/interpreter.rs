@@ -22,8 +22,7 @@ use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::Platform;
-use uv_platform_tags::{Tags, TagsError};
+use uv_platform_tags::{Platform, Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
@@ -51,6 +50,7 @@ pub struct Interpreter {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     tags: OnceLock<Tags>,
@@ -86,6 +86,7 @@ impl Interpreter {
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
+            site_packages: info.site_packages,
             stdlib: info.stdlib,
             standalone: info.standalone,
             tags: OnceLock::new(),
@@ -203,9 +204,7 @@ impl Interpreter {
             self.python_minor(),
             self.python_patch(),
             self.python_version().pre(),
-            self.os(),
-            self.arch(),
-            self.libc(),
+            uv_platform::Platform::new(self.os(), self.arch(), self.libc()),
             self.variant(),
         )
     }
@@ -439,8 +438,19 @@ impl Interpreter {
     }
 
     /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &Vec<PathBuf> {
+    pub fn sys_path(&self) -> &[PathBuf] {
         &self.sys_path
+    }
+
+    /// Return the `site.getsitepackages` for this Python interpreter.
+    ///
+    /// These are the paths Python will search for packages in at runtime. We use this for
+    /// environment layering, but not for checking for installed packages. We could use these paths
+    /// to check for installed packages, but it introduces a lot of complexity, so instead we use a
+    /// simplified version that does not respect customized site-packages. See
+    /// [`Interpreter::site_packages`].
+    pub fn runtime_site_packages(&self) -> &[PathBuf] {
+        &self.site_packages
     }
 
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
@@ -567,6 +577,9 @@ impl Interpreter {
     ///
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
+    ///
+    /// Note this does not include all runtime site-packages directories if the interpreter has been
+    /// customized. See [`Interpreter::runtime_site_packages`].
     pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
         let target = self.target().map(Target::site_packages);
 
@@ -870,6 +883,7 @@ struct InterpreterInfo {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     pointer_size: PointerSize,
@@ -1245,6 +1259,9 @@ mod tests {
             "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
             "sys_path": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
+                "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+            ],
+            "site_packages": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
