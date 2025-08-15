@@ -9,18 +9,19 @@ use std::process::Command;
 ///
 /// Unlike [`Path::with_extension`], this function does not replace an existing extension.
 ///
+/// If there is no file name, the path is returned unchanged.
+///
 /// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
 fn add_extension_to_path(mut path: PathBuf, extension: &str) -> PathBuf {
-    match path.file_name() {
-        Some(file_name) => {
-            let mut new_file_name = file_name.to_os_string();
-            new_file_name.push(".");
-            new_file_name.push(extension.trim_start_matches('.'));
-            path.set_file_name(new_file_name);
-            path
-        }
-        None => path,
-    }
+    let Some(name) = path.file_name() else {
+        // If there is no file name, we cannot add an extension.
+        return path;
+    };
+    let mut name = name.to_os_string();
+    name.push(".");
+    name.push(extension.trim_start_matches('.'));
+    path.set_file_name(name);
+    path
 }
 
 #[derive(Debug)]
