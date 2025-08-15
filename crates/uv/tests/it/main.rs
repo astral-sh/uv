@@ -39,8 +39,9 @@ mod lock_conflict;
 
 mod lock_scenarios;
 
-mod version;
+mod network;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
 mod pip_check;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
@@ -77,11 +78,17 @@ mod python_find;
 #[cfg(feature = "python")]
 mod python_list;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod python_module;
+
 #[cfg(feature = "python-managed")]
 mod python_install;
 
 #[cfg(feature = "python")]
 mod python_pin;
+
+#[cfg(feature = "python-managed")]
+mod python_upgrade;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod run;
@@ -119,7 +126,10 @@ mod tree;
 #[cfg(feature = "python")]
 mod venv;
 
+mod version;
+
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod workflow;
 
+mod extract;
 mod workspace;

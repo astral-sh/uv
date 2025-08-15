@@ -5,18 +5,18 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_configuration::{
     Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Preview,
 };
 use uv_fs::Simplified;
-use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
@@ -60,7 +60,7 @@ pub(crate) async fn remove(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -202,6 +202,14 @@ pub(crate) async fn remove(
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content)?;
 
+    // Determine enabled groups and extras
+    let default_groups = match &target {
+        RemoveTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
+        RemoveTarget::Script(_) => DefaultGroups::default(),
+    };
+    let groups = DependencyGroups::default().with_defaults(default_groups);
+    let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
+
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
     let target = match target {
         RemoveTarget::Project(project) => {
@@ -210,6 +218,7 @@ pub(crate) async fn remove(
                 let interpreter = ProjectInterpreter::discover(
                     project.workspace(),
                     project_dir,
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &network_settings,
                     python_preference,
@@ -220,6 +229,7 @@ pub(crate) async fn remove(
                     active,
                     cache,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -229,6 +239,7 @@ pub(crate) async fn remove(
                 // Discover or create the virtual environment.
                 let environment = ProjectEnvironment::get_or_init(
                     project.workspace(),
+                    &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
                     &network_settings,
@@ -240,6 +251,7 @@ pub(crate) async fn remove(
                     cache,
                     DryRun::Disabled,
                     printer,
+                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -249,7 +261,7 @@ pub(crate) async fn remove(
         }
         RemoveTarget::Script(script) => {
             let interpreter = ScriptInterpreter::discover(
-                Pep723ItemRef::Script(&script),
+                (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -260,6 +272,7 @@ pub(crate) async fn remove(
                 active,
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter();
@@ -267,6 +280,14 @@ pub(crate) async fn remove(
             AddTarget::Script(script, Box::new(interpreter))
         }
     };
+
+    let _lock = target
+        .acquire_lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Determine the lock mode.
     let mode = if locked {
@@ -287,6 +308,7 @@ pub(crate) async fn remove(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -312,12 +334,6 @@ pub(crate) async fn remove(
         return Ok(ExitStatus::Success);
     };
 
-    // Determine the default groups to include.
-    let default_groups = default_dependency_groups(project.pyproject_toml())?;
-
-    // Determine the default extras to include.
-    let default_extras = DefaultExtras::default();
-
     // Identify the installation target.
     let target = match &project {
         VirtualProject::Project(project) => InstallTarget::Project {
@@ -336,11 +352,12 @@ pub(crate) async fn remove(
     match project::sync::do_sync(
         target,
         venv,
-        &ExtrasSpecification::default().with_defaults(default_extras),
-        &DependencyGroups::default().with_defaults(default_groups),
+        &extras,
+        &groups,
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Exact,
+        None,
         (&settings).into(),
         &network_settings,
         &state,
@@ -348,6 +365,7 @@ pub(crate) async fn remove(
         installer_metadata,
         concurrency,
         cache,
+        WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,
@@ -368,6 +386,7 @@ pub(crate) async fn remove(
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum RemoveTarget {
     /// A PEP 723 script, with inline metadata.
     Project(VirtualProject),

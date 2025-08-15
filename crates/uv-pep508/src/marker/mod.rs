@@ -23,8 +23,8 @@ pub use lowering::{
 pub use tree::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerExpression,
     MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeDebugGraph, MarkerTreeKind,
-    MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
-    StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString, MarkerValueVersion,
+    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 
 /// `serde` helpers for [`MarkerTree`].

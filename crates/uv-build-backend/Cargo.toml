@@ -1,13 +1,13 @@
 [package]
 name = "uv-build-backend"
 version = "0.1.0"
-edition.workspace = true
-rust-version.workspace = true
-homepage.workspace = true
-documentation.workspace = true
-repository.workspace = true
-authors.workspace = true
-license.workspace = true
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 doctest = false
@@ -31,6 +31,7 @@ flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true }
 globset = { workspace = true }
 itertools = { workspace = true }
+rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
@@ -55,5 +56,6 @@ schemars = ["dep:schemars", "uv-pypi-types/schemars"]
 
 [dev-dependencies]
 indoc = { workspace = true }
-insta = { version = "1.40.0", features = ["filters"] }
+insta = { workspace = true }
+regex = { workspace = true }
 tempfile = { workspace = true }

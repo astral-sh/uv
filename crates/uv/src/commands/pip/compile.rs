@@ -1,9 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use itertools::Itertools;
@@ -14,19 +13,21 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    BuildOptions, Concurrency, Constraints, ExportFormat, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Origin, Requirement, UnresolvedRequirementSpecification, Verbatim,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
+    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
+    UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
@@ -34,17 +35,20 @@ use uv_python::{
 };
 use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
-    RequirementsSource, RequirementsSpecification, is_pylock_toml, upgrade::read_requirements_txt,
+    GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
+    upgrade::read_requirements_txt,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, RequiresPython,
-    ResolutionMode, ResolverEnvironment,
+    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
+    ResolverEnvironment,
 };
+use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
+use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
@@ -64,7 +68,7 @@ pub(crate) async fn pip_compile(
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
-    groups: BTreeMap<PathBuf, Vec<GroupName>>,
+    groups: GroupsSpecification,
     output_file: Option<&Path>,
     format: Option<ExportFormat>,
     resolution_mode: ResolutionMode,
@@ -91,13 +95,16 @@ pub(crate) async fn pip_compile(
     keyring_provider: KeyringProviderType,
     network_settings: &NetworkSettings,
     config_settings: ConfigSettings,
+    config_settings_package: PackageConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
+    extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     universal: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     sources: SourceStrategy,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
@@ -108,8 +115,17 @@ pub(crate) async fn pip_compile(
     quiet: bool,
     cache: Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
+    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+        && !extra_build_dependencies.is_empty()
+    {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+        );
+    }
+
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
     if output_file
@@ -150,7 +166,7 @@ pub(crate) async fn pip_compile(
 
     // Respect `UV_PYTHON`
     if python.is_none() && python_version.is_none() {
-        if let Ok(request) = std::env::var("UV_PYTHON") {
+        if let Ok(request) = std::env::var(EnvVars::UV_PYTHON) {
             if !request.is_empty() {
                 python = Some(request);
             }
@@ -180,6 +196,7 @@ pub(crate) async fn pip_compile(
     }
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
@@ -205,7 +222,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
-        groups,
+        Some(&groups),
         &client_builder,
     )
     .await?;
@@ -269,9 +286,16 @@ pub(crate) async fn pip_compile(
 
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
+    let python_preference = python_preference.with_system_flag(system);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(&request, environment_preference, python_preference, &cache)
+        PythonInstallation::find(
+            &request,
+            environment_preference,
+            python_preference,
+            &cache,
+            preview,
+        )
     } else {
         // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
         // be able to use `PythonInstallation::find(...)` here.
@@ -281,7 +305,13 @@ pub(crate) async fn pip_compile(
         } else {
             PythonRequest::default()
         };
-        PythonInstallation::find_best(&request, environment_preference, python_preference, &cache)
+        PythonInstallation::find_best(
+            &request,
+            environment_preference,
+            python_preference,
+            &cache,
+            preview,
+        )
     }?
     .into_interpreter();
 
@@ -326,13 +356,12 @@ pub(crate) async fn pip_compile(
 
     // Determine the Python requirement, if the user requested a specific version.
     let python_requirement = if universal {
-        let requires_python = RequiresPython::greater_than_equal_version(
-            if let Some(python_version) = python_version.as_ref() {
-                &python_version.version
-            } else {
-                interpreter.python_version()
-            },
-        );
+        let requires_python = if let Some(python_version) = python_version.as_ref() {
+            RequiresPython::greater_than_equal_version(&python_version.version)
+        } else {
+            let version = interpreter.python_minor_version();
+            RequiresPython::greater_than_equal_version(&version)
+        };
         PythonRequirement::from_requires_python(&interpreter, requires_python)
     } else if let Some(python_version) = python_version.as_ref() {
         PythonRequirement::from_python_version(&interpreter, python_version)
@@ -376,32 +405,21 @@ pub(crate) async fn pip_compile(
         no_index,
     );
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    index_locations.cache_index_credentials();
 
     // Determine the PyTorch backend.
-    let torch_backend = torch_backend.map(|mode| {
-        if preview.is_disabled() {
-            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
-        }
-
-        TorchStrategy::from_mode(
-            mode,
-            python_platform
-                .map(TargetTriple::platform)
-                .as_ref()
-                .unwrap_or(interpreter.platform())
-                .os(),
-        )
-    }).transpose()?;
+    let torch_backend = torch_backend
+        .map(|mode| {
+            TorchStrategy::from_mode(
+                mode,
+                python_platform
+                    .map(TargetTriple::platform)
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -466,10 +484,16 @@ pub(crate) async fn pip_compile(
             .map(|constraint| constraint.requirement.clone()),
     );
 
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires =
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        build_constraints,
+        &build_constraints,
         &interpreter,
         &index_locations,
         &flat_index,
@@ -477,11 +501,14 @@ pub(crate) async fn pip_compile(
         state,
         index_strategy,
         &config_settings,
+        &config_settings_package,
         build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
         link_mode,
         &build_options,
         &build_hashes,
-        exclude_newer,
+        exclude_newer.clone(),
         sources,
         WorkspaceCache::default(),
         concurrency,
@@ -493,7 +520,7 @@ pub(crate) async fn pip_compile(
         .prerelease_mode(prerelease_mode)
         .fork_strategy(fork_strategy)
         .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
+        .exclude_newer(exclude_newer.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
@@ -517,6 +544,7 @@ pub(crate) async fn pip_compile(
         tags.as_deref(),
         resolver_env.clone(),
         python_requirement,
+        interpreter.markers(),
         Conflicts::empty(),
         &client,
         &flat_index,

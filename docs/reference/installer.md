@@ -1,6 +1,6 @@
-# Configuring the uv installer
+# The uv installer
 
-## Changing the install path
+## Changing the installation path
 
 By default, uv is installed to `~/.local/bin`. If `XDG_BIN_HOME` is set, it will be used instead.
 Similarly, if `XDG_DATA_HOME` is set, the target directory will be inferred as
@@ -23,14 +23,14 @@ To change the installation path, use `UV_INSTALL_DIR`:
 ## Disabling shell modifications
 
 The installer may also update your shell profiles to ensure the uv binary is on your `PATH`. To
-disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
+disable this behavior, use `UV_NO_MODIFY_PATH`. For example:
 
 ```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
+$ curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
 ```
 
-If installed with `INSTALLER_NO_MODIFY_PATH`, subsequent operations, like `uv self update`, will not
-modify your shell profiles.
+If installed with `UV_NO_MODIFY_PATH`, subsequent operations, like `uv self update`, will not modify
+your shell profiles.
 
 ## Unmanaged installations
 
@@ -43,10 +43,11 @@ $ curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/custom
 
 The use of `UV_UNMANAGED_INSTALL` will also disable self-updates (via `uv self update`).
 
-## Passing options to the install script
+## Passing options to the installation script
 
 Using environment variables is recommended because they are consistent across platforms. However,
-options can be passed directly to the install script. For example, to see the available options:
+options can be passed directly to the installation script. For example, to see the available
+options:
 
 ```console
 $ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help

@@ -1127,6 +1127,70 @@ fn tool_run_without_output() {
 
 #[test]
 #[cfg(not(windows))]
+fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    let black_editable = context.temp_dir.child("src").child("black_editable");
+    copy_dir_all(
+        context
+            .workspace_root
+            .join("scripts/packages/black_editable"),
+        &black_editable,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["anyio", "sniffio==1.3.1"]
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import sniffio
+       "
+    })?;
+
+    // Performs a tool run with a comma-separated `--with` flag.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-w")
+        .arg("iniconfig,typing-extensions")
+        .arg("pytest")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
 fn tool_run_csv_with() -> anyhow::Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
@@ -1889,6 +1953,73 @@ fn tool_run_python_at_version() {
     Audited in [TIME]
     "###);
 
+    // The @ is optional.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python3.11")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // Dotless syntax also works.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python311")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // Other implementations like PyPy also work. PyPy isn't currently in the test suite, so
+    // specify CPython and rely on the fact that they go through the same codepath.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("cpython311")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // But short names don't work in the executable position (as opposed to with -p/--python). We
+    // interpret those as package names.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("cp311")
+        .arg("--version"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    // Bare versions don't work either. Again we interpret them as package names.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("311")
+        .arg("--version"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
+    ");
+
     // Request a version via `-p`
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
@@ -1903,6 +2034,35 @@ fn tool_run_python_at_version() {
     ----- stderr -----
     Resolved in [TIME]
     "###);
+
+    // @ syntax is also allowed here.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("python@311")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // But @ with nothing in front of it is not.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("@311")
+        .arg("python")
+        .arg("--version"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for executable name `@311` in [PYTHON SOURCES]
+    ");
 
     // Request a version in the tool and `-p`
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1954,6 +2114,54 @@ fn tool_run_python_at_version() {
 }
 
 #[test]
+fn tool_run_hint_version_not_available() {
+    let context = TestContext::new_with_versions(&[])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "never"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python 3.12, but Python downloads are set to 'never'
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto")
+        .env(EnvVars::UV_OFFLINE, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python 3.12, but uv is set to offline mode
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "auto")
+        .env(EnvVars::UV_NO_MANAGED_PYTHON, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python 3.12, but the Python preference is set to 'only system'
+    ");
+}
+
+#[test]
 fn tool_run_python_from() {
     let context = TestContext::new_with_versions(&["3.12", "3.11"])
         .with_filtered_counts()
@@ -1991,16 +2199,47 @@ fn tool_run_python_from() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("python>=3.12")
+        .arg("python311")
         .arg("python")
-        .arg("--version"), @r###"
-    success: false
-    exit_code: 2
+        .arg("--version"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    Python 3.11.[X]
 
     ----- stderr -----
-    error: Using `--from python<specifier>` is not supported. Use `python@<version>` instead.
-    "###);
+    Resolved in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python>3.11,<3.13")
+        .arg("python")
+        .arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    // The executed command isn't necessarily Python, but Python is in the PATH.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python@3.11")
+        .arg("bash")
+        .arg("-c")
+        .arg("python --version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
 }
 
 #[test]
@@ -2348,7 +2587,7 @@ fn tool_run_with_script_and_from_script() {
 
 #[test]
 fn tool_run_with_compatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8")
+    let context = TestContext::new("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2361,7 +2600,7 @@ fn tool_run_with_compatible_build_constraints() -> Result<()> {
         .arg("--build-constraints")
         .arg("build_constraints.txt")
         .arg("pytest")
-        .arg("--version"), @r###"
+        .arg("--version"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2378,14 +2617,14 @@ fn tool_run_with_compatible_build_constraints() -> Result<()> {
      + pytest==8.2.0
      + requests==1.2.0
      + tomli==2.0.1
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn tool_run_with_incompatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8")
+    let context = TestContext::new("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2404,18 +2643,17 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
       × Failed to download and build `requests==1.2.0`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     Ok(())
 }
@@ -2847,6 +3085,96 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
 
     ----- stderr -----
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn tool_run_reresolve_python() -> anyhow::Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let foo_dir = context.temp_dir.child("foo");
+    let foo_pyproject_toml = foo_dir.child("pyproject.toml");
+
+    foo_pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:run"
+        "#
+    })?;
+    let foo_project_src = foo_dir.child("src");
+    let foo_module = foo_project_src.child("foo");
+    let foo_init = foo_module.child("__init__.py");
+    foo_init.write_str(indoc! { r#"
+        import sys
+
+        def run():
+            print(".".join(str(key) for key in sys.version_info[:2]))
+       "#
+    })?;
+
+    // Although 3.11 is first on the path, we'll re-resolve with 3.12 because the `requires-python`
+    // is not compatible with 3.11.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    // When an incompatible Python version is explicitly requested, we should not re-resolve
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("--python")
+        .arg("3.11")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
+          And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    // Unless the discovered interpreter is compatible with the request
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("--python")
+        .arg(">=3.11")
+        .arg("foo")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
 
     Ok(())
 }

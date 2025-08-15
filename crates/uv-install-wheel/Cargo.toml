@@ -22,6 +22,7 @@ name = "uv_install_wheel"
 
 [dependencies]
 uv-cache-info = { workspace = true }
+uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
@@ -56,5 +57,5 @@ self-replace = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-assert_fs = { version = "1.1.2" }
+assert_fs = { workspace = true }
 indoc = { workspace = true }

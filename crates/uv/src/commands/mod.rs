@@ -29,6 +29,7 @@ pub(crate) use project::remove::remove;
 pub(crate) use project::run::{RunCommand, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
+pub(crate) use project::version::{project_version, self_version};
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
@@ -37,6 +38,7 @@ pub(crate) use python::install::install as python_install;
 pub(crate) use python::list::list as python_list;
 pub(crate) use python::pin::pin as python_pin;
 pub(crate) use python::uninstall::uninstall as python_uninstall;
+pub(crate) use python::update_shell::update_shell as python_update_shell;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use tool::dir::dir as tool_dir;
@@ -56,7 +58,6 @@ use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
-pub(crate) use version::{project_version, self_version};
 
 use crate::printer::Printer;
 
@@ -72,12 +73,10 @@ mod project;
 mod publish;
 mod python;
 pub(crate) mod reporters;
-mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
 mod venv;
-mod version;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {

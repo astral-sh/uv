@@ -15,16 +15,18 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, Preview};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name};
+use uv_distribution_types::{
+    Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
+};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonEnvironment};
-use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference};
+use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
@@ -47,11 +49,12 @@ pub(crate) async fn pip_list(
     network_settings: &NetworkSettings,
     concurrency: Concurrency,
     strict: bool,
-    exclude_newer: Option<ExcludeNewer>,
+    exclude_newer: ExcludeNewer,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Disallow `--outdated` with `--format freeze`.
     if outdated && matches!(format, ListFormat::Freeze) {
@@ -62,7 +65,9 @@ pub(crate) async fn pip_list(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
+        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
@@ -83,6 +88,7 @@ pub(crate) async fn pip_list(
         let capabilities = IndexCapabilities::default();
 
         let client_builder = BaseClientBuilder::new()
+            .retries_from_env()?
             .connectivity(network_settings.connectivity)
             .native_tls(network_settings.native_tls)
             .keyring(keyring_provider)

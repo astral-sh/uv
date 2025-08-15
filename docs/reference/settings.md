@@ -127,6 +127,31 @@ default-groups = ["docs"]
 
 ---
 
+### [`dependency-groups`](#dependency-groups) {: #dependency-groups }
+
+Additional settings for `dependency-groups`.
+
+Currently this can only be used to add `requires-python` constraints
+to dependency groups (typically to inform uv that your dev tooling
+has a higher python requirement than your actual project).
+
+This cannot be used to define dependency groups, use the top-level
+`[dependency-groups]` table for that.
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.dependency-groups]
+my-group = {requires-python = ">=3.12"}
+```
+
+---
+
 ### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
 The project's development dependencies.
@@ -173,6 +198,49 @@ These environments will also be respected when `uv pip compile` is invoked with 
 [tool.uv]
 # Resolve for macOS, but not for Linux or Windows.
 environments = ["sys_platform == 'darwin'"]
+```
+
+---
+
+### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
+
+Additional build dependencies for packages.
+
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages, like,
+`pip`, and do not declare them as build dependencies.
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.extra-build-dependencies]
+pytest = ["pip"]
+```
+
+---
+
+### [`extra-build-variables`](#extra-build-variables) {: #extra-build-variables }
+
+Extra environment variables to set when building certain packages.
+
+Environment variables will be added to the environment when building the
+specified packages.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, dict[str, str]]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.extra-build-variables]
+flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
 ```
 
 ---
@@ -371,10 +439,6 @@ pydantic = { path = "/path/to/pydantic", editable = true }
 
 Settings for the uv build backend (`uv_build`).
 
-!!! note
-
-    The uv build backend is currently in preview and may change in any future release.
-
 Note that those settings only apply when using the `uv_build` backend, other build backends
 (such as hatchling) have their own configuration.
 
@@ -404,7 +468,7 @@ data files are included by placing them in the Python module instead of using da
   with this package as build requirement use the include directory to find additional header
   files.
 - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended
-  to uses these two options.
+  to use these two options.
 
 **Default value**: `{}`
 
@@ -414,7 +478,7 @@ data files are included by placing them in the Python module instead of using da
 
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
-data = { "headers": "include/headers", "scripts": "bin" }
+data = { headers = "include/headers", scripts = "bin" }
 ```
 
 ---
@@ -446,13 +510,24 @@ The name of the module directory inside `module-root`.
 
 The default module name is the package name with dots and dashes replaced by underscores.
 
+Package names need to be valid Python identifiers, and the directory needs to contain a
+`__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
+being the module name, and which contain a `__init__.pyi` file.
+
+For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
+`foo-stubs.bar`.
+
+For namespace packages with multiple modules, the path can be a list, e.g.,
+`["foo", "bar"]`. We recommend using a single module per package, splitting multiple
+packages into a workspace.
+
 Note that using this option runs the risk of creating two packages with different names but
 the same module names. Installing such packages together leads to unspecified behavior,
 often with corrupted files or directory trees.
 
 **Default value**: `None`
 
-**Type**: `str`
+**Type**: `str | list[str]`
 
 **Example usage**:
 
@@ -479,6 +554,66 @@ Common values are `src` (src layout, the default) or an empty path (flat layout)
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
 module-root = ""
+```
+
+---
+
+#### [`namespace`](#build-backend_namespace) {: #build-backend_namespace }
+<span id="namespace"></span>
+
+Build a namespace package.
+
+Build a PEP 420 implicit namespace package, allowing more than one root `__init__.py`.
+
+Use this option when the namespace package contains multiple root `__init__.py`, for
+namespace packages with a single root `__init__.py` use a dotted `module-name` instead.
+
+To compare dotted `module-name` and `namespace = true`, the first example below can be
+expressed with `module-name = "cloud.database"`: There is one root `__init__.py` `database`.
+In the second example, we have three roots (`cloud.database`, `cloud.database_pro`,
+`billing.modules.database_pro`), so `namespace = true` is required.
+
+```text
+src
+└── cloud
+    └── database
+        ├── __init__.py
+        ├── query_builder
+        │   └── __init__.py
+        └── sql
+            ├── parser.py
+            └── __init__.py
+```
+
+```text
+src
+├── cloud
+│   ├── database
+│   │   ├── __init__.py
+│   │   ├── query_builder
+│   │   │   └── __init__.py
+│   │   └── sql
+│   │       ├── __init__.py
+│   │       └── parser.py
+│   └── database_pro
+│       ├── __init__.py
+│       └── query_builder.py
+└── billing
+    └── modules
+        └── database_pro
+            ├── __init__.py
+            └── sql.py
+```
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+namespace = true
 ```
 
 ---
@@ -588,6 +723,44 @@ members = ["member1", "path/to/member2", "libs/*"]
 ---
 
 ## Configuration
+### [`add-bounds`](#add-bounds) {: #add-bounds }
+
+The default version specifier when adding a dependency.
+
+When adding a dependency to the project, if no constraint or URL is provided, a constraint
+is added based on the latest compatible version of the package. By default, a lower bound
+constraint is used, e.g., `>=1.2.3`.
+
+When `--frozen` is provided, no resolution is performed, and dependencies are always added
+without constraints.
+
+This option is in preview and may change in any future release.
+
+**Default value**: `"lower"`
+
+**Possible values**:
+
+- `"lower"`: Only a lower bound, e.g., `>=1.2.3`
+- `"major"`: Allow the same major version, similar to the semver caret, e.g., `>=1.2.3, <2.0.0`
+- `"minor"`: Allow the same minor version, similar to the semver tilde, e.g., `>=1.2.3, <1.3.0`
+- `"exact"`: Pin the exact version, e.g., `==1.2.3`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    add-bounds = "major"
+    ```
+=== "uv.toml"
+
+    ```toml
+    add-bounds = "major"
+    ```
+
+---
+
 ### [`allow-insecure-host`](#allow-insecure-host) {: #allow-insecure-host }
 
 Allow insecure connections to host.
@@ -876,6 +1049,33 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
+### [`config-settings-package`](#config-settings-package) {: #config-settings-package }
+
+Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+specified as `KEY=VALUE` pairs.
+
+Accepts a map from package names to string key-value pairs.
+
+**Default value**: `{}`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+=== "uv.toml"
+
+    ```toml
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+
+---
+
 ### [`dependency-metadata`](#dependency-metadata) {: #dependency-metadata }
 
 Pre-defined static metadata for dependencies of the project (direct or transitive). When
@@ -918,11 +1118,11 @@ standard, though only the following fields are respected:
 
 ### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
 
-Limit candidate packages to those that were uploaded prior to the given date.
+Limit candidate packages to those that were uploaded prior to a given point in time.
 
-Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-system's configured time zone.
+Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+behave consistently across timezones.
 
 **Default value**: `None`
 
@@ -934,12 +1134,96 @@ system's configured time zone.
 
     ```toml
     [tool.uv]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 === "uv.toml"
 
     ```toml
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
+    ```
+
+---
+
+### [`exclude-newer-package`](#exclude-newer-package) {: #exclude-newer-package }
+
+Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+
+Accepts package-date pairs in a dictionary format.
+
+**Default value**: `None`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+    ```
+=== "uv.toml"
+
+    ```toml
+    exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+    ```
+
+---
+
+### [`extra-build-dependencies`](#extra-build-dependencies) {: #extra-build-dependencies }
+
+Additional build dependencies for packages.
+
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages like
+`pip`, and do not declare them as build dependencies.
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    [extra-build-dependencies]
+    pytest = ["setuptools"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [extra-build-dependencies]
+    pytest = ["setuptools"]
+    ```
+
+---
+
+### [`extra-build-variables`](#extra-build-variables) {: #extra-build-variables }
+
+Extra environment variables to set when building certain packages.
+
+Environment variables will be added to the environment when building the
+specified packages.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, dict[str, str]]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.extra-build-variables]
+    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [tool.uv.extra-build-variables]
+    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
     ```
 
 ---
@@ -1198,6 +1482,11 @@ The method to use when installing packages from the global cache.
 
 Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
 Windows.
+
+WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+will break all installed packages by way of removing the underlying source files. Use
+symlinks with caution.
 
 **Default value**: `"clone" (macOS) or "hardlink" (Linux, Windows)`
 
@@ -2114,6 +2403,33 @@ specified as `KEY=VALUE` pairs.
 
 ---
 
+#### [`config-settings-package`](#pip_config-settings-package) {: #pip_config-settings-package }
+<span id="config-settings-package"></span>
+
+Settings to pass to the [PEP 517](https://peps.python.org/pep-0517/) build backend for specific packages,
+specified as `KEY=VALUE` pairs.
+
+**Default value**: `{}`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    config-settings-package = { numpy = { editable_mode = "compat" } }
+    ```
+
+---
+
 #### [`custom-compile-command`](#pip_custom-compile-command) {: #pip_custom-compile-command }
 <span id="custom-compile-command"></span>
 
@@ -2350,6 +2666,34 @@ behave consistently across timezones.
 
 ---
 
+#### [`exclude-newer-package`](#pip_exclude-newer-package) {: #pip_exclude-newer-package }
+<span id="exclude-newer-package"></span>
+
+Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+
+Accepts package-date pairs in a dictionary format.
+
+**Default value**: `None`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    exclude-newer-package = { tqdm = "2022-04-04T00:00:00Z" }
+    ```
+
+---
+
 #### [`extra`](#pip_extra) {: #pip_extra }
 <span id="extra"></span>
 
@@ -2374,6 +2718,69 @@ Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     ```toml
     [pip]
     extra = ["dev", "docs"]
+    ```
+
+---
+
+#### [`extra-build-dependencies`](#pip_extra-build-dependencies) {: #pip_extra-build-dependencies }
+<span id="extra-build-dependencies"></span>
+
+Additional build dependencies for packages.
+
+This allows extending the PEP 517 build environment for the project's dependencies with
+additional packages. This is useful for packages that assume the presence of packages like
+`pip`, and do not declare them as build dependencies.
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    [extra-build-dependencies]
+    pytest = ["setuptools"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    [extra-build-dependencies]
+    pytest = ["setuptools"]
+    ```
+
+---
+
+#### [`extra-build-variables`](#pip_extra-build-variables) {: #pip_extra-build-variables }
+<span id="extra-build-variables"></span>
+
+Extra environment variables to set when building certain packages.
+
+Environment variables will be added to the environment when building the
+specified packages.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, dict[str, str]]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    [extra-build-variables]
+    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    [extra-build-variables]
+    flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
     ```
 
 ---
@@ -2639,6 +3046,11 @@ The method to use when installing packages from the global cache.
 
 Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
 Windows.
+
+WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+will break all installed packages by way of removing the underlying source files. Use
+symlinks with caution.
 
 **Default value**: `"clone" (macOS) or "hardlink" (Linux, Windows)`
 
@@ -3329,7 +3741,7 @@ must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via d
 Hash-checking mode introduces a number of additional constraints:
 
 - Git dependencies are not supported.
-- Editable installs are not supported.
+- Editable installations are not supported.
 - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
 

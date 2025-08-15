@@ -7,16 +7,19 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, SourceStrategy};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, DistributionId, IndexCapabilities, IndexLocations,
-    InstalledDist, IsBuildBackendError, Requirement, Resolution, SourceDist,
+    CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
+    ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
+    PackageConfigSettings, Requirement, Resolution, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
+
+use crate::BuildArena;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -58,14 +61,19 @@ use uv_workspace::WorkspaceCache;
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
 
+    // Note: this function is async deliberately, because downstream code may need to
+    // run async code to get the interpreter, to resolve the Python version.
     /// Return a reference to the interpreter.
-    fn interpreter(&self) -> &Interpreter;
+    fn interpreter(&self) -> impl Future<Output = &Interpreter> + '_;
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
+
+    /// Return a reference to the build arena.
+    fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
 
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
@@ -82,6 +90,9 @@ pub trait BuildContext {
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
 
+    /// The [`ConfigSettings`] used to build a specific package.
+    fn config_settings_package(&self) -> &PackageConfigSettings;
+
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;
 
@@ -90,6 +101,12 @@ pub trait BuildContext {
 
     /// Workspace discovery caching.
     fn workspace_cache(&self) -> &WorkspaceCache;
+
+    /// Get the extra build requirements.
+    fn extra_build_requires(&self) -> &ExtraBuildRequires;
+
+    /// Get the extra build variables.
+    fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
@@ -180,12 +197,12 @@ pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
 pub struct EmptyInstalledPackages;
 
 impl InstalledPackagesProvider for EmptyInstalledPackages {
-    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
-        Vec::new()
-    }
-
     fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
         std::iter::empty()
+    }
+
+    fn get_packages(&self, _name: &PackageName) -> Vec<&InstalledDist> {
+        Vec::new()
     }
 }
 

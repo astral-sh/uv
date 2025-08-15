@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.7.5/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.8.11/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```pwsh-session
-    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.7.5/install.ps1 | iex"
+    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.8.11/install.ps1 | iex"
     ```
 
 !!! tip
@@ -62,7 +62,7 @@ uv provides a standalone installer to download and install uv:
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-See the documentation on [installer configuration](../configuration/installer.md) for details on
+See the reference documentation on the [installer](../reference/installer.md) for details on
 customizing your uv installation.
 
 ### PyPI
@@ -87,15 +87,6 @@ $ pip install uv
     platform, uv will be built from source, which requires a Rust toolchain. See the
     [contributing setup guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md#setup)
     for details on building uv from source.
-
-### Cargo
-
-uv is available via Cargo, but must be built from Git rather than [crates.io](https://crates.io) due
-to its dependency on unpublished crates.
-
-```console
-$ cargo install --git https://github.com/astral-sh/uv uv
-```
 
 ### Homebrew
 
@@ -136,6 +127,19 @@ uv release artifacts can be downloaded directly from
 Each release page includes binaries for all supported platforms as well as instructions for using
 the standalone installer via `github.com` instead of `astral.sh`.
 
+### Cargo
+
+uv is available via Cargo, but must be built from Git rather than [crates.io](https://crates.io) due
+to its dependency on unpublished crates.
+
+```console
+$ cargo install --git https://github.com/astral-sh/uv uv
+```
+
+!!! note
+
+    This method builds uv from source, which requires a compatible Rust toolchain.
+
 ## Upgrading uv
 
 When uv is installed via the standalone installer, it can update itself on-demand:
@@ -147,7 +151,7 @@ $ uv self update
 !!! tip
 
     Updating uv will re-run the installer and can modify your shell profiles. To disable this
-    behavior, set `INSTALLER_NO_MODIFY_PATH=1`.
+    behavior, set `UV_NO_MODIFY_PATH=1`.
 
 When another installation method is used, self-updates are disabled. Use the package manager's
 upgrade method instead. For example, with `pip`:

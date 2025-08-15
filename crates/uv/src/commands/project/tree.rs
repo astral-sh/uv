@@ -7,13 +7,13 @@ use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
-use uv_configuration::{Concurrency, DependencyGroups, PreviewMode, TargetTriple};
+use uv_configuration::{Concurrency, DependencyGroups, Preview, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
 use uv_normalize::DefaultGroups;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -34,7 +34,7 @@ use crate::settings::{NetworkSettings, ResolverSettings};
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     locked: bool,
     frozen: bool,
     universal: bool,
@@ -57,7 +57,7 @@ pub(crate) async fn tree(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Find the project requirements.
     let workspace_cache = WorkspaceCache::default();
@@ -71,11 +71,12 @@ pub(crate) async fn tree(
         LockTarget::Workspace(&workspace)
     };
 
-    // Determine the default groups to include.
-    let defaults = match target {
+    // Determine the groups to include.
+    let default_groups = match target {
         LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
         LockTarget::Script(_) => DefaultGroups::default(),
     };
+    let groups = groups.with_defaults(default_groups);
 
     let native_tls = network_settings.native_tls;
 
@@ -85,7 +86,7 @@ pub(crate) async fn tree(
     } else {
         Some(match target {
             LockTarget::Script(script) => ScriptInterpreter::discover(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 network_settings,
                 python_preference,
@@ -96,12 +97,14 @@ pub(crate) async fn tree(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
                 workspace,
                 project_dir,
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 network_settings,
                 python_preference,
@@ -112,6 +115,7 @@ pub(crate) async fn tree(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -142,6 +146,7 @@ pub(crate) async fn tree(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &WorkspaceCache::default(),
         printer,
         preview,
     )
@@ -195,8 +200,11 @@ pub(crate) async fn tree(
                 fork_strategy: _,
                 dependency_metadata: _,
                 config_setting: _,
+                config_settings_package: _,
                 no_build_isolation: _,
                 no_build_isolation_package: _,
+                extra_build_dependencies: _,
+                extra_build_variables: _,
                 exclude_newer: _,
                 link_mode: _,
                 upgrade: _,
@@ -210,6 +218,7 @@ pub(crate) async fn tree(
             let client = RegistryClientBuilder::new(
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
+            .retries_from_env()?
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
@@ -271,7 +280,7 @@ pub(crate) async fn tree(
         depth.into(),
         &prune,
         &package,
-        &dev.with_defaults(defaults),
+        &groups,
         no_dedupe,
         invert,
     );

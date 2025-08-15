@@ -31,8 +31,8 @@ the effect of declaring a build system in the
     This setting makes PyPI reject your uploaded package from publishing. It does not affect
     security or privacy settings on alternative registries.
 
-    We also recommend only generating per-project tokens: Without a PyPI token matching the project,
-    it can't be accidentally published.
+    We also recommend only generating [per-project PyPI API tokens](https://pypi.org/help/#apitoken):
+    Without a PyPI token matching the project, it can't be accidentally published.
 
 ## Building your package
 
@@ -54,6 +54,70 @@ Alternatively, `uv build <SRC>` will build the package in the specified director
     `build-system.requires` section of the `pyproject.toml`. When publishing a package, we recommend
     running `uv build --no-sources` to ensure that the package builds correctly when `tool.uv.sources`
     is disabled, as is the case when using other build tools, like [`pypa/build`](https://github.com/pypa/build).
+
+## Updating your version
+
+The `uv version` command provides conveniences for updating the version of your package before you
+publish it.
+[See the project docs for reading your package's version](./projects.md#managing-version).
+
+To update to an exact version, provide it as a positional argument:
+
+```console
+$ uv version 1.0.0
+hello-world 0.7.0 => 1.0.0
+```
+
+To preview the change without updating the `pyproject.toml`, use the `--dry-run` flag:
+
+```console
+$ uv version 2.0.0 --dry-run
+hello-world 1.0.0 => 2.0.0
+$ uv version
+hello-world 1.0.0
+```
+
+To increase the version of your package semantics, use the `--bump` option:
+
+```console
+$ uv version --bump minor
+hello-world 1.2.3 => 1.3.0
+```
+
+The `--bump` option supports the following common version components: `major`, `minor`, `patch`,
+`stable`, `alpha`, `beta`, `rc`, `post`, and `dev`. When provided more than once, the components
+will be applied in order, from largest (`major`) to smallest (`dev`).
+
+To move from a stable to pre-release version, bump one of the major, minor, or patch components in
+addition to the pre-release component:
+
+```console
+$ uv version --bump patch --bump beta
+hello-world 1.3.0 => 1.3.1b1
+$ uv version --bump major --bump alpha
+hello-world 1.3.0 => 2.0.0a1
+```
+
+When moving from a pre-release to a new pre-release version, just bump the relevant pre-release
+component:
+
+```console
+uv version --bump beta
+hello-world 1.3.0b1 => 1.3.1b2
+```
+
+When moving from a pre-release to a stable version, the `stable` option can be used to clear the
+pre-release component:
+
+```console
+uv version --bump stable
+hello-world 1.3.1b2 => 1.3.1
+```
+
+!!! info
+
+    By default, when `uv version` modifies the project it will perform a lock and sync. To
+    prevent locking and syncing, use `--frozen`, or,  to just prevent syncing, use `--no-sync`.
 
 ## Publishing your package
 
@@ -93,7 +157,7 @@ explicit = true
 Even though `uv publish` retries failed uploads, it can happen that publishing fails in the middle,
 with some files uploaded and some files still missing. With PyPI, you can retry the exact same
 command, existing identical files will be ignored. With other registries, use
-`--check-url <index url>` with the index URL (not the publish URL) the packages belong to. When
+`--check-url <index url>` with the index URL (not the publishing URL) the packages belong to. When
 using `--index`, the index URL is used as check URL. uv will skip uploading files that are identical
 to files in the registry, and it will also handle raced parallel uploads. Note that existing files
 need to match exactly with those previously uploaded to the registry, this avoids accidentally

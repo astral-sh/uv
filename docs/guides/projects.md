@@ -29,7 +29,7 @@ $ uv init
 uv will create the following files:
 
 ```text
-.
+├── .gitignore
 ├── .python-version
 ├── README.md
 ├── main.py
@@ -87,8 +87,8 @@ description or license. You can edit this file manually, or use commands like `u
     See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
     for more details on getting started with the `pyproject.toml` format.
 
-You'll also use this file to specify uv [configuration options](../configuration/files.md) in a
-[`[tool.uv]`](../reference/settings.md) section.
+You'll also use this file to specify uv [configuration options](../concepts/configuration-files.md)
+in a [`[tool.uv]`](../reference/settings.md) section.
 
 ### `.python-version`
 
@@ -159,6 +159,38 @@ version, while keeping the rest of the lockfile intact.
 
 See the documentation on [managing dependencies](../concepts/projects/dependencies.md) for more
 details.
+
+## Managing version
+
+The `uv version` command can be used to read your package's version.
+
+To get the version of your package, run `uv version`:
+
+```console
+$ uv version
+hello-world 0.7.0
+```
+
+To get the version without the package name, use the `--short` option:
+
+```console
+$ uv version --short
+0.7.0
+```
+
+To get version information in a JSON format, use the `--output-format json` option:
+
+```console
+$ uv version --output-format json
+{
+    "package_name": "hello-world",
+    "version": "0.7.0",
+    "commit_info": null
+}
+```
+
+See the [publishing guide](./package.md#updating-your-version) for details on updating your package
+version.
 
 ## Running commands
 

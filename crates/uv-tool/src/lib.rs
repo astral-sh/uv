@@ -1,6 +1,7 @@
 use core::fmt;
 use fs_err as fs;
 
+use uv_configuration::Preview;
 use uv_dirs::user_executable_directory;
 use uv_pep440::Version;
 use uv_pep508::{InvalidNameError, PackageName};
@@ -23,6 +24,7 @@ use uv_installer::SitePackages;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
+use uv_virtualenv::remove_virtualenv;
 
 mod receipt;
 mod tool;
@@ -187,17 +189,7 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        // On Windows, if the current executable is in the directory, guard against self-deletion.
-        #[cfg(windows)]
-        if let Ok(itself) = std::env::current_exe() {
-            let target = std::path::absolute(&environment_path)?;
-            if itself.starts_with(&target) {
-                debug!("Detected self-delete of executable: {}", itself.display());
-                self_replace::self_delete_outside_path(&environment_path)?;
-            }
-        }
-
-        fs_err::remove_dir_all(environment_path)?;
+        remove_virtualenv(environment_path.as_path())?;
 
         Ok(())
     }
@@ -257,6 +249,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
+        preview: Preview,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -283,9 +276,11 @@ impl InstalledTools {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
+            uv_virtualenv::OnExisting::Remove,
             false,
             false,
             false,
+            preview,
         )?;
 
         Ok(venv)

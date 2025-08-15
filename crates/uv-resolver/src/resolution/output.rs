@@ -12,8 +12,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, Requirement, ResolutionDiagnostic,
-    ResolvedDist, VersionId, VersionOrUrlRef,
+    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, Requirement, RequiresPython,
+    ResolutionDiagnostic, ResolvedDist, VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -30,8 +30,7 @@ use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
-    VersionsResponse,
+    InMemoryIndex, MetadataResponse, Options, PythonRequirement, ResolveError, VersionsResponse,
 };
 
 /// The output of a successful resolution.
@@ -69,15 +68,15 @@ pub(crate) enum ResolutionGraphNode {
 impl ResolutionGraphNode {
     pub(crate) fn marker(&self) -> &UniversalMarker {
         match self {
-            ResolutionGraphNode::Root => &UniversalMarker::TRUE,
-            ResolutionGraphNode::Dist(dist) => &dist.marker,
+            Self::Root => &UniversalMarker::TRUE,
+            Self::Dist(dist) => &dist.marker,
         }
     }
 
     pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => {
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => {
                 let extra = dist.extra.as_ref()?;
                 Some((&dist.name, extra))
             }
@@ -85,9 +84,9 @@ impl ResolutionGraphNode {
     }
 
     pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => {
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => {
                 let group = dist.dev.as_ref()?;
                 Some((&dist.name, group))
             }
@@ -95,9 +94,9 @@ impl ResolutionGraphNode {
     }
 
     pub(crate) fn package_name(&self) -> Option<&PackageName> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => Some(&dist.name),
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => Some(&dist.name),
         }
     }
 }
@@ -105,8 +104,8 @@ impl ResolutionGraphNode {
 impl Display for ResolutionGraphNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResolutionGraphNode::Root => f.write_str("root"),
-            ResolutionGraphNode::Dist(dist) => Display::fmt(dist, f),
+            Self::Root => f.write_str("root"),
+            Self::Dist(dist) => Display::fmt(dist, f),
         }
     }
 }
@@ -699,6 +698,11 @@ impl ResolverOutput {
                         add_marker_params_from_tree(tree, set);
                     }
                 }
+                MarkerTreeKind::List(marker) => {
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(tree, set);
+                    }
+                }
             }
         }
 
@@ -828,7 +832,7 @@ impl std::error::Error for ConflictingDistributionError {}
 
 impl Display for ConflictingDistributionError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let ConflictingDistributionError {
+        let Self {
             ref name,
             ref version1,
             ref version2,
@@ -895,16 +899,11 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
         // Re-add the edges to the reduced graph.
         for edge in graph.edge_indices() {
             let (source, target) = graph.edge_endpoints(edge).unwrap();
-            // OK to ignore conflicting marker because we've asserted
-            // above that we aren't in universal mode. If we aren't in
-            // universal mode, then there can be no conflicts since
-            // conflicts imply forks and forks imply universal mode.
-            let marker = graph[edge].pep508();
 
             match (&graph[source], &graph[target]) {
                 (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
                     let target = inverse[&target_dist.name()];
-                    transformed.update_edge(root, target, Edge::Prod(marker));
+                    transformed.update_edge(root, target, Edge::Prod);
                 }
                 (
                     ResolutionGraphNode::Dist(source_dist),
@@ -914,11 +913,11 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
                     let target = inverse[&target_dist.name()];
 
                     let edge = if let Some(extra) = source_dist.extra.as_ref() {
-                        Edge::Optional(extra.clone(), marker)
+                        Edge::Optional(extra.clone())
                     } else if let Some(dev) = source_dist.dev.as_ref() {
-                        Edge::Dev(dev.clone(), marker)
+                        Edge::Dev(dev.clone())
                     } else {
-                        Edge::Prod(marker)
+                        Edge::Prod
                     };
 
                     transformed.add_edge(source, target, edge);
@@ -929,7 +928,7 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
             }
         }
 
-        uv_distribution_types::Resolution::new(transformed).with_diagnostics(diagnostics)
+        Self::new(transformed).with_diagnostics(diagnostics)
     }
 }
 

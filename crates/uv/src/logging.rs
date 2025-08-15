@@ -114,7 +114,7 @@ where
 /// includes targets and timestamps, along with all `uv=debug` messages by default.
 pub(crate) fn setup_logging(
     level: Level,
-    durations: impl Layer<Registry> + Send + Sync,
+    durations_layer: Option<impl Layer<Registry> + Send + Sync>,
     color: ColorChoice,
 ) -> anyhow::Result<()> {
     // We use directives here to ensure `RUST_LOG` can override them
@@ -137,12 +137,14 @@ pub(crate) fn setup_logging(
         }
     };
 
-    // Only record our own spans.
-    let durations_layer = durations.with_filter(
-        tracing_subscriber::filter::Targets::new()
-            .with_target("", tracing::level_filters::LevelFilter::INFO),
-    );
-
+    // Avoid setting the default log level to INFO
+    let durations_layer = durations_layer.map(|durations_layer| {
+        durations_layer.with_filter(
+            // Only record our own spans
+            tracing_subscriber::filter::Targets::new()
+                .with_target("", tracing::level_filters::LevelFilter::INFO),
+        )
+    });
     let filter = EnvFilter::builder()
         .with_default_directive(default_directive)
         .from_env()
@@ -205,7 +207,7 @@ pub(crate) fn setup_logging(
 
 /// Setup the `TRACING_DURATIONS_FILE` environment variable to enable tracing durations.
 #[cfg(feature = "tracing-durations-export")]
-pub(crate) fn setup_duration() -> anyhow::Result<(
+pub(crate) fn setup_durations() -> anyhow::Result<(
     Option<DurationsLayer<Registry>>,
     Option<DurationsLayerDropGuard>,
 )> {

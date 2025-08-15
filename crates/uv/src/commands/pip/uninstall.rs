@@ -3,18 +3,18 @@ use std::fmt::Write;
 use anyhow::Result;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{DryRun, KeyringProviderType};
+use uv_configuration::{DryRun, KeyringProviderType, Preview};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
+use uv_python::{EnvironmentPreference, PythonPreference};
 use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
@@ -37,10 +37,12 @@ pub(crate) async fn pip_uninstall(
     network_settings: &NetworkSettings,
     dry_run: DryRun,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
@@ -56,7 +58,9 @@ pub(crate) async fn pip_uninstall(
             .map(PythonRequest::parse)
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
+        PythonPreference::default().with_system_flag(system),
         &cache,
+        preview,
     )?;
 
     report_target_environment(&environment, &cache, printer)?;
@@ -98,7 +102,13 @@ pub(crate) async fn pip_uninstall(
         }
     }
 
-    let _lock = environment.lock().await?;
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
 
     // Index the current `site-packages` directory.
     let site_packages = uv_installer::SitePackages::from_environment(&environment)?;

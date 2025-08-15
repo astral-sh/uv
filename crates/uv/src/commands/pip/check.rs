@@ -5,8 +5,10 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
+use uv_configuration::Preview;
 use uv_distribution_types::{Diagnostic, InstalledDist};
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
+use uv_python::PythonPreference;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
 use crate::commands::pip::operations::report_target_environment;
@@ -19,6 +21,7 @@ pub(crate) fn pip_check(
     system: bool,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     let start = Instant::now();
 
@@ -26,7 +29,9 @@ pub(crate) fn pip_check(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
+        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;

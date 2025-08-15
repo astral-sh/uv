@@ -617,6 +617,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                 arch,
             }]
         }
+        (Os::Pyodide { major, minor }, Arch::Wasm32) => {
+            vec![PlatformTag::Pyodide {
+                major: *major,
+                minor: *minor,
+            }]
+        }
         _ => {
             return Err(PlatformError::OsVersionDetectionError(format!(
                 "Unsupported operating system and architecture combination: {os} {arch}"
@@ -713,7 +719,7 @@ impl BinaryFormat {
     ///
     /// This is roughly the inverse of the above: given a binary format, which `platform_machine`
     /// tags are supported?
-    pub fn platform_machine(&self) -> &'static [BinaryFormat] {
+    pub fn platform_machine(&self) -> &'static [Self] {
         match self {
             Self::Arm64 => &[Self::Arm64],
             Self::Fat => &[Self::X86_64, Self::Ppc],
@@ -765,7 +771,7 @@ mod tests {
     /// A reference list can be generated with:
     /// ```text
     /// $ python -c "from packaging import tags; [print(tag) for tag in tags.platform_tags()]"`
-    /// ````
+    /// ```
     #[test]
     fn test_platform_tags_manylinux() {
         let tags = compatible_tags(&Platform::new(

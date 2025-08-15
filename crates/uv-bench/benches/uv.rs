@@ -1,6 +1,6 @@
+use std::hint::black_box;
 use std::str::FromStr;
 
-use uv_bench::criterion::black_box;
 use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
@@ -86,12 +86,14 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, PreviewMode,
-        SourceStrategy,
+        BuildOptions, Concurrency, Constraints, IndexStrategy, Preview, SourceStrategy,
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
-    use uv_distribution_types::{DependencyMetadata, IndexLocations};
+    use uv_distribution_types::{
+        ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
+        IndexLocations, PackageConfigSettings, RequiresPython,
+    };
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
@@ -99,7 +101,7 @@ mod resolver {
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{
-        FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
+        ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement,
         Resolver, ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
@@ -141,10 +143,13 @@ mod resolver {
         universal: bool,
     ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
+        let extra_build_requires = ExtraBuildRequires::default();
+        let extra_build_variables = ExtraBuildVariables::default();
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
-        let exclude_newer = Some(
+        let config_settings_package = PackageConfigSettings::default();
+        let exclude_newer = ExcludeNewer::global(
             jiff::civil::date(2024, 9, 1)
                 .to_zoned(jiff::tz::TimeZone::UTC)
                 .unwrap()
@@ -158,7 +163,9 @@ mod resolver {
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
-        let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
+        let options = OptionsBuilder::new()
+            .exclude_newer(exclude_newer.clone())
+            .build();
         let sources = SourceStrategy::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
@@ -176,7 +183,7 @@ mod resolver {
         let build_context = BuildDispatch::new(
             client,
             &cache,
-            build_constraints,
+            &build_constraints,
             interpreter,
             &index_locations,
             &flat_index,
@@ -184,7 +191,10 @@ mod resolver {
             state,
             IndexStrategy::default(),
             &config_settings,
+            &config_settings_package,
             build_isolation,
+            &extra_build_requires,
+            &extra_build_variables,
             LinkMode::default(),
             &build_options,
             &hashes,
@@ -192,7 +202,7 @@ mod resolver {
             sources,
             workspace_cache,
             concurrency,
-            PreviewMode::Enabled,
+            Preview::default(),
         );
 
         let markers = if universal {
@@ -206,6 +216,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
+            interpreter.markers(),
             conflicts,
             Some(&TAGS),
             &flat_index,

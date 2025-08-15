@@ -11,11 +11,13 @@
 //! let marker = r#"requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8""#;
 //! let dependency_specification = Requirement::<VerbatimUrl>::from_str(marker).unwrap();
 //! assert_eq!(dependency_specification.name.as_ref(), "requests");
-//! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()]);
+//! assert_eq!(dependency_specification.extras, vec![ExtraName::from_str("security").unwrap(), ExtraName::from_str("tests").unwrap()].into());
 //! ```
 
 #![warn(missing_docs)]
 
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
@@ -24,14 +26,15 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 use cursor::Cursor;
 pub use marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
-    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
+    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -144,23 +147,50 @@ impl<T: Pep508Url> Requirement<T> {
             self.version_or_url = None;
         }
     }
+
+    /// Returns a [`Display`] implementation that doesn't mask credentials.
+    pub fn displayable_with_credentials(&self) -> impl Display {
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: true,
+        }
+    }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)?;
-        if !self.extras.is_empty() {
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: false,
+        }
+        .fmt(f)
+    }
+}
+
+struct RequirementDisplay<'a, T>
+where
+    T: Pep508Url + Display,
+{
+    requirement: &'a Requirement<T>,
+    display_credentials: bool,
+}
+
+impl<T: Pep508Url + Display> Display for RequirementDisplay<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.requirement.name)?;
+        if !self.requirement.extras.is_empty() {
             write!(
                 f,
                 "[{}]",
-                self.extras
+                self.requirement
+                    .extras
                     .iter()
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(",")
             )?;
         }
-        if let Some(version_or_url) = &self.version_or_url {
+        if let Some(version_or_url) = &self.requirement.version_or_url {
             match version_or_url {
                 VersionOrUrl::VersionSpecifier(version_specifier) => {
                     let version_specifier: Vec<String> =
@@ -168,12 +198,17 @@ impl<T: Pep508Url + Display> Display for Requirement<T> {
                     write!(f, "{}", version_specifier.join(","))?;
                 }
                 VersionOrUrl::Url(url) => {
+                    let url_string = if self.display_credentials {
+                        url.displayable_with_credentials().to_string()
+                    } else {
+                        url.to_string()
+                    };
                     // We add the space for markers later if necessary
-                    write!(f, " @ {url}")?;
+                    write!(f, " @ {url_string}")?;
                 }
             }
         }
-        if let Some(marker) = self.marker.contents() {
+        if let Some(marker) = self.requirement.marker.contents() {
             write!(f, " ; {marker}")?;
         }
         Ok(())
@@ -217,6 +252,49 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
+impl<T: Pep508Url> CacheKey for Requirement<T> {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.name.as_str().cache_key(state);
+
+        self.extras.len().cache_key(state);
+        for extra in &self.extras {
+            extra.as_str().cache_key(state);
+        }
+
+        // TODO(zanieb): We inline cache key handling for the child types here, but we could
+        // move the implementations to the children. The intent here was to limit the scope of
+        // types exposing the `CacheKey` trait for now.
+        if let Some(version_or_url) = &self.version_or_url {
+            1u8.cache_key(state);
+            match version_or_url {
+                VersionOrUrl::VersionSpecifier(spec) => {
+                    0u8.cache_key(state);
+                    spec.len().cache_key(state);
+                    for specifier in spec.iter() {
+                        specifier.operator().as_str().cache_key(state);
+                        specifier.version().cache_key(state);
+                    }
+                }
+                VersionOrUrl::Url(url) => {
+                    1u8.cache_key(state);
+                    url.cache_key(state);
+                }
+            }
+        } else {
+            0u8.cache_key(state);
+        }
+
+        if let Some(marker) = self.marker.contents() {
+            1u8.cache_key(state);
+            marker.to_string().cache_key(state);
+        } else {
+            0u8.cache_key(state);
+        }
+
+        // `origin` is intentionally omitted
+    }
+}
+
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
@@ -249,19 +327,26 @@ impl<T: Pep508Url> Requirement<T> {
 }
 
 /// Type to parse URLs from `name @ <url>` into. Defaults to [`Url`].
-pub trait Pep508Url: Display + Debug + Sized {
+pub trait Pep508Url: Display + Debug + Sized + CacheKey {
     /// String to URL parsing error
     type Err: Error + Debug;
 
     /// Parse a url from `name @ <url>`. Defaults to [`Url::parse_url`].
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err>;
+
+    /// Returns a [`Display`] implementation that doesn't mask credentials.
+    fn displayable_with_credentials(&self) -> impl Display;
 }
 
 impl Pep508Url for Url {
     type Err = url::ParseError;
 
     fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
-        Url::parse(url)
+        Self::parse(url)
+    }
+
+    fn displayable_with_credentials(&self) -> impl Display {
+        self
     }
 }
 
@@ -295,22 +380,15 @@ impl Reporter for TracingReporter {
 
 #[cfg(feature = "schemars")]
 impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
-    fn schema_name() -> String {
-        "Requirement".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Requirement")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`".to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`"
+        })
     }
 }
 

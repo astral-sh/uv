@@ -50,11 +50,14 @@ use uv_pep508::{Pep508Url, VerbatimUrl};
 use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
+use uv_redacted::DisplaySafeUrl;
 
 pub use crate::annotation::*;
 pub use crate::any::*;
+pub use crate::build_requires::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
+pub use crate::config_settings::*;
 pub use crate::dependency_metadata::*;
 pub use crate::diagnostic::*;
 pub use crate::dist_error::*;
@@ -72,6 +75,7 @@ pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
 pub use crate::requested::*;
 pub use crate::requirement::*;
+pub use crate::requires_python::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
@@ -80,8 +84,10 @@ pub use crate::traits::*;
 
 mod annotation;
 mod any;
+mod build_requires;
 mod buildable;
 mod cached;
+mod config_settings;
 mod dependency_metadata;
 mod diagnostic;
 mod dist_error;
@@ -99,6 +105,7 @@ mod pip_index;
 mod prioritized_distribution;
 mod requested;
 mod requirement;
+mod requires_python;
 mod resolution;
 mod resolved;
 mod specified_requirement;
@@ -117,8 +124,8 @@ impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&T> {
         match self {
-            VersionOrUrlRef::Version(_) => None,
-            VersionOrUrlRef::Url(url) => Some(url),
+            Self::Version(_) => None,
+            Self::Url(url) => Some(url),
         }
     }
 }
@@ -126,8 +133,8 @@ impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
 impl Verbatim for VersionOrUrlRef<'_> {
     fn verbatim(&self) -> Cow<'_, str> {
         match self {
-            VersionOrUrlRef::Version(version) => Cow::Owned(format!("=={version}")),
-            VersionOrUrlRef::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
+            Self::Version(version) => Cow::Owned(format!("=={version}")),
+            Self::Url(url) => Cow::Owned(format!(" @ {}", url.verbatim())),
         }
     }
 }
@@ -135,8 +142,8 @@ impl Verbatim for VersionOrUrlRef<'_> {
 impl std::fmt::Display for VersionOrUrlRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VersionOrUrlRef::Version(version) => write!(f, "=={version}"),
-            VersionOrUrlRef::Url(url) => write!(f, " @ {url}"),
+            Self::Version(version) => write!(f, "=={version}"),
+            Self::Url(url) => write!(f, " @ {url}"),
         }
     }
 }
@@ -147,23 +154,23 @@ pub enum InstalledVersion<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location, along with the version
     /// specifier to which it resolved.
-    Url(&'a Url, &'a Version),
+    Url(&'a DisplaySafeUrl, &'a Version),
 }
 
 impl InstalledVersion<'_> {
     /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&Url> {
+    pub fn url(&self) -> Option<&DisplaySafeUrl> {
         match self {
-            InstalledVersion::Version(_) => None,
-            InstalledVersion::Url(url, _) => Some(url),
+            Self::Version(_) => None,
+            Self::Url(url, _) => Some(url),
         }
     }
 
     /// If it is a version, return its value.
     pub fn version(&self) -> &Version {
         match self {
-            InstalledVersion::Version(version) => version,
-            InstalledVersion::Url(_, version) => version,
+            Self::Version(version) => version,
+            Self::Url(_, version) => version,
         }
     }
 }
@@ -171,8 +178,8 @@ impl InstalledVersion<'_> {
 impl std::fmt::Display for InstalledVersion<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InstalledVersion::Version(version) => write!(f, "=={version}"),
-            InstalledVersion::Url(url, version) => write!(f, "=={version} (from {url})"),
+            Self::Version(version) => write!(f, "=={version}"),
+            Self::Url(url, version) => write!(f, "=={version} (from {url})"),
         }
     }
 }
@@ -258,7 +265,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Box<Url>,
+    pub location: Box<DisplaySafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -299,7 +306,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Box<Url>,
+    pub location: Box<DisplaySafeUrl>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<Box<Path>>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -340,9 +347,9 @@ pub struct DirectorySourceDist {
     /// The absolute path to the distribution which we use for installing.
     pub install_path: Box<Path>,
     /// Whether the package should be installed in editable mode.
-    pub editable: bool,
+    pub editable: Option<bool>,
     /// Whether the package should be built and installed.
-    pub r#virtual: bool,
+    pub r#virtual: Option<bool>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -353,10 +360,10 @@ impl Dist {
     pub fn from_http_url(
         name: PackageName,
         url: VerbatimUrl,
-        location: Url,
+        location: DisplaySafeUrl,
         subdirectory: Option<Box<Path>>,
         ext: DistExtension,
-    ) -> Result<Dist, Error> {
+    ) -> Result<Self, Error> {
         match ext {
             DistExtension::Wheel => {
                 // Validate that the name in the wheel matches that of the requirement.
@@ -393,7 +400,7 @@ impl Dist {
         url: VerbatimUrl,
         install_path: &Path,
         ext: DistExtension,
-    ) -> Result<Dist, Error> {
+    ) -> Result<Self, Error> {
         // Convert to an absolute path.
         let install_path = path::absolute(install_path)?;
 
@@ -449,9 +456,9 @@ impl Dist {
         name: PackageName,
         url: VerbatimUrl,
         install_path: &Path,
-        editable: bool,
-        r#virtual: bool,
-    ) -> Result<Dist, Error> {
+        editable: Option<bool>,
+        r#virtual: Option<bool>,
+    ) -> Result<Self, Error> {
         // Convert to an absolute path.
         let install_path = path::absolute(install_path)?;
 
@@ -479,7 +486,7 @@ impl Dist {
         url: VerbatimUrl,
         git: GitUrl,
         subdirectory: Option<Box<Path>>,
-    ) -> Result<Dist, Error> {
+    ) -> Result<Self, Error> {
         Ok(Self::Source(SourceDist::Git(GitSourceDist {
             name,
             git: Box::new(git),
@@ -563,7 +570,7 @@ impl Dist {
     }
 
     /// Convert this distribution into a reference.
-    pub fn as_ref(&self) -> DistRef {
+    pub fn as_ref(&self) -> DistRef<'_> {
         match self {
             Self::Built(dist) => DistRef::Built(dist),
             Self::Source(dist) => DistRef::Source(dist),
@@ -652,7 +659,7 @@ impl SourceDist {
     /// Returns `true` if the distribution is editable.
     pub fn is_editable(&self) -> bool {
         match self {
-            Self::Directory(DirectorySourceDist { editable, .. }) => *editable,
+            Self::Directory(DirectorySourceDist { editable, .. }) => editable.unwrap_or(false),
             _ => false,
         }
     }
@@ -660,7 +667,7 @@ impl SourceDist {
     /// Returns `true` if the distribution is virtual.
     pub fn is_virtual(&self) -> bool {
         match self {
-            Self::Directory(DirectorySourceDist { r#virtual, .. }) => *r#virtual,
+            Self::Directory(DirectorySourceDist { r#virtual, .. }) => r#virtual.unwrap_or(false),
             _ => false,
         }
     }
@@ -849,17 +856,17 @@ impl Name for Dist {
 impl Name for CompatibleDist<'_> {
     fn name(&self) -> &PackageName {
         match self {
-            CompatibleDist::InstalledDist(dist) => dist.name(),
-            CompatibleDist::SourceDist {
+            Self::InstalledDist(dist) => dist.name(),
+            Self::SourceDist {
                 sdist,
                 prioritized: _,
             } => sdist.name(),
-            CompatibleDist::CompatibleWheel {
+            Self::CompatibleWheel {
                 wheel,
                 priority: _,
                 prioritized: _,
             } => wheel.name(),
-            CompatibleDist::IncompatibleWheel {
+            Self::IncompatibleWheel {
                 sdist,
                 wheel: _,
                 prioritized: _,
@@ -869,61 +876,61 @@ impl Name for CompatibleDist<'_> {
 }
 
 impl DistributionMetadata for RegistryBuiltWheel {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.filename.version)
     }
 }
 
 impl DistributionMetadata for RegistryBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         self.best_wheel().version_or_url()
     }
 }
 
 impl DistributionMetadata for DirectUrlBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for PathBuiltDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for RegistrySourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.version)
     }
 }
 
 impl DistributionMetadata for DirectUrlSourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for GitSourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for PathSourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for DirectorySourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url)
     }
 }
 
 impl DistributionMetadata for SourceDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
@@ -935,7 +942,7 @@ impl DistributionMetadata for SourceDist {
 }
 
 impl DistributionMetadata for BuiltDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::DirectUrl(dist) => dist.version_or_url(),
@@ -945,7 +952,7 @@ impl DistributionMetadata for BuiltDist {
 }
 
 impl DistributionMetadata for Dist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Built(dist) => dist.version_or_url(),
             Self::Source(dist) => dist.version_or_url(),
@@ -1168,7 +1175,7 @@ impl RemoteSource for Dist {
     }
 }
 
-impl Identifier for Url {
+impl Identifier for DisplaySafeUrl {
     fn distribution_id(&self) -> DistributionId {
         DistributionId::Url(uv_cache_key::CanonicalUrl::new(self))
     }
@@ -1445,15 +1452,15 @@ impl Identifier for SourceUrl<'_> {
 impl Identifier for BuildableSource<'_> {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            BuildableSource::Dist(source) => source.distribution_id(),
-            BuildableSource::Url(source) => source.distribution_id(),
+            Self::Dist(source) => source.distribution_id(),
+            Self::Url(source) => source.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            BuildableSource::Dist(source) => source.resource_id(),
-            BuildableSource::Url(source) => source.resource_id(),
+            Self::Dist(source) => source.resource_id(),
+            Self::Url(source) => source.resource_id(),
         }
     }
 }
@@ -1461,7 +1468,7 @@ impl Identifier for BuildableSource<'_> {
 #[cfg(test)]
 mod test {
     use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
-    use url::Url;
+    use uv_redacted::DisplaySafeUrl;
 
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
@@ -1485,7 +1492,7 @@ mod test {
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
         ] {
-            let url = Url::parse(url).unwrap();
+            let url = DisplaySafeUrl::parse(url).unwrap();
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");

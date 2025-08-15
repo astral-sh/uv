@@ -6,45 +6,52 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-
+use serde::Serialize;
+use tracing::warn;
 use uv_cache::Cache;
+use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
-    PreviewMode,
+    Preview, PreviewFeatures, TargetTriple, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
-use uv_fs::Simplified;
+use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, Installable, Lock};
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
+use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::resolution_markers;
+use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
-    default_dependency_groups, detect_conflicts, script_specification, update_environment,
+    default_dependency_groups, detect_conflicts, script_extra_build_requires, script_specification,
+    update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{
+    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
+};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -57,11 +64,12 @@ pub(crate) async fn sync(
     all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -73,8 +81,17 @@ pub(crate) async fn sync(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
+    output_format: SyncFormat,
 ) -> Result<ExitStatus> {
+    if preview.is_enabled(PreviewFeatures::JSON_OUTPUT) && matches!(output_format, SyncFormat::Json)
+    {
+        warn_user!(
+            "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::JSON_OUTPUT
+        );
+    }
+
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
@@ -106,7 +123,7 @@ pub(crate) async fn sync(
         // TODO(lucab): improve warning content
         // <https://github.com/astral-sh/uv/issues/7428>
         if project.workspace().pyproject_toml().has_scripts()
-            && !project.workspace().pyproject_toml().is_package()
+            && !project.workspace().pyproject_toml().is_package(true)
         {
             warn_user!(
                 "Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`"
@@ -116,23 +133,24 @@ pub(crate) async fn sync(
         SyncTarget::Project(project)
     };
 
-    // Determine the default groups to include.
+    // Determine the groups and extras to include.
     let default_groups = match &target {
         SyncTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         SyncTarget::Script(..) => DefaultGroups::default(),
     };
-
-    // Determine the default extras to include.
     let default_extras = match &target {
         SyncTarget::Project(_project) => DefaultExtras::default(),
         SyncTarget::Script(..) => DefaultExtras::default(),
     };
+    let groups = groups.with_defaults(default_groups);
+    let extras = extras.with_defaults(default_extras);
 
     // Discover or create the virtual environment.
     let environment = match &target {
         SyncTarget::Project(project) => SyncEnvironment::Project(
             ProjectEnvironment::get_or_init(
                 project.workspace(),
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &network_settings,
@@ -144,12 +162,13 @@ pub(crate) async fn sync(
                 cache,
                 dry_run,
                 printer,
+                preview,
             )
             .await?,
         ),
         SyncTarget::Script(script) => SyncEnvironment::Script(
             ScriptEnvironment::get_or_init(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -161,108 +180,30 @@ pub(crate) async fn sync(
                 cache,
                 dry_run,
                 printer,
+                preview,
             )
             .await?,
         ),
     };
 
-    // Notify the user of any environment changes.
-    match &environment {
-        SyncEnvironment::Project(ProjectEnvironment::Existing(environment))
-            if dry_run.enabled() =>
-        {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Discovered existing environment at: {}",
-                    environment.root().user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
-            if dry_run.enabled() =>
-        {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would replace existing virtual environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
-            if dry_run.enabled() =>
-        {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would create virtual environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
-            if dry_run.enabled() {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Discovered existing environment at: {}",
-                        environment.root().user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            } else {
-                writeln!(
-                    printer.stderr(),
-                    "Using script environment at: {}",
-                    environment.root().user_display().cyan()
-                )?;
-            }
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Replaced(environment)) if !dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "Recreating script environment at: {}",
-                environment.root().user_display().cyan()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Created(environment)) if !dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "Creating script environment at: {}",
-                environment.root().user_display().cyan()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..)) if dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would replace existing script environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..)) if dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would create script environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        _ => {}
+    let _lock = environment
+        .lock()
+        .await
+        .inspect_err(|err| {
+            warn!("Failed to acquire environment lock: {err}");
+        })
+        .ok();
+
+    let sync_report = SyncReport {
+        dry_run: dry_run.enabled(),
+        environment: EnvironmentReport::from(&environment),
+        action: SyncAction::from(&environment),
+        target: TargetName::from(&target),
+    };
+
+    // Show the intermediate results if relevant
+    if let Some(message) = sync_report.format(output_format) {
+        writeln!(printer.stderr(), "{message}")?;
     }
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
@@ -285,8 +226,9 @@ pub(crate) async fn sync(
             }
 
             // Parse the requirements from the script.
-            let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
-                .unwrap_or_default();
+            let spec = script_specification(script.into(), &settings.resolver)?.unwrap_or_default();
+            let script_extra_build_requires =
+                script_extra_build_requires(script.into(), &settings.resolver)?.into_inner();
 
             // Parse the build constraints from the script.
             let build_constraints = script
@@ -307,10 +249,11 @@ pub(crate) async fn sync(
                 });
 
             match update_environment(
-                Deref::deref(&environment).clone(),
+                environment.clone(),
                 spec,
                 modifications,
                 build_constraints.unwrap_or_default(),
+                script_extra_build_requires,
                 &settings,
                 &network_settings,
                 &PlatformState::default(),
@@ -319,14 +262,30 @@ pub(crate) async fn sync(
                 installer_metadata,
                 concurrency,
                 cache,
-                workspace_cache,
+                workspace_cache.clone(),
                 dry_run,
                 printer,
                 preview,
             )
             .await
             {
-                Ok(..) => return Ok(ExitStatus::Success),
+                Ok(..) => {
+                    // Generate a report for the script without a lockfile
+                    let report = Report {
+                        schema: SchemaReport::default(),
+                        target: TargetName::from(&target),
+                        project: None,
+                        script: Some(ScriptReport::from(script)),
+                        sync: sync_report,
+                        lock: None,
+                        dry_run: dry_run.enabled(),
+                    };
+                    if let Some(output) = report.format(output_format) {
+                        writeln!(printer.stdout_important(), "{output}")?;
+                    }
+                    return Ok(ExitStatus::Success);
+                }
+                // TODO(zanieb): We should respect `--output-format json` for the error case
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         network_settings.native_tls,
@@ -366,64 +325,54 @@ pub(crate) async fn sync(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
     .execute(lock_target)
     .await
     {
-        Ok(result) => {
-            if dry_run.enabled() {
-                match result {
-                    LockResult::Unchanged(..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Found up-to-date lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
-                    }
-                    LockResult::Changed(None, ..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Would create lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
-                    }
-                    LockResult::Changed(Some(..), ..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Would update lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
-                    }
-                }
-            }
-            Outcome::Success(result.into_lock())
-        }
+        Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
-            // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
-            // sync operation, but exit with a non-zero status.
-            Outcome::LockMismatch(lock)
+        Err(ProjectError::LockMismatch(prev, cur)) => {
+            if dry_run.enabled() {
+                // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
+                // sync operation, but exit with a non-zero status.
+                Outcome::LockMismatch(prev, cur)
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    ProjectError::LockMismatch(prev, cur).to_string().bold()
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
         }
         Err(err) => return Err(err.into()),
     };
+
+    let lock_report = LockReport::from((&lock_target, &mode, &outcome));
+    if let Some(message) = lock_report.format(output_format) {
+        writeln!(printer.stderr(), "{message}")?;
+    }
+
+    let report = Report {
+        schema: SchemaReport::default(),
+        target: TargetName::from(&target),
+        project: target.project().map(ProjectReport::from),
+        script: target.script().map(ScriptReport::from),
+        sync: sync_report,
+        lock: Some(lock_report),
+        dry_run: dry_run.enabled(),
+    };
+
+    if let Some(output) = report.format(output_format) {
+        writeln!(printer.stdout_important(), "{output}")?;
+    }
 
     // Identify the installation target.
     let sync_target =
@@ -435,11 +384,12 @@ pub(crate) async fn sync(
     match do_sync(
         sync_target,
         &environment,
-        &extras.with_defaults(default_extras),
-        &dev.with_defaults(default_groups),
+        &extras,
+        &groups,
         editable,
         install_options,
         modifications,
+        python_platform.as_ref(),
         (&settings).into(),
         &network_settings,
         &state,
@@ -447,6 +397,7 @@ pub(crate) async fn sync(
         installer_metadata,
         concurrency,
         cache,
+        workspace_cache,
         dry_run,
         printer,
         preview,
@@ -464,7 +415,14 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(lock) => Err(ProjectError::LockMismatch(lock).into()),
+        Outcome::LockMismatch(prev, cur) => {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                ProjectError::LockMismatch(prev, cur).to_string().bold()
+            )?;
+            Ok(ExitStatus::Failure)
+        }
     }
 }
 
@@ -473,17 +431,20 @@ pub(crate) async fn sync(
 #[allow(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
-    Success(Lock),
+    Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>),
 }
 
 impl Outcome {
     /// Return the [`Lock`] associated with this outcome.
     fn lock(&self) -> &Lock {
         match self {
-            Self::Success(lock) => lock,
-            Self::LockMismatch(lock) => lock,
+            Self::Success(lock) => match lock {
+                LockResult::Changed(_, lock) => lock,
+                LockResult::Unchanged(lock) => lock,
+            },
+            Self::LockMismatch(_prev, cur) => cur,
         }
     }
 }
@@ -539,11 +500,28 @@ fn identify_installation_target<'a>(
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 enum SyncTarget {
     /// Sync a project environment.
     Project(VirtualProject),
     /// Sync a PEP 723 script environment.
     Script(Pep723Script),
+}
+
+impl SyncTarget {
+    fn project(&self) -> Option<&VirtualProject> {
+        match self {
+            Self::Project(project) => Some(project),
+            Self::Script(_) => None,
+        }
+    }
+
+    fn script(&self) -> Option<&Pep723Script> {
+        match self {
+            Self::Project(_) => None,
+            Self::Script(script) => Some(script),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -554,13 +532,22 @@ enum SyncEnvironment {
     Script(ScriptEnvironment),
 }
 
+impl SyncEnvironment {
+    fn dry_run_target(&self) -> Option<&Path> {
+        match self {
+            Self::Project(env) => env.dry_run_target(),
+            Self::Script(env) => env.dry_run_target(),
+        }
+    }
+}
+
 impl Deref for SyncEnvironment {
     type Target = PythonEnvironment;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Project(environment) => Deref::deref(environment),
-            Self::Script(environment) => Deref::deref(environment),
+            Self::Project(environment) => environment,
+            Self::Script(environment) => environment,
         }
     }
 }
@@ -571,10 +558,11 @@ pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     extras: &ExtrasSpecificationWithDefaults,
-    dev: &DependencyGroupsWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
+    python_platform: Option<&TargetTriple>,
     settings: InstallerSettingsRef<'_>,
     network_settings: &NetworkSettings,
     state: &PlatformState,
@@ -582,9 +570,10 @@ pub(super) async fn do_sync(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<(), ProjectError> {
     // Extract the project settings.
     let InstallerSettingsRef {
@@ -593,8 +582,11 @@ pub(super) async fn do_sync(
         keyring_provider,
         dependency_metadata,
         config_setting,
+        config_settings_package,
         no_build_isolation,
         no_build_isolation_package,
+        extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -603,7 +595,56 @@ pub(super) async fn do_sync(
         sources,
     } = settings;
 
+    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+        && !extra_build_dependencies.is_empty()
+    {
+        warn_user_once!(
+            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+        );
+    }
+
+    // Lower the extra build dependencies with source resolution.
+    let extra_build_requires = match &target {
+        InstallTarget::Workspace { workspace, .. }
+        | InstallTarget::Project { workspace, .. }
+        | InstallTarget::NonProjectWorkspace { workspace, .. } => {
+            LoweredExtraBuildDependencies::from_workspace(
+                extra_build_dependencies.clone(),
+                workspace,
+                index_locations,
+                sources,
+            )?
+        }
+        InstallTarget::Script { script, .. } => {
+            // Try to get extra build dependencies from the script metadata
+            let resolver_settings = ResolverSettings {
+                build_options: build_options.clone(),
+                config_setting: config_setting.clone(),
+                config_settings_package: config_settings_package.clone(),
+                dependency_metadata: dependency_metadata.clone(),
+                exclude_newer: exclude_newer.clone(),
+                fork_strategy: ForkStrategy::default(),
+                index_locations: index_locations.clone(),
+                index_strategy,
+                keyring_provider,
+                link_mode,
+                no_build_isolation,
+                no_build_isolation_package: no_build_isolation_package.to_vec(),
+                extra_build_dependencies: extra_build_dependencies.clone(),
+                extra_build_variables: extra_build_variables.clone(),
+                prerelease: PrereleaseMode::default(),
+                resolution: ResolutionMode::default(),
+                sources,
+                upgrade: Upgrade::default(),
+            };
+            script_extra_build_requires((*script).into(), &resolver_settings)?
+        }
+    }
+    .into_inner();
+
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
@@ -622,14 +663,14 @@ pub(super) async fn do_sync(
     }
 
     // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(target.lock(), extras, dev)?;
+    detect_conflicts(&target, extras, groups)?;
 
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(extras)?;
-    target.validate_groups(dev)?;
+    target.validate_groups(groups)?;
 
     // Determine the markers to use for resolution.
-    let marker_env = venv.interpreter().resolver_marker_environment();
+    let marker_env = resolution_markers(None, python_platform, venv.interpreter());
 
     // Validate that the platform is supported by the lockfile.
     let environments = target.lock().supported_environments();
@@ -655,15 +696,15 @@ pub(super) async fn do_sync(
         }
     }
 
-    // Determine the tags to use for resolution.
-    let tags = venv.interpreter().tags()?;
+    // Determine the tags to use for the resolution.
+    let tags = resolution_tags(None, python_platform, venv.interpreter())?;
 
     // Read the lockfile.
     let resolution = target.to_resolution(
         &marker_env,
-        tags,
+        &tags,
         extras,
-        dev,
+        groups,
         build_options,
         &install_options,
     )?;
@@ -674,16 +715,10 @@ pub(super) async fn do_sync(
     // If necessary, convert editable to non-editable distributions.
     let resolution = apply_editable_mode(resolution, editable);
 
-    // Add all authenticated sources to the cache.
-    for index in index_locations.allowed_indexes() {
-        if let Some(credentials) = index.credentials() {
-            let credentials = Arc::new(credentials);
-            uv_auth::store_credentials(index.raw_url(), credentials.clone());
-            if let Some(root_url) = index.root_url() {
-                uv_auth::store_credentials(&root_url, credentials.clone());
-            }
-        }
-    }
+    // Constrain any build requirements marked as `match-runtime = true`.
+    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
+
+    index_locations.cache_index_credentials();
 
     // Populate credentials from the target.
     store_credentials_from_target(target);
@@ -722,14 +757,14 @@ pub(super) async fn do_sync(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         venv.interpreter(),
         index_locations,
         &flat_index,
@@ -737,13 +772,16 @@ pub(super) async fn do_sync(
         state.clone().into_inner(),
         index_strategy,
         config_setting,
+        config_settings_package,
         build_isolation,
+        &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &build_hasher,
-        exclude_newer,
+        exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
+        workspace_cache.clone(),
         concurrency,
         preview,
     );
@@ -759,10 +797,8 @@ pub(super) async fn do_sync(
         build_options,
         link_mode,
         compile_bytecode,
-        index_locations,
-        config_setting,
         &hasher,
-        tags,
+        &tags,
         &client,
         state.in_flight(),
         concurrency,
@@ -773,6 +809,7 @@ pub(super) async fn do_sync(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 
@@ -794,7 +831,7 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
             return true;
         };
 
-        !dist.r#virtual
+        !dist.r#virtual.unwrap_or(false)
     })
 }
 
@@ -812,8 +849,8 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
             let Dist::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
                 install_path,
-                editable: true,
-                r#virtual: false,
+                editable: Some(true),
+                r#virtual,
                 url,
             })) = dist.as_ref()
             else {
@@ -824,8 +861,8 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
                 dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
                     name: name.clone(),
                     install_path: install_path.clone(),
-                    editable: false,
-                    r#virtual: false,
+                    editable: Some(false),
+                    r#virtual: *r#virtual,
                     url: url.clone(),
                 }))),
                 version: version.clone(),
@@ -841,7 +878,7 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
 fn store_credentials_from_target(target: InstallTarget<'_>) {
-    // Iterate over any idnexes in the target.
+    // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
             let credentials = Arc::new(credentials);
@@ -878,6 +915,395 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
                 uv_auth::store_credentials_from_url(url);
             }
             _ => {}
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct WorkspaceReport {
+    /// The workspace directory path.
+    path: PortablePathBuf,
+}
+
+impl From<&Workspace> for WorkspaceReport {
+    fn from(workspace: &Workspace) -> Self {
+        Self {
+            path: workspace.install_path().as_path().into(),
+        }
+    }
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct ProjectReport {
+    //
+    path: PortablePathBuf,
+    workspace: WorkspaceReport,
+}
+
+impl From<&VirtualProject> for ProjectReport {
+    fn from(project: &VirtualProject) -> Self {
+        Self {
+            path: project.root().into(),
+            workspace: WorkspaceReport::from(project.workspace()),
+        }
+    }
+}
+
+impl From<&SyncTarget> for TargetName {
+    fn from(target: &SyncTarget) -> Self {
+        match target {
+            SyncTarget::Project(_) => Self::Project,
+            SyncTarget::Script(_) => Self::Script,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct ScriptReport {
+    /// The path to the script.
+    path: PortablePathBuf,
+}
+
+impl From<&Pep723Script> for ScriptReport {
+    fn from(script: &Pep723Script) -> Self {
+        Self {
+            path: script.path.as_path().into(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+enum SchemaVersion {
+    /// An unstable, experimental schema.
+    #[default]
+    Preview,
+}
+
+#[derive(Serialize, Debug, Default)]
+struct SchemaReport {
+    /// The version of the schema.
+    version: SchemaVersion,
+}
+
+/// A report of the uv sync operation
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct Report {
+    /// The schema of this report.
+    schema: SchemaReport,
+    /// The target of the sync operation, either a project or a script.
+    target: TargetName,
+    /// The report for a [`TargetName::Project`], if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    project: Option<ProjectReport>,
+    /// The report for a [`TargetName::Script`], if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    script: Option<ScriptReport>,
+    /// The report for the sync operation.
+    sync: SyncReport,
+    /// The report for the lock operation.
+    lock: Option<LockReport>,
+    /// Whether this is a dry run.
+    dry_run: bool,
+}
+
+/// The kind of target
+#[derive(Debug, Serialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum TargetName {
+    Project,
+    Script,
+}
+
+impl std::fmt::Display for TargetName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Project => write!(f, "project"),
+            Self::Script => write!(f, "script"),
+        }
+    }
+}
+
+/// Represents the action taken during a sync.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum SyncAction {
+    /// The environment was checked and required no updates.
+    Check,
+    /// The environment was updated.
+    Update,
+    /// The environment was replaced.
+    Replace,
+    /// A new environment was created.
+    Create,
+}
+
+impl From<&SyncEnvironment> for SyncAction {
+    fn from(env: &SyncEnvironment) -> Self {
+        match &env {
+            SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => Self::Check,
+            SyncEnvironment::Project(ProjectEnvironment::Created(..)) => Self::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(..)) => Self::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(..)) => Self::Replace,
+            SyncEnvironment::Project(ProjectEnvironment::Replaced(..)) => Self::Update,
+            SyncEnvironment::Script(ScriptEnvironment::Existing(..)) => Self::Check,
+            SyncEnvironment::Script(ScriptEnvironment::Created(..)) => Self::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(..)) => Self::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(..)) => Self::Replace,
+            SyncEnvironment::Script(ScriptEnvironment::Replaced(..)) => Self::Update,
+        }
+    }
+}
+
+impl SyncAction {
+    fn message(&self, target: TargetName, dry_run: bool) -> Option<&'static str> {
+        let message = if dry_run {
+            match self {
+                Self::Check => "Would use",
+                Self::Update => "Would update",
+                Self::Replace => "Would replace",
+                Self::Create => "Would create",
+            }
+        } else {
+            // For projects, we omit some of these messages when we're not in dry-run mode
+            let is_project = matches!(target, TargetName::Project);
+            match self {
+                Self::Check | Self::Update | Self::Create if is_project => {
+                    return None;
+                }
+                Self::Check => "Using",
+                Self::Update => "Updating",
+                Self::Replace => "Replacing",
+                Self::Create => "Creating",
+            }
+        };
+        Some(message)
+    }
+}
+
+/// Represents the action taken during a lock.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum LockAction {
+    /// The lockfile was used without checking.
+    Use,
+    /// The lockfile was checked and required no updates.
+    Check,
+    /// The lockfile was updated.
+    Update,
+    /// A new lockfile was created.
+    Create,
+}
+
+impl LockAction {
+    fn message(&self, dry_run: bool) -> Option<&'static str> {
+        let message = if dry_run {
+            match self {
+                Self::Use => return None,
+                Self::Check => "Found up-to-date",
+                Self::Update => "Would update",
+                Self::Create => "Would create",
+            }
+        } else {
+            return None;
+        };
+        Some(message)
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct PythonReport {
+    path: PortablePathBuf,
+    version: uv_pep508::StringVersion,
+    implementation: String,
+}
+
+impl From<&uv_python::Interpreter> for PythonReport {
+    fn from(interpreter: &uv_python::Interpreter) -> Self {
+        Self {
+            path: interpreter.sys_executable().into(),
+            version: interpreter.python_full_version().clone(),
+            implementation: interpreter.implementation_name().to_string(),
+        }
+    }
+}
+
+impl PythonReport {
+    /// Set the path for this Python report.
+    #[must_use]
+    fn with_path(mut self, path: PortablePathBuf) -> Self {
+        self.path = path;
+        self
+    }
+}
+
+#[derive(Serialize, Debug)]
+struct EnvironmentReport {
+    /// The path to the environment.
+    path: PortablePathBuf,
+    /// The Python interpreter for the environment.
+    python: PythonReport,
+}
+
+impl From<&PythonEnvironment> for EnvironmentReport {
+    fn from(env: &PythonEnvironment) -> Self {
+        Self {
+            python: PythonReport::from(env.interpreter()),
+            path: env.root().into(),
+        }
+    }
+}
+
+impl From<&SyncEnvironment> for EnvironmentReport {
+    fn from(env: &SyncEnvironment) -> Self {
+        let report = Self::from(&**env);
+        // Replace the path if necessary; we construct a temporary virtual environment during dry
+        // run invocations and want to report the path we _would_ use.
+        if let Some(path) = env.dry_run_target() {
+            report.with_path(path.into())
+        } else {
+            report
+        }
+    }
+}
+
+impl EnvironmentReport {
+    /// Set the path for this environment report.
+    #[must_use]
+    fn with_path(mut self, path: PortablePathBuf) -> Self {
+        let python_path = &self.python.path;
+        if let Ok(python_path) = python_path.as_ref().strip_prefix(self.path) {
+            let new_path = path.as_ref().to_path_buf().join(python_path);
+            self.python = self.python.with_path(new_path.as_path().into());
+        }
+        self.path = path;
+        self
+    }
+}
+
+/// The report for a sync operation.
+#[derive(Serialize, Debug)]
+struct SyncReport {
+    /// The environment.
+    environment: EnvironmentReport,
+    /// The action performed during the sync, e.g., what was done to the environment.
+    action: SyncAction,
+
+    // We store these fields so the report can format itself self-contained, but the outer
+    // [`Report`] is intended to include these in user-facing output
+    #[serde(skip)]
+    dry_run: bool,
+    #[serde(skip)]
+    target: TargetName,
+}
+
+impl SyncReport {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            // This is an intermediate report, when using JSON, it's only rendered at the end
+            SyncFormat::Json => None,
+            SyncFormat::Text => self.to_human_readable_string(),
+        }
+    }
+
+    fn to_human_readable_string(&self) -> Option<String> {
+        let Self {
+            environment,
+            action,
+            dry_run,
+            target,
+        } = self;
+
+        let action = action.message(*target, *dry_run)?;
+
+        let message = format!(
+            "{action} {target} environment at: {path}",
+            path = environment.path.user_display().cyan(),
+        );
+        if *dry_run {
+            return Some(message.dimmed().to_string());
+        }
+
+        Some(message)
+    }
+}
+
+/// The report for a lock operation.
+#[derive(Debug, Serialize)]
+struct LockReport {
+    /// The path to the lockfile
+    path: PortablePathBuf,
+    /// Whether the lockfile was preserved, created, or updated.
+    action: LockAction,
+
+    // We store this field so the report can format itself self-contained, but the outer
+    // [`Report`] is intended to include this in user-facing output
+    #[serde(skip)]
+    dry_run: bool,
+}
+
+impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
+    fn from((target, mode, outcome): (&LockTarget, &LockMode, &Outcome)) -> Self {
+        Self {
+            path: target.lock_path().deref().into(),
+            action: match outcome {
+                Outcome::Success(result) => {
+                    match result {
+                        LockResult::Unchanged(..) => match mode {
+                            // When `--frozen` is used, we don't check the lockfile
+                            LockMode::Frozen => LockAction::Use,
+                            LockMode::DryRun(_) | LockMode::Locked(_) | LockMode::Write(_) => {
+                                LockAction::Check
+                            }
+                        },
+                        LockResult::Changed(None, ..) => LockAction::Create,
+                        LockResult::Changed(Some(_), ..) => LockAction::Update,
+                    }
+                }
+                // TODO(zanieb): We don't have a way to report the outcome of the lock yet
+                Outcome::LockMismatch(..) => LockAction::Check,
+            },
+            dry_run: matches!(mode, LockMode::DryRun(_)),
+        }
+    }
+}
+
+impl LockReport {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            SyncFormat::Json => None,
+            SyncFormat::Text => self.to_human_readable_string(),
+        }
+    }
+
+    fn to_human_readable_string(&self) -> Option<String> {
+        let Self {
+            path,
+            action,
+            dry_run,
+        } = self;
+
+        let action = action.message(*dry_run)?;
+
+        let message = format!(
+            "{action} lockfile at: {path}",
+            path = path.user_display().cyan(),
+        );
+        if *dry_run {
+            return Some(message.dimmed().to_string());
+        }
+
+        Some(message)
+    }
+}
+
+impl Report {
+    fn format(&self, output_format: SyncFormat) -> Option<String> {
+        match output_format {
+            SyncFormat::Json => serde_json::to_string_pretty(self).ok(),
+            SyncFormat::Text => None,
         }
     }
 }

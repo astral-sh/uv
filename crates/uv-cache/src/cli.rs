@@ -82,7 +82,7 @@ impl TryFrom<CacheArgs> for Cache {
     type Error = io::Error;
 
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        Cache::from_settings(value.no_cache, value.cache_dir)
+        Self::from_settings(value.no_cache, value.cache_dir)
     }
 }
 

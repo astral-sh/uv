@@ -1,5 +1,5 @@
+use std::hash::{Hash, Hasher};
 use std::{fmt::Display, fmt::Formatter};
-
 use url::Url;
 use uv_small_str::SmallString;
 
@@ -22,7 +22,7 @@ use uv_small_str::SmallString;
 // The port is only allowed to differ if it matches the "default port" for the scheme.
 // However, `url` (and therefore `reqwest`) sets the `port` to `None` if it matches the default port
 // so we do not need any special handling here.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub(crate) struct Realm {
     scheme: SmallString,
     host: Option<SmallString>,
@@ -55,6 +55,76 @@ impl Display for Realm {
                 self.scheme,
                 self.host.as_deref().unwrap_or_default()
             )
+        }
+    }
+}
+
+impl PartialEq for Realm {
+    fn eq(&self, other: &Self) -> bool {
+        RealmRef::from(self) == RealmRef::from(other)
+    }
+}
+
+impl Eq for Realm {}
+
+impl Hash for Realm {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        RealmRef::from(self).hash(state);
+    }
+}
+
+/// A reference to a [`Realm`] that can be used for zero-allocation comparisons.
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct RealmRef<'a> {
+    scheme: &'a str,
+    host: Option<&'a str>,
+    port: Option<u16>,
+}
+
+impl<'a> From<&'a Url> for RealmRef<'a> {
+    fn from(url: &'a Url) -> Self {
+        Self {
+            scheme: url.scheme(),
+            host: url.host_str(),
+            port: url.port(),
+        }
+    }
+}
+
+impl PartialEq for RealmRef<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.scheme == other.scheme && self.host == other.host && self.port == other.port
+    }
+}
+
+impl Eq for RealmRef<'_> {}
+
+impl Hash for RealmRef<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.scheme.hash(state);
+        self.host.hash(state);
+        self.port.hash(state);
+    }
+}
+
+impl<'a> PartialEq<RealmRef<'a>> for Realm {
+    fn eq(&self, rhs: &RealmRef<'a>) -> bool {
+        RealmRef::from(self) == *rhs
+    }
+}
+
+impl PartialEq<Realm> for RealmRef<'_> {
+    fn eq(&self, rhs: &Realm) -> bool {
+        *self == RealmRef::from(rhs)
+    }
+}
+
+impl<'a> From<&'a Realm> for RealmRef<'a> {
+    fn from(realm: &'a Realm) -> Self {
+        Self {
+            scheme: &realm.scheme,
+            host: realm.host.as_deref(),
+            port: realm.port,
         }
     }
 }

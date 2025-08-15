@@ -14,6 +14,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, MetadataError};
+use uv_redacted::DisplaySafeUrl;
 
 use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
 
@@ -86,7 +87,7 @@ pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
     pub direct_url: Box<DirectUrl>,
-    pub url: Url,
+    pub url: DisplaySafeUrl,
     pub editable: bool,
     pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
@@ -112,7 +113,7 @@ pub struct InstalledLegacyEditable {
     pub version: Version,
     pub egg_link: Box<Path>,
     pub target: Box<Path>,
-    pub target_url: Url,
+    pub target_url: DisplaySafeUrl,
     pub egg_info: Box<Path>,
 }
 
@@ -135,16 +136,16 @@ impl InstalledDist {
 
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version)?;
-            let cache_info = Self::cache_info(path)?;
+            let cache_info = Self::read_cache_info(path)?;
 
-            return if let Some(direct_url) = Self::direct_url(path)? {
+            return if let Some(direct_url) = Self::read_direct_url(path)? {
                 match Url::try_from(&direct_url) {
                     Ok(url) => Ok(Some(Self::Url(InstalledDirectUrlDist {
                         name,
                         version,
                         editable: matches!(&direct_url, DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
                         direct_url: Box::new(direct_url),
-                        url,
+                        url: DisplaySafeUrl::from(url),
                         path: path.to_path_buf().into_boxed_path(),
                         cache_info,
                     }))),
@@ -272,7 +273,7 @@ impl InstalledDist {
                 version: Version::from_str(&egg_metadata.version)?,
                 egg_link: path.to_path_buf().into_boxed_path(),
                 target: target.into_boxed_path(),
-                target_url: url,
+                target_url: DisplaySafeUrl::from(url),
                 egg_info: egg_info.into_boxed_path(),
             })));
         }
@@ -303,7 +304,7 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    pub fn direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
+    pub fn read_direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
         let path = path.join("direct_url.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -316,7 +317,7 @@ impl InstalledDist {
     }
 
     /// Read the `uv_cache.json` file from a `.dist-info` directory.
-    pub fn cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
+    pub fn read_cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
         let path = path.join("uv_cache.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -329,7 +330,7 @@ impl InstalledDist {
     }
 
     /// Read the `METADATA` file from a `.dist-info` directory.
-    pub fn metadata(&self) -> Result<uv_pypi_types::ResolutionMetadata, InstalledDistError> {
+    pub fn read_metadata(&self) -> Result<uv_pypi_types::ResolutionMetadata, InstalledDistError> {
         match self {
             Self::Registry(_) | Self::Url(_) => {
                 let path = self.install_path().join("METADATA");
@@ -361,10 +362,10 @@ impl InstalledDist {
     }
 
     /// Return the `INSTALLER` of the distribution.
-    pub fn installer(&self) -> Result<Option<String>, InstalledDistError> {
+    pub fn read_installer(&self) -> Result<Option<String>, InstalledDistError> {
         let path = self.install_path().join("INSTALLER");
         match fs::read_to_string(path) {
-            Ok(installer) => Ok(Some(installer)),
+            Ok(installer) => Ok(Some(installer.trim().to_owned())),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err.into()),
         }
@@ -402,7 +403,7 @@ impl InstalledDist {
 }
 
 impl DistributionMetadata for InstalledDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(self.version())
     }
 }
@@ -450,37 +451,37 @@ impl Name for InstalledDist {
 }
 
 impl InstalledMetadata for InstalledRegistryDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.version)
     }
 }
 
 impl InstalledMetadata for InstalledDirectUrlDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Url(&self.url, &self.version)
     }
 }
 
 impl InstalledMetadata for InstalledEggInfoFile {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.version)
     }
 }
 
 impl InstalledMetadata for InstalledEggInfoDirectory {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.version)
     }
 }
 
 impl InstalledMetadata for InstalledLegacyEditable {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         InstalledVersion::Version(&self.version)
     }
 }
 
 impl InstalledMetadata for InstalledDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         match self {
             Self::Registry(dist) => dist.installed_version(),
             Self::Url(dist) => dist.installed_version(),

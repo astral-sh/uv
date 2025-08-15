@@ -2,6 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use rustc_hash::FxHashSet;
 use url::Url;
+use uv_redacted::DisplaySafeUrl;
 
 /// When to use authentication.
 #[derive(
@@ -41,9 +42,9 @@ pub enum AuthPolicy {
 impl Display for AuthPolicy {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            AuthPolicy::Auto => write!(f, "auto"),
-            AuthPolicy::Always => write!(f, "always"),
-            AuthPolicy::Never => write!(f, "never"),
+            Self::Auto => write!(f, "auto"),
+            Self::Always => write!(f, "always"),
+            Self::Never => write!(f, "never"),
         }
     }
 }
@@ -53,10 +54,10 @@ impl Display for AuthPolicy {
 // could potentially make sense for a future refactor.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Index {
-    pub url: Url,
+    pub url: DisplaySafeUrl,
     /// The root endpoint where authentication is applied.
     /// For PEP 503 endpoints, this excludes `/simple`.
-    pub root_url: Url,
+    pub root_url: DisplaySafeUrl,
     pub auth_policy: AuthPolicy,
 }
 
@@ -85,7 +86,7 @@ impl Indexes {
         Self(FxHashSet::default())
     }
 
-    /// Create a new [`AuthIndexUrls`] from an iterator of [`AuthIndexUrl`]s.
+    /// Create a new [`Indexes`] instance from an iterator of [`Index`]s.
     pub fn from_indexes(urls: impl IntoIterator<Item = Index>) -> Self {
         let mut index_urls = Self::new();
         for url in urls {
@@ -95,7 +96,7 @@ impl Indexes {
     }
 
     /// Get the index URL prefix for a URL if one exists.
-    pub fn index_url_for(&self, url: &Url) -> Option<&Url> {
+    pub fn index_url_for(&self, url: &Url) -> Option<&DisplaySafeUrl> {
         self.find_prefix_index(url).map(|index| &index.url)
     }
 

@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use serde::Deserialize;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
 
@@ -54,10 +54,6 @@ pub enum ValidationError {
         "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `{0}`"
     )]
     InvalidGroup(String),
-    #[error(
-        "Entrypoint names must consist of letters, numbers, dots, underscores and dashes; invalid name: `{0}`"
-    )]
-    InvalidName(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
     ReservedScripts,
     #[error("Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`")]
@@ -171,7 +167,7 @@ impl PyProjectToml {
     ///
     /// ```toml
     /// [build-system]
-    /// requires = ["uv_build>=0.4.15,<5"]
+    /// requires = ["uv_build>=0.4.15,<0.5.0"]
     /// build-backend = "uv_build"
     /// ```
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
@@ -620,12 +616,14 @@ impl PyProjectToml {
 
         let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
-            // More strict than the spec, we enforce the recommendation
             if !name
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
             {
-                return Err(ValidationError::InvalidName(name.to_string()));
+                warn!(
+                    "Entrypoint names should consist of letters, numbers, dots, underscores and \
+                    dashes; non-compliant name: `{name}`"
+                );
             }
 
             // TODO(konsti): Validate that the object references are valid Python identifiers.
@@ -703,7 +701,7 @@ struct Project {
 /// The optional `project.readme` key in a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#readme>.
 #[derive(Deserialize, Debug, Clone)]
-#[serde(untagged, rename_all = "kebab-case")]
+#[serde(untagged, rename_all_fields = "kebab-case")]
 pub(crate) enum Readme {
     /// Relative path to the README.
     String(PathBuf),
@@ -713,7 +711,7 @@ pub(crate) enum Readme {
         content_type: String,
         charset: Option<String>,
     },
-    /// The full description of the project as inline value.
+    /// The full description of the project as an inline value.
     Text {
         text: String,
         content_type: String,
@@ -725,9 +723,9 @@ impl Readme {
     /// If the readme is a file, return the path to the file.
     pub(crate) fn path(&self) -> Option<&Path> {
         match self {
-            Readme::String(path) => Some(path),
-            Readme::File { file, .. } => Some(file),
-            Readme::Text { .. } => None,
+            Self::String(path) => Some(path),
+            Self::File { file, .. } => Some(file),
+            Self::Text { .. } => None,
         }
     }
 }
@@ -826,7 +824,7 @@ mod tests {
             {payload}
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "uv_build"
         "#
         }
@@ -909,7 +907,7 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "uv_build"
         "#
         };
@@ -963,6 +961,65 @@ mod tests {
         foo-bar = foo:bar
 
         "###);
+    }
+
+    #[test]
+    fn readme() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("Readme.md"),
+            indoc! {r"
+            # Foo
+
+            This is the foo library.
+        "},
+        )
+        .unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("License.txt"),
+            indoc! {r#"
+                THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        "#},
+        )
+        .unwrap();
+
+        let contents = indoc! {r#"
+            # See https://github.com/pypa/sampleproject/blob/main/pyproject.toml for another example
+
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+            description = "A Python package"
+            readme = { file = "Readme.md", content-type = "text/markdown" }
+            requires_python = ">=3.12"
+
+            [build-system]
+            requires = ["uv_build>=0.4.15,<0.5"]
+            build-backend = "uv_build"
+        "#
+        };
+
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @r"
+        Metadata-Version: 2.3
+        Name: hello-world
+        Version: 0.1.0
+        Summary: A Python package
+        Description-Content-Type: text/markdown
+
+        # Foo
+
+        This is the foo library.
+        ");
     }
 
     #[test]
@@ -1036,7 +1093,7 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "uv_build"
         "#
         };
@@ -1104,7 +1161,7 @@ mod tests {
         let contents = extend_project("");
         let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
         assert_snapshot!(
-            pyproject_toml.check_build_system("1.0.0+test").join("\n"),
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
             @""
         );
     }
@@ -1135,7 +1192,7 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5", "wheel"]
+            requires = ["uv_build>=0.4.15,<0.5.0", "wheel"]
             build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
@@ -1171,7 +1228,7 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv_build>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<0.5.0"]
             build-backend = "setuptools"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
@@ -1342,16 +1399,6 @@ mod tests {
         "#
         });
         assert_snapshot!(script_error(&contents), @"Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `a@b`");
-    }
-
-    #[test]
-    fn invalid_entry_point_name() {
-        let contents = extend_project(indoc! {r#"
-            [project.scripts]
-            "a@b" = "bar"
-        "#
-        });
-        assert_snapshot!(script_error(&contents), @"Entrypoint names must consist of letters, numbers, dots, underscores and dashes; invalid name: `a@b`");
     }
 
     #[test]

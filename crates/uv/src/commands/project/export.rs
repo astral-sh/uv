@@ -9,13 +9,13 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Preview,
 };
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport};
-use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -32,6 +32,7 @@ use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 enum ExportTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script),
@@ -61,7 +62,7 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DependencyGroups,
+    groups: DependencyGroups,
     editable: EditableMode,
     locked: bool,
     frozen: bool,
@@ -79,7 +80,7 @@ pub(crate) async fn export(
     quiet: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
@@ -122,7 +123,7 @@ pub(crate) async fn export(
         ExportTarget::Script(_) => DefaultExtras::default(),
     };
 
-    let dev = dev.with_defaults(default_groups);
+    let groups = groups.with_defaults(default_groups);
     let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
@@ -131,7 +132,7 @@ pub(crate) async fn export(
     } else {
         Some(match &target {
             ExportTarget::Script(script) => ScriptInterpreter::discover(
-                Pep723ItemRef::Script(script),
+                script.into(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -142,12 +143,14 @@ pub(crate) async fn export(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
             ExportTarget::Project(project) => ProjectInterpreter::discover(
                 project.workspace(),
                 project_dir,
+                &groups,
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,
@@ -158,6 +161,7 @@ pub(crate) async fn export(
                 Some(false),
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -190,6 +194,7 @@ pub(crate) async fn export(
         Box::new(DefaultResolveLogger),
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -204,9 +209,6 @@ pub(crate) async fn export(
         }
         Err(err) => return Err(err.into()),
     };
-
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&lock, &extras, &dev)?;
 
     // Identify the installation target.
     let target = match &target {
@@ -257,9 +259,12 @@ pub(crate) async fn export(
         },
     };
 
+    // Validate that the set of requested extras and development groups are compatible.
+    detect_conflicts(&target, &extras, &groups)?;
+
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
-    target.validate_groups(&dev)?;
+    target.validate_groups(&groups)?;
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
@@ -306,7 +311,7 @@ pub(crate) async fn export(
                 &target,
                 &prune,
                 &extras,
-                &dev,
+                &groups,
                 include_annotations,
                 editable,
                 hashes,
@@ -328,8 +333,9 @@ pub(crate) async fn export(
                 &target,
                 &prune,
                 &extras,
-                &dev,
+                &groups,
                 include_annotations,
+                editable,
                 &install_options,
             )?;
 

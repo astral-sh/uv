@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io;
-use std::io::{BufReader, Read, Seek, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
@@ -144,7 +144,7 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
 ///
 /// <https://github.com/pypa/pip/blob/76e82a43f8fb04695e834810df64f2d9a2ff6020/src/pip/_vendor/distlib/scripts.py#L121-L126>
 fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
-    // Only check for pythonw.exe on Windows
+    // Only check for `pythonw.exe` on Windows.
     if cfg!(windows) && is_gui {
         python_executable
             .file_name()
@@ -431,21 +431,40 @@ fn install_script(
         Err(err) => return Err(Error::Io(err)),
     }
     let size_and_encoded_hash = if start == placeholder_python {
-        let is_gui = {
-            let mut buf = vec![0; 1];
-            script.read_exact(&mut buf)?;
-            if buf == b"w" {
-                true
-            } else {
-                script.seek_relative(-1)?;
-                false
+        // Read the rest of the first line, one byte at a time, until we hit a newline.
+        let mut is_gui = false;
+        let mut first = true;
+        let mut byte = [0u8; 1];
+        loop {
+            match script.read_exact(&mut byte) {
+                Ok(()) => {
+                    if byte[0] == b'\n' || byte[0] == b'\r' {
+                        break;
+                    }
+
+                    // Check if this is a GUI script (starts with 'w').
+                    if first {
+                        is_gui = byte[0] == b'w';
+                        first = false;
+                    }
+                }
+                Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(err) => return Err(Error::Io(err)),
             }
-        };
+        }
+
         let executable = get_script_executable(&layout.sys_executable, is_gui);
         let executable = get_relocatable_executable(executable, layout, relocatable)?;
-        let start = format_shebang(&executable, &layout.os_name, relocatable)
+        let mut start = format_shebang(&executable, &layout.os_name, relocatable)
             .as_bytes()
             .to_vec();
+
+        // Use appropriate line ending for the platform.
+        if layout.os_name == "nt" {
+            start.extend_from_slice(b"\r\n");
+        } else {
+            start.push(b'\n');
+        }
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
@@ -569,12 +588,20 @@ pub(crate) fn install_data(
 
         match path.file_name().and_then(|name| name.to_str()) {
             Some("data") => {
-                trace!(?dist_name, "Installing data/data");
+                trace!(
+                    ?dist_name,
+                    "Installing data/data to {}",
+                    layout.scheme.data.user_display()
+                );
                 // Move the content of the folder to the root of the venv
                 move_folder_recorded(&path, &layout.scheme.data, site_packages, record)?;
             }
             Some("scripts") => {
-                trace!(?dist_name, "Installing data/scripts");
+                trace!(
+                    ?dist_name,
+                    "Installing data/scripts to {}",
+                    layout.scheme.scripts.user_display()
+                );
                 let mut rename_or_copy = RenameOrCopy::default();
                 let mut initialized = false;
                 for file in fs::read_dir(path)? {
@@ -613,16 +640,28 @@ pub(crate) fn install_data(
                 }
             }
             Some("headers") => {
-                trace!(?dist_name, "Installing data/headers");
                 let target_path = layout.scheme.include.join(dist_name.as_str());
+                trace!(
+                    ?dist_name,
+                    "Installing data/headers to {}",
+                    target_path.user_display()
+                );
                 move_folder_recorded(&path, &target_path, site_packages, record)?;
             }
             Some("purelib") => {
-                trace!(?dist_name, "Installing data/purelib");
+                trace!(
+                    ?dist_name,
+                    "Installing data/purelib to {}",
+                    layout.scheme.purelib.user_display()
+                );
                 move_folder_recorded(&path, &layout.scheme.purelib, site_packages, record)?;
             }
             Some("platlib") => {
-                trace!(?dist_name, "Installing data/platlib");
+                trace!(
+                    ?dist_name,
+                    "Installing data/platlib to {}",
+                    layout.scheme.platlib.user_display()
+                );
                 move_folder_recorded(&path, &layout.scheme.platlib, site_packages, record)?;
             }
             _ => {
@@ -865,7 +904,7 @@ impl RenameOrCopy {
             Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
                 Ok(()) => {}
                 Err(err) => {
-                    *self = RenameOrCopy::Copy;
+                    *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
                     fs_err::copy(from.as_ref(), to.as_ref())?;
                 }

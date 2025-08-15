@@ -46,9 +46,10 @@ static LD_NOT_FOUND_RE: LazyLock<Regex> = LazyLock::new(|| {
 static WHEEL_NOT_FOUND_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"error: invalid command 'bdist_wheel'").unwrap());
 
-/// e.g. `ModuleNotFoundError: No module named 'torch'`
-static TORCH_NOT_FOUND_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'torch'").unwrap());
+/// e.g. `ModuleNotFoundError`
+static MODULE_NOT_FOUND: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new("ModuleNotFoundError: No module named ['\"]([^'\"]+)['\"]").unwrap()
+});
 
 /// e.g. `ModuleNotFoundError: No module named 'distutils'`
 static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
@@ -130,6 +131,59 @@ pub struct MissingHeaderCause {
     version_id: Option<String>,
 }
 
+/// Extract the package name from a version specifier string.
+/// Uses PEP 508 naming rules but more lenient for hinting purposes.
+fn extract_package_name(version_id: &str) -> &str {
+    // https://peps.python.org/pep-0508/#names
+    // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
+    // Since we're only using this for a hint, we're more lenient than what we would be doing if this was used for parsing
+    let end = version_id
+        .char_indices()
+        .take_while(|(_, char)| matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))
+        .last()
+        .map_or(0, |(i, c)| i + c.len_utf8());
+
+    if end == 0 {
+        version_id
+    } else {
+        &version_id[..end]
+    }
+}
+
+/// Write a hint about missing build dependencies.
+fn hint_build_dependency(
+    f: &mut std::fmt::Formatter<'_>,
+    display_name: &str,
+    package_name: &str,
+    package: &str,
+) -> std::fmt::Result {
+    let table_key = if package_name.contains('.') {
+        format!("\"{package_name}\"")
+    } else {
+        package_name.to_string()
+    };
+    write!(
+        f,
+        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
+        If `{}` is a first-party package, consider adding `{}` to its `{}`. \
+        Otherwise, either add it to your `pyproject.toml` under:\n\
+        \n\
+            [tool.uv.extra-build-dependencies]\n\
+            {} = [\"{}\"]\n\
+        \n\
+        or `{}` into the environment and re-run with `{}`.",
+        display_name.cyan(),
+        package.cyan(),
+        package_name.cyan(),
+        package.cyan(),
+        "build-system.requires".green(),
+        table_key.cyan(),
+        package.cyan(),
+        format!("uv pip install {package}").green(),
+        "--no-build-isolation".green(),
+    )
+}
+
 impl Display for MissingHeaderCause {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.missing_library {
@@ -190,29 +244,15 @@ impl Display for MissingHeaderCause {
                 if let (Some(package_name), Some(package_version)) =
                     (&self.package_name, &self.package_version)
                 {
-                    write!(
+                    hint_build_dependency(
                         f,
-                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. If `{}` is a first-party package, consider adding `{}` to its `{}`. Otherwise, `{}` into the environment and re-run with `{}`.",
-                        format!("{package_name}@{package_version}").cyan(),
-                        package.cyan(),
-                        package_name.cyan(),
-                        package.cyan(),
-                        "build-system.requires".green(),
-                        format!("uv pip install {package}").green(),
-                        "--no-build-isolation".green(),
+                        &format!("{package_name}@{package_version}"),
+                        package_name.as_str(),
+                        package,
                     )
                 } else if let Some(version_id) = &self.version_id {
-                    write!(
-                        f,
-                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. If `{}` is a first-party package, consider adding `{}` to its `{}`. Otherwise, `{}` into the environment and re-run with `{}`.",
-                        version_id.cyan(),
-                        package.cyan(),
-                        version_id.cyan(),
-                        package.cyan(),
-                        "build-system.requires".green(),
-                        format!("uv pip install {package}").green(),
-                        "--no-build-isolation".green(),
-                    )
+                    let package_name = extract_package_name(version_id);
+                    hint_build_dependency(f, package_name, package_name, package)
                 } else {
                     write!(
                         f,
@@ -347,13 +387,22 @@ impl Error {
                 Some(MissingLibrary::Linker(library.to_string()))
             } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::BuildDependency("wheel".to_string()))
-            } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::BuildDependency("torch".to_string()))
             } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::DeprecatedModule(
                     "distutils".to_string(),
                     Version::new([3, 12]),
                 ))
+            } else if let Some(caps) = MODULE_NOT_FOUND.captures(line.trim()) {
+                if let Some(module_match) = caps.get(1) {
+                    let module_name = module_match.as_str();
+                    let package_name = match crate::pipreqs::MODULE_MAPPING.lookup(module_name) {
+                        Some(package) => package.to_string(),
+                        None => module_name.to_string(),
+                    };
+                    Some(MissingLibrary::BuildDependency(package_name))
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -565,7 +614,7 @@ mod test {
             .to_string()
             .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
-        insta::assert_snapshot!(formatted, @r###"
+        insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
 
         [stderr]
@@ -576,8 +625,13 @@ mod test {
 
         error: invalid command 'bdist_wheel'
 
-        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
-        "###);
+        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+        [tool.uv.extra-build-dependencies]
+        "pygraphviz-1.11" = ["wheel"]
+
+        or `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
+        "#);
     }
 
     #[test]

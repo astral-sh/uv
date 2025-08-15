@@ -7,12 +7,13 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 
 use uv_cache::Cache;
+use uv_configuration::Preview;
 use uv_distribution_types::{Diagnostic, Name};
 use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -27,6 +28,7 @@ pub(crate) fn pip_show(
     files: bool,
     cache: &Cache,
     printer: Printer,
+    preview: Preview,
 ) -> Result<ExitStatus> {
     if packages.is_empty() {
         #[allow(clippy::print_stderr)]
@@ -45,7 +47,9 @@ pub(crate) fn pip_show(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
+        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
@@ -94,7 +98,7 @@ pub(crate) fn pip_show(
     let mut requires_map = FxHashMap::default();
     // For Requires field
     for dist in &distributions {
-        if let Ok(metadata) = dist.metadata() {
+        if let Ok(metadata) = dist.read_metadata() {
             requires_map.insert(
                 dist.name(),
                 Box::into_iter(metadata.requires_dist)
@@ -112,7 +116,7 @@ pub(crate) fn pip_show(
             if requires_map.contains_key(installed.name()) {
                 continue;
             }
-            if let Ok(metadata) = installed.metadata() {
+            if let Ok(metadata) = installed.read_metadata() {
                 let requires = Box::into_iter(metadata.requires_dist)
                     .filter(|req| req.evaluate_markers(&markers, &[]))
                     .map(|req| req.name)

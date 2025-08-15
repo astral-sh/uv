@@ -19,9 +19,11 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache-key = { workspace = true }
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
+uv-redacted = { workspace = true }
 
 arcstr = { workspace = true}
 boxcar = { workspace = true }
@@ -39,9 +41,9 @@ url = { workspace = true, features = ["serde"] }
 version-ranges = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.40.0" }
-serde_json = { version = "1.0.128" }
-tracing-test = { version = "0.2.5" }
+insta = { workspace = true }
+serde_json = { workspace = true }
+tracing-test = { workspace = true }
 
 [features]
 tracing = ["dep:tracing", "uv-pep440/tracing"]

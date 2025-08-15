@@ -22,8 +22,8 @@ See the [guide on installing Python](../guides/install-python.md) to get started
 Executing standalone Python scripts, e.g., `example.py`.
 
 - `uv run`: Run a script.
-- `uv add --script`: Add a dependency to a script
-- `uv remove --script`: Remove a dependency from a script
+- `uv add --script`: Add a dependency to a script.
+- `uv remove --script`: Remove a dependency from a script.
 
 See the [guide on running scripts](../guides/scripts.md) to get started.
 
@@ -104,6 +104,6 @@ self-update:
 
 ## Next steps
 
-Read the [guides](../guides/index.md) for an introduction to each feature, check out
+Read the [guides](../guides/index.md) for an introduction to each feature, check out the
 [concept](../concepts/index.md) pages for in-depth details about uv's features, or learn how to
 [get help](./help.md) if you run into any problems.

@@ -3,18 +3,22 @@
 //! Taken from `glibc_version` (<https://github.com/delta-incubator/glibc-version-rs>),
 //! which used the Apache 2.0 license (but not the MIT license)
 
+use crate::cpuinfo::detect_hardware_floating_point_support;
 use fs_err as fs;
 use goblin::elf::Elf;
 use regex::Regex;
+use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::str::FromStr;
 use std::sync::LazyLock;
-use thiserror::Error;
+use std::{env, fmt};
 use tracing::trace;
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum LibcDetectionError {
     #[error(
         "Could not detect either glibc version nor musl libc version, at least one of which is required"
@@ -31,21 +35,102 @@ pub enum LibcDetectionError {
         #[source]
         err: io::Error,
     },
-    #[error("Could not find glibc version in output of: `ldd --version`")]
-    InvalidLddOutputGnu,
+    #[error("Could not find glibc version in output of: `{0} --version`")]
+    InvalidLdSoOutputGnu(PathBuf),
     #[error("Could not find musl version in output of: `{0}`")]
-    InvalidLddOutputMusl(PathBuf),
+    InvalidLdSoOutputMusl(PathBuf),
     #[error("Could not read ELF interpreter from any of the following paths: {0}")]
     CoreBinaryParsing(String),
+    #[error("Failed to find any common binaries to determine libc from: {0}")]
+    NoCommonBinariesFound(String),
     #[error("Failed to determine libc")]
     Io(#[from] io::Error),
 }
 
 /// We support glibc (manylinux) and musl (musllinux) on linux.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum LibcVersion {
+pub enum LibcVersion {
     Manylinux { major: u32, minor: u32 },
     Musllinux { major: u32, minor: u32 },
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+pub enum Libc {
+    Some(target_lexicon::Environment),
+    None,
+}
+
+impl Libc {
+    pub fn from_env() -> Result<Self, crate::Error> {
+        match env::consts::OS {
+            "linux" => {
+                if let Ok(libc) = env::var(EnvVars::UV_LIBC) {
+                    if !libc.is_empty() {
+                        return Self::from_str(&libc);
+                    }
+                }
+
+                Ok(Self::Some(match detect_linux_libc()? {
+                    LibcVersion::Manylinux { .. } => match env::consts::ARCH {
+                        // Checks if the CPU supports hardware floating-point operations.
+                        // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
+                        // download-metadata.json only includes armv7.
+                        "arm" | "armv5te" | "armv7" => {
+                            match detect_hardware_floating_point_support() {
+                                Ok(true) => target_lexicon::Environment::Gnueabihf,
+                                Ok(false) => target_lexicon::Environment::Gnueabi,
+                                Err(_) => target_lexicon::Environment::Gnu,
+                            }
+                        }
+                        _ => target_lexicon::Environment::Gnu,
+                    },
+                    LibcVersion::Musllinux { .. } => target_lexicon::Environment::Musl,
+                }))
+            }
+            "windows" | "macos" => Ok(Self::None),
+            // Use `None` on platforms without explicit support.
+            _ => Ok(Self::None),
+        }
+    }
+
+    pub fn is_musl(&self) -> bool {
+        matches!(self, Self::Some(target_lexicon::Environment::Musl))
+    }
+}
+
+impl FromStr for Libc {
+    type Err = crate::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "gnu" => Ok(Self::Some(target_lexicon::Environment::Gnu)),
+            "gnueabi" => Ok(Self::Some(target_lexicon::Environment::Gnueabi)),
+            "gnueabihf" => Ok(Self::Some(target_lexicon::Environment::Gnueabihf)),
+            "musl" => Ok(Self::Some(target_lexicon::Environment::Musl)),
+            "none" => Ok(Self::None),
+            _ => Err(crate::Error::UnknownLibc(s.to_string())),
+        }
+    }
+}
+
+impl Display for Libc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Some(env) => write!(f, "{env}"),
+            Self::None => write!(f, "none"),
+        }
+    }
+}
+
+impl From<&uv_platform_tags::Os> for Libc {
+    fn from(value: &uv_platform_tags::Os) -> Self {
+        match value {
+            uv_platform_tags::Os::Manylinux { .. } => Self::Some(target_lexicon::Environment::Gnu),
+            uv_platform_tags::Os::Musllinux { .. } => Self::Some(target_lexicon::Environment::Musl),
+            uv_platform_tags::Os::Pyodide { .. } => Self::Some(target_lexicon::Environment::Musl),
+            _ => Self::None,
+        }
+    }
 }
 
 /// Determine whether we're running glibc or musl and in which version, given we are on linux.
@@ -73,49 +158,55 @@ pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
             );
         }
     }
-    match detect_glibc_version_from_ldd(&ld_path) {
+    match detect_glibc_version_from_ld(&ld_path) {
         Ok(os_version) => return Ok(os_version),
         Err(err) => {
-            trace!("Tried to find glibc version from `ldd --version`, but failed: {err}");
+            trace!(
+                "Tried to find glibc version from `{} --version`, but failed: {}",
+                ld_path.simplified_display(),
+                err
+            );
         }
     }
     Err(LibcDetectionError::NoLibcFound)
 }
 
 // glibc version is taken from `std/sys/unix/os.rs`.
-fn detect_glibc_version_from_ldd(ldd: &Path) -> Result<LibcVersion, LibcDetectionError> {
-    let output = Command::new(ldd)
+fn detect_glibc_version_from_ld(ld_so: &Path) -> Result<LibcVersion, LibcDetectionError> {
+    let output = Command::new(ld_so)
         .args(["--version"])
         .output()
         .map_err(|err| LibcDetectionError::FailedToRun {
             libc: "glibc",
-            program: format!("{} --version", ldd.user_display()),
+            program: format!("{} --version", ld_so.user_display()),
             err,
         })?;
-    if let Some(os) = glibc_ldd_output_to_version("stdout", &output.stdout) {
+    if let Some(os) = glibc_ld_output_to_version("stdout", &output.stdout) {
         return Ok(os);
     }
-    if let Some(os) = glibc_ldd_output_to_version("stderr", &output.stderr) {
+    if let Some(os) = glibc_ld_output_to_version("stderr", &output.stderr) {
         return Ok(os);
     }
-    Err(LibcDetectionError::InvalidLddOutputGnu)
+    Err(LibcDetectionError::InvalidLdSoOutputGnu(
+        ld_so.to_path_buf(),
+    ))
 }
 
-/// Parse `ldd --version` output.
+/// Parse output `/lib64/ld-linux-x86-64.so.2 --version` and equivalent ld.so files.
 ///
 /// Example: `ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.`.
-fn glibc_ldd_output_to_version(kind: &str, output: &[u8]) -> Option<LibcVersion> {
+fn glibc_ld_output_to_version(kind: &str, output: &[u8]) -> Option<LibcVersion> {
     static RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"ld.so \(.+\) .* ([0-9]+\.[0-9]+)").unwrap());
 
     let output = String::from_utf8_lossy(output);
-    trace!("{kind} output from `ldd --version`: {output:?}");
+    trace!("{kind} output from `ld.so --version`: {output:?}");
     let (_, [version]) = RE.captures(output.as_ref()).map(|c| c.extract())?;
     // Parse the input as "x.y" glibc version.
     let mut parsed_ints = version.split('.').map(str::parse).fuse();
     let major = parsed_ints.next()?.ok()?;
     let minor = parsed_ints.next()?.ok()?;
-    trace!("Found manylinux {major}.{minor} in {kind} of `ldd --version`");
+    trace!("Found manylinux {major}.{minor} in {kind} of ld.so version");
     Some(LibcVersion::Manylinux { major, minor })
 }
 
@@ -166,7 +257,7 @@ fn detect_musl_version(ld_path: impl AsRef<Path>) -> Result<LibcVersion, LibcDet
     if let Some(os) = musl_ld_output_to_version("stderr", &output.stderr) {
         return Ok(os);
     }
-    Err(LibcDetectionError::InvalidLddOutputMusl(
+    Err(LibcDetectionError::InvalidLdSoOutputMusl(
         ld_path.to_path_buf(),
     ))
 }
@@ -201,12 +292,24 @@ fn find_ld_path() -> Result<PathBuf, LibcDetectionError> {
     // See: https://github.com/astral-sh/uv/issues/1810
     // See: https://github.com/astral-sh/uv/issues/4242#issuecomment-2306164449
     let attempts = ["/bin/sh", "/usr/bin/env", "/bin/dash", "/bin/ls"];
+    let mut found_anything = false;
     for path in attempts {
-        if let Some(ld_path) = find_ld_path_at(path) {
-            return Ok(ld_path);
+        if std::fs::exists(path).ok() == Some(true) {
+            found_anything = true;
+            if let Some(ld_path) = find_ld_path_at(path) {
+                return Ok(ld_path);
+            }
         }
     }
-    Err(LibcDetectionError::CoreBinaryParsing(attempts.join(", ")))
+    let attempts_string = attempts.join(", ");
+    if !found_anything {
+        // Known failure cases here include running the distroless Docker images directly
+        // (depending on what subcommand you use) and certain Nix setups. See:
+        // https://github.com/astral-sh/uv/issues/8635
+        Err(LibcDetectionError::NoCommonBinariesFound(attempts_string))
+    } else {
+        Err(LibcDetectionError::CoreBinaryParsing(attempts_string))
+    }
 }
 
 /// Attempt to find the path to the `ld` executable by
@@ -244,8 +347,8 @@ mod tests {
     use indoc::indoc;
 
     #[test]
-    fn parse_ldd_output() {
-        let ver_str = glibc_ldd_output_to_version(
+    fn parse_ld_so_output() {
+        let ver_str = glibc_ld_output_to_version(
             "stdout",
             indoc! {br"ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.
             Copyright (C) 2024 Free Software Foundation, Inc.

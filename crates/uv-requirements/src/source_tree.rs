@@ -1,13 +1,13 @@
-use std::path::{Path, PathBuf};
+use std::borrow::Cow;
+use std::path::Path;
 use std::sync::Arc;
-use std::{borrow::Cow, collections::BTreeMap};
 
 use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use futures::stream::FuturesOrdered;
 use url::Url;
 
-use uv_configuration::{DependencyGroups, ExtrasSpecification};
+use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
@@ -16,6 +16,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::RequirementOrigin;
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
@@ -36,8 +37,6 @@ pub struct SourceTreeResolution {
 pub struct SourceTreeResolver<'a, Context: BuildContext> {
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
-    /// The groups to include when resolving requirements.
-    groups: &'a BTreeMap<PathBuf, DependencyGroups>,
     /// The hash policy to enforce.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -50,14 +49,12 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         extras: &'a ExtrasSpecification,
-        groups: &'a BTreeMap<PathBuf, DependencyGroups>,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             extras,
-            groups,
             hasher,
             index,
             database,
@@ -100,46 +97,17 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
         let mut requirements = Vec::new();
 
-        // Resolve any groups associated with this path
-        let default_groups = DependencyGroups::default();
-        let groups = self.groups.get(path).unwrap_or(&default_groups);
-
         // Flatten any transitive extras and include dependencies
         // (unless something like --only-group was passed)
-        if groups.prod() {
-            requirements.extend(
-                FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
-                    .into_iter()
-                    .map(|requirement| Requirement {
-                        origin: Some(origin.clone()),
-                        marker: requirement.marker.simplify_extras(&extras),
-                        ..requirement
-                    }),
-            );
-        }
-
-        // Apply dependency-groups
-        for (group_name, group) in &metadata.dependency_groups {
-            if groups.contains(group_name) {
-                requirements.extend(group.iter().cloned().map(|group| Requirement {
-                    origin: Some(RequirementOrigin::Group(
-                        path.to_path_buf(),
-                        metadata.name.clone(),
-                        group_name.clone(),
-                    )),
-                    ..group
-                }));
-            }
-        }
-        // Complain if dependency groups are named that don't appear.
-        for name in groups.explicit_names() {
-            if !metadata.dependency_groups.contains_key(name) {
-                return Err(anyhow::anyhow!(
-                    "The dependency group '{name}' was not found in the project: {}",
-                    path.user_display()
-                ));
-            }
-        }
+        requirements.extend(
+            FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
+                .into_iter()
+                .map(|requirement| Requirement {
+                    origin: Some(origin.clone()),
+                    marker: requirement.marker.simplify_extras(&extras),
+                    ..requirement
+                }),
+        );
 
         let requirements = requirements.into_boxed_slice();
         let project = metadata.name;
@@ -180,13 +148,13 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             return Ok(metadata);
         }
 
-        let Ok(url) = Url::from_directory_path(source_tree) else {
+        let Ok(url) = Url::from_directory_path(source_tree).map(DisplaySafeUrl::from) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {
             url: &url,
             install_path: Cow::Borrowed(source_tree),
-            editable: false,
+            editable: None,
         });
 
         // Determine the hash policy. Since we don't have a package name, we perform a

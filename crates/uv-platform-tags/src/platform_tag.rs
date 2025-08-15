@@ -71,37 +71,45 @@ pub enum PlatformTag {
     Illumos { release_arch: SmallString },
     /// Ex) `solaris_11_4_x86_64`
     Solaris { release_arch: SmallString },
+    /// Ex) `pyodide_2024_0_wasm32`
+    Pyodide { major: u16, minor: u16 },
 }
 
 impl PlatformTag {
     /// Return a pretty string representation of the language tag.
     pub fn pretty(&self) -> Option<&'static str> {
         match self {
-            PlatformTag::Any => None,
-            PlatformTag::Manylinux { .. } => Some("Linux"),
-            PlatformTag::Manylinux1 { .. } => Some("Linux"),
-            PlatformTag::Manylinux2010 { .. } => Some("Linux"),
-            PlatformTag::Manylinux2014 { .. } => Some("Linux"),
-            PlatformTag::Linux { .. } => Some("Linux"),
-            PlatformTag::Musllinux { .. } => Some("Linux"),
-            PlatformTag::Macos { .. } => Some("macOS"),
-            PlatformTag::Win32 => Some("Windows"),
-            PlatformTag::WinAmd64 => Some("Windows"),
-            PlatformTag::WinArm64 => Some("Windows"),
-            PlatformTag::WinIa64 => Some("Windows"),
-            PlatformTag::Android { .. } => Some("Android"),
-            PlatformTag::FreeBsd { .. } => Some("FreeBSD"),
-            PlatformTag::NetBsd { .. } => Some("NetBSD"),
-            PlatformTag::OpenBsd { .. } => Some("OpenBSD"),
-            PlatformTag::Dragonfly { .. } => Some("DragonFly"),
-            PlatformTag::Haiku { .. } => Some("Haiku"),
-            PlatformTag::Illumos { .. } => Some("Illumos"),
-            PlatformTag::Solaris { .. } => Some("Solaris"),
+            Self::Any => None,
+            Self::Manylinux { .. } => Some("Linux"),
+            Self::Manylinux1 { .. } => Some("Linux"),
+            Self::Manylinux2010 { .. } => Some("Linux"),
+            Self::Manylinux2014 { .. } => Some("Linux"),
+            Self::Linux { .. } => Some("Linux"),
+            Self::Musllinux { .. } => Some("Linux"),
+            Self::Macos { .. } => Some("macOS"),
+            Self::Win32 => Some("Windows"),
+            Self::WinAmd64 => Some("Windows"),
+            Self::WinArm64 => Some("Windows"),
+            Self::WinIa64 => Some("Windows"),
+            Self::Android { .. } => Some("Android"),
+            Self::FreeBsd { .. } => Some("FreeBSD"),
+            Self::NetBsd { .. } => Some("NetBSD"),
+            Self::OpenBsd { .. } => Some("OpenBSD"),
+            Self::Dragonfly { .. } => Some("DragonFly"),
+            Self::Haiku { .. } => Some("Haiku"),
+            Self::Illumos { .. } => Some("Illumos"),
+            Self::Solaris { .. } => Some("Solaris"),
+            Self::Pyodide { .. } => Some("Pyodide"),
         }
     }
 }
 
 impl PlatformTag {
+    /// Returns `true` if the platform is "any" (i.e., not specific to a platform).
+    pub fn is_any(&self) -> bool {
+        matches!(self, Self::Any)
+    }
+
     /// Returns `true` if the platform is manylinux-only.
     pub fn is_manylinux(&self) -> bool {
         matches!(
@@ -129,6 +137,11 @@ impl PlatformTag {
     /// Returns `true` if the platform is macOS-only.
     pub fn is_macos(&self) -> bool {
         matches!(self, Self::Macos { .. })
+    }
+
+    /// Returns `true` if the platform is Android-only.
+    pub fn is_android(&self) -> bool {
+        matches!(self, Self::Android { .. })
     }
 
     /// Returns `true` if the platform is Windows-only.
@@ -262,6 +275,7 @@ impl std::fmt::Display for PlatformTag {
             Self::Haiku { release_arch } => write!(f, "haiku_{release_arch}"),
             Self::Illumos { release_arch } => write!(f, "illumos_{release_arch}"),
             Self::Solaris { release_arch } => write!(f, "solaris_{release_arch}_64bit"),
+            Self::Pyodide { major, minor } => write!(f, "pyodide_{major}_{minor}_wasm32"),
         }
     }
 }
@@ -616,6 +630,35 @@ impl FromStr for PlatformTag {
             });
         }
 
+        if let Some(rest) = s.strip_prefix("pyodide_") {
+            let mid =
+                rest.strip_suffix("_wasm32")
+                    .ok_or_else(|| ParsePlatformTagError::InvalidArch {
+                        platform: "pyodide",
+                        tag: s.to_string(),
+                    })?;
+            let underscore = memchr::memchr(b'_', mid.as_bytes()).ok_or_else(|| {
+                ParsePlatformTagError::InvalidFormat {
+                    platform: "pyodide",
+                    tag: s.to_string(),
+                }
+            })?;
+            let major: u16 = mid[..underscore].parse().map_err(|_| {
+                ParsePlatformTagError::InvalidMajorVersion {
+                    platform: "pyodide",
+                    tag: s.to_string(),
+                }
+            })?;
+
+            let minor: u16 = mid[underscore + 1..].parse().map_err(|_| {
+                ParsePlatformTagError::InvalidMinorVersion {
+                    platform: "pyodide",
+                    tag: s.to_string(),
+                }
+            })?;
+            return Ok(Self::Pyodide { major, minor });
+        }
+
         Err(ParsePlatformTagError::UnknownFormat(s.to_string()))
     }
 }
@@ -896,6 +939,27 @@ mod tests {
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "solaris",
                 tag: "solaris_11_4_x86_64".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn pyodide_platform() {
+        let tag = PlatformTag::Pyodide {
+            major: 2024,
+            minor: 0,
+        };
+        assert_eq!(
+            PlatformTag::from_str("pyodide_2024_0_wasm32").as_ref(),
+            Ok(&tag)
+        );
+        assert_eq!(tag.to_string(), "pyodide_2024_0_wasm32");
+
+        assert_eq!(
+            PlatformTag::from_str("pyodide_2024_0_wasm64"),
+            Err(ParsePlatformTagError::InvalidArch {
+                platform: "pyodide",
+                tag: "pyodide_2024_0_wasm64".to_string()
             })
         );
     }

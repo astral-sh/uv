@@ -2,26 +2,26 @@ use std::path::PathBuf;
 
 use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
-use uv_python::{
-    PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME,
-    platform::{Arch, Os},
-};
+use uv_platform::{Arch, Os};
+use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
+use uv_static::EnvVars;
 
 #[test]
 fn python_pin() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No pinned Python version found
-    "###);
+    error: No Python version file found; specify a version to create one
+    ");
 
     // Given an argument, we pin to that version
     uv_snapshot!(context.filters(), context.python_pin().arg("any"), @r###"
@@ -163,7 +163,7 @@ fn python_pin() {
     // (skip on Windows because the snapshot is different and the behavior is not platform dependent)
     #[cfg(unix)]
     {
-        uv_snapshot!(context.filters(), context.python_pin().arg("pypy"), @r###"
+        uv_snapshot!(context.filters(), context.python_pin().arg("pypy"), @r"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -171,7 +171,7 @@ fn python_pin() {
 
         ----- stderr -----
         warning: No interpreter found for PyPy in managed installations or search path
-        "###);
+        ");
 
         let python_version = context.read(PYTHON_VERSION_FILENAME);
         assert_snapshot!(python_version, @r###"
@@ -208,14 +208,14 @@ fn python_pin_global_if_no_local() -> Result<()> {
     uv.create_dir_all()?;
 
     // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No pinned Python version found
-    "###);
+    error: No Python version file found; specify a version to create one
+    ");
 
     // Given an argument, we globally pin to that version
     uv_snapshot!(context.filters(), context.python_pin().arg("3.11").arg("--global"), @r"
@@ -360,7 +360,7 @@ fn python_pin_global_creates_parent_dirs() {
 fn python_pin_no_python() {
     let context: TestContext = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -368,7 +368,7 @@ fn python_pin_no_python() {
 
     ----- stderr -----
     warning: No interpreter found for Python 3.12 in managed installations or search path
-    "###);
+    ");
 }
 
 #[test]
@@ -447,7 +447,7 @@ fn python_pin_compatible_with_requires_python() -> Result<()> {
     "###);
 
     // Request a version that is compatible and uses a Python variant
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.13t"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.13t"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -455,7 +455,7 @@ fn python_pin_compatible_with_requires_python() -> Result<()> {
 
     ----- stderr -----
     warning: No interpreter found for Python 3.13t in [PYTHON SOURCES]
-    "###);
+    ");
 
     // Request a implementation version that is compatible
     uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.11"), @r###"
@@ -586,27 +586,17 @@ fn warning_pinned_python_version_not_installed() -> Result<()> {
 /// We do need a Python interpreter for `--resolved` pins
 #[test]
 fn python_pin_resolve_no_python() {
-    let context: TestContext = TestContext::new_with_versions(&[]);
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_sources();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
 
-        ----- stderr -----
-        error: No interpreter found for Python 3.12 in managed installations, search path, or registry
-        "###);
-    } else {
-        uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: No interpreter found for Python 3.12 in managed installations or search path
-        "###);
-    }
+    hint: A managed Python download is available for Python 3.12, but Python downloads are set to 'never'
+    ");
 }
 
 #[test]
@@ -740,14 +730,16 @@ fn python_pin_resolve() {
     // Request an implementation that is not installed
     // (skip on Windows because the snapshot is different and the behavior is not platform dependent)
     #[cfg(unix)]
-    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("pypy"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("pypy"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for PyPy in managed installations or search path
-    "###);
+
+    hint: A managed Python download is available for PyPy, but Python downloads are set to 'never'
+    ");
 
     let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
@@ -813,4 +805,119 @@ fn python_pin_with_comments() -> Result<()> {
     "###);
 
     Ok(())
+}
+
+#[test]
+#[cfg(feature = "python-managed")]
+fn python_pin_install() {
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_sources();
+
+    // Should not install 3.12 when downloads are not automatic
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    warning: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+    ");
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").env(EnvVars::UV_PYTHON_DOWNLOADS, "auto"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn python_pin_rm() {
+    let context: TestContext = TestContext::new_with_versions(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No Python version file found
+    ");
+
+    // Create and remove a local pin
+    context.python_pin().arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed Python version file at `.python-version`
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No global Python pin found
+    ");
+
+    // Global does not detect the local pin
+    context.python_pin().arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No global Python pin found
+    ");
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed global Python pin at `[UV_USER_CONFIG_DIR]/.python-version`
+
+    ----- stderr -----
+    ");
+
+    // Add the global pin again
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+
+    // Remove the local pin
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed Python version file at `.python-version`
+
+    ----- stderr -----
+    ");
+
+    // The global pin should not be removed without `--global`
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No Python version file found; use `--rm --global` to remove the global pin
+    ");
 }

@@ -32,7 +32,6 @@ pub struct VirtualEnvironment {
 
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct PyVenvConfiguration {
     /// Was the virtual environment created with the `virtualenv` package?
     pub(crate) virtualenv: bool,
@@ -86,22 +85,22 @@ impl CondaEnvironmentKind {
     fn from_prefix_path(path: &Path) -> Self {
         // If we cannot read `CONDA_DEFAULT_ENV`, there's no way to know if the base environment
         let Ok(default_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
-            return CondaEnvironmentKind::Child;
+            return Self::Child;
         };
 
         // These are the expected names for the base environment
         if default_env != "base" && default_env != "root" {
-            return CondaEnvironmentKind::Child;
+            return Self::Child;
         }
 
         let Some(name) = path.file_name() else {
-            return CondaEnvironmentKind::Child;
+            return Self::Child;
         };
 
         if name.to_str().is_some_and(|name| name == default_env) {
-            CondaEnvironmentKind::Base
+            Self::Base
         } else {
-            CondaEnvironmentKind::Child
+            Self::Child
         }
     }
 }
@@ -131,14 +130,14 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
 
     for dir in current_dir.ancestors() {
         // If we're _within_ a virtualenv, return it.
-        if dir.join("pyvenv.cfg").is_file() {
+        if uv_fs::is_virtualenv_base(dir) {
             return Ok(Some(dir.to_path_buf()));
         }
 
         // Otherwise, search for a `.venv` directory.
         let dot_venv = dir.join(".venv");
         if dot_venv.is_dir() {
-            if !dot_venv.join("pyvenv.cfg").is_file() {
+            if !uv_fs::is_virtualenv_base(&dot_venv) {
                 return Err(Error::MissingPyVenvCfg(dot_venv));
             }
             return Ok(Some(dot_venv));

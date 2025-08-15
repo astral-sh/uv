@@ -1,16 +1,19 @@
 use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
 use std::fmt::Write;
+use std::iter;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
+use uv_distribution_types::RequiresPython;
 
 use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    PreviewMode, ProjectBuildBackend, VersionControlError, VersionControlSystem,
+    DependencyGroupsWithDefaults, Preview, ProjectBuildBackend, VersionControlError,
+    VersionControlSystem,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
@@ -21,9 +24,9 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
     VersionRequest,
 };
-use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
+use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
@@ -59,11 +62,8 @@ pub(crate) async fn init(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<ExitStatus> {
-    if build_backend == Some(ProjectBuildBackend::Uv) && preview.is_disabled() {
-        warn_user_once!("The uv build backend is experimental and may change without warning");
-    }
     match init_kind {
         InitKind::Script => {
             let Some(path) = explicit_path.as_deref() else {
@@ -85,6 +85,7 @@ pub(crate) async fn init(
                 pin_python,
                 package,
                 no_config,
+                preview,
             )
             .await?;
 
@@ -200,6 +201,7 @@ async fn init_script(
     pin_python: bool,
     package: bool,
     no_config: bool,
+    preview: Preview,
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -214,6 +216,7 @@ async fn init_script(
         warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
     }
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -256,6 +259,7 @@ async fn init_script(
         &client_builder,
         cache,
         &reporter,
+        preview,
     )
     .await?;
 
@@ -292,7 +296,7 @@ async fn init_project(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: PreviewMode,
+    preview: Preview,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();
@@ -343,6 +347,7 @@ async fn init_project(
 
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
+        .retries_from_env()?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
@@ -432,6 +437,7 @@ async fn init_project(
                         install_mirrors.python_install_mirror.as_deref(),
                         install_mirrors.pypy_install_mirror.as_deref(),
                         install_mirrors.python_downloads_json_url.as_deref(),
+                        preview,
                     )
                     .await?
                     .into_interpreter();
@@ -459,6 +465,7 @@ async fn init_project(
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
+                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -501,7 +508,7 @@ async fn init_project(
         (requires_python, python_request)
     } else if let Some(requires_python) = workspace
         .as_ref()
-        .map(find_requires_python)
+        .map(|workspace| find_requires_python(workspace, &DependencyGroupsWithDefaults::none()))
         .transpose()?
         .flatten()
     {
@@ -525,6 +532,7 @@ async fn init_project(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
+                preview,
             )
             .await?
             .into_interpreter();
@@ -552,6 +560,7 @@ async fn init_project(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
+            preview,
         )
         .await?
         .into_interpreter();
@@ -585,7 +594,6 @@ async fn init_project(
         author_from,
         no_readme,
         package,
-        preview,
     )?;
 
     if let Some(workspace) = workspace {
@@ -676,7 +684,7 @@ pub(crate) enum InitKind {
 
 impl Default for InitKind {
     fn default() -> Self {
-        InitKind::Project(InitProjectKind::default())
+        Self::Project(InitProjectKind::default())
     }
 }
 
@@ -693,7 +701,7 @@ pub(crate) enum InitProjectKind {
 impl InitKind {
     /// Returns `true` if the project should be packaged by default.
     pub(crate) fn packaged_by_default(self) -> bool {
-        matches!(self, InitKind::Project(InitProjectKind::Library))
+        matches!(self, Self::Project(InitProjectKind::Library))
     }
 }
 
@@ -713,10 +721,9 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        preview: PreviewMode,
     ) -> Result<()> {
         match self {
-            InitProjectKind::Application => InitProjectKind::init_application(
+            Self::Application => Self::init_application(
                 name,
                 path,
                 requires_python,
@@ -728,9 +735,8 @@ impl InitProjectKind {
                 author_from,
                 no_readme,
                 package,
-                preview,
             ),
-            InitProjectKind::Library => InitProjectKind::init_library(
+            Self::Library => Self::init_library(
                 name,
                 path,
                 requires_python,
@@ -742,7 +748,6 @@ impl InitProjectKind {
                 author_from,
                 no_readme,
                 package,
-                preview,
             ),
         }
     }
@@ -761,7 +766,6 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        preview: PreviewMode,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
@@ -794,11 +798,7 @@ impl InitProjectKind {
             }
 
             // Add a build system
-            let build_backend = match build_backend {
-                Some(build_backend) => build_backend,
-                None if preview.is_enabled() => ProjectBuildBackend::Uv,
-                None => ProjectBuildBackend::Hatch,
-            };
+            let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
             pyproject.push('\n');
             pyproject.push_str(&pyproject_build_system(name, build_backend));
             pyproject_build_backend_prerequisites(name, path, build_backend)?;
@@ -848,7 +848,6 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
-        preview: PreviewMode,
     ) -> Result<()> {
         if !package {
             return Err(anyhow!("Library projects must be packaged"));
@@ -869,11 +868,7 @@ impl InitProjectKind {
         );
 
         // Always include a build system if the project is packaged.
-        let build_backend = match build_backend {
-            Some(build_backend) => build_backend,
-            None if preview.is_enabled() => ProjectBuildBackend::Uv,
-            None => ProjectBuildBackend::Hatch,
-        };
+        let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
         pyproject.push('\n');
         pyproject.push_str(&pyproject_build_system(name, build_backend));
         pyproject_build_backend_prerequisites(name, path, build_backend)?;
@@ -950,7 +945,13 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 min_version.release()[0] == 0,
                 "migrate to major version bumps"
             );
-            let max_version = Version::new([0, min_version.release()[1] + 1]);
+            let max_version = Version::new(
+                [0, min_version.release()[1] + 1]
+                    .into_iter()
+                    // Add trailing zeroes to match the version length, to use the same style
+                    // as `--bounds`.
+                    .chain(iter::repeat_n(0, min_version.release().len() - 2)),
+            );
             indoc::formatdoc! {r#"
                 [build-system]
                 requires = ["uv_build>={min_version},<{max_version}"]
@@ -1235,6 +1236,7 @@ fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
     let Ok(output) = Command::new(git)
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
+        .env(EnvVars::LC_ALL, "C")
         .current_dir(path)
         .output()
     else {

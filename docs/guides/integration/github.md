@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 ```
 
 It is considered best practice to pin to a specific uv version, e.g., with:
@@ -44,10 +44,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           # Install a specific version of uv.
-          version: "0.7.5"
+          version: "0.8.11"
 ```
 
 ## Setting up Python
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       - name: Set up Python
         run: uv python install
@@ -92,13 +92,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
       - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version-file: ".python-version"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 ```
 
 Or, specify the `pyproject.toml` file to ignore the pin and use the latest version compatible with
@@ -115,13 +115,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
       - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 ```
 
 ## Multiple Python versions
@@ -146,7 +146,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv and set the python version
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
 ```
@@ -187,7 +187,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev
@@ -212,43 +212,10 @@ persisting the cache:
 
 ```yaml title="example.yml"
 - name: Enable caching
-  uses: astral-sh/setup-uv@v5
+  uses: astral-sh/setup-uv@v6
   with:
     enable-cache: true
 ```
-
-You can configure the action to use a custom cache directory on the runner:
-
-```yaml title="example.yml"
-- name: Define a custom uv cache path
-  uses: astral-sh/setup-uv@v5
-  with:
-    enable-cache: true
-    cache-local-path: "/path/to/cache"
-```
-
-Or invalidate it when the lockfile changes:
-
-```yaml title="example.yml"
-- name: Define a cache dependency glob
-  uses: astral-sh/setup-uv@v5
-  with:
-    enable-cache: true
-    cache-dependency-glob: "uv.lock"
-```
-
-Or when any requirements file changes:
-
-```yaml title="example.yml"
-- name: Define a cache dependency glob
-  uses: astral-sh/setup-uv@v5
-  with:
-    enable-cache: true
-    cache-dependency-glob: "requirements**.txt"
-```
-
-Note that `astral-sh/setup-uv` will automatically use a separate cache key for each host
-architecture and platform.
 
 Alternatively, you can manage the cache manually with the `actions/cache` action:
 
@@ -346,3 +313,32 @@ steps:
 ```
 
 To opt-out again, the `--no-system` flag can be used in any uv invocation.
+
+## Private repos
+
+If your project has [dependencies](../../concepts/projects/dependencies.md#git) on private GitHub
+repositories, you will need to configure a [personal access token (PAT)][PAT] to allow uv to fetch
+them.
+
+After creating a PAT that has read access to the private repositories, add it as a [repository
+secret].
+
+Then, you can use the [`gh`](https://cli.github.com/) CLI (which is installed in GitHub Actions
+runners by default) to configure a
+[credential helper for Git](../../concepts/authentication.md#git-credential-helpers) to use the PAT
+for queries to repositories hosted on `github.com`.
+
+For example, if you called your repository secret `MY_PAT`:
+
+```yaml title="example.yml"
+steps:
+  - name: Register the personal access token
+    run: echo "${{ secrets.MY_PAT }}" | gh auth login --with-token
+  - name: Configure the Git credential helper
+    run: gh auth setup-git
+```
+
+[PAT]:
+  https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
+[repository secret]:
+  https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository

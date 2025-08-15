@@ -16,8 +16,11 @@ use url::Url;
 
 use uv_fs::Simplified;
 use uv_git_types::{GitHubRepository, GitOid, GitReference};
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
+
+use crate::rate_limit::{GITHUB_RATE_LIMIT_STATUS, is_github_rate_limited};
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
@@ -132,7 +135,7 @@ impl Display for ReferenceOrOid<'_> {
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) struct GitRemote {
     /// URL to a remote repository.
-    url: Url,
+    url: DisplaySafeUrl,
 }
 
 /// A local clone of a remote repository's database. Multiple [`GitCheckout`]s
@@ -158,20 +161,20 @@ pub(crate) struct GitRepository {
 
 impl GitRepository {
     /// Opens an existing Git repository at `path`.
-    pub(crate) fn open(path: &Path) -> Result<GitRepository> {
+    pub(crate) fn open(path: &Path) -> Result<Self> {
         // Make sure there is a Git repository at the specified path.
         ProcessBuilder::new(GIT.as_ref()?)
             .arg("rev-parse")
             .cwd(path)
             .exec_with_output()?;
 
-        Ok(GitRepository {
+        Ok(Self {
             path: path.to_path_buf(),
         })
     }
 
     /// Initializes a Git repository at `path`.
-    fn init(path: &Path) -> Result<GitRepository> {
+    fn init(path: &Path) -> Result<Self> {
         // TODO(ibraheem): see if this still necessary now that we no longer use libgit2
         // Skip anything related to templates, they just call all sorts of issues as
         // we really don't want to use them yet they insist on being used. See #6240
@@ -184,7 +187,7 @@ impl GitRepository {
             .cwd(path)
             .exec_with_output()?;
 
-        Ok(GitRepository {
+        Ok(Self {
             path: path.to_path_buf(),
         })
     }
@@ -205,12 +208,12 @@ impl GitRepository {
 
 impl GitRemote {
     /// Creates an instance for a remote repository URL.
-    pub(crate) fn new(url: &Url) -> Self {
+    pub(crate) fn new(url: &DisplaySafeUrl) -> Self {
         Self { url: url.clone() }
     }
 
     /// Gets the remote repository URL.
-    pub(crate) fn url(&self) -> &Url {
+    pub(crate) fn url(&self) -> &DisplaySafeUrl {
         &self.url
     }
 
@@ -389,7 +392,7 @@ impl GitCheckout {
         }
 
         let repo = GitRepository::open(into)?;
-        let checkout = GitCheckout::new(revision, repo);
+        let checkout = Self::new(revision, repo);
         checkout.reset()?;
         Ok(checkout)
     }
@@ -786,7 +789,15 @@ fn github_fast_path(
         }
     };
 
-    let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{github_branch_name}");
+    // Check if we're rate-limited by GitHub before determining the FastPathRev
+    if GITHUB_RATE_LIMIT_STATUS.is_active() {
+        debug!("Skipping GitHub fast path attempt for: {url} (rate-limited)");
+        return Ok(FastPathRev::Indeterminate);
+    }
+
+    let base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
+        .unwrap_or("https://api.github.com/repos".to_owned());
+    let url = format!("{base_url}/{owner}/{repo}/commits/{github_branch_name}");
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -805,6 +816,11 @@ fn github_fast_path(
         }
 
         let response = request.send().await?;
+
+        if is_github_rate_limited(&response) {
+            // Mark that we are being rate-limited by GitHub
+            GITHUB_RATE_LIMIT_STATUS.activate();
+        }
 
         // GitHub returns a 404 if the repository does not exist, and a 422 if it exists but GitHub
         // is unable to resolve the requested revision.

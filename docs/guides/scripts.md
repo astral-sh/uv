@@ -241,10 +241,12 @@ Declaration of dependencies is also supported in this context, for example:
 
 ```python title="example"
 #!/usr/bin/env -S uv run --script
+#
 # /// script
 # requires-python = ">=3.12"
 # dependencies = ["httpx"]
 # ///
+
 import httpx
 
 print(httpx.get("https://example.com"))
@@ -252,8 +254,8 @@ print(httpx.get("https://example.com"))
 
 ## Using alternative package indexes
 
-If you wish to use an alternative [package index](../configuration/indexes.md) to resolve
-dependencies, you can provide the index with the `--index` option:
+If you wish to use an alternative [package index](../concepts/indexes.md) to resolve dependencies,
+you can provide the index with the `--index` option:
 
 ```console
 $ uv add --index "https://example.com/simple" --script example.py 'requests<3' 'rich'
@@ -267,7 +269,7 @@ This will include the package data in the inline metadata:
 ```
 
 If you require authentication to access the package index, then please refer to the
-[package index](../configuration/indexes.md) documentation.
+[package index](../concepts/indexes.md) documentation.
 
 ## Locking dependencies
 

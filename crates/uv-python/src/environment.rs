@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -8,7 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_cache_key::cache_digest;
+use uv_configuration::Preview;
 use uv_fs::{LockedFile, Simplified};
 use uv_pep440::Version;
 
@@ -153,18 +152,16 @@ impl PythonEnvironment {
     pub fn find(
         request: &PythonRequest,
         preference: EnvironmentPreference,
+        python_preference: PythonPreference,
         cache: &Cache,
+        preview: Preview,
     ) -> Result<Self, Error> {
-        let installation = match find_python_installation(
-            request,
-            preference,
-            // Ignore managed installations when looking for environments
-            PythonPreference::OnlySystem,
-            cache,
-        )? {
-            Ok(installation) => installation,
-            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
-        };
+        let installation =
+            match find_python_installation(request, preference, python_preference, cache, preview)?
+            {
+                Ok(installation) => installation,
+                Err(err) => return Err(EnvironmentNotFound::from(err).into()),
+            };
         Ok(Self::from_installation(installation))
     }
 
@@ -173,7 +170,7 @@ impl PythonEnvironment {
     /// N.B. This function also works for system Python environments and users depend on this.
     pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
         debug!(
-            "Checking for Python environment at `{}`",
+            "Checking for Python environment at: `{}`",
             root.as_ref().user_display()
         );
         match root.as_ref().try_exists() {
@@ -305,7 +302,7 @@ impl PythonEnvironment {
     ///
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
-    pub fn site_packages(&self) -> impl Iterator<Item = Cow<Path>> {
+    pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
         self.0.interpreter.site_packages()
     }
 
@@ -316,23 +313,7 @@ impl PythonEnvironment {
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
     pub async fn lock(&self) -> Result<LockedFile, std::io::Error> {
-        if let Some(target) = self.0.interpreter.target() {
-            // If we're installing into a `--target`, use a target-specific lockfile.
-            LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
-        } else if let Some(prefix) = self.0.interpreter.prefix() {
-            // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
-            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display()).await
-        } else if self.0.interpreter.is_virtualenv() {
-            // If the environment a virtualenv, use a virtualenv-specific lockfile.
-            LockedFile::acquire(self.0.root.join(".lock"), self.0.root.user_display()).await
-        } else {
-            // Otherwise, use a global lockfile.
-            LockedFile::acquire(
-                env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.0.root))),
-                self.0.root.user_display(),
-            )
-            .await
-        }
+        self.0.interpreter.lock().await
     }
 
     /// Return the [`Interpreter`] for this environment.

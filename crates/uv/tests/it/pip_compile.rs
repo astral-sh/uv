@@ -3,9 +3,8 @@
 use std::env::current_dir;
 use std::fs;
 use std::io::Cursor;
-use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
@@ -17,7 +16,9 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, download_to_disk, packse_index_url, uv_snapshot};
+use crate::common::{
+    DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, packse_index_url, uv_snapshot,
+};
 
 #[test]
 fn compile_requirements_in() -> Result<()> {
@@ -1371,7 +1372,7 @@ fn compile_python_312() -> Result<()> {
     // And `UV_PYTHON`
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env("UV_PYTHON", "3.12"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1613,7 +1614,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("-p")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1642,7 +1643,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("--python")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1671,7 +1672,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("--python-version")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1789,14 +1790,14 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("3.13")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 3.13 in [PYTHON SOURCES]
-    "###
+    "
     );
 
     // `UV_PYTHON` is ignored if `--python-version` is set
@@ -1891,7 +1892,7 @@ fn compile_fallback_interpreter_broken_in_path() -> Result<()> {
             .arg("--python-version")
             .arg("3.12")
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str()), @r###"
+            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2105,6 +2106,7 @@ fn omit_non_matching_annotation() -> Result<()> {
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
 /// incompatible sdist <https://github.com/astral-sh/uv/issues/388>
+#[cfg(feature = "python-eol")]
 #[test]
 fn compile_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -2907,16 +2909,16 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
-    - git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
     - git+https://github.com/astral-test/uv-public-pypackage@test-branch
-    "###
+    - git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+    "
     );
 
     Ok(())
@@ -3360,7 +3362,7 @@ fn compile_exclude_newer() -> Result<()> {
         .arg("--exclude-newer")
         // 4.64.0: 2022-04-04T01:48:46.194635Z1
         // 4.64.1: 2022-09-03T11:10:27.148080Z
-        .arg("2022-04-04T12:00:00Z"), @r###"
+        .arg("2022-04-04T12:00:00Z"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3371,7 +3373,7 @@ fn compile_exclude_newer() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     // Use a date as input instead.
@@ -3381,7 +3383,7 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04"), @r###"
+        .arg("2022-04-04"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3392,7 +3394,7 @@ fn compile_exclude_newer() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     // Check the error message for invalid datetime
@@ -3431,6 +3433,160 @@ fn compile_exclude_newer() -> Result<()> {
 
     For more information, try '--help'.
     "###
+    );
+
+    Ok(())
+}
+
+/// Test per-package exclude-newer functionality
+#[test]
+fn compile_exclude_newer_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("tqdm\nrequests")?;
+
+    // First, establish baseline with global exclude-newer
+    // tqdm 4.64.0 was released on 2022-04-04, 4.64.1 on 2022-09-03
+    // requests 2.27.1 was released on 2022-01-05, 2.28.0 on 2022-05-29
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("requirements.in")
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --exclude-newer 2022-04-04T12:00:00Z
+    certifi==2021.10.8
+        # via requests
+    charset-normalizer==2.0.12
+        # via requests
+    idna==3.3
+        # via requests
+    requests==2.27.1
+        # via -r requirements.in
+    tqdm==4.64.0
+        # via -r requirements.in
+    urllib3==1.26.9
+        # via requests
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "
+    );
+
+    // Test override: allow tqdm to use newer versions while keeping requests pinned
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("requirements.in")
+        .arg("--exclude-newer")
+        .arg("2022-04-04T12:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=2022-09-04T00:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --exclude-newer 2022-04-04T12:00:00Z --exclude-newer-package tqdm=2022-09-04T00:00:00Z
+    certifi==2021.10.8
+        # via requests
+    charset-normalizer==2.0.12
+        # via requests
+    idna==3.3
+        # via requests
+    requests==2.27.1
+        # via -r requirements.in
+    tqdm==4.64.1
+        # via -r requirements.in
+    urllib3==1.26.9
+        # via requests
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "
+    );
+
+    // Test multiple package overrides
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("requirements.in")
+        .arg("--exclude-newer")
+        .arg("2022-01-01T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=2022-09-04T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("requests=2022-06-01T00:00:00Z"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --exclude-newer 2022-01-01T00:00:00Z --exclude-newer-package tqdm=2022-09-04T00:00:00Z --exclude-newer-package requests=2022-06-01T00:00:00Z
+    certifi==2021.10.8
+        # via requests
+    charset-normalizer==2.0.9
+        # via requests
+    idna==3.3
+        # via requests
+    requests==2.27.1
+        # via -r requirements.in
+    tqdm==4.64.1
+        # via -r requirements.in
+    urllib3==1.26.7
+        # via requests
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Test error handling for malformed --exclude-newer-package
+#[test]
+fn compile_exclude_newer_package_errors() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("tqdm")?;
+
+    // Test invalid format (missing =)
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("requirements.in")
+        .arg("--exclude-newer-package")
+        .arg("tqdm"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'tqdm' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `tqdm`: expected format `PACKAGE=DATE`
+
+    For more information, try '--help'.
+    "
+    );
+
+    // Test invalid date format
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("requirements.in")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=invalid-date"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` timestamp `invalid-date`: `invalid-date` could not be parsed as a valid date: failed to parse year in date "invalid-date": failed to parse "inva" as year (a four digit integer): invalid digit, expected 0-9 but got i
+
+    For more information, try '--help'.
+    "#
     );
 
     Ok(())
@@ -4800,97 +4956,6 @@ fn compile_editable_url_requirement() -> Result<()> {
     Ok(())
 }
 
-#[test]
-#[ignore]
-fn cache_errors_are_non_fatal() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let requirements_in = context.temp_dir.child("requirements.in");
-    // No git dep, git has its own locking strategy
-    requirements_in.write_str(indoc! {r"
-        # pypi wheel
-        pandas
-        # url wheel
-        flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl
-        # url source dist
-        werkzeug @ https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz
-    "
-    })?;
-
-    // Pick a file from each kind of cache
-    let interpreter_cache = context
-        .cache_dir
-        .path()
-        .join("interpreter-v0")
-        .read_dir()?
-        .next()
-        .context("Expected a python interpreter cache file")??
-        .path();
-    let cache_files = [
-        PathBuf::from("simple-v0/pypi/numpy.msgpack"),
-        PathBuf::from(
-            "wheels-v0/pypi/python-dateutil/python_dateutil-2.8.2-py2.py3-none-any.msgpack",
-        ),
-        PathBuf::from("wheels-v0/url/4b8be67c801a7ecb/flask/flask-3.0.0-py3-none-any.msgpack"),
-        PathBuf::from("built-wheels-v0/url/6781bd6440ae72c2/werkzeug/metadata.msgpack"),
-        interpreter_cache,
-    ];
-
-    let check = || {
-        uv_snapshot!(context.filters(), context.pip_compile()
-                .arg("pip")
-                .arg("compile")
-                .arg(requirements_in.path())
-                // It's sufficient to check that we resolve to a fix number of packages
-                .stdout(std::process::Stdio::null()), @r###"
-            success: true
-            exit_code: 0
-            ----- stdout -----
-
-            ----- stderr -----
-            Resolved 13 packages in [TIME]
-            "###
-        );
-    };
-
-    insta::allow_duplicates! {
-        check();
-
-        // Replace some cache files with invalid contents
-        for file in &cache_files {
-            let file = context.cache_dir.join(file);
-            if !file.is_file() {
-                bail!("Missing cache file {}", file.user_display());
-            }
-            fs_err::write(file, "I borken you cache")?;
-        }
-
-        check();
-
-        #[cfg(unix)]
-        {
-            use fs_err::os::unix::fs::OpenOptionsExt;
-
-            // Make some files unreadable, so that the read instead of the deserialization will fail
-            for file in cache_files {
-                let file = context.cache_dir.join(file);
-                if !file.is_file() {
-                    bail!("Missing cache file {}", file.user_display());
-                }
-
-                fs_err::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .mode(0o000)
-                    .open(file)?;
-            }
-        }
-
-        check();
-
-        Ok(())
-    }
-}
-
 /// Resolve a distribution from an HTML-only registry.
 #[test]
 #[cfg(not(target_env = "musl"))] // No musllinux wheels in the torch index
@@ -5563,6 +5628,7 @@ coverage = ["example[test]", "extras>=0.0.1,<=0.0.2"]
 ///
 /// `voluptuous==0.15.1` requires Python 3.9 or later, so we should resolve to an earlier version
 /// and avoiding building 0.15.1 at all.
+#[cfg(feature = "python-eol")]
 #[test]
 fn requires_python_prefetch() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -6957,7 +7023,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
       ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Metadata for `validation` (v2.0.0) could not be parsed:
-            Failed to parse version: Unexpected end of version specifier, expected operator:
+            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
             12
             ^^
     "###
@@ -8056,7 +8122,7 @@ fn universal_platform_fork() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("-c")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8080,9 +8146,9 @@ fn universal_platform_fork() -> Result<()> {
         # via torch
     sympy==1.13.1
         # via torch
-    torch==2.5.1 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
+    torch==2.5.1 ; (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'
         # via -r requirements.in
-    torch==2.5.1+cpu ; (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
+    torch==2.5.1+cpu ; (python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     typing-extensions==4.9.0
         # via
@@ -8091,7 +8157,7 @@ fn universal_platform_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8486,7 +8552,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8512,7 +8578,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via torch
     sympy==1.13.3
         # via torch
-    torch==2.0.0 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'darwin')
+    torch==2.0.0 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'darwin')
         # via
         #   -r requirements.in
         #   example
@@ -8520,7 +8586,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via
         #   -r requirements.in
         #   example
-    torch==2.0.0+cu118 ; (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'darwin') or (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')
+    torch==2.0.0+cu118 ; (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'darwin') or (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via
         #   -r requirements.in
         #   example
@@ -8532,7 +8598,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 14 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8567,7 +8633,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8598,7 +8664,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     sympy==1.13.3
         # via torch
@@ -8609,9 +8675,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
+    torch==2.3.0 ; (python_full_version < '3.13' and implementation_name != 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8620,7 +8686,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    "###
+    "
     );
 
     // A similar case, except the nested marker is now on the path requirement.
@@ -8731,7 +8797,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8762,7 +8828,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux') or (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     sympy==1.13.3
         # via torch
@@ -8777,9 +8843,9 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
+    torch==2.3.0 ; (python_full_version < '3.13' and os_name != 'Linux' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux') or (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and os_name == 'Linux' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8788,7 +8854,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 20 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9521,7 +9587,7 @@ fn universal_marker_propagation() -> Result<()> {
         # via requests
     charset-normalizer==3.3.2
         # via requests
-    cmake==3.28.4 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    cmake==3.28.4 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via pytorch-triton-rocm
     filelock==3.13.1
         # via
@@ -9533,7 +9599,7 @@ fn universal_marker_propagation() -> Result<()> {
         # via requests
     jinja2==3.1.3
         # via torch
-    lit==18.1.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    lit==18.1.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via pytorch-triton-rocm
     markupsafe==2.1.5
         # via jinja2
@@ -9549,17 +9615,17 @@ fn universal_marker_propagation() -> Result<()> {
         # via torchvision
     pillow==10.2.0
         # via torchvision
-    pytorch-triton-rocm==2.0.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    pytorch-triton-rocm==2.0.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     requests==2.31.0
         # via torchvision
     sympy==1.12
         # via torch
-    torch==2.0.0 ; (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
+    torch==2.0.0 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
         # via
         #   -r requirements.in
         #   torchvision
-    torch==2.0.0+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torch==2.0.0+rocm5.4.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via
         #   -r requirements.in
         #   pytorch-triton-rocm
@@ -9568,9 +9634,9 @@ fn universal_marker_propagation() -> Result<()> {
         # via
         #   -r requirements.in
         #   torchvision
-    torchvision==0.15.1 ; (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
+    torchvision==0.15.1 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
         # via -r requirements.in
-    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torchvision==0.15.1+rocm5.4.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     torchvision==0.17.0 ; platform_machine != 'x86_64'
         # via -r requirements.in
@@ -12274,7 +12340,7 @@ requires-python = ">3.8"
 fn prerelease_path_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an a package that requires a pre-release version of `flask`.
+    // Create a package that requires a pre-release version of `flask`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -12328,7 +12394,7 @@ requires-python = ">3.8"
 fn prerelease_editable_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an a package that requires a pre-release version of `flask`.r
+    // Create a package that requires a pre-release version of `flask`.r
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
@@ -12802,28 +12868,34 @@ fn emit_index_annotation_multiple_indexes() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("uv\nrequests")?;
+    requirements_in.write_str("httpcore\nrequests")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
-        .arg("--emit-index-annotation"), @r###"
+        .arg("--emit-index-annotation"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --emit-index-annotation
+    certifi==2016.8.8
+        # via httpcore
+        # from https://test.pypi.org/simple
+    h11==0.14.0
+        # via httpcore
+        # from https://pypi.org/simple
+    httpcore==1.0.4
+        # via -r requirements.in
+        # from https://pypi.org/simple
     requests==2.5.4.1
         # via -r requirements.in
         # from https://test.pypi.org/simple
-    uv==0.1.24
-        # via -r requirements.in
-        # from https://pypi.org/simple
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    "###
+    Resolved 4 packages in [TIME]
+    "
     );
 
     Ok(())
@@ -13551,7 +13623,7 @@ fn ignore_invalid_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -13580,7 +13652,7 @@ fn incompatible_build_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -13590,7 +13662,7 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.txt")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13601,7 +13673,7 @@ fn compatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -13610,7 +13682,7 @@ fn compatible_build_constraint() -> Result<()> {
 /// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
@@ -13648,6 +13720,7 @@ build-constraint-dependencies = [
 }
 
 /// Include `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
+#[cfg(feature = "python-eol")]
 #[test]
 fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -13691,7 +13764,7 @@ build-constraint-dependencies = [
 /// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
@@ -13776,7 +13849,7 @@ build-constraint-dependencies = [
 /// Merge CLI args `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
 #[test]
 fn compatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     // incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
@@ -13942,7 +14015,7 @@ fn invalid_extra() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn symlink() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
 
@@ -13958,7 +14031,7 @@ fn symlink() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.in")
         .arg("--output-file")
-        .arg("requirements-symlink.txt"), @r###"
+        .arg("requirements-symlink.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13966,18 +14039,14 @@ fn symlink() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --output-file requirements-symlink.txt
     anyio==4.3.0
         # via -r requirements.in
-    exceptiongroup==1.2.0
-        # via anyio
     idna==3.6
         # via anyio
     sniffio==1.3.1
         # via anyio
-    typing-extensions==4.10.0
-        # via anyio
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
-    "###
+    Resolved 3 packages in [TIME]
+    "
     );
 
     // The symlink should still be a symlink.
@@ -14047,16 +14116,16 @@ fn compile_enumerate_no_versions() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in"),
-    @r###"
+    @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and rooster-blue<=0.0.8 depends on Python>=3.11,<4.0, we can conclude that rooster-blue<=0.0.8 cannot be used.
+      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and all versions of rooster-blue depend on Python>=3.11,<4.0, we can conclude that all versions of rooster-blue cannot be used.
           And because you require rooster-blue, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     Ok(())
 }
@@ -14351,8 +14420,6 @@ matplotlib
 fn importlib_metadata_not_repeated() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let uv_toml = context.temp_dir.child("uv.toml");
-    uv_toml.write_str(r#"environments = ["python_version >= '3.10'", "python_version >= '3.8' and python_version < '3.10'", "python_version < '3.8'"]"#)?;
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("build")?;
 
@@ -14486,6 +14553,7 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
 /// dynamic metadata.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8767>
+#[cfg(feature = "python-eol")]
 #[test]
 fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2024-11-04T00:00:00Z");
@@ -14495,17 +14563,19 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--universal")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (python_full_version >= '3.10'):
+      × No solution found when resolving dependencies for split (markers: python_full_version >= '3.10'):
       ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
           hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
-    "###);
+
+          hint: While the active Python version is 3.8, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    ");
 
     Ok(())
 }
@@ -14761,10 +14831,7 @@ fn compile_derivation_chain() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"exit code: 1", "exit status: 1"),
-            (r"/.*/src", "/[TMP]/src"),
-        ])
+        .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_compile().arg("pyproject.toml"), @r###"
@@ -14813,21 +14880,38 @@ fn invalid_platform() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--python-platform")
-        .arg("linux")
-        .arg("requirements.in"), @r###"
+        .arg("x86_64-manylinux_2_17")
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only open3d<=0.18.0 is available and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
-          And because open3d>=0.16.0,<=0.18.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only the following versions of open3d are available:
+              open3d==0.8.0.0
+              open3d==0.9.0.0
+              open3d==0.10.0.0
+              open3d==0.10.0.1
+              open3d==0.11.0
+              open3d==0.11.1
+              open3d==0.11.2
+              open3d==0.12.0
+              open3d==0.13.0
+              open3d==0.14.1
+              open3d==0.15.1
+              open3d==0.15.2
+              open3d==0.16.0
+              open3d==0.16.1
+              open3d==0.17.0
+              open3d==0.18.0
+          and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
+          And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
 
           hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
 
           hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
-    "###);
+    ");
 
     Ok(())
 }
@@ -14928,16 +15012,17 @@ fn universal_conflicting_override_urls() -> Result<()> {
             .arg("requirements.in")
             .arg("--overrides")
             .arg("overrides.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
-    - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
-    - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
-    "###
+      × Failed to resolve dependencies for `anyio` (v4.3.0)
+      ╰─▶ Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
+          - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
+          - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+    "
     );
 
     Ok(())
@@ -14986,6 +15071,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "python-eol")]
 #[test]
 fn disjoint_requires_python() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -15086,6 +15172,7 @@ fn dynamic_version_source_dist() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "python-eol")]
 #[test]
 fn max_python_requirement() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2024-12-18T00:00:00Z");
@@ -15760,7 +15847,106 @@ fn invalid_group() -> Result<()> {
 }
 
 #[test]
-fn project_and_group() -> Result<()> {
+fn project_and_group_workspace_inherit() -> Result<()> {
+    // Checking that --project is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+
+            [tool.uv.sources]
+            pytest = { workspace = true }
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("packages");
+        subdir.create_dir_all()?;
+
+        let pytest_dir = subdir.child("pytest");
+        pytest_dir.create_dir_all()?;
+        let pytest_toml = pytest_dir.child("pyproject.toml");
+        pytest_toml.write_str(
+            r#"
+            [project]
+            name = "pytest"
+            version = "4.0.0"
+            requires-python = ">=3.12"
+            "#,
+        )?;
+
+        let sniffio_dir = subdir.child("sniffio");
+        sniffio_dir.create_dir_all()?;
+        let sniffio_toml = sniffio_dir.child("pyproject.toml");
+        sniffio_toml.write_str(
+            r#"
+            [project]
+            name = "sniffio"
+            version = "1.3.1"
+            requires-python = ">=3.12"
+            "#,
+        )?;
+
+        let subproject_dir = subdir.child("mysubproject");
+        subproject_dir.create_dir_all()?;
+        let subproject_toml = subproject_dir.child("pyproject.toml");
+        subproject_toml.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.sources]
+            sniffio = { workspace = true }
+
+            [dependency-groups]
+            foo = ["iniconfig", "anyio", "sniffio", "pytest"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    // Check that the workspace's sources are discovered and consulted
+    let context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("packages/mysubproject/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group packages/mysubproject/pyproject.toml:foo
+    -e file://[TEMP_DIR]/packages/pytest
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    -e file://[TEMP_DIR]/packages/sniffio
+        # via
+        #   mysubproject (packages/mysubproject/pyproject.toml:foo)
+        #   anyio
+    anyio==4.3.0
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+    idna==3.6
+        # via anyio
+    iniconfig==2.0.0
+        # via mysubproject (packages/mysubproject/pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn project_and_group_workspace() -> Result<()> {
     // Checking that --project is handled properly with --group
     fn new_context() -> Result<TestContext> {
         let context = TestContext::new("3.12");
@@ -15994,6 +16180,7 @@ fn directory_and_group() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/10957>
+#[cfg(feature = "python-eol")]
 #[test]
 fn compile_preserve_requires_python_split() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -16308,7 +16495,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16357,7 +16544,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "source-distribution"
@@ -16441,7 +16628,7 @@ fn pep_751_compile_directory() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16512,7 +16699,7 @@ fn pep_751_compile_git() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "uv-public-pypackage"
@@ -16562,7 +16749,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16626,7 +16813,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16695,7 +16882,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16733,7 +16920,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16774,7 +16961,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16813,7 +17000,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -16850,7 +17037,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16891,7 +17078,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16931,7 +17118,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -16970,7 +17157,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17018,7 +17205,7 @@ fn pep_751_compile_warn() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --emit-index-url
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "iniconfig"
@@ -17231,7 +17418,7 @@ fn pep_751_compile_no_emit_package() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --no-emit-package idna
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.[X]"
+    requires-python = ">=3.12"
 
     [[packages]]
     name = "anyio"
@@ -17377,11 +17564,11 @@ fn compile_broken_active_venv() -> Result<()> {
         .arg(&broken_system_python)
         .arg("venv2"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No interpreter found at path `python3.14159`
+    error: No interpreter found at path `python3.14159`
     ");
 
     // Simulate a removed Python interpreter
@@ -17489,6 +17676,83 @@ fn pubgrub_panic_double_self_dependency_extra() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Sync a Git repository that depends on a package within the same repository via a `path` source.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13020>
+#[test]
+#[cfg(feature = "git")]
+fn git_path_transitive_dependency() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(
+        r"
+        git+https://git@github.com/astral-sh/uv-path-dependency-test.git#subdirectory=package2
+        ",
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    package1 @ git+https://git@github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1
+        # via package2
+    package2 @ git+https://git@github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Ensure that `--emit-index-annotation` plays nicely with `--annotation-style=line`.
+#[test]
+fn omit_python_patch_universal() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("redis")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    redis==5.0.3
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
+    async-timeout==4.0.3 ; python_full_version < '3.11.[X]'
+        # via redis
+    redis==5.0.3
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
 
     Ok(())
 }

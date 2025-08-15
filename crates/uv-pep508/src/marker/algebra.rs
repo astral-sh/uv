@@ -59,8 +59,10 @@ use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range}
 
 use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
-    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+    CanonicalMarkerListPair, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
+    CanonicalMarkerValueVersion,
 };
+use crate::marker::tree::ContainerOperator;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
@@ -172,7 +174,7 @@ impl InternerGuard<'_> {
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
-                    match python_version_to_full_version(normalize_specifier(specifier)) {
+                    match python_version_to_full_version(specifier.only_release()) {
                         Ok(specifier) => (
                             Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
                             Edges::from_specifier(specifier),
@@ -186,19 +188,19 @@ impl InternerGuard<'_> {
             MarkerExpression::VersionIn {
                 key,
                 versions,
-                negated,
+                operator,
             } => match key {
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
-                    Edges::from_versions(&versions, negated),
+                    Edges::from_versions(&versions, operator),
                 ),
                 MarkerValueVersion::PythonFullVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-                    Edges::from_versions(&versions, negated),
+                    Edges::from_versions(&versions, operator),
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
-                    match Edges::from_python_versions(versions, negated) {
+                    match Edges::from_python_versions(versions, operator) {
                         Ok(edges) => (
                             Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
                             edges,
@@ -313,6 +315,10 @@ impl InternerGuard<'_> {
                 };
                 (Variable::String(key), Edges::from_string(operator, value))
             }
+            MarkerExpression::List { pair, operator } => (
+                Variable::List(pair),
+                Edges::from_bool(operator == ContainerOperator::In),
+            ),
             // A variable representing the existence or absence of a particular extra.
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Extra(extra),
@@ -328,7 +334,7 @@ impl InternerGuard<'_> {
                 Variable::Extra(CanonicalMarkerValueExtra::Extra(extra)),
                 Edges::from_bool(false),
             ),
-            // Invalid extras are always `false`.
+            // Invalid `extra` names are always `false`.
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Arbitrary(_),
                 ..
@@ -1046,6 +1052,12 @@ pub(crate) enum Variable {
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     Extra(CanonicalMarkerValueExtra),
+    /// A variable representing whether a `<value> in <key>` or `<value> not in <key>`
+    /// expression, where the key is a list.
+    ///
+    /// We keep extras and groups at the leaves of the tree, so when simplifying extras we can
+    /// trivially remove the leaves without having to reconstruct the entire tree.
+    List(CanonicalMarkerListPair),
 }
 
 impl Variable {
@@ -1055,7 +1067,7 @@ impl Variable {
     /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
     /// never be true at the same time.
     fn is_conflicting_variable(&self) -> bool {
-        let Variable::String(marker) = self else {
+        let Self::String(marker) = self else {
             return false;
         };
         marker.is_conflicting()
@@ -1074,8 +1086,8 @@ pub(crate) struct Node {
 
 impl Node {
     /// Return the complement of this node, flipping all children IDs.
-    fn not(self) -> Node {
-        Node {
+    fn not(self) -> Self {
+        Self {
             var: self.var,
             children: self.children.not(),
         }
@@ -1090,16 +1102,16 @@ pub(crate) struct NodeId(usize);
 
 impl NodeId {
     // The terminal node representing `true`, or a trivially `true` node.
-    pub(crate) const TRUE: NodeId = NodeId(0);
+    pub(crate) const TRUE: Self = Self(0);
 
     // The terminal node representing `false`, or an unsatisifable node.
-    pub(crate) const FALSE: NodeId = NodeId(1);
+    pub(crate) const FALSE: Self = Self(1);
 
     /// Create a new, optionally complemented, [`NodeId`] with the given index.
-    fn new(index: usize, complement: bool) -> NodeId {
+    fn new(index: usize, complement: bool) -> Self {
         // Ensure the index does not interfere with the lowest complement bit.
         let index = (index + 1) << 1;
-        NodeId(index | usize::from(complement))
+        Self(index | usize::from(complement))
     }
 
     /// Returns the index of this ID, ignoring the complemented edge.
@@ -1115,16 +1127,16 @@ impl NodeId {
     }
 
     /// Returns the complement of this node.
-    pub(crate) fn not(self) -> NodeId {
+    pub(crate) fn not(self) -> Self {
         // Toggle the lowest bit.
-        NodeId(self.0 ^ 1)
+        Self(self.0 ^ 1)
     }
 
     /// Returns the complement of this node, if it's parent is complemented.
     ///
     /// This method is useful to restore the complemented state of children nodes
     /// when traversing the tree.
-    pub(crate) fn negate(self, parent: NodeId) -> NodeId {
+    pub(crate) fn negate(self, parent: Self) -> Self {
         if parent.is_complement() {
             self.not()
         } else {
@@ -1134,12 +1146,12 @@ impl NodeId {
 
     /// Returns `true` if this node represents an unsatisfiable node.
     pub(crate) fn is_false(self) -> bool {
-        self == NodeId::FALSE
+        self == Self::FALSE
     }
 
     /// Returns `true` if this node represents a trivially `true` node.
     pub(crate) fn is_true(self) -> bool {
-        self == NodeId::TRUE
+        self == Self::TRUE
     }
 }
 
@@ -1177,14 +1189,14 @@ pub(crate) enum Edges {
 
 impl Edges {
     /// Returns the [`Edges`] for a boolean variable.
-    fn from_bool(complemented: bool) -> Edges {
+    fn from_bool(complemented: bool) -> Self {
         if complemented {
-            Edges::Boolean {
+            Self::Boolean {
                 high: NodeId::TRUE,
                 low: NodeId::FALSE,
             }
         } else {
-            Edges::Boolean {
+            Self::Boolean {
                 high: NodeId::FALSE,
                 low: NodeId::TRUE,
             }
@@ -1195,7 +1207,7 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: ArcStr) -> Edges {
+    fn from_string(operator: MarkerOperator, value: ArcStr) -> Self {
         let range: Ranges<ArcStr> = match operator {
             MarkerOperator::Equal => Ranges::singleton(value),
             MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
@@ -1207,44 +1219,47 @@ impl Edges {
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
 
-        Edges::String {
-            edges: Edges::from_range(&range),
+        Self::String {
+            edges: Self::from_range(&range),
         }
     }
 
     /// Returns the [`Edges`] for a version specifier.
-    fn from_specifier(specifier: VersionSpecifier) -> Edges {
-        let specifier = release_specifier_to_range(normalize_specifier(specifier));
-        Edges::Version {
-            edges: Edges::from_range(&specifier),
+    fn from_specifier(specifier: VersionSpecifier) -> Self {
+        let specifier = release_specifier_to_range(specifier.only_release(), true);
+        Self::Version {
+            edges: Self::from_range(&specifier),
         }
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
     ///
     /// Only for use when the `key` is a `PythonVersion`. Normalizes to `PythonFullVersion`.
-    fn from_python_versions(versions: Vec<Version>, negated: bool) -> Result<Edges, NodeId> {
+    fn from_python_versions(
+        versions: Vec<Version>,
+        operator: ContainerOperator,
+    ) -> Result<Self, NodeId> {
         let mut range: Ranges<Version> = versions
             .into_iter()
             .map(|version| {
-                let specifier = VersionSpecifier::equals_version(version.clone());
+                let specifier = VersionSpecifier::equals_version(version.only_release());
                 let specifier = python_version_to_full_version(specifier)?;
-                Ok(release_specifier_to_range(normalize_specifier(specifier)))
+                Ok(release_specifier_to_range(specifier, true))
             })
             .flatten_ok()
             .collect::<Result<Ranges<_>, NodeId>>()?;
 
-        if negated {
+        if operator == ContainerOperator::NotIn {
             range = range.complement();
         }
 
-        Ok(Edges::Version {
-            edges: Edges::from_range(&range),
+        Ok(Self::Version {
+            edges: Self::from_range(&range),
         })
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &[Version], negated: bool) -> Edges {
+    fn from_versions(versions: &[Version], operator: ContainerOperator) -> Self {
         let mut range: Ranges<Version> = versions
             .iter()
             .map(|version| {
@@ -1255,12 +1270,12 @@ impl Edges {
             })
             .collect();
 
-        if negated {
+        if operator == ContainerOperator::NotIn {
             range = range.complement();
         }
 
-        Edges::Version {
-            edges: Edges::from_range(&range),
+        Self::Version {
+            edges: Self::from_range(&range),
         }
     }
 
@@ -1308,26 +1323,26 @@ impl Edges {
     fn apply(
         &self,
         parent: NodeId,
-        right_edges: &Edges,
+        right_edges: &Self,
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> Edges {
+    ) -> Self {
         match (self, right_edges) {
             // For version or string variables, we have to split and merge the overlapping ranges.
-            (Edges::Version { edges }, Edges::Version { edges: right_edges }) => Edges::Version {
-                edges: Edges::apply_ranges(edges, parent, right_edges, right_parent, apply),
+            (Self::Version { edges }, Self::Version { edges: right_edges }) => Self::Version {
+                edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
-            (Edges::String { edges }, Edges::String { edges: right_edges }) => Edges::String {
-                edges: Edges::apply_ranges(edges, parent, right_edges, right_parent, apply),
+            (Self::String { edges }, Self::String { edges: right_edges }) => Self::String {
+                edges: Self::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
             // For boolean variables, we simply merge the low and high edges.
             (
-                Edges::Boolean { high, low },
-                Edges::Boolean {
+                Self::Boolean { high, low },
+                Self::Boolean {
                     high: right_high,
                     low: right_low,
                 },
-            ) => Edges::Boolean {
+            ) => Self::Boolean {
                 high: apply(high.negate(parent), right_high.negate(right_parent)),
                 low: apply(low.negate(parent), right_low.negate(right_parent)),
             },
@@ -1407,22 +1422,22 @@ impl Edges {
     fn is_disjoint(
         &self,
         parent: NodeId,
-        right_edges: &Edges,
+        right_edges: &Self,
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
     ) -> bool {
         match (self, right_edges) {
             // For version or string variables, we have to split and check the overlapping ranges.
-            (Edges::Version { edges }, Edges::Version { edges: right_edges }) => {
-                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            (Self::Version { edges }, Self::Version { edges: right_edges }) => {
+                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
             }
-            (Edges::String { edges }, Edges::String { edges: right_edges }) => {
-                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            (Self::String { edges }, Self::String { edges: right_edges }) => {
+                Self::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
             }
             // For boolean variables, we simply check the low and high edges.
             (
-                Edges::Boolean { high, low },
-                Edges::Boolean {
+                Self::Boolean { high, low },
+                Self::Boolean {
                     high: right_high,
                     low: right_low,
                 },
@@ -1467,23 +1482,23 @@ impl Edges {
     }
 
     // Apply the given function to all direct children of this node.
-    fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> Edges {
+    fn map(&self, parent: NodeId, mut f: impl FnMut(NodeId) -> NodeId) -> Self {
         match self {
-            Edges::Version { edges: map } => Edges::Version {
+            Self::Version { edges: map } => Self::Version {
                 edges: map
                     .iter()
                     .cloned()
                     .map(|(range, node)| (range, f(node.negate(parent))))
                     .collect(),
             },
-            Edges::String { edges: map } => Edges::String {
+            Self::String { edges: map } => Self::String {
                 edges: map
                     .iter()
                     .cloned()
                     .map(|(range, node)| (range, f(node.negate(parent))))
                     .collect(),
             },
-            Edges::Boolean { high, low } => Edges::Boolean {
+            Self::Boolean { high, low } => Self::Boolean {
                 low: f(low.negate(parent)),
                 high: f(high.negate(parent)),
             },
@@ -1493,32 +1508,32 @@ impl Edges {
     // Returns an iterator over all direct children of this node.
     fn nodes(&self) -> impl Iterator<Item = NodeId> + '_ {
         match self {
-            Edges::Version { edges: map } => {
+            Self::Version { edges: map } => {
                 Either::Left(Either::Left(map.iter().map(|(_, node)| *node)))
             }
-            Edges::String { edges: map } => {
+            Self::String { edges: map } => {
                 Either::Left(Either::Right(map.iter().map(|(_, node)| *node)))
             }
-            Edges::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
+            Self::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
         }
     }
 
     // Returns the complement of this [`Edges`].
-    fn not(self) -> Edges {
+    fn not(self) -> Self {
         match self {
-            Edges::Version { edges: map } => Edges::Version {
+            Self::Version { edges: map } => Self::Version {
                 edges: map
                     .into_iter()
                     .map(|(range, node)| (range, node.not()))
                     .collect(),
             },
-            Edges::String { edges: map } => Edges::String {
+            Self::String { edges: map } => Self::String {
                 edges: map
                     .into_iter()
                     .map(|(range, node)| (range, node.not()))
                     .collect(),
             },
-            Edges::Boolean { high, low } => Edges::Boolean {
+            Self::Boolean { high, low } => Self::Boolean {
                 high: high.not(),
                 low: low.not(),
             },
@@ -1526,57 +1541,62 @@ impl Edges {
     }
 }
 
-// Normalize a [`VersionSpecifier`] before adding it to the tree.
-fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
-    let (operator, version) = specifier.into_parts();
-
-    // The decision diagram relies on the assumption that the negation of a marker tree is
-    // the complement of the marker space. However, pre-release versions violate this assumption.
-    //
-    // For example, the marker `python_full_version > '3.9' or python_full_version <= '3.9'`
-    // does not match `python_full_version == 3.9.0a0` and so cannot simplify to `true`. However,
-    // its negation, `python_full_version > '3.9' and python_full_version <= '3.9'`, also does not
-    // match `3.9.0a0` and simplifies to `false`, which violates the algebra decision diagrams
-    // rely on. For this reason we ignore pre-release versions entirely when evaluating markers.
-    //
-    // Note that `python_version` cannot take on pre-release values as it is truncated to just the
-    // major and minor version segments. Thus using release-only specifiers is definitely necessary
-    // for `python_version` to fully simplify any ranges, such as `python_version > '3.9' or python_version <= '3.9'`,
-    // which is always `true` for `python_version`. For `python_full_version` however, this decision
-    // is a semantic change.
-    let mut release = &*version.release();
-
-    // Strip any trailing `0`s.
-    //
-    // The [`Version`] type ignores trailing `0`s for equality, but still preserves them in its
-    // [`Display`] output. We must normalize all versions by stripping trailing `0`s to remove the
-    // distinction between versions like `3.9` and `3.9.0`. Otherwise, their output would depend on
-    // which form was added to the global marker interner first.
-    //
-    // Note that we cannot strip trailing `0`s for star equality, as `==3.0.*` is different from `==3.*`.
-    if !operator.is_star() {
-        if let Some(end) = release.iter().rposition(|segment| *segment != 0) {
-            if end > 0 {
-                release = &release[..=end];
-            }
-        }
-    }
-
-    VersionSpecifier::from_version(operator, Version::new(release)).unwrap()
-}
-
 /// Returns the equivalent `python_full_version` specifier for a `python_version` specifier.
 ///
 /// Returns `Err` with a constant node if the equivalent comparison is always `true` or `false`.
 fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<VersionSpecifier, NodeId> {
+    // Trailing zeroes matter only for (not-)equals-star and tilde-equals. This means that below
+    // the next two blocks, we can use the trimmed release as the release.
+    if specifier.operator().is_star() {
+        // Input          python_version  python_full_version
+        // ==3.*          3.*             3.*
+        // ==3.0.*        3.0             3.0.*
+        // ==3.0.0.*      3.0             3.0.*
+        // ==3.9.*        3.9             3.9.*
+        // ==3.9.0.*      3.9             3.9.*
+        // ==3.9.0.0.*    3.9             3.9.*
+        // ==3.9.1.*      FALSE           FALSE
+        // ==3.9.1.0.*    FALSE           FALSE
+        // ==3.9.1.0.0.*  FALSE           FALSE
+        return match &*specifier.version().release() {
+            // `3.*`
+            [_major] => Ok(specifier),
+            // Ex) `3.9.*`, `3.9.0.*`, or `3.9.0.0.*`
+            [major, minor, rest @ ..] if rest.iter().all(|x| *x == 0) => {
+                let python_version = Version::new([major, minor]);
+                // Unwrap safety: A star operator with two version segments is always valid.
+                Ok(VersionSpecifier::from_version(*specifier.operator(), python_version).unwrap())
+            }
+            // Ex) `3.9.1.*` or `3.9.0.1.*`
+            _ => Err(NodeId::FALSE),
+        };
+    }
+
+    if *specifier.operator() == Operator::TildeEqual {
+        // python_version  python_full_version
+        // ~=3             (not possible)
+        // ~= 3.0          >= 3.0, < 4.0
+        // ~= 3.9          >= 3.9, < 4.0
+        // ~= 3.9.0        == 3.9.*
+        // ~= 3.9.1        FALSE
+        // ~= 3.9.0.0      == 3.9.*
+        // ~= 3.9.0.1      FALSE
+        return match &*specifier.version().release() {
+            // Ex) `3.0`, `3.7`
+            [_major, _minor] => Ok(specifier),
+            // Ex) `3.9`, `3.9.0`, or `3.9.0.0`
+            [major, minor, rest @ ..] if rest.iter().all(|x| *x == 0) => {
+                let python_version = Version::new([major, minor]);
+                Ok(VersionSpecifier::equals_star_version(python_version))
+            }
+            // Ex) `3.9.1` or `3.9.0.1`
+            _ => Err(NodeId::FALSE),
+        };
+    }
+
     // Extract the major and minor version segments if the specifier contains exactly
     // those segments, or if it contains a major segment with an implied minor segment of `0`.
-    let major_minor = match *specifier.version().release() {
-        // For star operators, we cannot add a trailing `0`.
-        //
-        // `python_version == 3.*` is equivalent to `python_full_version == 3.*`. Adding a
-        // trailing `0` would result in `python_version == 3.0.*`, which is incorrect.
-        [_major] if specifier.operator().is_star() => return Ok(specifier),
+    let major_minor = match *specifier.version().only_release_trimmed().release() {
         // Add a trailing `0` for the minor version, which is implied.
         // For example, `python_version == 3` matches `3.0.1`, `3.0.2`, etc.
         [major] => Some((major, 0)),
@@ -1614,9 +1634,10 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
                 VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
             }
 
-            // `==3.7.*`, `!=3.7.*`, `~=3.7` already represent the equivalent `python_full_version`
-            // comparison.
-            Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => specifier,
+            Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => {
+                // Handled above.
+                unreachable!()
+            }
         })
     } else {
         let [major, minor, ..] = *specifier.version().release() else {
@@ -1624,13 +1645,14 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
         };
 
         Ok(match specifier.operator() {
-            // `python_version` cannot have more than two release segments, so equality is impossible.
-            Operator::Equal | Operator::ExactEqual | Operator::EqualStar | Operator::TildeEqual => {
+            // `python_version` cannot have more than two release segments, and we know
+            // that the following release segments aren't purely zeroes so equality is impossible.
+            Operator::Equal | Operator::ExactEqual => {
                 return Err(NodeId::FALSE);
             }
 
             // Similarly, inequalities are always `true`.
-            Operator::NotEqual | Operator::NotEqualStar => return Err(NodeId::TRUE),
+            Operator::NotEqual => return Err(NodeId::TRUE),
 
             // `python_version {<,<=} 3.7.8` is equivalent to `python_full_version < 3.8`.
             Operator::LessThan | Operator::LessThanEqual => {
@@ -1640,6 +1662,11 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
             // `python_version {>,>=} 3.7.8` is equivalent to `python_full_version >= 3.8`.
             Operator::GreaterThan | Operator::GreaterThanEqual => {
                 VersionSpecifier::greater_than_equal_version(Version::new([major, minor + 1]))
+            }
+
+            Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => {
+                // Handled above.
+                unreachable!()
             }
         })
     }
