@@ -117,6 +117,7 @@ windows-result = { workspace = true }
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 byteorder = { workspace = true }
 filetime = { workspace = true }
