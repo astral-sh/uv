@@ -131,9 +131,12 @@ impl WindowsRunnable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fs_err as fs;
-    use std::io;
     use std::path::PathBuf;
+
+    #[cfg(target_os = "windows")]
+    use fs_err as fs;
+    #[cfg(target_os = "windows")]
+    use std::io;
 
     #[test]
     fn test_add_extension_to_path() {
@@ -172,6 +175,7 @@ mod tests {
     }
 
     /// Helper function to create a temporary directory with test files
+    #[cfg(target_os = "windows")]
     fn create_test_environment() -> io::Result<tempfile::TempDir> {
         let temp_dir = tempfile::tempdir()?;
         let scripts_dir = temp_dir.path().join("Scripts");
@@ -190,6 +194,7 @@ mod tests {
         Ok(temp_dir)
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_from_script_path_single_dot_package() {
         let temp_dir = create_test_environment().expect("Failed to create test environment");
@@ -204,6 +209,7 @@ mod tests {
         assert_eq!(command.get_program(), expected_path.as_os_str());
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_from_script_path_multiple_dots_package() {
         let temp_dir = create_test_environment().expect("Failed to create test environment");
@@ -224,6 +230,7 @@ mod tests {
         assert_eq!(command.get_program(), expected_path.as_os_str());
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_from_script_path_simple_package_name() {
         let temp_dir = create_test_environment().expect("Failed to create test environment");
@@ -236,6 +243,7 @@ mod tests {
         assert_eq!(command.get_program(), expected_path.as_os_str());
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_from_script_path_explicit_extensions() {
         let temp_dir = create_test_environment().expect("Failed to create test environment");
