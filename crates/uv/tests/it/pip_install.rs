@@ -8618,12 +8618,9 @@ build-constraint-dependencies = [
 fn install_build_isolation_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an package.
+    // Create a package.
     let package = context.temp_dir.child("project");
-    package.create_dir_all()?;
-    let pyproject_toml = package.child("pyproject.toml");
-
-    pyproject_toml.write_str(
+    package.child("pyproject.toml").write_str(
         r#"
         [project]
         name = "project"
@@ -8632,11 +8629,6 @@ fn install_build_isolation_package() -> Result<()> {
         dependencies = [
             "iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
         ]
-        [build-system]
-        requires = [
-          "setuptools >= 40.9.0",
-        ]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
