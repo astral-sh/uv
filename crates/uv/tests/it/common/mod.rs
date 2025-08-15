@@ -600,29 +600,6 @@ impl TestContext {
                     .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
             );
 
-            // Add filtering for the bin directory of the base interpreter path
-            let bin_dir = if cfg!(windows) {
-                // On Windows, the Python executable is in the root, not the bin directory
-                executable
-                    .canonicalize()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join("Scripts")
-            } else {
-                executable
-                    .canonicalize()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .to_path_buf()
-            };
-            filters.extend(
-                Self::path_patterns(bin_dir)
-                    .into_iter()
-                    .map(|pattern| (pattern.to_string(), format!("[PYTHON-BIN-{version}]"))),
-            );
-
             // And for the symlink we created in the test the Python path
             filters.extend(
                 Self::path_patterns(python_dir.join(version.to_string()))
