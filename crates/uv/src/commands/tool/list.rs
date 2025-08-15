@@ -19,6 +19,7 @@ pub(crate) async fn list(
     show_version_specifiers: bool,
     show_with: bool,
     show_extras: bool,
+    show_python: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -96,6 +97,24 @@ pub(crate) async fn list(
                 format!(" [extras: {extras_str}]")
             })
             .unwrap_or_default();
+
+        writeln!(printer.stdout(), "show_python: {}", show_python)?;
+        let python_version = if show_python {
+            if let Some(python_request) = tool.python() {
+                writeln!(printer.stdout(), "python_request")?;
+                if let uv_python::PythonRequest::ImplementationVersion(implementation, version_request) = python_request {
+                    writeln!(printer.stdout(), "uv_python::PythonRequest::ImplementationVersion")?;
+                    format!(" [python: {} {}]", implementation, version_request)
+                } else {
+                    format!(" [python: {}]", python_request)
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+        writeln!(printer.stdout(), "python version: {}", python_version)?;
 
         let with_requirements = show_with
             .then(|| {
