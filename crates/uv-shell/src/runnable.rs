@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Helper function to add an extension to a path by appending it instead of replacing.
-/// 
+///
 /// This mimics the behavior of the upcoming stable `with_added_extension` method for future compatibility.
 /// When `Path::with_added_extension` stabilizes, this function can be replaced with:
 /// ```ignore
