@@ -1393,7 +1393,7 @@ fn sync_build_isolation_package() -> Result<()> {
         "#,
     )?;
 
-    // Running `uv sync` should fail for iniconfig.
+    // Running `uv sync` should fail.
     uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r#"
     success: false
     exit_code: 1
@@ -1454,6 +1454,157 @@ fn sync_build_isolation_package() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
+    ");
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// By default, isolated dependencies should be installed before non-isolated dependencies.
+#[test]
+fn sync_build_isolation_package_order() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        ]
+        "#,
+    )?;
+
+    // Running `uv sync` should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+          ModuleNotFoundError: No module named 'hatchling'
+
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          source-distribution = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
+      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    "#);
+
+    // Add `hatchling`.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "hatchling",
+            "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        ]
+        "#,
+    )?;
+
+    // Running `uv sync` should succeed; `hatchling` should be installed first.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 5 isolated packages in [TIME]
+    Installed 5 isolated packages in [TIME]
+    Prepared 1 non-isolated package in [TIME]
+    Installed 1 non-isolated package in [TIME]
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + trove-classifiers==2024.3.3
+    ");
+
+    // Modify the version.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz",
+        ]
+        "#,
+    )?;
+
+    // Running `uv sync` should uninstall `hatchling`, then build `source-distribution`, then uninstall
+    // the existing `source-distribution`, and finally install the new one.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 5 isolated packages in [TIME]
+    Prepared 1 non-isolated package in [TIME]
+    Uninstalled 1 non-isolated package in [TIME]
+    Installed 1 non-isolated package in [TIME]
+     - hatchling==1.22.4
+     - packaging==24.0
+     - pathspec==0.12.1
+     - pluggy==1.4.0
+     - source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz)
+     - trove-classifiers==2024.3.3
+    ");
+
+    // Revert back.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "hatchling",
+            "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        ]
+        "#,
+    )?;
+
+    // Running `uv sync` should install everything in a single phase, since the build is cached.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 6 packages in [TIME]
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     - source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + trove-classifiers==2024.3.3
     ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
