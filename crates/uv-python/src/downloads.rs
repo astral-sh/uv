@@ -8,6 +8,7 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 use std::{env, io};
 
+use anyhow::anyhow;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
@@ -109,6 +110,11 @@ pub enum Error {
         file: Box<PythonInstallationKey>,
         url: Box<Url>,
         python_builds_dir: PathBuf,
+    },
+    #[error("Invalid build target value in {variable}: {err}")]
+    InvalidBuildTarget {
+        variable: &'static str,
+        err: anyhow::Error,
     },
 }
 
@@ -365,30 +371,29 @@ impl PythonDownloadRequest {
         Ok(self)
     }
 
-    /// Fill the build field from environment variables based on implementation.
-    pub fn fill_build_from_env(mut self) -> Self {
-        use std::env;
-        use uv_static::EnvVars;
-
-        if self.build.is_none() {
-            let build_env_var = match self.implementation {
-                Some(ImplementationName::CPython) | None => {
-                    env::var_os(EnvVars::UV_PYTHON_CPYTHON_BUILD)
-                }
-                Some(ImplementationName::PyPy) => env::var_os(EnvVars::UV_PYTHON_PYPY_BUILD),
-                Some(ImplementationName::GraalPy) => env::var_os(EnvVars::UV_PYTHON_GRAALPY_BUILD),
-                Some(ImplementationName::Pyodide) => {
-                    env::var_os(EnvVars::UV_PYTHON_PYODIDE_BUILD)
-                }
-            };
-
-            if let Some(build) = build_env_var {
-                if let Ok(build_str) = build.into_string() {
-                    self.build = Some(build_str);
-                }
-            }
+    /// Fill the build field from the environment variable relevant for the [`ImplementationName`].
+    pub fn fill_build_from_env(mut self) -> Result<Self, Error> {
+        if self.build.is_some() {
+            return Ok(self);
         }
-        self
+
+        let variable = match self.implementation.unwrap_or_default() {
+            ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
+            ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
+            ImplementationName::GraalPy => EnvVars::UV_PYTHON_GRAALPY_BUILD,
+            ImplementationName::Pyodide => EnvVars::UV_PYTHON_PYODIDE_BUILD,
+        };
+
+        let Some(build) = env::var_os(variable) else {
+            return Ok(self);
+        };
+
+        self.build = Some(build.into_string().map_err(|_| Error::InvalidBuildTarget {
+            variable,
+            err: anyhow!("not valid UTF-8"),
+        })?);
+
+        Ok(self)
     }
 
     pub fn fill(mut self) -> Result<Self, Error> {
@@ -396,7 +401,7 @@ impl PythonDownloadRequest {
             self.implementation = Some(ImplementationName::CPython);
         }
         self = self.fill_platform()?;
-        self = self.fill_build_from_env();
+        self = self.fill_build_from_env()?;
         Ok(self)
     }
 
@@ -474,14 +479,14 @@ impl PythonDownloadRequest {
         if !self.satisfied_by_key(download.key()) {
             return false;
         }
-        
+
         // Then check the build if specified
         if let Some(ref requested_build) = self.build {
             if download.build() != requested_build {
                 return false;
             }
         }
-        
+
         true
     }
 
@@ -1806,15 +1811,13 @@ mod tests {
             .with_build("20250814".to_string());
 
         // Get all downloads and find one that matches
-        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
-            .unwrap()
-            .collect();
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None).unwrap().collect();
 
         // Count how many downloads match without build constraint
         let request_no_build = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
             .with_implementation(ImplementationName::CPython);
-        
+
         let matches_without_build: Vec<_> = downloads
             .iter()
             .filter(|d| request_no_build.satisfied_by_download(d))
@@ -1828,7 +1831,7 @@ mod tests {
 
         // With build constraint should match fewer (or zero) downloads
         assert!(matches_with_build.len() <= matches_without_build.len());
-        
+
         // If we have matches with the build, verify they all have the correct build
         for download in matches_with_build {
             assert_eq!(download.build(), "20250814");
@@ -1862,10 +1865,10 @@ mod tests {
             .find(|d| !d.build().is_empty())
         {
             let display_with_build = format!("{}", download.to_display_with_build());
-            
+
             // The display with build should contain the build string
             assert!(display_with_build.contains(download.build()));
-            
+
             // The display with build should contain a '+' separator
             assert!(display_with_build.contains('+'));
         }

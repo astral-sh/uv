@@ -3161,6 +3161,8 @@ fn python_install_pyodide() {
 
 #[test]
 fn python_install_with_build_env() {
+    use uv_python::managed::platform_key_from_env;
+
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -3180,6 +3182,15 @@ fn python_install_with_build_env() {
     Installed Python 3.12.11 in [TIME]
      + cpython-3.12.11-[PLATFORM] (python3.12)
     ");
+
+    // Check that the BUILD file was created with the correct content
+    let cpython_dir = context.temp_dir.child("managed").child(format!(
+        "cpython-3.12.11-{}",
+        platform_key_from_env().unwrap()
+    ));
+    let build_file_path = cpython_dir.join("BUILD");
+    let build_content = fs_err::read_to_string(&build_file_path).unwrap();
+    assert_eq!(build_content, "20250814");
 
     // Test that an invalid build causes no downloads to be found
     uv_snapshot!(context.filters(), context.python_install()
@@ -3209,6 +3220,8 @@ fn python_install_with_build_env() {
 
 #[test]
 fn python_install_pypy_with_build_env() {
+    use uv_python::managed::platform_key_from_env;
+
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -3228,7 +3241,16 @@ fn python_install_pypy_with_build_env() {
     Installed Python 3.10.16 in [TIME]
      + pypy-3.10.16-[PLATFORM] (python3.10)
     ");
-    
+
+    // Check that the BUILD file was created with the correct content for PyPy
+    let pypy_dir = context
+        .temp_dir
+        .child("managed")
+        .child(format!("pypy-3.10.16-{}", platform_key_from_env().unwrap()));
+    let build_file_path = pypy_dir.join("BUILD");
+    let build_content = fs_err::read_to_string(&build_file_path).unwrap();
+    assert_eq!(build_content, "7.3.19");
+
     // Test that an invalid build causes no downloads to be found
     uv_snapshot!(context.filters(), context.python_install()
         .arg("pypy3.10")

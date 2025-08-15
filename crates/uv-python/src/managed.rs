@@ -319,6 +319,10 @@ pub struct ManagedPythonInstallation {
     ///
     /// Empty when self was constructed from a path.
     sha256: Option<&'static str>,
+    /// The build version of the Python installation.
+    ///
+    /// Empty when self was constructed from a path without a BUILD file.
+    build: Option<&'static str>,
 }
 
 impl ManagedPythonInstallation {
@@ -328,6 +332,7 @@ impl ManagedPythonInstallation {
             key: download.key().clone(),
             url: Some(download.url()),
             sha256: download.sha256(),
+            build: Some(download.build()),
         }
     }
 
@@ -341,11 +346,21 @@ impl ManagedPythonInstallation {
 
         let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
 
+        // Try to read the BUILD file if it exists
+        let build = match fs::read_to_string(path.join("BUILD")) {
+            Ok(content) => {
+                Some(Box::leak(content.trim().to_string().into_boxed_str()) as &'static str)
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) => return Err(err.into()),
+        };
+
         Ok(Self {
             path,
             key,
             url: None,
             sha256: None,
+            build,
         })
     }
 
@@ -613,6 +628,15 @@ impl ManagedPythonInstallation {
                     macos_dylib::patch_dylib_install_name(dylib_path)?;
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// Ensure the build version is written to a BUILD file in the installation directory.
+    pub fn ensure_build_file(&self) -> Result<(), Error> {
+        if let Some(build) = self.build {
+            let build_file = self.path.join("BUILD");
+            fs::write(&build_file, build)?;
         }
         Ok(())
     }
