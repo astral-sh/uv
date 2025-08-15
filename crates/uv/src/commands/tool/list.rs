@@ -105,7 +105,7 @@ pub(crate) async fn list(
                     format!(" [{}]", interpreter.markers().implementation_version())
                 }
                 Ok(None) => String::from(" [python: not found]"),
-                Err(e) => format!(" [python: error: {}]", e),
+                Err(e) => format!(" [python: error: {e}]"),
             }
         } else {
             String::new()
