@@ -3186,6 +3186,7 @@ mod tests {
                 arch: None,
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );
@@ -3205,6 +3206,7 @@ mod tests {
                 ))),
                 os: Some(Os::new(target_lexicon::OperatingSystem::Darwin(None))),
                 libc: Some(Libc::None),
+                build: None,
                 prereleases: None
             })
         );
@@ -3221,6 +3223,7 @@ mod tests {
                 arch: None,
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );
@@ -3240,6 +3243,7 @@ mod tests {
                 ))),
                 os: None,
                 libc: None,
+                build: None,
                 prereleases: None
             })
         );

@@ -154,6 +154,7 @@ pub struct PythonDownloadRequest {
     pub(crate) arch: Option<ArchRequest>,
     pub(crate) os: Option<Os>,
     pub(crate) libc: Option<Libc>,
+    pub(crate) build: Option<String>,
 
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
@@ -256,6 +257,7 @@ impl PythonDownloadRequest {
             arch,
             os,
             libc,
+            build: None,
             prereleases,
         }
     }
@@ -312,6 +314,12 @@ impl PythonDownloadRequest {
         self
     }
 
+    #[must_use]
+    pub fn with_build(mut self, build: String) -> Self {
+        self.build = Some(build);
+        self
+    }
+
     /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`] if possible.
     ///
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
@@ -357,11 +365,38 @@ impl PythonDownloadRequest {
         Ok(self)
     }
 
+    /// Fill the build field from environment variables based on implementation.
+    pub fn fill_build_from_env(mut self) -> Self {
+        use std::env;
+        use uv_static::EnvVars;
+
+        if self.build.is_none() {
+            let build_env_var = match self.implementation {
+                Some(ImplementationName::CPython) | None => {
+                    env::var_os(EnvVars::UV_PYTHON_CPYTHON_BUILD)
+                }
+                Some(ImplementationName::PyPy) => env::var_os(EnvVars::UV_PYTHON_PYPY_BUILD),
+                Some(ImplementationName::GraalPy) => env::var_os(EnvVars::UV_PYTHON_GRAALPY_BUILD),
+                Some(ImplementationName::Pyodide) => {
+                    env::var_os(EnvVars::UV_PYTHON_PYODIDE_BUILD)
+                }
+            };
+
+            if let Some(build) = build_env_var {
+                if let Ok(build_str) = build.into_string() {
+                    self.build = Some(build_str);
+                }
+            }
+        }
+        self
+    }
+
     pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
             self.implementation = Some(ImplementationName::CPython);
         }
         self = self.fill_platform()?;
+        self = self.fill_build_from_env();
         Ok(self)
     }
 
@@ -435,7 +470,19 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by a Python download.
     pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
-        self.satisfied_by_key(download.key())
+        // First check the key
+        if !self.satisfied_by_key(download.key()) {
+            return false;
+        }
+        
+        // Then check the build if specified
+        if let Some(ref requested_build) = self.build {
+            if download.build() != requested_build {
+                return false;
+            }
+        }
+        
+        true
     }
 
     /// Whether this download request opts-in to pre-release Python versions.
@@ -1747,5 +1794,80 @@ mod tests {
         let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
 
         assert!(matches!(result, Err(Error::TooManyParts(_))));
+    }
+
+    /// Test that build filtering works correctly
+    #[test]
+    fn test_python_download_request_build_filtering() {
+        // Create a request with a specific build
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython)
+            .with_build("20250814".to_string());
+
+        // Get all downloads and find one that matches
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .collect();
+
+        // Count how many downloads match without build constraint
+        let request_no_build = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython);
+        
+        let matches_without_build: Vec<_> = downloads
+            .iter()
+            .filter(|d| request_no_build.satisfied_by_download(d))
+            .collect();
+
+        // Count how many match with build constraint
+        let matches_with_build: Vec<_> = downloads
+            .iter()
+            .filter(|d| request.satisfied_by_download(d))
+            .collect();
+
+        // With build constraint should match fewer (or zero) downloads
+        assert!(matches_with_build.len() <= matches_without_build.len());
+        
+        // If we have matches with the build, verify they all have the correct build
+        for download in matches_with_build {
+            assert_eq!(download.build(), "20250814");
+        }
+    }
+
+    /// Test that an invalid build results in no matches
+    #[test]
+    fn test_python_download_request_invalid_build() {
+        // Create a request with a non-existent build
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython)
+            .with_build("99999999".to_string());
+
+        // Should find no matching downloads
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .filter(|d| request.satisfied_by_download(d))
+            .collect();
+
+        assert_eq!(downloads.len(), 0);
+    }
+
+    /// Test build display
+    #[test]
+    fn test_managed_python_download_build_display() {
+        // Get a download and test its display
+        if let Some(download) = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .find(|d| !d.build().is_empty())
+        {
+            let display_with_build = format!("{}", download.to_display_with_build());
+            
+            // The display with build should contain the build string
+            assert!(display_with_build.contains(download.build()));
+            
+            // The display with build should contain a '+' separator
+            assert!(display_with_build.contains('+'));
+        }
     }
 }

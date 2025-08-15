@@ -3158,3 +3158,86 @@ fn python_install_pyodide() {
     ----- stderr -----
     ");
 }
+
+#[test]
+fn python_install_with_build_env() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Test that UV_PYTHON_CPYTHON_BUILD pins to a specific build
+    // We know from the download-metadata.json that CPython 3.12.11 has build "20250814"
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("3.12")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20250814"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.11 in [TIME]
+     + cpython-3.12.11-[PLATFORM] (python3.12)
+    ");
+
+    // Test that an invalid build causes no downloads to be found
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("3.12")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "99999999"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: cpython-3.12-[PLATFORM]
+    ");
+
+    // Test that requesting a specific patch version that doesn't match the build fails
+    // CPython 3.12.11 has build "20250814", but if we request 3.12.10 with that build, it should fail
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("3.12.10")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20250814"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: cpython-3.12.10-[PLATFORM]
+    ");
+}
+
+#[test]
+fn python_install_pypy_with_build_env() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    // Test that UV_PYTHON_PYPY_BUILD pins to a specific PyPy version
+    // We know from the download-metadata.json that PyPy 3.10.16 has build "7.3.19"
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("pypy3.10")
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.16 in [TIME]
+     + pypy-3.10.16-[PLATFORM] (python3.10)
+    ");
+    
+    // Test that an invalid build causes no downloads to be found
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("pypy3.10")
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "99.99.99"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: pypy-3.10-[PLATFORM]
+    ");
+}
