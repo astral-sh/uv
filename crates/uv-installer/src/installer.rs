@@ -112,7 +112,7 @@ impl<'a> Installer<'a> {
             let result = install(
                 wheels,
                 &layout,
-                installer_name.as_ref(),
+                installer_name.as_deref(),
                 link_mode,
                 reporter.as_ref(),
                 relocatable,
@@ -143,7 +143,7 @@ impl<'a> Installer<'a> {
         install(
             wheels,
             &self.venv.interpreter().layout(),
-            self.name.as_ref(),
+            self.name.as_deref(),
             self.link_mode,
             self.reporter.as_ref(),
             self.venv.relocatable(),
@@ -158,7 +158,7 @@ impl<'a> Installer<'a> {
 fn install(
     wheels: Vec<CachedDist>,
     layout: &Layout,
-    installer_name: Option<&String>,
+    installer_name: Option<&str>,
     link_mode: LinkMode,
     reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
@@ -183,7 +183,7 @@ fn install(
             } else {
                 Some(wheel.cache_info())
             },
-            installer_name.map(String::as_str),
+            installer_name,
             installer_metadata,
             link_mode,
             &locks,
