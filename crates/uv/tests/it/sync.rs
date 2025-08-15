@@ -13089,3 +13089,36 @@ fn sync_extra_build_variables() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn reject_unmatched_runtime() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+         [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["source-distribution", "iniconfig"]
+
+        [tool.uv.extra-build-dependencies]
+        source-distribution = [{ requirement = "iniconfig", match-runtime = true }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+      × Failed to download and build `source-distribution==0.0.3`
+      ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
+      help: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
+    ");
+
+    Ok(())
+}

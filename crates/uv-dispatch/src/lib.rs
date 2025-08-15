@@ -480,7 +480,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.workspace_cache(),
             config_settings,
             self.build_isolation,
-            self.extra_build_requires(),
+            self.extra_build_requires,
             &build_stack,
             build_kind,
             environment_variables,
