@@ -2422,9 +2422,9 @@ uv tool list [OPTIONS]
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-tool-list--quiet"><a href="#uv-tool-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
-</dd><dt id="uv-tool-list--show-python"><a href="#uv-tool-list--show-python"><code>--show-python</code></a></dt><dd><p>Whether to display the Python installation used to run each tool.</p>
 </dd><dt id="uv-tool-list--show-extras"><a href="#uv-tool-list--show-extras"><code>--show-extras</code></a></dt><dd><p>Whether to display the extra requirements installed with each tool</p>
 </dd><dt id="uv-tool-list--show-paths"><a href="#uv-tool-list--show-paths"><code>--show-paths</code></a></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
+</dd><dt id="uv-tool-list--show-python"><a href="#uv-tool-list--show-python"><code>--show-python</code></a></dt><dd><p>Whether to display the Python installation used to run each tool</p>
 </dd><dt id="uv-tool-list--show-version-specifiers"><a href="#uv-tool-list--show-version-specifiers"><code>--show-version-specifiers</code></a></dt><dd><p>Whether to display the version specifier(s) used to install each tool</p>
 </dd><dt id="uv-tool-list--show-with"><a href="#uv-tool-list--show-with"><code>--show-with</code></a></dt><dd><p>Whether to display the additional requirements installed with each tool</p>
 </dd><dt id="uv-tool-list--verbose"><a href="#uv-tool-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -5618,3 +5618,4 @@ uv help [OPTIONS] [COMMAND]...
 </dd><dt id="uv-help--verbose"><a href="#uv-help--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
+
