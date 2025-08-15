@@ -4581,7 +4581,7 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_extras: bool,
 
-    /// Whether to display the Python installation used to build each tool.
+    /// Whether to display the Python installation used to run each tool.
     #[arg(long)]
     pub show_python: bool,
 
