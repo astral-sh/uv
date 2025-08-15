@@ -523,11 +523,7 @@ pub(crate) async fn install(
     if has_isolated_phase {
         let (isolated_installs, isolated_uninstalls) = execute_plan(
             isolated_phase,
-            if has_shared_phase {
-                Some(InstallPhase::Isolated)
-            } else {
-                None
-            },
+            None,
             resolution,
             build_options,
             link_mode,
@@ -593,8 +589,6 @@ pub(crate) async fn install(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InstallPhase {
-    /// A dedicated phase for building and installing packages with build-isolation enabled.
-    Isolated,
     /// A dedicated phase for building and installing packages with build-isolation disabled.
     Shared,
 }
@@ -602,8 +596,7 @@ enum InstallPhase {
 impl InstallPhase {
     fn label(self) -> &'static str {
         match self {
-            Self::Isolated => "isolated",
-            Self::Shared => "non-isolated",
+            Self::Shared => "without build isolation",
         }
     }
 }
@@ -698,12 +691,7 @@ async fn execute_plan(
             }
         }
 
-        logger.on_uninstall(
-            uninstalls.len(),
-            phase.map(InstallPhase::label),
-            start,
-            printer,
-        )?;
+        logger.on_uninstall(uninstalls.len(), start, printer)?;
     }
 
     // Install the resolved distributions.
@@ -722,12 +710,7 @@ async fn execute_plan(
             // task.
             .install_blocking(installs)?;
 
-        logger.on_install(
-            installs.len(),
-            phase.map(InstallPhase::label),
-            start,
-            printer,
-        )?;
+        logger.on_install(installs.len(), start, printer)?;
     }
 
     Ok((installs, uninstalls))

@@ -23,7 +23,7 @@ pub(crate) trait InstallLogger {
     fn on_prepare(
         &self,
         count: usize,
-        prefix: Option<&str>,
+        suffix: Option<&str>,
         start: std::time::Instant,
         printer: Printer,
     ) -> fmt::Result;
@@ -32,19 +32,12 @@ pub(crate) trait InstallLogger {
     fn on_uninstall(
         &self,
         count: usize,
-        prefix: Option<&str>,
         start: std::time::Instant,
         printer: Printer,
     ) -> fmt::Result;
 
     /// Log the completion of the installation phase.
-    fn on_install(
-        &self,
-        count: usize,
-        prefix: Option<&str>,
-        start: std::time::Instant,
-        printer: Printer,
-    ) -> fmt::Result;
+    fn on_install(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result;
 
     /// Log the completion of the operation.
     fn on_complete(&self, changelog: &Changelog, printer: Printer) -> fmt::Result;
@@ -80,7 +73,7 @@ impl InstallLogger for DefaultInstallLogger {
     fn on_prepare(
         &self,
         count: usize,
-        prefix: Option<&str>,
+        suffix: Option<&str>,
         start: std::time::Instant,
         printer: Printer,
     ) -> fmt::Result {
@@ -90,8 +83,8 @@ impl InstallLogger for DefaultInstallLogger {
             "{}",
             format!(
                 "Prepared {} {}",
-                if let Some(prefix) = prefix {
-                    format!("{count} {prefix} package{s}")
+                if let Some(suffix) = suffix {
+                    format!("{count} package{s} {suffix}")
                 } else {
                     format!("{count} package{s}")
                 }
@@ -105,7 +98,6 @@ impl InstallLogger for DefaultInstallLogger {
     fn on_uninstall(
         &self,
         count: usize,
-        prefix: Option<&str>,
         start: std::time::Instant,
         printer: Printer,
     ) -> fmt::Result {
@@ -115,37 +107,21 @@ impl InstallLogger for DefaultInstallLogger {
             "{}",
             format!(
                 "Uninstalled {} {}",
-                if let Some(prefix) = prefix {
-                    format!("{count} {prefix} package{s}")
-                } else {
-                    format!("{count} package{s}")
-                }
-                .bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )
     }
 
-    fn on_install(
-        &self,
-        count: usize,
-        prefix: Option<&str>,
-        start: std::time::Instant,
-        printer: Printer,
-    ) -> fmt::Result {
+    fn on_install(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
         let s = if count == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
             "{}",
             format!(
                 "Installed {} {}",
-                if let Some(prefix) = prefix {
-                    format!("{count} {prefix} package{s}")
-                } else {
-                    format!("{count} package{s}")
-                }
-                .bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -233,7 +209,7 @@ impl InstallLogger for SummaryInstallLogger {
     fn on_prepare(
         &self,
         _count: usize,
-        _prefix: Option<&str>,
+        _suffix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
     ) -> fmt::Result {
@@ -243,7 +219,6 @@ impl InstallLogger for SummaryInstallLogger {
     fn on_uninstall(
         &self,
         count: usize,
-        prefix: Option<&str>,
         start: std::time::Instant,
         printer: Printer,
     ) -> fmt::Result {
@@ -253,37 +228,21 @@ impl InstallLogger for SummaryInstallLogger {
             "{}",
             format!(
                 "Uninstalled {} {}",
-                if let Some(prefix) = prefix {
-                    format!("{count} {prefix} package{s}")
-                } else {
-                    format!("{count} package{s}")
-                }
-                .bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
         )
     }
 
-    fn on_install(
-        &self,
-        count: usize,
-        prefix: Option<&str>,
-        start: std::time::Instant,
-        printer: Printer,
-    ) -> fmt::Result {
+    fn on_install(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
         let s = if count == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
             "{}",
             format!(
                 "Installed {} {}",
-                if let Some(prefix) = prefix {
-                    format!("{count} {prefix} package{s}")
-                } else {
-                    format!("{count} package{s}")
-                }
-                .bold(),
+                format!("{count} package{s}").bold(),
                 format!("in {}", elapsed(start.elapsed())).dimmed()
             )
             .dimmed()
@@ -321,7 +280,7 @@ impl InstallLogger for UpgradeInstallLogger {
     fn on_prepare(
         &self,
         _count: usize,
-        _prefix: Option<&str>,
+        _suffix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
     ) -> fmt::Result {
@@ -331,7 +290,6 @@ impl InstallLogger for UpgradeInstallLogger {
     fn on_uninstall(
         &self,
         _count: usize,
-        _prefix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
     ) -> fmt::Result {
@@ -341,7 +299,6 @@ impl InstallLogger for UpgradeInstallLogger {
     fn on_install(
         &self,
         _count: usize,
-        _prefix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
     ) -> fmt::Result {

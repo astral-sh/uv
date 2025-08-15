@@ -1401,6 +1401,8 @@ fn sync_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
@@ -1444,14 +1446,13 @@ fn sync_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 5 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
      - hatchling==1.22.4
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
     ");
@@ -1527,10 +1528,10 @@ fn sync_build_isolation_package_order() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    Prepared 5 isolated packages in [TIME]
-    Installed 5 isolated packages in [TIME]
-    Prepared 1 non-isolated package in [TIME]
-    Installed 1 non-isolated package in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+    Prepared 1 package without build isolation in [TIME]
+    Installed 1 package in [TIME]
      + hatchling==1.22.4
      + packaging==24.0
      + pathspec==0.12.1
@@ -1561,10 +1562,9 @@ fn sync_build_isolation_package_order() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Uninstalled 5 isolated packages in [TIME]
-    Prepared 1 non-isolated package in [TIME]
-    Uninstalled 1 non-isolated package in [TIME]
-    Installed 1 non-isolated package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 6 packages in [TIME]
+    Installed 1 package in [TIME]
      - hatchling==1.22.4
      - packaging==24.0
      - pathspec==0.12.1
@@ -1647,6 +1647,8 @@ fn sync_build_isolation_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
@@ -1665,31 +1667,32 @@ fn sync_build_isolation_extra() -> Result<()> {
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "#);
 
-    // Running `uv sync` with `--all-extras` should also fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r#"
-    success: false
-    exit_code: 1
+    // Running `uv sync` with `--all-extras` should succeed, because we install the build dependencies
+    // first.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+    Prepared [N] packages without build isolation in [TIME]
+    Installed [N] packages in [TIME]
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + trove-classifiers==2024.3.3
+    ");
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+    // Clear the virtual environment.
+    context.venv().arg("--clear").assert().success();
 
-          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
-          [tool.uv.extra-build-dependencies]
-          source-distribution = ["hatchling"]
-
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
-      help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
-    "#);
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir)?;
 
     // Install the build dependencies.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("build"), @r"

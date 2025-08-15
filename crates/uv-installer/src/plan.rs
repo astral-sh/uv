@@ -700,21 +700,33 @@ impl Plan {
             .into_iter()
             .partition::<Vec<_>, _>(|dist| !right_remote.iter().any(|d| d.name() == dist.name()));
 
+        // If the right plan is non-empty, then remove extraneous distributions as part of the
+        // right plan, so they're present until the very end. Otherwise, we risk removing extraneous
+        // packages that are actually build dependencies.
+        let (left_extraneous, right_extraneous) = if right_remote.is_empty() {
+            (extraneous, vec![])
+        } else {
+            (vec![], extraneous)
+        };
+
+        // Always include the cached distributions in the left plan.
+        let (left_cached, right_cached) = (cached, vec![]);
+
         // Include all cached and extraneous distributions in the left plan.
         let left_plan = Self {
-            cached,
+            cached: left_cached,
             remote: left_remote,
             reinstalls: left_reinstalls,
-            extraneous,
+            extraneous: left_extraneous,
         };
 
         // The right plan will only contain the remote distributions that did not match the predicate,
         // along with any reinstalls for those distributions.
         let right_plan = Self {
-            cached: vec![],
+            cached: right_cached,
             remote: right_remote,
             reinstalls: right_reinstalls,
-            extraneous: vec![],
+            extraneous: right_extraneous,
         };
 
         (left_plan, right_plan)
