@@ -21,7 +21,7 @@ use uv_pep440::{
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-use crate::downloads::{PlatformRequest, PythonDownloadRequest, python_build_versions_from_env};
+use crate::downloads::{PlatformRequest, PythonDownloadRequest};
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
@@ -29,6 +29,7 @@ use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
+use crate::python_build_versions_from_env;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,
@@ -248,10 +249,6 @@ pub enum Error {
     #[error(transparent)]
     VirtualEnv(#[from] crate::virtualenv::Error),
 
-    /// An error was encountered with Python download configuration.
-    #[error(transparent)]
-    Download(#[from] crate::downloads::Error),
-
     #[cfg(windows)]
     #[error("Failed to query installed Python versions from the Windows registry")]
     RegistryError(#[from] windows_result::Error),
@@ -267,6 +264,9 @@ pub enum Error {
     // TODO(zanieb): Is this error case necessary still? We should probably drop it.
     #[error("Interpreter discovery for `{0}` requires `{1}` but only `{2}` is allowed")]
     SourceNotAllowed(PythonRequest, PythonSource, PythonPreference),
+
+    #[error(transparent)]
+    BuildVersion(#[from] crate::python_version::BuildVersionError),
 }
 
 /// Lazily iterate over Python executables in mutable virtual environments.
@@ -1242,13 +1242,6 @@ pub fn find_python_installations<'a>(
                 }
             }
 
-            // Check if we need to fill build from environment
-            // We'll clone the request and fill it, then use it in the closure
-            let filled_request = match request.clone().fill_build_from_env() {
-                Ok(req) => req,
-                Err(err) => return Box::new(iter::once(Err(Error::from(err)))),
-            };
-
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(
@@ -1261,7 +1254,7 @@ pub fn find_python_installations<'a>(
                     preview,
                 )
                 .filter_ok(move |(_source, interpreter)| {
-                    filled_request.satisfied_by_interpreter(interpreter)
+                    request.satisfied_by_interpreter(interpreter)
                 })
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })

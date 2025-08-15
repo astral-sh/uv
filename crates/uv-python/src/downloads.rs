@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -8,7 +8,6 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 use std::{env, io};
 
-use anyhow::anyhow;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
@@ -37,7 +36,10 @@ use crate::implementation::{
 };
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
-use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
+use crate::python_version::BuildVersionError;
+use crate::{
+    Interpreter, PythonRequest, PythonVersion, VersionRequest, python_build_version_from_env,
+};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -111,11 +113,8 @@ pub enum Error {
         url: Box<Url>,
         python_builds_dir: PathBuf,
     },
-    #[error("Invalid build target value in {variable}: {err}")]
-    InvalidBuildTarget {
-        variable: &'static str,
-        err: anyhow::Error,
-    },
+    #[error(transparent)]
+    BuildVersion(#[from] BuildVersionError),
 }
 
 impl Error {
@@ -246,53 +245,6 @@ impl ArchRequest {
             Self::Explicit(arch) | Self::Environment(arch) => *arch,
         }
     }
-}
-
-/// Get the environment variable name for the build constraint for a given implementation.
-pub fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
-    match implementation {
-        ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
-        ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
-        ImplementationName::GraalPy => EnvVars::UV_PYTHON_GRAALPY_BUILD,
-        ImplementationName::Pyodide => EnvVars::UV_PYTHON_PYODIDE_BUILD,
-    }
-}
-
-/// Get the build version number from the environment variable for a given implementation.
-pub fn python_build_version_from_env(
-    implementation: ImplementationName,
-) -> Result<Option<String>, Error> {
-    let variable = python_build_version_variable(implementation);
-
-    let Some(build_os) = env::var_os(variable) else {
-        return Ok(None);
-    };
-
-    let build = build_os
-        .into_string()
-        .map_err(|_| Error::InvalidBuildTarget {
-            variable,
-            err: anyhow!("not valid UTF-8"),
-        })?;
-
-    let trimmed = build.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(trimmed.to_string()))
-}
-
-/// Get the build version numbers for all Python implementations.
-pub fn python_build_versions_from_env() -> Result<BTreeMap<ImplementationName, String>, Error> {
-    let mut versions = BTreeMap::new();
-    for implementation in ImplementationName::iter_all() {
-        let Some(build) = python_build_version_from_env(implementation)? else {
-            continue;
-        };
-        versions.insert(implementation, build);
-    }
-    Ok(versions)
 }
 
 impl PythonDownloadRequest {

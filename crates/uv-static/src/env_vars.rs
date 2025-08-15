@@ -328,22 +328,22 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
 
-    /// Pin CPython downloads to a specific build version.
+    /// Pin managed CPython versions to a specific build version.
     ///
     /// For CPython, this should be the build date (e.g., "20250814").
     pub const UV_PYTHON_CPYTHON_BUILD: &'static str = "UV_PYTHON_CPYTHON_BUILD";
 
-    /// Pin PyPy downloads to a specific build version.
+    /// Pin managed PyPy versions to a specific build version.
     ///
     /// For PyPy, this should be the PyPy version (e.g., "7.3.20").
     pub const UV_PYTHON_PYPY_BUILD: &'static str = "UV_PYTHON_PYPY_BUILD";
 
-    /// Pin GraalPy downloads to a specific build version.
+    /// Pin managed GraalPy versions to a specific build version.
     ///
     /// For GraalPy, this should be the GraalPy version (e.g., "24.2.2").
     pub const UV_PYTHON_GRAALPY_BUILD: &'static str = "UV_PYTHON_GRAALPY_BUILD";
 
-    /// Pin Pyodide downloads to a specific build version.
+    /// Pin managed Pyodide versions to a specific build version.
     ///
     /// For Pyodide, this should be the Pyodide version (e.g., "0.28.1").
     pub const UV_PYTHON_PYODIDE_BUILD: &'static str = "UV_PYTHON_PYODIDE_BUILD";

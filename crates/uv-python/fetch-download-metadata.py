@@ -398,7 +398,7 @@ class CPythonFinder(Finder):
             implementation=self.implementation,
             filename=filename,
             url=url,
-            build=str(release),  # CPython build is the release date
+            build=str(release),
             build_options=build_options,
             variant=variant,
             sha256=sha256,
@@ -526,7 +526,7 @@ class PyPyFinder(Finder):
                     implementation=self.implementation,
                     filename=file["filename"],
                     url=file["download_url"],
-                    build=pypy_version,  # PyPy build is the PyPy version
+                    build=pypy_version,
                 )
                 # Only keep the latest pypy version of each arch/platform
                 if (python_version, arch, platform) not in results:
@@ -616,7 +616,7 @@ class PyodideFinder(Finder):
                     implementation=self.implementation,
                     filename=asset["name"],
                     url=url,
-                    build=pyodide_version,  # Pyodide build is the Pyodide version
+                    build=pyodide_version,
                 )
             )
 
@@ -713,7 +713,7 @@ class GraalPyFinder(Finder):
                     implementation=self.implementation,
                     filename=asset["name"],
                     url=url,
-                    build=graalpy_version,  # GraalPy build is the GraalPy version
+                    build=graalpy_version,
                     sha256=sha256,
                 )
                 # Only keep the latest GraalPy version of each arch/platform

@@ -407,7 +407,7 @@ installation.
 
 ### `UV_PYTHON_CPYTHON_BUILD`
 
-Pin CPython downloads to a specific build version.
+Pin managed CPython versions to a specific build version.
 
 For CPython, this should be the build date (e.g., "20250814").
 
