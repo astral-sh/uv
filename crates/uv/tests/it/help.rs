@@ -65,7 +65,7 @@ fn help() {
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
@@ -144,7 +144,7 @@ fn help_flag() {
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
@@ -222,7 +222,7 @@ fn help_short_flag() {
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
@@ -408,7 +408,7 @@ fn help_subcommand() {
               
               See `--project` to only change the project root directory.
 
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory.
               
               All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
@@ -675,7 +675,7 @@ fn help_subsubcommand() {
               
               See `--project` to only change the project root directory.
 
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory.
               
               All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
@@ -766,7 +766,7 @@ fn help_flag_subcommand() {
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
@@ -847,7 +847,7 @@ fn help_flag_subsubcommand() {
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
@@ -1003,7 +1003,7 @@ fn help_with_global_option() {
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
@@ -1124,7 +1124,7 @@ fn help_with_no_pager() {
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
-          --project <PROJECT>
+      -C, --project <PROJECT>
               Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
