@@ -98,23 +98,18 @@ pub(crate) async fn list(
             })
             .unwrap_or_default();
 
-        writeln!(printer.stdout(), "show_python: {}", show_python)?;
         let python_version = if show_python {
-            if let Some(python_request) = tool.python() {
-                writeln!(printer.stdout(), "python_request")?;
-                if let uv_python::PythonRequest::ImplementationVersion(implementation, version_request) = python_request {
-                    writeln!(printer.stdout(), "uv_python::PythonRequest::ImplementationVersion")?;
-                    format!(" [python: {} {}]", implementation, version_request)
-                } else {
-                    format!(" [python: {}]", python_request)
+            match installed_tools.get_environment(&name, cache) {
+                Ok(Some(env)) => {
+                    let interpreter = env.interpreter();
+                    format!(" [{}]", interpreter.markers().implementation_version())
                 }
-            } else {
-                String::new()
+                Ok(None) => String::from(" [python: not found]"),
+                Err(e) => format!(" [python: error: {}]", e),
             }
         } else {
             String::new()
         };
-        writeln!(printer.stdout(), "python version: {}", python_version)?;
 
         let with_requirements = show_with
             .then(|| {
@@ -137,7 +132,7 @@ pub(crate) async fn list(
                 printer.stdout(),
                 "{} ({})",
                 format!(
-                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}"
+                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}{python_version}"
                 )
                 .bold(),
                 installed_tools.tool_dir(&name).simplified_display().cyan(),
@@ -147,7 +142,7 @@ pub(crate) async fn list(
                 printer.stdout(),
                 "{}",
                 format!(
-                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}"
+                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}{python_version}"
                 )
                 .bold()
             )?;
