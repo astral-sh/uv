@@ -50,7 +50,7 @@ impl FromIterator<(PackageName, Vec<ExtraBuildRequirement>)> for ExtraBuildRequi
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtraBuildRequirement {
     /// The underlying [`Requirement`] for the build requirement.
     pub requirement: Requirement,

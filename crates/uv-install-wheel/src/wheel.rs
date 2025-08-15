@@ -12,7 +12,6 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_cache_info::CacheInfo;
 use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
@@ -704,12 +703,13 @@ pub(crate) fn write_file_recorded(
 }
 
 /// Adds `INSTALLER`, `REQUESTED` and `direct_url.json` to the .dist-info dir
-pub(crate) fn write_installer_metadata(
+pub(crate) fn write_installer_metadata<Cache: serde::Serialize, Build: serde::Serialize>(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,
     direct_url: Option<&DirectUrl>,
-    cache_info: Option<&CacheInfo>,
+    cache_info: Option<&Cache>,
+    build_info: Option<&Build>,
     installer: Option<&str>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
@@ -730,6 +730,14 @@ pub(crate) fn write_installer_metadata(
             site_packages,
             &dist_info_dir.join("uv_cache.json"),
             serde_json::to_string(cache_info)?.as_bytes(),
+            record,
+        )?;
+    }
+    if let Some(build_info) = build_info {
+        write_file_recorded(
+            site_packages,
+            &dist_info_dir.join("uv_build.json"),
+            serde_json::to_string(build_info)?.as_bytes(),
             record,
         )?;
     }
@@ -1221,10 +1229,11 @@ mod test {
             .child("foo-0.1.0.dist-info")
             .create_dir_all()
             .unwrap();
-        write_installer_metadata(
+        write_installer_metadata::<(), ()>(
             site_packages,
             "foo-0.1.0",
             true,
+            None,
             None,
             None,
             Some("uv"),

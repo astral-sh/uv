@@ -183,6 +183,7 @@ fn install(
             } else {
                 Some(wheel.cache_info())
             },
+            wheel.build_info(),
             installer_name,
             installer_metadata,
             link_mode,

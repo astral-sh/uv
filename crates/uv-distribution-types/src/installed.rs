@@ -16,7 +16,9 @@ use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, MetadataError};
 use uv_redacted::DisplaySafeUrl;
 
-use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
+use crate::{
+    BuildInfo, DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef,
+};
 
 #[derive(Error, Debug)]
 pub enum InstalledDistError {
@@ -80,6 +82,7 @@ pub struct InstalledRegistryDist {
     pub version: Version,
     pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
+    pub build_info: Option<BuildInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -91,6 +94,7 @@ pub struct InstalledDirectUrlDist {
     pub editable: bool,
     pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
+    pub build_info: Option<BuildInfo>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -137,6 +141,7 @@ impl InstalledDist {
             let name = PackageName::from_str(name)?;
             let version = Version::from_str(version)?;
             let cache_info = Self::read_cache_info(path)?;
+            let build_info = Self::read_build_info(path)?;
 
             return if let Some(direct_url) = Self::read_direct_url(path)? {
                 match Url::try_from(&direct_url) {
@@ -148,6 +153,7 @@ impl InstalledDist {
                         url: DisplaySafeUrl::from(url),
                         path: path.to_path_buf().into_boxed_path(),
                         cache_info,
+                        build_info,
                     }))),
                     Err(err) => {
                         warn!("Failed to parse direct URL: {err}");
@@ -156,6 +162,7 @@ impl InstalledDist {
                             version,
                             path: path.to_path_buf().into_boxed_path(),
                             cache_info,
+                            build_info,
                         })))
                     }
                 }
@@ -165,6 +172,7 @@ impl InstalledDist {
                     version,
                     path: path.to_path_buf().into_boxed_path(),
                     cache_info,
+                    build_info,
                 })))
             };
         }
@@ -303,6 +311,28 @@ impl InstalledDist {
         }
     }
 
+    /// Return the [`CacheInfo`] of the distribution, if any.
+    pub fn cache_info(&self) -> Option<&CacheInfo> {
+        match self {
+            Self::Registry(dist) => dist.cache_info.as_ref(),
+            Self::Url(dist) => dist.cache_info.as_ref(),
+            Self::EggInfoDirectory(..) => None,
+            Self::EggInfoFile(..) => None,
+            Self::LegacyEditable(..) => None,
+        }
+    }
+
+    /// Return the [`BuildInfo`] of the distribution, if any.
+    pub fn build_info(&self) -> Option<&BuildInfo> {
+        match self {
+            Self::Registry(dist) => dist.build_info.as_ref(),
+            Self::Url(dist) => dist.build_info.as_ref(),
+            Self::EggInfoDirectory(..) => None,
+            Self::EggInfoFile(..) => None,
+            Self::LegacyEditable(..) => None,
+        }
+    }
+
     /// Read the `direct_url.json` file from a `.dist-info` directory.
     pub fn read_direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
         let path = path.join("direct_url.json");
@@ -327,6 +357,19 @@ impl InstalledDist {
         let cache_info =
             serde_json::from_reader::<BufReader<fs_err::File>, CacheInfo>(BufReader::new(file))?;
         Ok(Some(cache_info))
+    }
+
+    /// Read the `uv_build.json` file from a `.dist-info` directory.
+    pub fn read_build_info(path: &Path) -> Result<Option<BuildInfo>, InstalledDistError> {
+        let path = path.join("uv_build.json");
+        let file = match fs_err::File::open(&path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+        let build_info =
+            serde_json::from_reader::<BufReader<fs_err::File>, BuildInfo>(BufReader::new(file))?;
+        Ok(Some(build_info))
     }
 
     /// Read the `METADATA` file from a `.dist-info` directory.

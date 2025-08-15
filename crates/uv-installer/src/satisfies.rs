@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Debug;
 
 use same_file::is_same_file;
@@ -6,8 +7,13 @@ use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
-use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist, RequirementSource};
+use uv_distribution_types::{
+    BuildInfo, BuildVariables, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
+    ExtraBuildVariables, InstalledDirectUrlDist, InstalledDist, PackageConfigSettings,
+    RequirementSource,
+};
 use uv_git_types::GitOid;
+use uv_normalize::PackageName;
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
@@ -22,11 +28,37 @@ impl RequirementSatisfaction {
     /// Returns true if a requirement is satisfied by an installed distribution.
     ///
     /// Returns an error if IO fails during a freshness check for a local path.
-    pub(crate) fn check(distribution: &InstalledDist, source: &RequirementSource) -> Self {
+    pub(crate) fn check(
+        name: &PackageName,
+        distribution: &InstalledDist,
+        source: &RequirementSource,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
+    ) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
             distribution, source
         );
+
+        // If the distribution was built with other settings, it is out of date.
+        if distribution.build_info().is_some_and(|dist_build_info| {
+            let config_settings =
+                config_settings_for(name, config_settings, config_settings_package);
+            let extra_build_requires = extra_build_requires_for(name, extra_build_requires);
+            let extra_build_variables = extra_build_variables_for(name, extra_build_variables);
+            let build_info = BuildInfo::from_settings(
+                &config_settings,
+                extra_build_requires,
+                extra_build_variables,
+            );
+            dist_build_info != &build_info
+        }) {
+            debug!("Build info mismatch for {name}: {distribution:?}");
+            return Self::OutOfDate;
+        }
+
         // Filter out already-installed packages.
         match source {
             // If the requirement comes from a registry, check by name.
@@ -286,4 +318,36 @@ impl RequirementSatisfaction {
             }
         }
     }
+}
+
+/// Determine the [`ConfigSettings`] for the given package name.
+fn config_settings_for<'settings>(
+    name: &PackageName,
+    config_settings: &'settings ConfigSettings,
+    config_settings_package: &PackageConfigSettings,
+) -> Cow<'settings, ConfigSettings> {
+    if let Some(package_settings) = config_settings_package.get(name) {
+        Cow::Owned(package_settings.clone().merge(config_settings.clone()))
+    } else {
+        Cow::Borrowed(config_settings)
+    }
+}
+
+/// Determine the extra build requirements for the given package name.
+fn extra_build_requires_for<'settings>(
+    name: &PackageName,
+    extra_build_requires: &'settings ExtraBuildRequires,
+) -> &'settings [ExtraBuildRequirement] {
+    extra_build_requires
+        .get(name)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+}
+
+/// Determine the extra build variables for the given package name.
+fn extra_build_variables_for<'settings>(
+    name: &PackageName,
+    extra_build_variables: &'settings ExtraBuildVariables,
+) -> Option<&'settings BuildVariables> {
+    extra_build_variables.get(name)
 }
