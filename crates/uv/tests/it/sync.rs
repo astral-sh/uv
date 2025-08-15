@@ -1387,22 +1387,19 @@ fn sync_build_isolation_package() -> Result<()> {
             "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
         ]
 
-        [build-system]
-        requires = ["setuptools >= 40.9.0"]
-        build-backend = "setuptools.build_meta"
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
         "#,
     )?;
 
     // Running `uv sync` should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r#"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
@@ -1439,7 +1436,7 @@ fn sync_build_isolation_package() -> Result<()> {
     "###);
 
     // Running `uv sync` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1477,11 +1474,14 @@ fn sync_build_isolation_package_order() -> Result<()> {
         dependencies = [
             "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
         ]
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
         "#,
     )?;
 
     // Running `uv sync` should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r#"
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1517,11 +1517,14 @@ fn sync_build_isolation_package_order() -> Result<()> {
             "hatchling",
             "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
         ]
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
         "#,
     )?;
 
     // Running `uv sync` should succeed; `hatchling` should be installed first.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1550,12 +1553,15 @@ fn sync_build_isolation_package_order() -> Result<()> {
         dependencies = [
             "source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz",
         ]
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
         "#,
     )?;
 
     // Running `uv sync` should uninstall `hatchling`, then build `source-distribution`, then uninstall
     // the existing `source-distribution`, and finally install the new one.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1585,11 +1591,14 @@ fn sync_build_isolation_package_order() -> Result<()> {
             "hatchling",
             "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
         ]
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
         "#,
     )?;
 
     // Running `uv sync` should install everything in a single phase, since the build is cached.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
