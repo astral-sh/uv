@@ -323,7 +323,7 @@
       ]
     },
     "link-mode": {
-      "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clear`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
+      "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
       "anyOf": [
         {
           "$ref": "#/definitions/LinkMode"
@@ -1482,7 +1482,7 @@
           ]
         },
         "link-mode": {
-          "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clear`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
+          "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
           "anyOf": [
             {
               "$ref": "#/definitions/LinkMode"

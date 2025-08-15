@@ -1484,7 +1484,7 @@ Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Li
 Windows.
 
 WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+the cache and the target environment. For example, clearing the cache (`uv cache clean`)
 will break all installed packages by way of removing the underlying source files. Use
 symlinks with caution.
 
@@ -3048,7 +3048,7 @@ Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Li
 Windows.
 
 WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+the cache and the target environment. For example, clearing the cache (`uv cache clean`)
 will break all installed packages by way of removing the underlying source files. Use
 symlinks with caution.
 
