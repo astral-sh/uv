@@ -205,6 +205,10 @@ impl BuildContext for BuildDispatch<'_> {
         self.build_options
     }
 
+    fn build_isolation(&self) -> BuildIsolation<'_> {
+        self.build_isolation
+    }
+
     fn config_settings(&self) -> &ConfigSettings {
         self.config_settings
     }

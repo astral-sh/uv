@@ -8693,18 +8693,20 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Prepared 1 package without build isolation in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
      + project==0.1.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     Ok(())
 }
