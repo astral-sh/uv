@@ -4,6 +4,8 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use rustc_hash::FxHashSet;
+
 use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
@@ -232,7 +234,11 @@ pub struct PylockTomlPackage {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[allow(clippy::empty_structs_with_brackets)]
-struct PylockTomlDependency {}
+struct PylockTomlDependency {
+    pub name: PackageName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<Version>,
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -657,6 +663,12 @@ impl<'lock> PylockToml {
         // We don't support attestation identities at time of writing.
         let attestation_identities = vec![];
 
+        // Collect all package names and versions that are included in this export
+        let included_packages: FxHashSet<_> = nodes
+            .iter()
+            .map(|node| (&node.package.id.name, &node.package.id.version))
+            .collect();
+
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(nodes.len());
         for node in nodes {
@@ -866,12 +878,37 @@ impl<'lock> PylockToml {
                 .filter(|_| directory.is_none())
                 .cloned();
 
+            // Extract dependencies from the package
+            // Only include dependencies that are actually in the export
+            let dependencies = package
+                .dependencies
+                .iter()
+                .map(|dep| PylockTomlDependency {
+                    name: dep.package_id.name.clone(),
+                    version: dep.package_id.version.clone(),
+                })
+                .chain(
+                    package
+                        .optional_dependencies
+                        .values()
+                        .flatten()
+                        .filter(|dep| {
+                            included_packages
+                                .contains(&(&dep.package_id.name, &dep.package_id.version))
+                        })
+                        .map(|dep| PylockTomlDependency {
+                            name: dep.package_id.name.clone(),
+                            version: dep.package_id.version.clone(),
+                        }),
+                )
+                .collect();
+
             let package = PylockTomlPackage {
                 name,
                 version,
                 marker: node.marker,
                 requires_python: None,
-                dependencies: vec![],
+                dependencies,
                 index,
                 vcs,
                 directory,
