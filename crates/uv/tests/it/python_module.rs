@@ -385,7 +385,7 @@ fn find_uv_bin_user_bin() {
 
 #[test]
 fn find_uv_bin_error_message() {
-    let context = TestContext::new("3.12")
+    let mut context = TestContext::new("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -393,6 +393,29 @@ fn find_uv_bin_error_message() {
         // Target installs always use "bin" on all platforms. On Windows,
         // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
         .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()));
+
+    // Add filters for Python bin directories using with_filtered_path
+    // This inserts at the beginning, so these filters are applied first
+    let python_info: Vec<_> = context.python_versions.clone();
+    for (version, executable) in &python_info {
+        let bin_dir = if cfg!(windows) {
+            // On Windows, the Python executable is in the root, not the bin directory
+            executable
+                .canonicalize()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("Scripts")
+        } else {
+            executable
+                .canonicalize()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_path_buf()
+        };
+        context = context.with_filtered_path(&bin_dir, &format!("PYTHON-BIN-{version}"));
+    }
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
@@ -431,7 +454,7 @@ fn find_uv_bin_error_message() {
         raise UvNotFound(
     uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
      - [VENV]/[BIN]
-     - [PYTHON-BIN-3.12]
+     - [PYTHON-BIN-3.12]/
      - [SITE_PACKAGES]/[BIN]
      - [USER_SCHEME]/[BIN]
     "#
