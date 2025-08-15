@@ -43,3 +43,6 @@ profile.json.gz
 # IDE
 .idea
 .vscode
+
+# temp
+cuda-tests/
