@@ -5,28 +5,17 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Helper function to add an extension to a path by appending it instead of replacing.
+/// Append an extension to a [`PathBuf`].
 ///
-/// This mimics the behavior of the upcoming stable `with_added_extension` method for future compatibility.
-/// When `Path::with_added_extension` stabilizes, this function can be replaced with:
-/// ```ignore
-/// fn add_extension_to_path(path: PathBuf, extension: &str) -> PathBuf {
-///     path.with_added_extension(extension)
-/// }
-/// ```
+/// Unlike [`Path::with_extension`], this function does not replace an existing extension.
 ///
-/// # Arguments
-/// * `path` - The path to add the extension to
-/// * `extension` - The extension to add (without the leading dot)
-///
-/// # Returns
-/// A new `PathBuf` with the extension appended
+/// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
 fn add_extension_to_path(mut path: PathBuf, extension: &str) -> PathBuf {
     match path.file_name() {
         Some(file_name) => {
             let mut new_file_name = file_name.to_os_string();
             new_file_name.push(".");
-            new_file_name.push(extension);
+            new_file_name.push(extension.trim_start_matches('.'));
             path.set_file_name(new_file_name);
             path
         }
