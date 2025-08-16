@@ -142,6 +142,7 @@ plugins:
         Reference:
           - reference/cli.md
           - reference/settings.md
+          - reference/storage.md
           - reference/environment.md
           - reference/installer.md
 extra_css:
@@ -227,6 +228,7 @@ nav:
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Environment variables: reference/environment.md
+      - Storage: reference/storage.md
       - Installer: reference/installer.md
       - Troubleshooting:
           - reference/troubleshooting/index.md
