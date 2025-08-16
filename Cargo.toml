@@ -42,6 +42,7 @@ uv-git-types = { path = "crates/uv-git-types" }
 uv-globfilter = { path = "crates/uv-globfilter" }
 uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }
+uv-keyring = { path = "crates/uv-keyring" }
 uv-macros = { path = "crates/uv-macros" }
 uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
