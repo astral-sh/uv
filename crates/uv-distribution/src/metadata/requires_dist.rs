@@ -619,11 +619,11 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 8, column 16
+        error: TOML parse error at line 8, column 28
           |
         8 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
-          |                ^
-        missing opening quote, expected `"`
+          |                            ^
+        missing comma between key-value pairs, expected `,`
         "#);
     }
 
