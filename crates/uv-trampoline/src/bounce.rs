@@ -36,8 +36,8 @@ use crate::{error, format, warn};
 const RT_RCDATA: u16 = 10;
 
 /// Resource IDs for the trampoline metadata
-const RESOURCE_TRAMPOLINE_KIND: &str = "UV_TRAMPOLINE_KIND\0";
-const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH\0";
+const RESOURCE_TRAMPOLINE_KIND: windows::core::PCWSTR = windows::core::w!("UV_TRAMPOLINE_KIND");
+const RESOURCE_PYTHON_PATH: windows::core::PCWSTR = windows::core::w!("UV_PYTHON_PATH");
 
 /// The kind of trampoline.
 enum TrampolineKind {
@@ -58,15 +58,13 @@ impl TrampolineKind {
 }
 
 /// Safely loads a resource from the current module
-fn load_resource(resource_id: &str) -> Option<Vec<u8>> {
+fn load_resource(resource_id: windows::core::PCWSTR) -> Option<Vec<u8>> {
     // SAFETY: winapi calls; null-terminated strings; all pointers are checked.
     unsafe {
-        let mut resource_id_null_term = resource_id.encode_utf16().collect::<Vec<_>>();
-        resource_id_null_term.push(0);
         // Find the resource
         let resource = FindResourceW(
             None,
-            windows::core::PCWSTR(resource_id_null_term.as_ptr()),
+            resource_id,
             windows::core::PCWSTR(RT_RCDATA as *const _),
         );
         if resource.is_invalid() {

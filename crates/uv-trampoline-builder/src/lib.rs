@@ -1,11 +1,8 @@
-use std::io::{self, Cursor, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::str::Utf8Error;
 
 use thiserror::Error;
-use uv_fs::Simplified;
-use zip::ZipWriter;
-use zip::write::SimpleFileOptions;
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_GUI: &[u8] =
@@ -36,12 +33,15 @@ const LAUNCHER_AARCH64_CONSOLE: &[u8] =
 const RT_RCDATA: u16 = 10;
 
 // Resource IDs matching uv-trampoline
-const RESOURCE_TRAMPOLINE_KIND: &str = "UV_TRAMPOLINE_KIND\0";
-const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH\0";
+#[cfg(windows)]
+const RESOURCE_TRAMPOLINE_KIND: windows::core::PCWSTR = windows::core::w!("UV_TRAMPOLINE_KIND");
+#[cfg(windows)]
+const RESOURCE_PYTHON_PATH: windows::core::PCWSTR = windows::core::w!("UV_PYTHON_PATH");
 // Note: This does not need to be looked up as a resource, as we rely on `zipimport`
 // to do the loading work. Still, keeping the content under a resource means that it
 // sits nicely under the PE format.
-const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA\0";
+#[cfg(windows)]
+const RESOURCE_SCRIPT_DATA: windows::core::PCWSTR = windows::core::w!("UV_SCRIPT_DATA");
 
 #[derive(Debug)]
 pub struct Launcher {
@@ -67,8 +67,11 @@ impl Launcher {
             use windows::Win32::System::LibraryLoader::LOAD_LIBRARY_AS_DATAFILE;
             use windows::Win32::System::LibraryLoader::LoadLibraryExW;
 
-            let mut path_str = path.as_os_str().encode_wide().collect::<Vec<_>>();
-            path_str.push(0);
+            let path_str = path
+                .as_os_str()
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect::<Vec<_>>();
 
             // SAFETY: winapi call; null-terminated strings
             #[allow(unsafe_code)]
@@ -119,29 +122,38 @@ impl Launcher {
         }
     }
 
+    #[allow(unused_variables)]
     pub fn write_to_file(self, file_path: &Path, is_gui: bool) -> Result<(), Error> {
-        let python_path = self.python_path.simplified_display().to_string();
-
-        // Write the launcher binary
-        fs_err::write(file_path, get_launcher_bin(is_gui)?)?;
-
-        // Write resources
-        let resources = &[
-            (
-                RESOURCE_TRAMPOLINE_KIND,
-                &[self.kind.to_resource_value()][..],
-            ),
-            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
-        ];
-        if let Some(script_data) = self.script_data {
-            let mut all_resources = resources.to_vec();
-            all_resources.push((RESOURCE_SCRIPT_DATA, &script_data));
-            write_resources(file_path, &all_resources)?;
-        } else {
-            write_resources(file_path, resources)?;
+        #[cfg(not(windows))]
+        {
+            Err(Error::NotWindows)
         }
+        #[cfg(windows)]
+        {
+            use uv_fs::Simplified;
+            let python_path = self.python_path.simplified_display().to_string();
 
-        Ok(())
+            // Write the launcher binary
+            fs_err::write(file_path, get_launcher_bin(is_gui)?)?;
+
+            // Write resources
+            let resources = &[
+                (
+                    RESOURCE_TRAMPOLINE_KIND,
+                    &[self.kind.to_resource_value()][..],
+                ),
+                (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+            ];
+            if let Some(script_data) = self.script_data {
+                let mut all_resources = resources.to_vec();
+                all_resources.push((RESOURCE_SCRIPT_DATA, &script_data));
+                write_resources(file_path, &all_resources)?;
+            } else {
+                write_resources(file_path, resources)?;
+            }
+
+            Ok(())
+        }
     }
 
     #[must_use]
@@ -166,6 +178,7 @@ pub enum LauncherKind {
 }
 
 impl LauncherKind {
+    #[cfg(windows)]
     fn to_resource_value(self) -> u8 {
         match self {
             Self::Script => 1,
@@ -203,6 +216,7 @@ pub enum Error {
 }
 
 #[allow(clippy::unnecessary_wraps, unused_variables)]
+#[cfg(windows)]
 fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
     Ok(match std::env::consts::ARCH {
         #[cfg(all(windows, target_arch = "x86"))]
@@ -233,58 +247,54 @@ fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
         arch => {
             return Err(Error::UnsupportedWindowsArch(arch));
         }
-        #[cfg(not(windows))]
-        _ => &[],
     })
 }
 
 /// Helper to write Windows PE resources
 #[allow(unused_variables)]
-fn write_resources(path: &Path, resources: &[(&str, &[u8])]) -> Result<(), Error> {
-    #[cfg(not(windows))]
-    {
-        Err(Error::NotWindows)
-    }
-    #[cfg(windows)]
-    {
-        // SAFETY: winapi calls; null-terminated strings
-        #[allow(unsafe_code)]
-        unsafe {
-            use std::os::windows::ffi::OsStrExt;
-            use windows::Win32::System::LibraryLoader::{
-                BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
-            };
+#[cfg(windows)]
+fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) -> Result<(), Error> {
+    // SAFETY: winapi calls; null-terminated strings
+    #[allow(unsafe_code)]
+    unsafe {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::System::LibraryLoader::{
+            BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
+        };
 
-            let mut path_str = path.as_os_str().encode_wide().collect::<Vec<_>>();
-            path_str.push(0);
-            let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_str.as_ptr()), false)
-                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        let path_str = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_str.as_ptr()), false)
+            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
 
-            for (name, data) in resources {
-                let mut name_null_term = name.encode_utf16().collect::<Vec<_>>();
-                name_null_term.push(0);
-                UpdateResourceW(
-                    handle,
-                    windows::core::PCWSTR(RT_RCDATA as *const _),
-                    windows::core::PCWSTR(name_null_term.as_ptr()),
-                    0,
-                    Some(data.as_ptr().cast()),
-                    u32::try_from(data.len()).map_err(|_| Error::ResourceTooLarge)?,
-                )
-                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
-            }
-
-            EndUpdateResourceW(handle, false)
-                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        for (name, data) in resources {
+            UpdateResourceW(
+                handle,
+                windows::core::PCWSTR(RT_RCDATA as *const _),
+                *name,
+                0,
+                Some(data.as_ptr().cast()),
+                u32::try_from(data.len()).map_err(|_| Error::ResourceTooLarge)?,
+            )
+            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
         }
 
-        Ok(())
+        EndUpdateResourceW(handle, false)
+            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
     }
+
+    Ok(())
 }
 
 #[cfg(windows)]
 /// Safely reads a resource from a PE file
-fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Option<Vec<u8>> {
+fn read_resource(
+    handle: windows::Win32::Foundation::HMODULE,
+    name: windows::core::PCWSTR,
+) -> Option<Vec<u8>> {
     // SAFETY: winapi calls; null-terminated strings; all pointers are checked.
     #[allow(unsafe_code)]
     unsafe {
@@ -294,7 +304,7 @@ fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Opt
         // Find the resource
         let resource = FindResourceW(
             Some(handle),
-            windows::core::PCWSTR(name.encode_utf16().collect::<Vec<_>>().as_ptr()),
+            name,
             windows::core::PCWSTR(RT_RCDATA as *const _),
         );
         if resource.is_invalid() {
@@ -303,6 +313,9 @@ fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Opt
 
         // Get resource size and data
         let size = SizeofResource(Some(handle), resource);
+        if size == 0 {
+            return None;
+        }
         let data = LoadResource(Some(handle), resource).ok()?;
         let ptr = LockResource(data) as *const u8;
         if ptr.is_null() {
@@ -324,57 +337,67 @@ pub fn windows_script_launcher(
     is_gui: bool,
     python_executable: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
-    // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
-    // compilation on all platforms.
-    if cfg!(not(windows)) {
-        return Err(Error::NotWindows);
-    }
-
-    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
-
-    let mut payload: Vec<u8> = Vec::new();
+    // This method should only be called on Windows, but we avoid function-scope
+    // `#[cfg(windows)]` to retain compilation on all platforms.
+    #[cfg(not(windows))]
     {
-        // We're using the zip writer, but with stored compression
-        // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
-        // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-        let stored =
-            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        let mut archive = ZipWriter::new(Cursor::new(&mut payload));
-        let error_msg = "Writing to Vec<u8> should never fail";
-        archive.start_file("__main__.py", stored).expect(error_msg);
-        archive
-            .write_all(launcher_python_script.as_bytes())
-            .expect(error_msg);
-        archive.finish().expect(error_msg);
+        Err(Error::NotWindows)
     }
+    #[cfg(windows)]
+    {
+        use std::io::{Cursor, Write};
 
-    let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
+        use zip::ZipWriter;
+        use zip::write::SimpleFileOptions;
 
-    // Start with base launcher binary
-    // Create temporary file for the launcher
-    let temp_dir = tempfile::tempdir()?;
-    let temp_file = temp_dir
-        .path()
-        .join(format!("uv-trampoline-{}.exe", std::process::id()));
-    fs_err::write(&temp_file, launcher_bin)?;
+        use uv_fs::Simplified;
 
-    // Write resources
-    let resources = &[
-        (
-            RESOURCE_TRAMPOLINE_KIND,
-            &[LauncherKind::Script.to_resource_value()][..],
-        ),
-        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
-        (RESOURCE_SCRIPT_DATA, &payload),
-    ];
-    write_resources(&temp_file, resources)?;
+        let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
 
-    // Read back the complete file
-    let launcher = fs_err::read(&temp_file)?;
-    fs_err::remove_file(temp_file)?;
+        let mut payload: Vec<u8> = Vec::new();
+        {
+            // We're using the zip writer, but with stored compression
+            // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
+            // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
+            let stored =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let mut archive = ZipWriter::new(Cursor::new(&mut payload));
+            let error_msg = "Writing to Vec<u8> should never fail";
+            archive.start_file("__main__.py", stored).expect(error_msg);
+            archive
+                .write_all(launcher_python_script.as_bytes())
+                .expect(error_msg);
+            archive.finish().expect(error_msg);
+        }
 
-    Ok(launcher)
+        let python = python_executable.as_ref();
+        let python_path = python.simplified_display().to_string();
+
+        // Start with base launcher binary
+        // Create temporary file for the launcher
+        let temp_dir = tempfile::TempDir::new()?;
+        let temp_file = temp_dir
+            .path()
+            .join(format!("uv-trampoline-{}.exe", std::process::id()));
+        fs_err::write(&temp_file, launcher_bin)?;
+
+        // Write resources
+        let resources = &[
+            (
+                RESOURCE_TRAMPOLINE_KIND,
+                &[LauncherKind::Script.to_resource_value()][..],
+            ),
+            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+            (RESOURCE_SCRIPT_DATA, &payload),
+        ];
+        write_resources(&temp_file, resources)?;
+
+        // Read back the complete file
+        let launcher = fs_err::read(&temp_file)?;
+        fs_err::remove_file(temp_file)?;
+
+        Ok(launcher)
+    }
 }
 
 /// A minimal .exe launcher binary for Python.
@@ -385,39 +408,44 @@ pub fn windows_python_launcher(
     python_executable: impl AsRef<Path>,
     is_gui: bool,
 ) -> Result<Vec<u8>, Error> {
-    // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
-    // compilation on all platforms.
-    if cfg!(not(windows)) {
-        return Err(Error::NotWindows);
+    // This method should only be called on Windows, but we avoid function-scope
+    // `#[cfg(windows)]` to retain compilation on all platforms.
+    #[cfg(not(windows))]
+    {
+        Err(Error::NotWindows)
     }
+    #[cfg(windows)]
+    {
+        use uv_fs::Simplified;
 
-    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+        let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
 
-    let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
+        let python = python_executable.as_ref();
+        let python_path = python.simplified_display().to_string();
 
-    // Create temporary file for the launcher
-    let temp_dir = tempfile::tempdir()?;
-    let temp_file = temp_dir
-        .path()
-        .join(format!("uv-trampoline-{}.exe", std::process::id()));
-    fs_err::write(&temp_file, launcher_bin)?;
+        // Create temporary file for the launcher
+        let temp_dir = tempfile::TempDir::new()?;
+        let temp_file = temp_dir
+            .path()
+            .join(format!("uv-trampoline-{}.exe", std::process::id()));
+        fs_err::write(&temp_file, launcher_bin)?;
 
-    // Write resources
-    let resources = &[
-        (
-            RESOURCE_TRAMPOLINE_KIND,
-            &[LauncherKind::Python.to_resource_value()][..],
-        ),
-        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
-    ];
-    write_resources(&temp_file, resources)?;
+        // Write resources
+        let resources = &[
+            (
+                RESOURCE_TRAMPOLINE_KIND,
+                &[LauncherKind::Python.to_resource_value()][..],
+            ),
+            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+        ];
+        write_resources(&temp_file, resources)?;
 
-    // Read back the complete file
-    let launcher = fs_err::read(&temp_file)?;
-    fs_err::remove_file(temp_file)?;
+        // Read back the complete file
+        let launcher = fs_err::read(&temp_file)?;
+        fs_err::remove_file(temp_file)?;
 
-    Ok(launcher)
+        Ok(launcher)
+    }
 }
 
 #[cfg(all(test, windows))]
@@ -569,7 +597,7 @@ if __name__ == "__main__":
 
     /// Signs the given binary using `PowerShell`'s `Set-AuthenticodeSignature` with a temporary certificate.
     fn sign_authenticode(bin_path: impl AsRef<Path>) {
-        let temp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temporary directory");
         let temp_pfx =
             create_temp_certificate(&temp_dir).expect("Failed to create self-signed certificate");
 
