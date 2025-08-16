@@ -169,8 +169,8 @@ impl PubGrubPackage {
             | PubGrubPackageInner::System(_) => MarkerTree::TRUE,
             PubGrubPackageInner::Package { marker, .. }
             | PubGrubPackageInner::Extra { marker, .. }
-            | PubGrubPackageInner::Dev { marker, .. } => *marker,
-            PubGrubPackageInner::Marker { marker, .. } => *marker,
+            | PubGrubPackageInner::Dev { marker, .. }
+            | PubGrubPackageInner::Marker { marker, .. } => *marker,
         }
     }
 
