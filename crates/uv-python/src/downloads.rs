@@ -36,7 +36,10 @@ use crate::implementation::{
 };
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
-use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
+use crate::python_version::BuildVersionError;
+use crate::{
+    Interpreter, PythonRequest, PythonVersion, VersionRequest, python_build_version_from_env,
+};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -110,6 +113,8 @@ pub enum Error {
         url: Box<Url>,
         python_builds_dir: PathBuf,
     },
+    #[error(transparent)]
+    BuildVersion(#[from] BuildVersionError),
 }
 
 impl Error {
@@ -144,6 +149,7 @@ pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: &'static str,
     sha256: Option<&'static str>,
+    build: &'static str,
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
@@ -153,6 +159,7 @@ pub struct PythonDownloadRequest {
     pub(crate) arch: Option<ArchRequest>,
     pub(crate) os: Option<Os>,
     pub(crate) libc: Option<Libc>,
+    pub(crate) build: Option<String>,
 
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
@@ -255,6 +262,7 @@ impl PythonDownloadRequest {
             arch,
             os,
             libc,
+            build: None,
             prereleases,
         }
     }
@@ -311,6 +319,12 @@ impl PythonDownloadRequest {
         self
     }
 
+    #[must_use]
+    pub fn with_build(mut self, build: String) -> Self {
+        self.build = Some(build);
+        self
+    }
+
     /// Construct a new [`PythonDownloadRequest`] from a [`PythonRequest`] if possible.
     ///
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
@@ -356,11 +370,25 @@ impl PythonDownloadRequest {
         Ok(self)
     }
 
+    /// Fill the build field from the environment variable relevant for the [`ImplementationName`].
+    pub fn fill_build_from_env(mut self) -> Result<Self, Error> {
+        if self.build.is_some() {
+            return Ok(self);
+        }
+        let Some(implementation) = self.implementation else {
+            return Ok(self);
+        };
+
+        self.build = python_build_version_from_env(implementation)?;
+        Ok(self)
+    }
+
     pub fn fill(mut self) -> Result<Self, Error> {
         if self.implementation.is_none() {
             self.implementation = Some(ImplementationName::CPython);
         }
         self = self.fill_platform()?;
+        self = self.fill_build_from_env()?;
         Ok(self)
     }
 
@@ -434,7 +462,19 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by a Python download.
     pub fn satisfied_by_download(&self, download: &ManagedPythonDownload) -> bool {
-        self.satisfied_by_key(download.key())
+        // First check the key
+        if !self.satisfied_by_key(download.key()) {
+            return false;
+        }
+
+        // Then check the build if specified
+        if let Some(ref requested_build) = self.build {
+            if download.build() != requested_build {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Whether this download request opts-in to pre-release Python versions.
@@ -753,6 +793,7 @@ struct JsonPythonDownload {
     url: String,
     sha256: Option<String>,
     variant: Option<String>,
+    build: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -767,7 +808,25 @@ pub enum DownloadResult {
     Fetched(PathBuf),
 }
 
+/// A wrapper type to display a `ManagedPythonDownload` with its build information.
+pub struct ManagedPythonDownloadWithBuild<'a>(&'a ManagedPythonDownload);
+
+impl Display for ManagedPythonDownloadWithBuild<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.build.is_empty() {
+            write!(f, "{}", self.0.key)
+        } else {
+            write!(f, "{}+{}", self.0.key, self.0.build)
+        }
+    }
+}
+
 impl ManagedPythonDownload {
+    /// Return a display type that includes the build information.
+    pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
+        ManagedPythonDownloadWithBuild(self)
+    }
+
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
     ///
     /// If there is no stable version matching the request, a compatible pre-release version will
@@ -850,6 +909,10 @@ impl ManagedPythonDownload {
 
     pub fn sha256(&self) -> Option<&'static str> {
         self.sha256
+    }
+
+    pub fn build(&self) -> &'static str {
+        self.build
     }
 
     /// Download and extract a Python distribution, retrying on failure.
@@ -1341,6 +1404,7 @@ fn parse_json_downloads(
             let sha256 = entry
                 .sha256
                 .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
+            let build = Box::leak(entry.build.into_boxed_str()) as &'static str;
 
             Some(ManagedPythonDownload {
                 key: PythonInstallationKey::new_from_version(
@@ -1351,6 +1415,7 @@ fn parse_json_downloads(
                 ),
                 url,
                 sha256,
+                build,
             })
         })
         .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
@@ -1721,5 +1786,78 @@ mod tests {
         let result = PythonDownloadRequest::from_str("any-any-any-any-any-any");
 
         assert!(matches!(result, Err(Error::TooManyParts(_))));
+    }
+
+    /// Test that build filtering works correctly
+    #[test]
+    fn test_python_download_request_build_filtering() {
+        // Create a request with a specific build
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython)
+            .with_build("20250814".to_string());
+
+        // Get all downloads and find one that matches
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None).unwrap().collect();
+
+        // Count how many downloads match without build constraint
+        let request_no_build = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython);
+
+        let matches_without_build: Vec<_> = downloads
+            .iter()
+            .filter(|d| request_no_build.satisfied_by_download(d))
+            .collect();
+
+        // Count how many match with build constraint
+        let matches_with_build: Vec<_> = downloads
+            .iter()
+            .filter(|d| request.satisfied_by_download(d))
+            .collect();
+
+        // With build constraint should match fewer (or zero) downloads
+        assert!(matches_with_build.len() <= matches_without_build.len());
+
+        // If we have matches with the build, verify they all have the correct build
+        for download in matches_with_build {
+            assert_eq!(download.build(), "20250814");
+        }
+    }
+
+    /// Test that an invalid build results in no matches
+    #[test]
+    fn test_python_download_request_invalid_build() {
+        // Create a request with a non-existent build
+        let request = PythonDownloadRequest::default()
+            .with_version(VersionRequest::from_str("3.12").unwrap())
+            .with_implementation(ImplementationName::CPython)
+            .with_build("99999999".to_string());
+
+        // Should find no matching downloads
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .filter(|d| request.satisfied_by_download(d))
+            .collect();
+
+        assert_eq!(downloads.len(), 0);
+    }
+
+    /// Test build display
+    #[test]
+    fn test_managed_python_download_build_display() {
+        // Get a download and test its display
+        if let Some(download) = ManagedPythonDownload::iter_all(None)
+            .unwrap()
+            .find(|d| !d.build().is_empty())
+        {
+            let display_with_build = format!("{}", download.to_display_with_build());
+
+            // The display with build should contain the build string
+            assert!(display_with_build.contains(download.build()));
+
+            // The display with build should contain a '+' separator
+            assert!(display_with_build.contains('+'));
+        }
     }
 }

@@ -3158,3 +3158,151 @@ fn python_install_pyodide() {
     ----- stderr -----
     ");
 }
+
+#[test]
+fn python_install_build_version() {
+    use uv_python::managed::platform_key_from_env;
+
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("3.12")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20250814"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.11 in [TIME]
+     + cpython-3.12.11-[PLATFORM] (python3.12)
+    ");
+
+    // A BUILD file should be present with the version
+    let cpython_dir = context.temp_dir.child("managed").child(format!(
+        "cpython-3.12.11-{}",
+        platform_key_from_env().unwrap()
+    ));
+    let build_file_path = cpython_dir.join("BUILD");
+    let build_content = fs_err::read_to_string(&build_file_path).unwrap();
+    assert_eq!(build_content, "20250814");
+
+    // We should find the build
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("3.12")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20250814"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12
+
+    ----- stderr -----
+    ");
+
+    // If the build number does not match, we should ignore the installation
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("3.12")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "99999999"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12 in virtual environments, managed installations, or search path
+    ");
+
+    // If there's no install for a build number, we should fail
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("3.12")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "99999999"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: cpython-3.12-[PLATFORM]
+    ");
+
+    // Requesting a specific patch version without a matching build number should fail
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("3.12.10")
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20250814"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: cpython-3.12.10-[PLATFORM]
+    ");
+}
+
+#[test]
+fn python_install_build_version_pypy() {
+    use uv_python::managed::platform_key_from_env;
+
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("pypy3.10")
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.16 in [TIME]
+     + pypy-3.10.16-[PLATFORM] (python3.10)
+    ");
+
+    // A BUILD file should be present with the version
+    let pypy_dir = context
+        .temp_dir
+        .child("managed")
+        .child(format!("pypy-3.10.16-{}", platform_key_from_env().unwrap()));
+    let build_file_path = pypy_dir.join("BUILD");
+    let build_content = fs_err::read_to_string(&build_file_path).unwrap();
+    assert_eq!(build_content, "7.3.19");
+
+    // We should find the build
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("pypy3.10")
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/pypy-3.10.16-[PLATFORM]/bin/pypy3.10
+
+    ----- stderr -----
+    ");
+
+    // If the build number does not match, we should ignore the installation
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("pypy3.10")
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "99.99.99"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for PyPy 3.10 in virtual environments, managed installations, or search path
+    ");
+
+    // If there's no install for a build number, we should fail
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("pypy3.10")
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "99.99.99"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: pypy-3.10-[PLATFORM]
+    ");
+}
