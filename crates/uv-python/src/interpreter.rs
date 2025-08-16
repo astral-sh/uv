@@ -909,23 +909,26 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(
-                |err| match err.raw_os_error().and_then(|code| u32::try_from(code).ok()) {
+            .map_err(|err| {
+                if err.kind() == io::ErrorKind::NotFound {
+                    return Error::NotFound(interpreter.to_path_buf());
+                }
+                #[cfg(windows)]
+                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) =
+                    err.raw_os_error().and_then(|code| u32::try_from(code).ok())
+                {
                     // These error codes are returned if the Python interpreter is a corrupt MSIX
                     // package, which we want to differentiate from a typical spawn failure.
-                    #[cfg(windows)]
-                    Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) => {
-                        Error::CorruptWindowsPackage {
-                            path: interpreter.to_path_buf(),
-                            err,
-                        }
-                    }
-                    _ => Error::SpawnFailed {
+                    return Error::CorruptWindowsPackage {
                         path: interpreter.to_path_buf(),
                         err,
-                    },
-                },
-            )?;
+                    };
+                }
+                Error::SpawnFailed {
+                    path: interpreter.to_path_buf(),
+                    err,
+                }
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
