@@ -153,6 +153,10 @@ impl Workspace {
         let path = std::path::absolute(path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
+        // Remove `.` and `..`
+        let path = uv_fs::normalize_path(&path);
+        // Trim trailing slashes.
+        let path = path.components().collect::<PathBuf>();
 
         let project_path = path
             .ancestors()
@@ -1271,6 +1275,10 @@ impl ProjectWorkspace {
         let project_path = std::path::absolute(install_path)
             .map_err(WorkspaceError::Normalize)?
             .clone();
+        // Remove `.` and `..`
+        let project_path = uv_fs::normalize_path(&project_path);
+        // Trim trailing slashes.
+        let project_path = project_path.components().collect::<PathBuf>();
 
         // Check if workspaces are explicitly disabled for the project.
         if project_pyproject_toml
