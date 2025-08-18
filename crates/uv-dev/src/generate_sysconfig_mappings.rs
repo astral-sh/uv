@@ -11,7 +11,7 @@ use crate::ROOT_DIR;
 use crate::generate_all::Mode;
 
 /// Contains current supported targets
-const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20250814/cpython-unix/targets.yml";
+const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20250818/cpython-unix/targets.yml";
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
@@ -130,7 +130,7 @@ async fn generate() -> Result<String> {
     output.push_str("//! DO NOT EDIT\n");
     output.push_str("//!\n");
     output.push_str("//! Generated with `cargo run dev generate-sysconfig-metadata`\n");
-    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20250814/cpython-unix/targets.yml>\n");
+    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20250818/cpython-unix/targets.yml>\n");
     output.push_str("//!\n");
 
     // Disable clippy/fmt
@@ -188,6 +188,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_sysconfig_mappings() -> Result<()> {
+        // Skip this test in CI to avoid redundancy with the dedicated CI job
+        if env::var_os(EnvVars::CI).is_some() {
+            return Ok(());
+        }
+
         let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
             Mode::Write
         } else {

@@ -17,6 +17,7 @@ use uv_distribution_types::{
     RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
+use uv_normalize::PackageName;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
@@ -120,7 +121,15 @@ impl<'a> Planner<'a> {
                     [] => {}
                     [installed] => {
                         let source = RequirementSource::from(dist);
-                        match RequirementSatisfaction::check(installed, &source) {
+                        match RequirementSatisfaction::check(
+                            dist.name(),
+                            installed,
+                            &source,
+                            config_settings,
+                            config_settings_package,
+                            extra_build_requires,
+                            extra_build_variables,
+                        ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
                                     "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
@@ -221,6 +230,7 @@ impl<'a> Planner<'a> {
                     match HttpArchivePointer::read_from(&cache_entry) {
                         Ok(Some(pointer)) => {
                             let cache_info = pointer.to_cache_info();
+                            let build_info = pointer.to_build_info();
                             let archive = pointer.into_archive();
                             if archive.satisfies(hasher.get(dist.as_ref())) {
                                 let cached_dist = CachedDirectUrlDist {
@@ -231,6 +241,7 @@ impl<'a> Planner<'a> {
                                     },
                                     hashes: archive.hashes,
                                     cache_info,
+                                    build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
 
@@ -294,6 +305,7 @@ impl<'a> Planner<'a> {
                             Ok(timestamp) => {
                                 if pointer.is_up_to_date(timestamp) {
                                     let cache_info = pointer.to_cache_info();
+                                    let build_info = pointer.to_build_info();
                                     let archive = pointer.into_archive();
                                     if archive.satisfies(hasher.get(dist.as_ref())) {
                                         let cached_dist = CachedDirectUrlDist {
@@ -304,6 +316,7 @@ impl<'a> Planner<'a> {
                                             },
                                             hashes: archive.hashes,
                                             cache_info,
+                                            build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
 
@@ -645,4 +658,77 @@ pub struct Plan {
     /// Any distributions that are already installed in the current environment, and are
     /// _not_ necessary to satisfy the requirements.
     pub extraneous: Vec<InstalledDist>,
+}
+
+impl Plan {
+    /// Returns `true` if the plan is empty.
+    pub fn is_empty(&self) -> bool {
+        self.cached.is_empty()
+            && self.remote.is_empty()
+            && self.reinstalls.is_empty()
+            && self.extraneous.is_empty()
+    }
+
+    /// Partition the remote distributions based on a predicate function.
+    ///
+    /// Returns a tuple of plans, where the first plan contains the remote distributions that match
+    /// the predicate, and the second plan contains those that do not.
+    ///
+    /// Any extraneous and cached distributions will be returned in the first plan, while the second
+    /// plan will contain any `false` matches from the remote distributions, along with any
+    /// reinstalls for those distributions.
+    pub fn partition<F>(self, mut f: F) -> (Self, Self)
+    where
+        F: FnMut(&PackageName) -> bool,
+    {
+        let Self {
+            cached,
+            remote,
+            reinstalls,
+            extraneous,
+        } = self;
+
+        // Partition the remote distributions based on the predicate function.
+        let (left_remote, right_remote) = remote
+            .into_iter()
+            .partition::<Vec<_>, _>(|dist| f(dist.name()));
+
+        // If any remote distributions are not matched, but are already installed, ensure that
+        // they're uninstalled as part of the right plan. (Uninstalling them as part of the left
+        // plan risks uninstalling them from the environment _prior_ to the replacement being built.)
+        let (left_reinstalls, right_reinstalls) = reinstalls
+            .into_iter()
+            .partition::<Vec<_>, _>(|dist| !right_remote.iter().any(|d| d.name() == dist.name()));
+
+        // If the right plan is non-empty, then remove extraneous distributions as part of the
+        // right plan, so they're present until the very end. Otherwise, we risk removing extraneous
+        // packages that are actually build dependencies.
+        let (left_extraneous, right_extraneous) = if right_remote.is_empty() {
+            (extraneous, vec![])
+        } else {
+            (vec![], extraneous)
+        };
+
+        // Always include the cached distributions in the left plan.
+        let (left_cached, right_cached) = (cached, vec![]);
+
+        // Include all cached and extraneous distributions in the left plan.
+        let left_plan = Self {
+            cached: left_cached,
+            remote: left_remote,
+            reinstalls: left_reinstalls,
+            extraneous: left_extraneous,
+        };
+
+        // The right plan will only contain the remote distributions that did not match the predicate,
+        // along with any reinstalls for those distributions.
+        let right_plan = Self {
+            cached: right_cached,
+            remote: right_remote,
+            reinstalls: right_reinstalls,
+            extraneous: right_extraneous,
+        };
+
+        (left_plan, right_plan)
+    }
 }

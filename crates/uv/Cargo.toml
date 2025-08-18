@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.8.10"
+version = "0.8.12"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -117,6 +117,7 @@ windows-result = { workspace = true }
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 byteorder = { workspace = true }
 filetime = { workspace = true }

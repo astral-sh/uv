@@ -19,7 +19,7 @@ use uv_pep508::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::BuildArena;
+use crate::{BuildArena, BuildIsolation};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -86,6 +86,9 @@ pub trait BuildContext {
     /// This [`BuildContext::setup_build`] calls will fail if builds are disabled.
     /// This method exists to avoid fetching source distributions if we know we can't build them.
     fn build_options(&self) -> &BuildOptions;
+
+    /// The isolation mode used for building source distributions.
+    fn build_isolation(&self) -> BuildIsolation<'_>;
 
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
