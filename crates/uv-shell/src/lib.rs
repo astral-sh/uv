@@ -5,9 +5,11 @@ pub mod windows;
 pub use shlex::{escape_posix_for_single_quotes, shlex_posix, shlex_windows};
 
 use std::path::{Path, PathBuf};
-use tracing::debug;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+
+#[cfg(unix)]
+use tracing::debug;
 
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
