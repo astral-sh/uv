@@ -509,7 +509,7 @@ class PyPyFinder(Finder):
             python_version = Version.from_str(version["python_version"])
             if python_version < (3, 7, 0):
                 continue
-            pypy_version = version.get("pypy_version", "")
+            pypy_version = version["pypy_version"]
             for file in version["files"]:
                 arch = self._normalize_arch(file["arch"])
                 platform = self._normalize_os(file["platform"])
