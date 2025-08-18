@@ -92,12 +92,7 @@ fn group_name_with_clap_error(arg: &str) -> Result<GroupName> {
 }
 
 fn pip_group_name_with_clap_error(arg: &str) -> Result<PipGroupName> {
-    PipGroupName::from_str(arg).map_err(|_err| {
-        anyhow!(
-            "Group names must start and end with a letter or digit and may only \
-            contain -, _, ., and alphanumeric characters"
-        )
-    })
+    PipGroupName::from_str(arg).map_err(|err| anyhow!("{}", err))
 }
 
 // Configures Clap v3-style help menu colors

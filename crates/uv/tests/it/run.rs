@@ -5962,7 +5962,7 @@ fn run_python_preference_no_project() {
 /// Test comma-separated extras in run command
 #[test]
 fn run_comma_separated_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6001,7 +6001,7 @@ fn run_comma_separated_extras() -> Result<()> {
 /// Test mixed comma-separated and individual extras in run command
 #[test]
 fn run_mixed_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6043,7 +6043,7 @@ fn run_mixed_extras() -> Result<()> {
 /// Test invalid comma-separated extras in run command
 #[test]
 fn run_invalid_comma_separated_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

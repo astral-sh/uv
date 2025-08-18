@@ -4471,7 +4471,7 @@ fn no_editable_env_var() -> Result<()> {
 /// Test comma-separated extras in export command
 #[test]
 fn export_comma_separated_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4515,7 +4515,7 @@ fn export_comma_separated_extras() -> Result<()> {
 /// Test mixed comma-separated and individual extras in export command
 #[test]
 fn export_mixed_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4572,7 +4572,7 @@ fn export_mixed_extras() -> Result<()> {
 /// Test invalid comma-separated extras in export command
 #[test]
 fn export_invalid_comma_separated_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

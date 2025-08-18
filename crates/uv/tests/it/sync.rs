@@ -13462,7 +13462,7 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 /// Test comma-separated extras in sync command
 #[test]
 fn sync_comma_separated_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13502,7 +13502,7 @@ fn sync_comma_separated_extras() -> Result<()> {
 /// Test comma-separated groups in sync command
 #[test]
 fn sync_comma_separated_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13542,7 +13542,7 @@ fn sync_comma_separated_groups() -> Result<()> {
 /// Test mixed comma-separated and individual extras in sync command
 #[test]
 fn sync_mixed_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13586,7 +13586,7 @@ fn sync_mixed_extras() -> Result<()> {
 /// Test mixed comma-separated and individual groups in sync command
 #[test]
 fn sync_mixed_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13630,7 +13630,7 @@ fn sync_mixed_groups() -> Result<()> {
 /// Test invalid comma-separated extras in sync command
 #[test]
 fn sync_invalid_comma_separated_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13666,7 +13666,7 @@ fn sync_invalid_comma_separated_extras() -> Result<()> {
 /// Test invalid comma-separated groups in sync command
 #[test]
 fn sync_invalid_comma_separated_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
