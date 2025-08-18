@@ -29,7 +29,7 @@ use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
-use crate::python_build_versions_from_env;
+use crate::python_version::python_build_versions_from_env;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,

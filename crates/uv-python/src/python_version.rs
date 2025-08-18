@@ -15,7 +15,7 @@ use crate::implementation::ImplementationName;
 
 #[derive(Error, Debug)]
 #[error("Invalid build target value in {variable}: {err}")]
-pub(crate) struct BuildVersionError {
+pub struct BuildVersionError {
     pub variable: &'static str,
     pub err: anyhow::Error,
 }
@@ -220,7 +220,7 @@ impl PythonVersion {
 }
 
 /// Get the environment variable name for the build constraint for a given implementation.
-pub fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
+pub(crate) fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
     match implementation {
         ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
         ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,
@@ -230,7 +230,7 @@ pub fn python_build_version_variable(implementation: ImplementationName) -> &'st
 }
 
 /// Get the build version number from the environment variable for a given implementation.
-pub fn python_build_version_from_env(
+pub(crate) fn python_build_version_from_env(
     implementation: ImplementationName,
 ) -> Result<Option<String>, BuildVersionError> {
     let variable = python_build_version_variable(implementation);
@@ -253,7 +253,7 @@ pub fn python_build_version_from_env(
 }
 
 /// Get the build version numbers for all Python implementations.
-pub fn python_build_versions_from_env()
+pub(crate) fn python_build_versions_from_env()
 -> Result<BTreeMap<ImplementationName, String>, BuildVersionError> {
     let mut versions = BTreeMap::new();
     for implementation in ImplementationName::iter_all() {

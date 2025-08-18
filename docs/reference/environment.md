@@ -428,7 +428,7 @@ Note that currently, only local paths are supported.
 
 ### `UV_PYTHON_GRAALPY_BUILD`
 
-Pin GraalPy downloads to a specific build version.
+Pin managed GraalPy versions to a specific build version.
 
 For GraalPy, this should be the GraalPy version (e.g., "24.2.2").
 
@@ -460,13 +460,13 @@ Whether uv should prefer system or managed Python versions.
 
 ### `UV_PYTHON_PYODIDE_BUILD`
 
-Pin Pyodide downloads to a specific build version.
+Pin managed Pyodide versions to a specific build version.
 
 For Pyodide, this should be the Pyodide version (e.g., "0.28.1").
 
 ### `UV_PYTHON_PYPY_BUILD`
 
-Pin PyPy downloads to a specific build version.
+Pin managed PyPy versions to a specific build version.
 
 For PyPy, this should be the PyPy version (e.g., "7.3.20").
 

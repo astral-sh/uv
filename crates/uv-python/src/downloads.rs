@@ -37,9 +37,8 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
 use crate::python_version::BuildVersionError;
-use crate::{
-    Interpreter, PythonRequest, PythonVersion, VersionRequest, python_build_version_from_env,
-};
+use crate::python_version::python_build_version_from_env;
+use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
 pub enum Error {
