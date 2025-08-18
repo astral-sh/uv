@@ -28,7 +28,7 @@ pub enum TargetTriple {
     #[serde(alias = "x8664-pc-windows-msvc")]
     X8664PcWindowsMsvc,
 
-    /// A 64-bit ARM64 Windows target.
+    /// An ARM64 Windows target.
     #[cfg_attr(feature = "clap", value(name = "aarch64-pc-windows-msvc"))]
     #[serde(rename = "aarch64-pc-windows-msvc")]
     #[serde(alias = "arm64-pc-windows-msvc")]

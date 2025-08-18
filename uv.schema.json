@@ -2252,7 +2252,7 @@
           "const": "x86_64-pc-windows-msvc"
         },
         {
-          "description": "A 64-bit ARM64 Windows target.",
+          "description": "An ARM64 Windows target.",
           "type": "string",
           "const": "aarch64-pc-windows-msvc"
         },
