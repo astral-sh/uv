@@ -1181,6 +1181,7 @@ environment in the project.</p>
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -1778,6 +1779,7 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -3557,6 +3559,7 @@ by <code>--python-version</code>.</p>
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -3826,6 +3829,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -4113,6 +4117,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
