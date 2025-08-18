@@ -13735,7 +13735,7 @@ fn sync_comma_separated_extras_edge_cases() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
-    context.reset_venv()?;
+    context.reset_venv();
 
     // Test empty values - should error
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("dev,,test"), @r"
