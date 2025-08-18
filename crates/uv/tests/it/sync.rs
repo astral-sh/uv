@@ -13698,3 +13698,56 @@ fn sync_invalid_comma_separated_groups() -> Result<()> {
 
     Ok(())
 }
+
+/// Test edge cases for comma-separated extras (whitespace, empty values)
+#[test]
+fn sync_comma_separated_extras_edge_cases() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test whitespace trimming - should work
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg(" dev , test "), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
+    context.reset_venv()?;
+
+    // Test empty values - should error
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("dev,,test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '' for '--extra <EXTRA>': Extra name cannot be empty
+
+    For more information, try '--help'.
+    ");
+
+    Ok(())
+}

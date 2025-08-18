@@ -74,25 +74,37 @@ pub enum ListFormat {
 }
 
 fn extra_name_with_clap_error(arg: &str) -> Result<ExtraName> {
-    ExtraName::from_str(arg).map_err(|_err| {
+    let trimmed = arg.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Extra name cannot be empty"));
+    }
+    ExtraName::from_str(trimmed).map_err(|_err| {
         anyhow!(
-            "Extra names must start and end with a letter or digit and may only \
-            contain -, _, ., and alphanumeric characters"
+            "Invalid extra name '{}': Extra names must start and end with a letter or digit and may only \
+            contain -, _, ., and alphanumeric characters", trimmed
         )
     })
 }
 
 fn group_name_with_clap_error(arg: &str) -> Result<GroupName> {
-    GroupName::from_str(arg).map_err(|_err| {
+    let trimmed = arg.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Group name cannot be empty"));
+    }
+    GroupName::from_str(trimmed).map_err(|_err| {
         anyhow!(
-            "Group names must start and end with a letter or digit and may only \
-            contain -, _, ., and alphanumeric characters"
+            "Invalid group name '{}': Group names must start and end with a letter or digit and may only \
+            contain -, _, ., and alphanumeric characters", trimmed
         )
     })
 }
 
 fn pip_group_name_with_clap_error(arg: &str) -> Result<PipGroupName> {
-    PipGroupName::from_str(arg).map_err(|err| anyhow!("{}", err))
+    let trimmed = arg.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Group name cannot be empty"));
+    }
+    PipGroupName::from_str(trimmed).map_err(|err| anyhow!("{}", err))
 }
 
 // Configures Clap v3-style help menu colors
