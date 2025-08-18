@@ -19,6 +19,9 @@ home = { workspace = true }
 same-file = { workspace = true }
 tracing = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
 [target.'cfg(windows)'.dependencies]
 windows-registry = { workspace = true }
 windows-result = { workspace = true }

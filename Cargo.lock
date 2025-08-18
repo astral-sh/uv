@@ -6272,6 +6272,7 @@ dependencies = [
  "anyhow",
  "fs-err",
  "home",
+ "nix 0.30.1",
  "same-file",
  "tempfile",
  "tracing",
