@@ -17,6 +17,8 @@ See the [python-build-standalone release notes](https://github.com/astral-sh/pyt
 - Add an `aarch64-pc-windows-msvc` target for `python-platform` ([#15347](https://github.com/astral-sh/uv/pull/15347))
 - Add fallback parent process detection to `uv tool update-shell` ([#15356](https://github.com/astral-sh/uv/pull/15356))
 - Install non-build-isolation packages in a second phase ([#15306](https://github.com/astral-sh/uv/pull/15306))
+- Add hint when virtual environments are included in source distributions ([#15202](https://github.com/astral-sh/uv/pull/15202))
+- Add Docker images derived from `buildpack-deps:trixie`, `debian:trixie-slim`, `alpine:3.22` ([#15351](https://github.com/astral-sh/uv/pull/15351))
 
 ### Bug fixes
 
