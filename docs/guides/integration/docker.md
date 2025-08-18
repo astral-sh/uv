@@ -41,12 +41,18 @@ And the following derived images are available:
 - Based on `alpine:3.21`:
     - `ghcr.io/astral-sh/uv:alpine`
     - `ghcr.io/astral-sh/uv:alpine3.21`
+- Based on `alpine:3.22`:
+    - `ghcr.io/astral-sh/uv:alpine3.22`
 - Based on `debian:bookworm-slim`:
     - `ghcr.io/astral-sh/uv:debian-slim`
     - `ghcr.io/astral-sh/uv:bookworm-slim`
+- Based on `debian:trixie-slim`:
+    - `ghcr.io/astral-sh/uv:trixie-slim`
 - Based on `buildpack-deps:bookworm`:
     - `ghcr.io/astral-sh/uv:debian`
     - `ghcr.io/astral-sh/uv:bookworm`
+- Based on `buildpack-deps:trixie`:
+    - `ghcr.io/astral-sh/uv:trixie`
 - Based on `python3.x-alpine`:
     - `ghcr.io/astral-sh/uv:python3.14-rc-alpine`
     - `ghcr.io/astral-sh/uv:python3.13-alpine`
