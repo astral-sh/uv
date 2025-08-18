@@ -13458,3 +13458,243 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
 
     Ok(())
 }
+
+/// Test comma-separated extras in sync command
+#[test]
+fn sync_comma_separated_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        docs = ["anyio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test comma-separated extras
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("dev,test"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Test comma-separated groups in sync command
+#[test]
+fn sync_comma_separated_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        docs = ["anyio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test comma-separated groups
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev,test"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Test mixed comma-separated and individual extras in sync command
+#[test]
+fn sync_mixed_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        docs = ["anyio"]
+        lint = ["ruff"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test mixing comma-separated and individual extras
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("dev,test").arg("--extra").arg("docs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Test mixed comma-separated and individual groups in sync command
+#[test]
+fn sync_mixed_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        docs = ["anyio"]
+        lint = ["ruff"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test mixing comma-separated and individual groups
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev,test").arg("--group").arg("docs"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+/// Test invalid comma-separated extras in sync command
+#[test]
+fn sync_invalid_comma_separated_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test with non-existent extra in comma-separated list
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("dev,nonexistent"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: Extra `nonexistent` is not defined in the project's `optional-dependencies` table
+    ");
+
+    Ok(())
+}
+
+/// Test invalid comma-separated groups in sync command
+#[test]
+fn sync_invalid_comma_separated_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        test = ["typing-extensions"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Test with non-existent group in comma-separated list
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev,nonexistent"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: Group `nonexistent` is not defined in the project's `dependency-groups` table
+    ");
+
+    Ok(())
+}
