@@ -475,7 +475,7 @@ impl TargetTriple {
     pub fn platform_machine(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "x86_64",
-            Self::Aarch64PcWindowsMsvc => "aarch64",
+            Self::Aarch64PcWindowsMsvc => "ARM64",
             Self::Linux | Self::X8664UnknownLinuxGnu => "x86_64",
             Self::Macos | Self::Aarch64AppleDarwin => "arm64",
             Self::I686PcWindowsMsvc => "x86",
