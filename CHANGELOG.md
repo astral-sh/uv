@@ -3,6 +3,33 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.12
+
+### Python
+
+- Add 3.13.7
+- Improve performance of zstd in Python 3.14
+
+See the [python-build-standalone release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250818) for details.
+
+### Enhancements
+
+- Add an `aarch64-pc-windows-msvc` target for `python-platform` ([#15347](https://github.com/astral-sh/uv/pull/15347))
+- Add fallback parent process detection to `uv tool update-shell` ([#15356](https://github.com/astral-sh/uv/pull/15356))
+- Install non-build-isolation packages in a second phase ([#15306](https://github.com/astral-sh/uv/pull/15306))
+
+### Bug fixes
+
+- Reject already-installed wheels built with outdated settings ([#15289](https://github.com/astral-sh/uv/pull/15289))
+- Skip interpreters that are not found on query ([#15315](https://github.com/astral-sh/uv/pull/15315))
+- Handle dotted package names in script path resolution ([#15300](https://github.com/astral-sh/uv/pull/15300))
+- Reject `match-runtime = true` for dynamic packages ([#15292](https://github.com/astral-sh/uv/pull/15292))
+
+### Documentation
+
+- Document improvements to build-isolation setups ([#15326](https://github.com/astral-sh/uv/pull/15326))
+- Fix reference documentation recommendation to use `uv cache clean` instead of `clear` ([#15313](https://github.com/astral-sh/uv/pull/15313))
+
 ## 0.8.11
 
 ### Python
