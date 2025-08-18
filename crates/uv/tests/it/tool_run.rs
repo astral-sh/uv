@@ -2713,7 +2713,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `not_pep723_script.py` does not contain a PEP 723 metadata tag; run `uv init --script not_pep723_script.py` to initialize the script
+    error: `not_pep723_script.py` does not contain an inline script metadata tag.
     ");
 
     // Error when the script doesn't exist.
@@ -2726,7 +2726,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `missing_file.py` (not found); run `uv init --script missing_file.py` to create a PEP 723 script
+    error: Failed to read `missing_file.py` (not found).
     ");
 
     Ok(())
