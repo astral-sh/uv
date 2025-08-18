@@ -756,7 +756,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd
 
       - name: Test in Firecracker VM
-        uses: zanieb/freebsd-firecracker-action@53aafbb470a6f21f8745eae5a6973002cdced262 # v0.5.1
+        uses: acj/freebsd-firecracker-action@e8e9155e944111ea65be7a606c69b32092f3c4c8 # v0.5.2
         with:
           verbose: false
           checkout: false
