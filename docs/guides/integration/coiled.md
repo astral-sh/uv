@@ -107,9 +107,9 @@ print(df.head())
 !!! tip
 
     While Coiled supports AWS, GCP, and Azure, this example assumes AWS is being used
-    (see the `region` option below). If you're new to Coiled, you'll automatically have
+    (see the `region` option above). If you're new to Coiled, you'll automatically have
     access to a free account running on AWS. If you're not running on AWS, you can either use
-    a valid `region` for your cloud provider or remove the `region` line below.
+    a valid `region` for your cloud provider or remove the `region` line above.
 
 The comments tell Coiled to use the official [uv Docker image](../integration/docker.md) when
 running the script (ensuring uv is available) and to run in the `us-east-2` region on AWS (where
@@ -119,7 +119,7 @@ To run the script, use
 [`coiled batch run`](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-batch-run)
 to execute the `uv run` command in the cloud:
 
-```bash hl-lines="1"
+```bash hl_lines="1"
 $ uvx coiled batch run \
     uv run process.py
 ```
