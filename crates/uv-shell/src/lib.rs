@@ -81,7 +81,6 @@ impl Shell {
     fn from_parent_process() -> Option<Self> {
         #[cfg(unix)]
         {
-
             // Get the parent process ID
             let ppid = nix::unistd::getppid();
             debug!("Detected parent process ID: {ppid}");
