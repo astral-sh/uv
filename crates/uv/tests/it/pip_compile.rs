@@ -1270,7 +1270,7 @@ optional-dependencies.foo = [
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'invalid name!' for '--extra <EXTRA>': Extra names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters
+    error: invalid value 'invalid name!' for '--extra <EXTRA>': Invalid extra name 'invalid name!': Extra names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters
 
     For more information, try '--help'.
     "###
