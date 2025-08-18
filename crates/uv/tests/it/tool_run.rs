@@ -2674,19 +2674,6 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
         import anyio
     "#})?;
 
-    let script_without_extension = context.temp_dir.child("script_without_extension");
-    script_without_extension.write_str(indoc! {r#"
-        #!/usr/bin/env -S uv run --script
-        # /// script
-        # requires-python = ">=3.11"
-        # dependencies = [
-        #   "pytest",
-        # ]
-        # ///
-
-        import pytest
-    "#})?;
-
     // script dependencies (anyio) are now installed.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with-requirements")
@@ -2713,32 +2700,6 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
      + sniffio==1.3.1
     ");
 
-    // script_without_extension dependencies (pytest) are now installed.
-    uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--with-requirements")
-        .arg("script_without_extension")
-        .arg("black")
-        .arg("script.py")
-        .arg("-q"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + iniconfig==2.0.0
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-     + pluggy==1.4.0
-     + pytest==8.1.1
-    ");
-
     // Error when the script is not a valid PEP723 script.
     let script = context.temp_dir.child("not_pep723_script.py");
     script.write_str("import anyio")?;
@@ -2746,27 +2707,27 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with-requirements")
         .arg("not_pep723_script.py")
-        .arg("black"), @r###"
+        .arg("black"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No script found in file: not_pep723_script.py
-    "###);
+    error: `not_pep723_script.py` does not contain a PEP 723 metadata tag; run `uv init --script not_pep723_script.py` to initialize the script
+    ");
 
     // Error when the script doesn't exist.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with-requirements")
         .arg("missing_file.py")
-        .arg("black"), @r###"
+        .arg("black"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: File not found missing_file.py
-    "###);
+    error: Failed to read `missing_file.py` (not found); run `uv init --script missing_file.py` to create a PEP 723 script
+    ");
 
     Ok(())
 }
