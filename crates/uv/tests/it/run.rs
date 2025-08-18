@@ -6032,6 +6032,7 @@ fn run_mixed_extras() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + anyio==4.3.0
+     + idna==3.6
      + iniconfig==2.0.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
@@ -6068,7 +6069,8 @@ fn run_invalid_comma_separated_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Extra `nonexistent` not found on `project`
+    Resolved [N] packages in [TIME]
+    error: Extra `nonexistent` is not defined in the project's `optional-dependencies` table
     ");
 
     Ok(())

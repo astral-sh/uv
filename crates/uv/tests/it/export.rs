@@ -4506,7 +4506,7 @@ fn export_comma_separated_extras() -> Result<()> {
         # via project
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved [N] packages in [TIME]
     ");
 
     Ok(())
@@ -4563,7 +4563,7 @@ fn export_mixed_extras() -> Result<()> {
         # via project
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved [N] packages in [TIME]
     ");
 
     Ok(())
@@ -4597,7 +4597,7 @@ fn export_invalid_comma_separated_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved [N] packages in [TIME]
     error: Extra `nonexistent` is not defined in the project's `optional-dependencies` table
     ");
 

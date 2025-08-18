@@ -13489,9 +13489,9 @@ fn sync_comma_separated_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
     ");
@@ -13529,9 +13529,9 @@ fn sync_comma_separated_groups() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
     ");
@@ -13570,9 +13570,9 @@ fn sync_mixed_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + iniconfig==2.0.0
@@ -13614,9 +13614,9 @@ fn sync_mixed_groups() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + iniconfig==2.0.0
@@ -13656,7 +13656,7 @@ fn sync_invalid_comma_separated_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved [N] packages in [TIME]
     error: Extra `nonexistent` is not defined in the project's `optional-dependencies` table
     ");
 
@@ -13692,7 +13692,7 @@ fn sync_invalid_comma_separated_groups() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved [N] packages in [TIME]
     error: Group `nonexistent` is not defined in the project's `dependency-groups` table
     ");
 
