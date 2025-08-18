@@ -398,8 +398,9 @@ impl AuthMiddleware {
             .as_ref()
             .is_ok_and(|response| response.error_for_status_ref().is_ok())
         {
-            if let (Some(index_url), Some(keyring)) = (index_url, &self.keyring) {
-                keyring.store_if_native(index_url, &credentials).await;
+            if let Some(keyring) = &self.keyring {
+                let url = index_url.unwrap_or(&url);
+                keyring.store_if_native(url, &credentials).await;
             }
             trace!("Updating cached credentials for {url} to {credentials:?}");
             self.cache().insert(&url, credentials);
@@ -575,7 +576,7 @@ impl AuthMiddleware {
         //      But, in the absence of an index URL, we cache the result per realm. So in that case,
         //      if a keyring implementation returns different credentials for different URLs in the
         //      same realm we will use the wrong credentials.
-        } else if let Some(credentials) = match self.keyring {
+        } else { match self.keyring {
             Some(ref keyring) => {
                 // The subprocess keyring provider is _slow_ so we do not perform fetches for all
                 // URLs; instead, we fetch if there's a username or if the user has requested to
@@ -603,12 +604,7 @@ impl AuthMiddleware {
                 }
             }
             None => None,
-        } {
-            debug!("Found credentials in keyring for {url}");
-            Some(credentials)
-        } else {
-            None
-        }
+        } }
         .map(Arc::new);
 
         // Register the fetch for this key

@@ -1559,6 +1559,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.reporter
                     .clone()
                     .map(|reporter| reporter.into_git_reporter()),
+                client
+                    .unmanaged
+                    .cached_client()
+                    .uncached()
+                    .keyring_provider()
+                    .as_ref(),
             )
             .await?;
 
@@ -1763,6 +1769,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.reporter
                     .clone()
                     .map(|reporter| reporter.into_git_reporter()),
+                client
+                    .unmanaged
+                    .cached_client()
+                    .uncached()
+                    .keyring_provider()
+                    .as_ref(),
             )
             .await?;
 
@@ -2010,6 +2022,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.reporter
                     .clone()
                     .map(|reporter| reporter.into_git_reporter()),
+                client
+                    .unmanaged
+                    .cached_client()
+                    .uncached()
+                    .keyring_provider()
+                    .as_ref(),
             )
             .await?;
 

@@ -20,12 +20,12 @@ static UV_SERVICE_PREFIX: &str = "uv-credentials:";
 ///
 /// See pip's implementation for reference
 /// <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L102>
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct KeyringProvider {
     backend: KeyringProviderBackend,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum KeyringProviderBackend {
     /// Use system keyring integration to fetch credentials.
     Native,
@@ -48,6 +48,11 @@ impl KeyringProvider {
         Self {
             backend: KeyringProviderBackend::Subprocess,
         }
+    }
+
+    /// Whether the backend is [`KeyringProviderBackend::Native`].
+    pub fn is_native(&self) -> bool {
+        matches!(self.backend, KeyringProviderBackend::Native)
     }
 
     /// Store credentials for the given [`Url`] to the keyring if the
@@ -109,7 +114,22 @@ impl KeyringProvider {
         }
     }
 
-    /// Fetch credentials for the given [`Url`] from the keyring.
+    /// Fetch credentials for the given [`DisplaySafeUrl`] from the keyring if the backend is
+    /// [`KeyringProviderBackend::Native`].
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
+    pub async fn fetch_if_native(
+        &self,
+        url: &DisplaySafeUrl,
+        username: Option<&str>,
+    ) -> Option<Credentials> {
+        if self.is_native() {
+            self.fetch(url, username).await
+        } else {
+            None
+        }
+    }
+
+    /// Fetch credentials for the given [`DisplaySafeUrl`] from the keyring.
     ///
     /// Returns [`None`] if no password was found for the username or if any errors
     /// are encountered in the keyring backend.
@@ -158,6 +178,10 @@ impl KeyringProvider {
                     Self::fetch_dummy(store, &host, username)
                 }
             };
+        }
+
+        if credentials.is_some() {
+            debug!("Found credentials in keyring for {url}");
         }
 
         credentials.map(|(username, password)| Credentials::basic(Some(username), Some(password)))

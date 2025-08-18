@@ -3,7 +3,6 @@ use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
-use url::Url;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
@@ -186,7 +185,7 @@ impl Hash for RepositoryUrl {
 }
 
 impl Deref for RepositoryUrl {
-    type Target = Url;
+    type Target = DisplaySafeUrl;
 
     fn deref(&self) -> &Self::Target {
         &self.0

@@ -28,6 +28,7 @@ use url::ParseError;
 use url::Url;
 
 use uv_auth::Credentials;
+use uv_auth::KeyringProvider;
 use uv_auth::{AuthMiddleware, Indexes};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
@@ -325,6 +326,7 @@ impl<'a> BaseClientBuilder<'a> {
             dangerous_client,
             raw_dangerous_client,
             timeout,
+            keyring_provider: self.keyring.to_provider(),
         }
     }
 
@@ -351,6 +353,7 @@ impl<'a> BaseClientBuilder<'a> {
             raw_client: existing.raw_client.clone(),
             raw_dangerous_client: existing.raw_dangerous_client.clone(),
             timeout: existing.timeout,
+            keyring_provider: self.keyring.to_provider(),
         }
     }
 
@@ -524,6 +527,8 @@ pub struct BaseClient {
     allow_insecure_host: Vec<TrustedHost>,
     /// The number of retries to attempt on transient errors.
     retries: u32,
+    /// Backend for providing credentials from a keyring.
+    keyring_provider: Option<KeyringProvider>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -570,6 +575,11 @@ impl BaseClient {
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
         ExponentialBackoff::builder().build_with_max_retries(self.retries)
+    }
+
+    /// The [`KeyringProvider`] if one exists.
+    pub fn keyring_provider(&self) -> &Option<KeyringProvider> {
+        &self.keyring_provider
     }
 }
 

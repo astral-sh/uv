@@ -18,8 +18,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, Preview,
-    PreviewFeatures, SourceStrategy,
+    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
+    KeyringProviderType, Preview, PreviewFeatures, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -650,7 +650,9 @@ pub(crate) async fn add(
         &extras_of_dependency,
         index,
         &mut toml,
-    )?;
+        settings.resolver.keyring_provider,
+    )
+    .await?;
 
     // Validate any indexes that were provided on the command-line to ensure
     // they point to existing non-empty directories when using path URLs.
@@ -768,7 +770,7 @@ pub(crate) async fn add(
     }
 }
 
-fn edits(
+async fn edits(
     requirements: Vec<Requirement>,
     target: &AddTarget,
     editable: Option<bool>,
@@ -780,6 +782,7 @@ fn edits(
     extras: &[ExtraName],
     index: Option<&IndexName>,
     toml: &mut PyProjectTomlMut,
+    keyring_provider: KeyringProviderType,
 ) -> Result<Vec<DependencyEdit>> {
     let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
@@ -853,13 +856,33 @@ fn edits(
                 extra,
                 group,
             }) => {
-                let credentials = uv_auth::Credentials::from_url(&git);
-                if let Some(credentials) = credentials {
-                    debug!("Caching credentials for: {git}");
-                    GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
-
-                    // Redact the credentials.
+                if let Some(credentials) = uv_auth::Credentials::from_url(&git) {
+                    let username = git.username().to_string();
+                    // Redact the credentials from the URL.
                     git.remove_credentials();
+
+                    let credentials = if credentials.password().is_some() {
+                        Some(credentials)
+                    } else {
+                        if let Some(keyring_provider) = keyring_provider.to_provider() {
+                            keyring_provider
+                                .fetch_if_native(&git, Some(&username))
+                                .await
+                        } else {
+                            Some(credentials)
+                        }
+                    };
+
+                    debug!("Caching credentials for: {git}");
+                    if let Some(credentials) = credentials {
+                        GIT_STORE
+                            .insert(
+                                RepositoryUrl::new(&git),
+                                credentials,
+                                keyring_provider.to_provider().as_ref(),
+                            )
+                            .await;
+                    }
                 }
                 Some(Source::Git {
                     git,
