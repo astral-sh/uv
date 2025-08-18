@@ -1253,7 +1253,7 @@ pub struct PipCompileArgs {
     pub no_all_extras: bool,
 
     /// Install the specified dependency group from a `pyproject.toml`.
-    /// Use comma separation for multiple values: `--group dev,test` or `--group dev --group test`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// If no path is provided, the `pyproject.toml` in the working directory is used.
     ///
@@ -1586,7 +1586,7 @@ pub struct PipSyncArgs {
     pub no_all_extras: bool,
 
     /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
-    /// Use comma separation for multiple values: `--group dev,test` or `--group dev --group test`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
     /// used.
@@ -1890,7 +1890,7 @@ pub struct PipInstallArgs {
     pub no_all_extras: bool,
 
     /// Install the specified dependency group from a `pylock.toml` or `pyproject.toml`.
-    /// Use comma separation for multiple values: `--group dev,test` or `--group dev --group test`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// If no path is provided, the `pylock.toml` or `pyproject.toml` in the working directory is
     /// used.
@@ -3069,7 +3069,7 @@ pub struct RunArgs {
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
-    /// Use comma separation for multiple values: `--group dev,test` or `--group dev --group test`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
@@ -3368,7 +3368,7 @@ pub struct SyncArgs {
     pub only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
-    /// Use comma separation for multiple values: `--group dev,test` or `--group dev --group test`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// When multiple extras or groups are specified that appear in
     /// `tool.uv.conflicts`, uv will report an error.
@@ -3986,7 +3986,7 @@ pub struct TreeArgs {
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
-    /// Use comma separation for multiple values: `--group dev,test` or `--group dev --group test`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
@@ -4164,7 +4164,7 @@ pub struct ExportArgs {
     pub only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
-    /// Use comma separation for multiple values: `--group dev,test` or `--group dev --group test`.
+    /// Multiple values may be provided with comma separated values or by repeating the flag.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_parser = group_name_with_clap_error, value_delimiter = ',')]
