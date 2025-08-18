@@ -2,12 +2,14 @@ use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Failed to read from zip file")]
-    Zip(#[from] zip::result::ZipError),
-    #[error("Failed to read from zip file")]
-    AsyncZip(#[from] async_zip::error::ZipError),
     #[error("I/O operation failed during extraction")]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
+    #[error("Invalid zip file")]
+    Zip(#[from] zip::result::ZipError),
+    #[error("Invalid zip file structure")]
+    AsyncZip(#[from] async_zip::error::ZipError),
+    #[error("Invalid tar file")]
+    Tar(#[from] tokio_tar::TarError),
     #[error(
         "The top-level of the archive must only contain a list directory, but it contains: {0:?}"
     )]
@@ -90,6 +92,31 @@ pub enum Error {
 }
 
 impl Error {
+    /// When reading from an archive, the error can either be an IO error from the underlying
+    /// operating system, or an error with the archive. Both get wrapper into an IO error through
+    /// e.g., `io::copy`. This method extracts zip and tar errors, to distinguish them from invalid
+    /// archives.
+    pub(crate) fn io_or_compression(err: std::io::Error) -> Self {
+        if err.kind() != std::io::ErrorKind::Other {
+            return Self::Io(err);
+        }
+
+        let err = match err.downcast::<tokio_tar::TarError>() {
+            Ok(tar_err) => return Self::Tar(tar_err),
+            Err(err) => err,
+        };
+        let err = match err.downcast::<async_zip::error::ZipError>() {
+            Ok(zip_err) => return Self::AsyncZip(zip_err),
+            Err(err) => err,
+        };
+        let err = match err.downcast::<zip::result::ZipError>() {
+            Ok(zip_err) => return Self::Zip(zip_err),
+            Err(err) => err,
+        };
+
+        Self::Io(err)
+    }
+
     /// Returns `true` if the error is due to the server not supporting HTTP streaming. Most
     /// commonly, this is due to serving ZIP files with features that are incompatible with
     /// streaming, like data descriptors.

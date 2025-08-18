@@ -22,7 +22,7 @@ async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
         .map_err(std::io::Error::other)
         .into_async_read();
 
-    let target = tempfile::TempDir::new()?;
+    let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
     uv_extract::stream::unzip(reader.compat(), target.path()).await
 }
 

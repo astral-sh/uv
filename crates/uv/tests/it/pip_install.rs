@@ -12108,7 +12108,7 @@ fn reject_invalid_central_directory_offset() {
     Resolved 1 package in [TIME]
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
       ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
-      ├─▶ Failed to read from zip file
+      ├─▶ Invalid zip file structure
       ╰─▶ the end of central directory offset (0xf0d9) did not match the actual offset (0xf9ac)
     "
     );
