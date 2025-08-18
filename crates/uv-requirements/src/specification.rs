@@ -187,16 +187,14 @@ impl RequirementsSpecification {
                     Ok(Some(script)) => Pep723Item::Script(script),
                     Ok(None) => {
                         return Err(anyhow::anyhow!(
-                            "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
+                            "`{}` does not contain an inline script metadata tag.",
                             path.user_display(),
-                            format!("uv init --script {}", path.user_display())
                         ));
                     }
                     Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                         return Err(anyhow::anyhow!(
-                            "Failed to read `{}` (not found); run `{}` to create a PEP 723 script",
+                            "Failed to read `{}` (not found).",
                             path.user_display(),
-                            format!("uv init --script {}", path.user_display())
                         ));
                     }
                     Err(err) => return Err(err.into()),

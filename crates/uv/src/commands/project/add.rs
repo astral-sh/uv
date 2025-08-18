@@ -122,7 +122,7 @@ pub(crate) async fn add(
                 bail!("Adding requirements from a `setup.py` is not supported in `uv add`");
             }
             RequirementsSource::Pep723Script(_) => {
-                bail!("Adding requirements from a PEP723 script is not supported in `uv add`");
+                bail!("Adding requirements from a PEP 723 script is not supported in `uv add`");
             }
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");

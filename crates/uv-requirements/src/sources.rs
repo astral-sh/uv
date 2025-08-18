@@ -13,7 +13,7 @@ pub enum RequirementsSource {
     Package(RequirementsTxtRequirement),
     /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
     Editable(RequirementsTxtRequirement),
-    /// Dependencies were provided via a Pep723 script file.
+    /// Dependencies were provided via a PEP 723 script file.
     Pep723Script(PathBuf),
     /// Dependencies were provided via a `pylock.toml` file.
     PylockToml(PathBuf),
