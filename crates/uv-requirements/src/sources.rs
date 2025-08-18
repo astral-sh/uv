@@ -50,6 +50,7 @@ impl RequirementsSource {
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
         {
+            // TODO(blueraft): Support scripts without an extension.
             Ok(Self::Pep723Script(path))
         } else if path
             .extension()
