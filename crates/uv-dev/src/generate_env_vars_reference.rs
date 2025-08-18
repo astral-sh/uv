@@ -117,6 +117,11 @@ mod tests {
 
     #[test]
     fn test_generate_env_vars_reference() -> Result<()> {
+        // Skip this test in CI to avoid redundancy with the dedicated CI job
+        if env::var_os(EnvVars::CI).is_some() {
+            return Ok(());
+        }
+
         let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
             Mode::Write
         } else {
