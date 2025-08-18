@@ -688,7 +688,7 @@ pub struct ResolverInstallerOptions {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
@@ -1576,7 +1576,7 @@ pub struct PipOptions {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(

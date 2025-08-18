@@ -1,10 +1,22 @@
 #![cfg(feature = "r2")]
 
+use backon::{BackoffBuilder, Retryable};
 use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
-    let response = reqwest::get(url).await.unwrap();
+    let backoff = backon::ExponentialBuilder::default()
+        .with_min_delay(std::time::Duration::from_millis(500))
+        .with_max_times(5)
+        .build();
+
+    let download = || async {
+        let response = reqwest::get(url).await?;
+        Ok::<_, reqwest::Error>(response)
+    };
+
+    let response = download.retry(backoff).await.unwrap();
+
     let reader = response
         .bytes_stream()
         .map_err(std::io::Error::other)

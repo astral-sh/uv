@@ -4063,43 +4063,13 @@ fn config_settings_path() -> Result<()> {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Reinstalling with `editable_mode=compat` should be a no-op; changes in build configuration
-    // don't invalidate the environment.
+    // Reinstalling with `editable_mode=compat` should force a reinstall.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("-C")
         .arg("editable_mode=compat")
-        , @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
-    );
-
-    // Uninstall the package.
-    uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("setuptools-editable"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
-    "###);
-
-    // Install the editable package with `editable_mode=compat`. We should ignore the cached
-    // build configuration and rebuild.
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
-        .arg("-C")
-        .arg("editable_mode=compat")
-        , @r###"
+        , @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4107,9 +4077,10 @@ fn config_settings_path() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
-    "###
+     ~ setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "
     );
 
     // When installed without `editable_mode=compat`, the `finder.py` file should _not_ be present.
@@ -8712,12 +8683,9 @@ build-constraint-dependencies = [
 fn install_build_isolation_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an package.
+    // Create a package.
     let package = context.temp_dir.child("project");
-    package.create_dir_all()?;
-    let pyproject_toml = package.child("pyproject.toml");
-
-    pyproject_toml.write_str(
+    package.child("pyproject.toml").write_str(
         r#"
         [project]
         name = "project"
@@ -8726,11 +8694,6 @@ fn install_build_isolation_package() -> Result<()> {
         dependencies = [
             "iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
         ]
-        [build-system]
-        requires = [
-          "setuptools >= 40.9.0",
-        ]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -8787,18 +8750,20 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Prepared 1 package without build isolation in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
      + project==0.1.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     Ok(())
 }

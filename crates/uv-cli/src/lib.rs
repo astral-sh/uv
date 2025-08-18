@@ -2773,7 +2773,7 @@ pub struct VenvArgs {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[arg(long, value_enum, env = EnvVars::UV_LINK_MODE)]
@@ -4822,7 +4822,7 @@ pub struct ToolUpgradeArgs {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[arg(
@@ -5638,7 +5638,7 @@ pub struct InstallerArgs {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[arg(
@@ -5855,7 +5855,7 @@ pub struct ResolverArgs {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[arg(
@@ -6064,7 +6064,7 @@ pub struct ResolverInstallerArgs {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[arg(

@@ -5,10 +5,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_cache_key::cache_digest;
 use uv_distribution_types::{
-    BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl, PackageConfigSettings,
+    BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
+    ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
+    PackageConfigSettings,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
@@ -226,18 +226,15 @@ impl<'a> RegistryWheelIndex<'a> {
                         config_settings,
                         config_settings_package,
                     );
-                    let cache_shard = if config_settings.is_empty()
-                        && extra_build_deps.is_empty()
-                        && extra_build_vars.is_none()
-                    {
-                        cache_shard
-                    } else {
-                        cache_shard.shard(cache_digest(&(
-                            &config_settings,
-                            extra_build_deps,
-                            extra_build_vars,
-                        )))
-                    };
+                    let build_info = BuildInfo::from_settings(
+                        &config_settings,
+                        extra_build_deps,
+                        extra_build_vars,
+                    );
+                    let cache_shard = build_info
+                        .cache_shard()
+                        .map(|digest| cache_shard.shard(digest))
+                        .unwrap_or(cache_shard);
 
                     for wheel_dir in uv_fs::entries(cache_shard).ok().into_iter().flatten() {
                         // Ignore any `.lock` files.
@@ -259,6 +256,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                         wheel,
                                         revision.hashes().into(),
                                         CacheInfo::default(),
+                                        build_info.clone(),
                                     );
                                     entries.push(IndexEntry {
                                         dist: wheel.into_registry_dist(),

@@ -91,6 +91,10 @@ pub enum Error {
     NoSourceDistBuilds,
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
+    #[error(
+        "Extra build requirement `{0}` was declared with `match-runtime = true`, but `{1}` does not declare static metadata, making runtime-matching impossible"
+    )]
+    UnmatchedRuntime(PackageName, PackageName),
 }
 
 impl IsBuildBackendError for Error {
@@ -106,7 +110,8 @@ impl IsBuildBackendError for Error {
             | Self::Virtualenv(_)
             | Self::NoSourceDistBuild(_)
             | Self::NoSourceDistBuilds
-            | Self::CyclicBuildDependency(_) => false,
+            | Self::CyclicBuildDependency(_)
+            | Self::UnmatchedRuntime(_, _) => false,
             Self::CommandFailed(_, _)
             | Self::BuildBackend(_)
             | Self::MissingHeader(_)

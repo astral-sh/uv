@@ -18,6 +18,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Constraints;
 use uv_configuration::{Concurrency, Preview};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
     IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
@@ -55,8 +56,8 @@ use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 use crate::settings::ResolverInstallerSettings;
+use crate::settings::{NetworkSettings, ResolverSettings};
 
 /// The user-facing command used to invoke a tool run.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -945,6 +946,24 @@ async fn get_or_create_environment(
                     .flatten()
                     .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())
                 {
+                    let ResolverInstallerSettings {
+                        resolver:
+                            ResolverSettings {
+                                config_setting,
+                                config_settings_package,
+                                extra_build_dependencies,
+                                extra_build_variables,
+                                ..
+                            },
+                        ..
+                    } = settings;
+
+                    // Lower the extra build dependencies, if any.
+                    let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
+                        extra_build_dependencies.clone(),
+                    )
+                    .into_inner();
+
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(&environment)?;
                     if matches!(
@@ -952,7 +971,11 @@ async fn get_or_create_environment(
                             requirements.iter(),
                             constraints.iter(),
                             overrides.iter(),
-                            &interpreter.resolver_marker_environment()
+                            &interpreter.resolver_marker_environment(),
+                            config_setting,
+                            config_settings_package,
+                            &extra_build_requires,
+                            extra_build_variables,
                         ),
                         Ok(SatisfiesResult::Fresh { .. })
                     ) {

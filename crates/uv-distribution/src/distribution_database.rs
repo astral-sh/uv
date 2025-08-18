@@ -20,7 +20,8 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, IndexUrl, InstalledDist, Name, SourceDist,
+    BuildInfo, BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, IndexUrl, InstalledDist, Name,
+    SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -220,6 +221,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                         cache: CacheInfo::default(),
+                        build: None,
                     }),
                     Err(Error::Extract(name, err)) => {
                         if err.is_http_streaming_unsupported() {
@@ -256,6 +258,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                             cache: CacheInfo::default(),
+                            build: None,
                         })
                     }
                     Err(err) => Err(err),
@@ -293,6 +296,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                         cache: CacheInfo::default(),
+                        build: None,
                     }),
                     Err(Error::Client(err)) if err.is_http_streaming_unsupported() => {
                         warn!(
@@ -322,6 +326,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                             cache: CacheInfo::default(),
+                            build: None,
                         })
                     }
                     Err(err) => Err(err),
@@ -387,6 +392,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     filename: built_wheel.filename,
                     hashes: built_wheel.hashes,
                     cache: built_wheel.cache_info,
+                    build: Some(built_wheel.build_info),
                 });
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -404,6 +410,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
             cache: built_wheel.cache_info,
+            build: Some(built_wheel.build_info),
         })
     }
 
@@ -912,6 +919,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
+                build: None,
             })
         } else if hashes.is_none() {
             // Otherwise, unzip the wheel.
@@ -938,6 +946,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
+                build: None,
             })
         } else {
             // If necessary, compute the hashes of the wheel.
@@ -990,6 +999,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
+                build: None,
             })
         }
     }
@@ -1161,6 +1171,11 @@ impl HttpArchivePointer {
     pub fn to_cache_info(&self) -> CacheInfo {
         CacheInfo::default()
     }
+
+    /// Return the [`BuildInfo`] from the pointer.
+    pub fn to_build_info(&self) -> Option<BuildInfo> {
+        None
+    }
 }
 
 /// A pointer to an archive in the cache, fetched from a local path.
@@ -1202,5 +1217,10 @@ impl LocalArchivePointer {
     /// Return the [`CacheInfo`] from the pointer.
     pub fn to_cache_info(&self) -> CacheInfo {
         CacheInfo::from_timestamp(self.timestamp)
+    }
+
+    /// Return the [`BuildInfo`] from the pointer.
+    pub fn to_build_info(&self) -> Option<BuildInfo> {
+        None
     }
 }
