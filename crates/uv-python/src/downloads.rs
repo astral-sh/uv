@@ -148,7 +148,7 @@ pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: &'static str,
     sha256: Option<&'static str>,
-    build: &'static str,
+    build: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
@@ -468,7 +468,19 @@ impl PythonDownloadRequest {
 
         // Then check the build if specified
         if let Some(ref requested_build) = self.build {
-            if download.build() != requested_build {
+            let Some(download_build) = download.build() else {
+                debug!(
+                    "Skipping download `{}`: a build version was requested but is not available for this download",
+                    download
+                );
+                return false;
+            };
+
+            if download_build != requested_build {
+                debug!(
+                    "Skipping download `{}`: requested build version `{}` does not match download build version `{}`",
+                    download, requested_build, download_build
+                );
                 return false;
             }
         }
@@ -792,7 +804,7 @@ struct JsonPythonDownload {
     url: String,
     sha256: Option<String>,
     variant: Option<String>,
-    build: String,
+    build: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -812,10 +824,10 @@ pub struct ManagedPythonDownloadWithBuild<'a>(&'a ManagedPythonDownload);
 
 impl Display for ManagedPythonDownloadWithBuild<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0.build.is_empty() {
-            write!(f, "{}", self.0.key)
+        if let Some(build) = self.0.build {
+            write!(f, "{}+{}", self.0.key, build)
         } else {
-            write!(f, "{}+{}", self.0.key, self.0.build)
+            write!(f, "{}", self.0.key)
         }
     }
 }
@@ -910,7 +922,7 @@ impl ManagedPythonDownload {
         self.sha256
     }
 
-    pub fn build(&self) -> &'static str {
+    pub fn build(&self) -> Option<&'static str> {
         self.build
     }
 
@@ -1403,7 +1415,9 @@ fn parse_json_downloads(
             let sha256 = entry
                 .sha256
                 .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
-            let build = Box::leak(entry.build.into_boxed_str()) as &'static str;
+            let build = entry
+                .build
+                .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
 
             Some(ManagedPythonDownload {
                 key: PythonInstallationKey::new_from_version(
@@ -1820,7 +1834,7 @@ mod tests {
 
         // If we have matches with the build, verify they all have the correct build
         for download in matches_with_build {
-            assert_eq!(download.build(), "20250814");
+            assert_eq!(download.build(), Some("20250814"));
         }
     }
 
@@ -1845,18 +1859,50 @@ mod tests {
     /// Test build display
     #[test]
     fn test_managed_python_download_build_display() {
-        // Get a download and test its display
-        if let Some(download) = ManagedPythonDownload::iter_all(None)
-            .unwrap()
-            .find(|d| !d.build().is_empty())
-        {
-            let display_with_build = format!("{}", download.to_display_with_build());
+        use crate::implementation::LenientImplementationName;
+        use crate::installation::PythonInstallationKey;
+        use uv_platform::{Arch, Libc, Os, Platform};
 
-            // The display with build should contain the build string
-            assert!(display_with_build.contains(download.build()));
+        // Create a test download with a build
+        let key = PythonInstallationKey::new(
+            LenientImplementationName::Known(crate::implementation::ImplementationName::CPython),
+            3,
+            12,
+            0,
+            None,
+            Platform::new(
+                Os::from_str("linux").unwrap(),
+                Arch::from_str("x86_64").unwrap(),
+                Libc::from_str("gnu").unwrap(),
+            ),
+            crate::PythonVariant::default(),
+        );
 
-            // The display with build should contain a '+' separator
-            assert!(display_with_build.contains('+'));
-        }
+        let download_with_build = ManagedPythonDownload {
+            key,
+            url: "https://example.com/python.tar.gz",
+            sha256: Some("abc123"),
+            build: Some("20240101"),
+        };
+
+        // Test display with build
+        assert_eq!(
+            download_with_build.to_display_with_build().to_string(),
+            "cpython-3.12.0-linux-x86_64-gnu+20240101"
+        );
+
+        // Test download without build
+        let download_without_build = ManagedPythonDownload {
+            key: download_with_build.key.clone(),
+            url: "https://example.com/python.tar.gz",
+            sha256: Some("abc123"),
+            build: None,
+        };
+
+        // Test display without build
+        assert_eq!(
+            download_without_build.to_display_with_build().to_string(),
+            "cpython-3.12.0-linux-x86_64-gnu"
+        );
     }
 }

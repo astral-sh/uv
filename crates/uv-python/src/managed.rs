@@ -332,7 +332,7 @@ impl ManagedPythonInstallation {
             key: download.key().clone(),
             url: Some(download.url()),
             sha256: download.sha256(),
-            build: Some(download.build()),
+            build: download.build(),
         }
     }
 
