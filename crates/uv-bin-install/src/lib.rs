@@ -22,7 +22,7 @@ use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_client::{BaseClient, is_extended_transient_error};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::Version;
-use uv_platform::{Arch, Libc, Os};
+use uv_platform::Platform;
 
 /// Binary tools that can be installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -35,7 +35,7 @@ impl Binary {
     pub fn default_version(&self) -> Version {
         match self {
             // TODO(zanieb): Figure out a nice way to automate updating this
-            Binary::Ruff => Version::new([0, 12, 5]),
+            Self::Ruff => Version::new([0, 12, 5]),
         }
     }
 
@@ -44,7 +44,7 @@ impl Binary {
     /// See [`Binary::executable`] for the platform-specific executable name.
     pub fn name(&self) -> &'static str {
         match self {
-            Binary::Ruff => "ruff",
+            Self::Ruff => "ruff",
         }
     }
 
@@ -56,7 +56,7 @@ impl Binary {
         format: ArchiveFormat,
     ) -> Result<Url, Error> {
         match self {
-            Binary::Ruff => {
+            Self::Ruff => {
                 let url = format!(
                     "https://github.com/astral-sh/ruff/releases/download/{version}/ruff-{platform}.{}",
                     format.extension()
@@ -98,8 +98,8 @@ impl ArchiveFormat {
 impl From<ArchiveFormat> for SourceDistExtension {
     fn from(val: ArchiveFormat) -> Self {
         match val {
-            ArchiveFormat::Zip => SourceDistExtension::Zip,
-            ArchiveFormat::TarGz => SourceDistExtension::TarGz,
+            ArchiveFormat::Zip => Self::Zip,
+            ArchiveFormat::TarGz => Self::TarGz,
         }
     }
 }
@@ -148,7 +148,7 @@ impl Error {
     /// Return the number of attempts that were made to complete this request before this error was
     /// returned. Note that e.g. 3 retries equates to 4 attempts.
     fn attempts(&self) -> u32 {
-        if let Error::NetworkErrorWithRetries { retries, .. } = self {
+        if let Self::NetworkErrorWithRetries { retries, .. } = self {
             return retries + 1;
         }
         1
@@ -262,10 +262,8 @@ async fn bin_install_inner(
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
-    let os = Os::from_env();
-    let arch = Arch::from_env();
-    let libc = Libc::from_env()?;
-    let platform_name = cargo_dist_platform(os, arch, libc);
+    let platform = Platform::from_env()?;
+    let platform_name = platform.as_cargo_dist_triple();
 
     // Check the cache first
     let cache_entry = CacheEntry::new(
@@ -281,7 +279,7 @@ async fn bin_install_inner(
         return Ok(cache_entry.into_path_buf());
     }
 
-    let format = if os.is_windows() {
+    let format = if platform.os.is_windows() {
         ArchiveFormat::Zip
     } else {
         ArchiveFormat::TarGz
@@ -365,46 +363,4 @@ async fn bin_install_inner(
     }
 
     Ok(cache_entry.into_path_buf())
-}
-
-/// Cast platform types to the binary target triple format used by cargo-dist.
-///
-/// This performs some normalization to match cargo-dist's styling.
-fn cargo_dist_platform(os: Os, arch: Arch, libc: Libc) -> String {
-    use target_lexicon::{
-        Architecture, ArmArchitecture, OperatingSystem, Riscv64Architecture, X86_32Architecture,
-    };
-    let arch_name = match arch.family() {
-        // Special cases where Display doesn't match target triple
-        Architecture::X86_32(X86_32Architecture::I686) => "i686".to_string(),
-        Architecture::Riscv64(Riscv64Architecture::Riscv64) => "riscv64gc".to_string(),
-        _ => arch.to_string(),
-    };
-    let vendor = match &*os {
-        OperatingSystem::Darwin(_) => "apple",
-        OperatingSystem::Windows => "pc",
-        _ => "unknown",
-    };
-    let os_name = match &*os {
-        OperatingSystem::Darwin(_) => "darwin",
-        _ => &os.to_string(),
-    };
-
-    let abi = match (&*os, libc) {
-        (OperatingSystem::Windows, _) => Some("msvc".to_string()),
-        (OperatingSystem::Linux, Libc::Some(env)) => Some({
-            // Special suffix for ARM with hardware float
-            if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7)) {
-                format!("{env}eabihf")
-            } else {
-                env.to_string()
-            }
-        }),
-        _ => None,
-    };
-
-    format!(
-        "{arch_name}-{vendor}-{os_name}{abi}",
-        abi = abi.map(|abi| format!("-{abi}")).unwrap_or_default()
-    )
 }

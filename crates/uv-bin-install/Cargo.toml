@@ -24,14 +24,11 @@ uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform = { workspace = true }
-
-anyhow = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
-target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
