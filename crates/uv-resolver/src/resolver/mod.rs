@@ -35,7 +35,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -523,39 +523,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )?;
 
                     // Pick the next compatible version.
-                    let version = match decision {
-                        None => {
-                            debug!("No compatible version found for: {next_package}");
+                    let Some(version) = decision else {
+                        debug!("No compatible version found for: {next_package}");
 
-                            let term_intersection = state
-                                .pubgrub
-                                .partial_solution
-                                .term_intersection_for_package(next_id)
-                                .expect("a package was chosen but we don't have a term");
+                        let term_intersection = state
+                            .pubgrub
+                            .partial_solution
+                            .term_intersection_for_package(next_id)
+                            .expect("a package was chosen but we don't have a term");
 
-                            if let PubGrubPackageInner::Package { name, .. } = &**next_package {
-                                // Check if the decision was due to the package being unavailable
-                                if let Some(entry) = self.unavailable_packages.get(name) {
-                                    state.pubgrub.add_incompatibility(
-                                        Incompatibility::custom_term(
-                                            next_id,
-                                            term_intersection.clone(),
-                                            UnavailableReason::Package(entry.clone()),
-                                        ),
-                                    );
-                                    continue;
-                                }
+                        if let PubGrubPackageInner::Package { name, .. } = &**next_package {
+                            // Check if the decision was due to the package being unavailable
+                            if let Some(entry) = self.unavailable_packages.get(name) {
+                                state
+                                    .pubgrub
+                                    .add_incompatibility(Incompatibility::custom_term(
+                                        next_id,
+                                        term_intersection.clone(),
+                                        UnavailableReason::Package(entry.clone()),
+                                    ));
+                                continue;
                             }
-
-                            state
-                                .pubgrub
-                                .add_incompatibility(Incompatibility::no_versions(
-                                    next_id,
-                                    term_intersection.clone(),
-                                ));
-                            continue;
                         }
-                        Some(version) => version,
+
+                        state
+                            .pubgrub
+                            .add_incompatibility(Incompatibility::no_versions(
+                                next_id,
+                                term_intersection.clone(),
+                            ));
+                        continue;
                     };
 
                     let version = match version {
@@ -711,12 +708,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 resolutions.len()
             );
         }
-        for resolution in &resolutions {
-            if let Some(env) = resolution.env.end_user_fork_display() {
-                debug!(
-                    "Distinct solution for {env} with {} packages",
-                    resolution.nodes.len()
-                );
+        if tracing::enabled!(Level::DEBUG) {
+            for resolution in &resolutions {
+                if let Some(env) = resolution.env.end_user_fork_display() {
+                    let packages: FxHashSet<_> = resolution
+                        .nodes
+                        .keys()
+                        .map(|package| &package.name)
+                        .collect();
+                    debug!(
+                        "Distinct solution for {env} with {} package(s)",
+                        packages.len()
+                    );
+                }
             }
         }
         for resolution in &resolutions {
@@ -942,6 +946,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let PubGrubDependency {
                 package,
                 version: _,
+                parent: _,
                 url: _,
             } = dependency;
             let url = package.name().and_then(|name| state.fork_urls.get(name));
@@ -1746,7 +1751,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.conflicts,
                             requirement,
                             None,
-                            None,
+                            Some(package),
                         )
                     })
                     .collect()
@@ -1862,7 +1867,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &self.conflicts,
                             requirement,
                             dev.as_ref(),
-                            Some(name),
+                            Some(package),
                         )
                     })
                     .chain(system_dependencies)
@@ -1886,6 +1891,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 marker,
                             }),
                             version: Range::singleton(version.clone()),
+                            parent: None,
                             url: None,
                         })
                         .collect(),
@@ -1913,6 +1919,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         marker,
                                     }),
                                     version: Range::singleton(version.clone()),
+                                    parent: None,
                                     url: None,
                                 })
                         })
@@ -1934,6 +1941,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 marker,
                             }),
                             version: Range::singleton(version.clone()),
+                            parent: None,
                             url: None,
                         })
                         .collect(),
@@ -2797,6 +2805,7 @@ impl ForkState {
             let PubGrubDependency {
                 package,
                 version,
+                parent: _,
                 url,
             } = dependency;
 
@@ -2868,6 +2877,7 @@ impl ForkState {
                 let PubGrubDependency {
                     package,
                     version,
+                    parent: _,
                     url: _,
                 } = dependency;
                 (package, version)
@@ -3330,7 +3340,7 @@ pub(crate) enum Request {
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {
-    fn from(dist: ResolvedDistRef<'a>) -> Request {
+    fn from(dist: ResolvedDistRef<'a>) -> Self {
         // N.B. This is almost identical to `ResolvedDistRef::to_owned`, but
         // creates a `Request` instead of a `ResolvedDist`. There's probably
         // some room for DRYing this up a bit. The obvious way would be to
@@ -3346,7 +3356,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                     (&source.name, &source.version),
                     "expected chosen sdist to match prioritized sdist"
                 );
-                Request::Dist(Dist::Source(SourceDist::Registry(source)))
+                Self::Dist(Dist::Source(SourceDist::Registry(source)))
             }
             ResolvedDistRef::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
@@ -3359,9 +3369,9 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized.built_dist().expect("at least one wheel");
-                Request::Dist(Dist::Built(BuiltDist::Registry(built)))
+                Self::Dist(Dist::Built(BuiltDist::Registry(built)))
             }
-            ResolvedDistRef::Installed { dist } => Request::Installed(dist.clone()),
+            ResolvedDistRef::Installed { dist } => Self::Installed(dist.clone()),
         }
     }
 }
@@ -3438,9 +3448,9 @@ impl Dependencies {
         conflicts: &Conflicts,
     ) -> ForkedDependencies {
         let deps = match self {
-            Dependencies::Available(deps) => deps,
-            Dependencies::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
-            Dependencies::Unavailable(err) => return ForkedDependencies::Unavailable(err),
+            Self::Available(deps) => deps,
+            Self::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
+            Self::Unavailable(err) => return ForkedDependencies::Unavailable(err),
         };
         let mut name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>> = BTreeMap::new();
         for dep in deps {
@@ -3512,7 +3522,7 @@ impl Forks {
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         conflicts: &Conflicts,
-    ) -> Forks {
+    ) -> Self {
         let python_marker = python_requirement.to_marker_tree();
 
         let mut forks = vec![Fork::new(env.clone())];
@@ -3650,7 +3660,7 @@ impl Forks {
                     continue;
                 }
 
-                // Create a fork that excludes ALL extras.
+                // Create a fork that excludes ALL conflicts.
                 if let Some(fork_none) = fork.clone().filter(set.iter().cloned().map(Err)) {
                     new.push(fork_none);
                 }
@@ -3676,7 +3686,7 @@ impl Forks {
             }
             forks = new;
         }
-        Forks {
+        Self {
             forks,
             diverging_packages,
         }
@@ -3726,8 +3736,8 @@ struct Fork {
 impl Fork {
     /// Create a new fork with no dependencies with the given resolver
     /// environment.
-    fn new(env: ResolverEnvironment) -> Fork {
-        Fork {
+    fn new(env: ResolverEnvironment) -> Self {
+        Self {
             dependencies: vec![],
             conflicts: crate::FxHashbrownSet::default(),
             env,
@@ -3736,7 +3746,7 @@ impl Fork {
 
     /// Add a dependency to this fork.
     fn add_dependency(&mut self, dep: PubGrubDependency) {
-        if let Some(conflicting_item) = dep.package.conflicting_item() {
+        if let Some(conflicting_item) = dep.conflicting_item() {
             self.conflicts.insert(conflicting_item.to_owned());
         }
         self.dependencies.push(dep);
@@ -3753,7 +3763,7 @@ impl Fork {
             if self.env.included_by_marker(marker) {
                 return true;
             }
-            if let Some(conflicting_item) = dep.package.conflicting_item() {
+            if let Some(conflicting_item) = dep.conflicting_item() {
                 self.conflicts.remove(&conflicting_item);
             }
             false
@@ -3775,14 +3785,25 @@ impl Fork {
     fn filter(
         mut self,
         rules: impl IntoIterator<Item = Result<ConflictItem, ConflictItem>>,
-    ) -> Option<Fork> {
+    ) -> Option<Self> {
         self.env = self.env.filter_by_group(rules)?;
         self.dependencies.retain(|dep| {
-            let Some(conflicting_item) = dep.package.conflicting_item() else {
+            let Some(conflicting_item) = dep.conflicting_item() else {
                 return true;
             };
             if self.env.included_by_group(conflicting_item) {
                 return true;
+            }
+            match conflicting_item.kind() {
+                // We should not filter entire projects unless they're a top-level dependency
+                // Otherwise, we'll fail to solve for children of the project, like extras
+                ConflictKindRef::Project => {
+                    if dep.parent.is_some() {
+                        return true;
+                    }
+                }
+                ConflictKindRef::Group(_) => {}
+                ConflictKindRef::Extra(_) => {}
             }
             self.conflicts.remove(&conflicting_item);
             false
@@ -3838,7 +3859,7 @@ impl Fork {
 impl Eq for Fork {}
 
 impl PartialEq for Fork {
-    fn eq(&self, other: &Fork) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.dependencies == other.dependencies && self.env == other.env
     }
 }

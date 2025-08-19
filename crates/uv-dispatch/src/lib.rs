@@ -17,16 +17,15 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PackageConfigSettings,
-    Preview, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, Constraints, IndexStrategy, Preview, Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
-use uv_distribution::ExtraBuildRequires;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, Identifier, IndexCapabilities, IndexLocations,
-    IsBuildBackendError, Name, Requirement, Resolution, SourceDist, VersionOrUrlRef,
+    CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
+    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -66,12 +65,12 @@ pub enum BuildDispatchError {
 impl IsBuildBackendError for BuildDispatchError {
     fn is_build_backend_error(&self) -> bool {
         match self {
-            BuildDispatchError::Tags(_)
-            | BuildDispatchError::Resolve(_)
-            | BuildDispatchError::Join(_)
-            | BuildDispatchError::Anyhow(_)
-            | BuildDispatchError::Prepare(_) => false,
-            BuildDispatchError::BuildFrontend(err) => err.is_build_backend_error(),
+            Self::Tags(_)
+            | Self::Resolve(_)
+            | Self::Join(_)
+            | Self::Anyhow(_)
+            | Self::Prepare(_) => false,
+            Self::BuildFrontend(err) => err.is_build_backend_error(),
         }
     }
 }
@@ -81,7 +80,7 @@ impl IsBuildBackendError for BuildDispatchError {
 pub struct BuildDispatch<'a> {
     client: &'a RegistryClient,
     cache: &'a Cache,
-    constraints: Constraints,
+    constraints: &'a Constraints,
     interpreter: &'a Interpreter,
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
@@ -90,6 +89,7 @@ pub struct BuildDispatch<'a> {
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
     extra_build_requires: &'a ExtraBuildRequires,
+    extra_build_variables: &'a ExtraBuildVariables,
     link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
@@ -108,7 +108,7 @@ impl<'a> BuildDispatch<'a> {
     pub fn new(
         client: &'a RegistryClient,
         cache: &'a Cache,
-        constraints: Constraints,
+        constraints: &'a Constraints,
         interpreter: &'a Interpreter,
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
@@ -119,6 +119,7 @@ impl<'a> BuildDispatch<'a> {
         config_settings_package: &'a PackageConfigSettings,
         build_isolation: BuildIsolation<'a>,
         extra_build_requires: &'a ExtraBuildRequires,
+        extra_build_variables: &'a ExtraBuildVariables,
         link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
@@ -142,6 +143,7 @@ impl<'a> BuildDispatch<'a> {
             config_settings_package,
             build_isolation,
             extra_build_requires,
+            extra_build_variables,
             link_mode,
             build_options,
             hasher,
@@ -203,6 +205,10 @@ impl BuildContext for BuildDispatch<'_> {
         self.build_options
     }
 
+    fn build_isolation(&self) -> BuildIsolation<'_> {
+        self.build_isolation
+    }
+
     fn config_settings(&self) -> &ConfigSettings {
         self.config_settings
     }
@@ -223,8 +229,12 @@ impl BuildContext for BuildDispatch<'_> {
         &self.workspace_cache
     }
 
-    fn extra_build_dependencies(&self) -> &uv_workspace::pyproject::ExtraBuildDependencies {
-        &self.extra_build_requires.extra_build_dependencies
+    fn extra_build_requires(&self) -> &ExtraBuildRequires {
+        self.extra_build_requires
+    }
+
+    fn extra_build_variables(&self) -> &ExtraBuildVariables {
+        self.extra_build_variables
     }
 
     async fn resolve<'data>(
@@ -311,6 +321,8 @@ impl BuildContext for BuildDispatch<'_> {
             self.index_locations,
             self.config_settings,
             self.config_settings_package,
+            self.extra_build_requires(),
+            self.extra_build_variables,
             self.cache(),
             venv,
             tags,
@@ -381,7 +393,7 @@ impl BuildContext for BuildDispatch<'_> {
                 if wheels.len() == 1 { "" } else { "s" },
                 wheels.iter().map(ToString::to_string).join(", ")
             );
-            wheels = Installer::new(venv)
+            wheels = Installer::new(venv, self.preview)
                 .with_link_mode(self.link_mode)
                 .with_cache(self.cache)
                 .install(wheels)
@@ -445,6 +457,18 @@ impl BuildContext for BuildDispatch<'_> {
             self.config_settings.clone()
         };
 
+        // Get package-specific environment variables if available.
+        let mut environment_variables = self.build_extra_env_vars.clone();
+        if let Some(name) = dist_name {
+            if let Some(package_vars) = self.extra_build_variables.get(name) {
+                environment_variables.extend(
+                    package_vars
+                        .iter()
+                        .map(|(key, value)| (OsString::from(key), OsString::from(value))),
+                );
+            }
+        }
+
         let builder = SourceBuild::setup(
             source,
             subdirectory,
@@ -460,10 +484,10 @@ impl BuildContext for BuildDispatch<'_> {
             self.workspace_cache(),
             config_settings,
             self.build_isolation,
-            &self.extra_build_requires.extra_build_dependencies,
+            self.extra_build_requires,
             &build_stack,
             build_kind,
-            self.build_extra_env_vars.clone(),
+            environment_variables,
             build_output,
             self.concurrency.builds,
             self.preview,

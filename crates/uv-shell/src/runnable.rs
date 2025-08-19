@@ -2,8 +2,27 @@
 
 use std::env::consts::EXE_EXTENSION;
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Append an extension to a [`PathBuf`].
+///
+/// Unlike [`Path::with_extension`], this function does not replace an existing extension.
+///
+/// If there is no file name, the path is returned unchanged.
+///
+/// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
+fn add_extension_to_path(mut path: PathBuf, extension: &str) -> PathBuf {
+    let Some(name) = path.file_name() else {
+        // If there is no file name, we cannot add an extension.
+        return path;
+    };
+    let mut name = name.to_os_string();
+    name.push(".");
+    name.push(extension.trim_start_matches('.'));
+    path.set_file_name(name);
+    path
+}
 
 #[derive(Debug)]
 pub enum WindowsRunnable {
@@ -90,11 +109,153 @@ impl WindowsRunnable {
             .map(|script_type| {
                 (
                     script_type,
-                    script_path.with_extension(script_type.to_extension()),
+                    add_extension_to_path(script_path.clone(), script_type.to_extension()),
                 )
             })
             .find(|(_, script_path)| script_path.is_file())
             .map(|(script_type, script_path)| script_type.as_command(&script_path))
             .unwrap_or_else(|| Command::new(runnable_name))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[cfg(target_os = "windows")]
+    use fs_err as fs;
+    #[cfg(target_os = "windows")]
+    use std::io;
+
+    #[test]
+    fn test_add_extension_to_path() {
+        // Test with simple package name (no dots)
+        let path = PathBuf::from("python");
+        let result = add_extension_to_path(path, "exe");
+        assert_eq!(result, PathBuf::from("python.exe"));
+
+        // Test with package name containing single dot
+        let path = PathBuf::from("awslabs.cdk-mcp-server");
+        let result = add_extension_to_path(path, "exe");
+        assert_eq!(result, PathBuf::from("awslabs.cdk-mcp-server.exe"));
+
+        // Test with package name containing multiple dots
+        let path = PathBuf::from("org.example.tool");
+        let result = add_extension_to_path(path, "exe");
+        assert_eq!(result, PathBuf::from("org.example.tool.exe"));
+
+        // Test with different extensions
+        let path = PathBuf::from("script");
+        let result = add_extension_to_path(path, "ps1");
+        assert_eq!(result, PathBuf::from("script.ps1"));
+
+        // Test with path that has directory components
+        let path = PathBuf::from("some/path/to/awslabs.cdk-mcp-server");
+        let result = add_extension_to_path(path, "exe");
+        assert_eq!(
+            result,
+            PathBuf::from("some/path/to/awslabs.cdk-mcp-server.exe")
+        );
+
+        // Test with empty path (edge case)
+        let path = PathBuf::new();
+        let result = add_extension_to_path(path.clone(), "exe");
+        assert_eq!(result, path); // Should return unchanged
+    }
+
+    /// Helper function to create a temporary directory with test files
+    #[cfg(target_os = "windows")]
+    fn create_test_environment() -> io::Result<tempfile::TempDir> {
+        let temp_dir = tempfile::tempdir()?;
+        let scripts_dir = temp_dir.path().join("Scripts");
+        fs::create_dir_all(&scripts_dir)?;
+
+        // Create test executable files
+        fs::write(scripts_dir.join("python.exe"), "")?;
+        fs::write(scripts_dir.join("awslabs.cdk-mcp-server.exe"), "")?;
+        fs::write(scripts_dir.join("org.example.tool.exe"), "")?;
+        fs::write(scripts_dir.join("multi.dot.package.name.exe"), "")?;
+        fs::write(scripts_dir.join("script.ps1"), "")?;
+        fs::write(scripts_dir.join("batch.bat"), "")?;
+        fs::write(scripts_dir.join("command.cmd"), "")?;
+        fs::write(scripts_dir.join("explicit.ps1"), "")?;
+
+        Ok(temp_dir)
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_from_script_path_single_dot_package() {
+        let temp_dir = create_test_environment().expect("Failed to create test environment");
+        let scripts_dir = temp_dir.path().join("Scripts");
+
+        // Test package name with single dot (awslabs.cdk-mcp-server)
+        let command =
+            WindowsRunnable::from_script_path(&scripts_dir, OsStr::new("awslabs.cdk-mcp-server"));
+
+        // The command should be constructed with the correct executable path
+        let expected_path = scripts_dir.join("awslabs.cdk-mcp-server.exe");
+        assert_eq!(command.get_program(), expected_path.as_os_str());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_from_script_path_multiple_dots_package() {
+        let temp_dir = create_test_environment().expect("Failed to create test environment");
+        let scripts_dir = temp_dir.path().join("Scripts");
+
+        // Test package name with multiple dots (org.example.tool)
+        let command =
+            WindowsRunnable::from_script_path(&scripts_dir, OsStr::new("org.example.tool"));
+
+        let expected_path = scripts_dir.join("org.example.tool.exe");
+        assert_eq!(command.get_program(), expected_path.as_os_str());
+
+        // Test another multi-dot package
+        let command =
+            WindowsRunnable::from_script_path(&scripts_dir, OsStr::new("multi.dot.package.name"));
+
+        let expected_path = scripts_dir.join("multi.dot.package.name.exe");
+        assert_eq!(command.get_program(), expected_path.as_os_str());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_from_script_path_simple_package_name() {
+        let temp_dir = create_test_environment().expect("Failed to create test environment");
+        let scripts_dir = temp_dir.path().join("Scripts");
+
+        // Test simple package name without dots
+        let command = WindowsRunnable::from_script_path(&scripts_dir, OsStr::new("python"));
+
+        let expected_path = scripts_dir.join("python.exe");
+        assert_eq!(command.get_program(), expected_path.as_os_str());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_from_script_path_explicit_extensions() {
+        let temp_dir = create_test_environment().expect("Failed to create test environment");
+        let scripts_dir = temp_dir.path().join("Scripts");
+
+        // Test explicit .ps1 extension
+        let command = WindowsRunnable::from_script_path(&scripts_dir, OsStr::new("explicit.ps1"));
+
+        let expected_path = scripts_dir.join("explicit.ps1");
+        assert_eq!(command.get_program(), "powershell");
+
+        // Verify the arguments contain the script path
+        let args: Vec<&OsStr> = command.get_args().collect();
+        assert!(args.contains(&OsStr::new("-File")));
+        assert!(args.contains(&expected_path.as_os_str()));
+
+        // Test explicit .bat extension
+        let command = WindowsRunnable::from_script_path(&scripts_dir, OsStr::new("batch.bat"));
+        assert_eq!(command.get_program(), "cmd");
+
+        // Test explicit .cmd extension
+        let command = WindowsRunnable::from_script_path(&scripts_dir, OsStr::new("command.cmd"));
+        assert_eq!(command.get_program(), "cmd");
     }
 }

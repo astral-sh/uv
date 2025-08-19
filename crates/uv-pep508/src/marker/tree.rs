@@ -268,7 +268,7 @@ impl MarkerOperator {
     }
 
     /// Inverts this marker operator.
-    pub(crate) fn invert(self) -> MarkerOperator {
+    pub(crate) fn invert(self) -> Self {
         match self {
             Self::LessThan => Self::GreaterThan,
             Self::LessEqual => Self::GreaterEqual,
@@ -288,7 +288,7 @@ impl MarkerOperator {
     ///
     /// If a negation doesn't exist, which is only the case for ~=, then this
     /// returns `None`.
-    pub(crate) fn negate(self) -> Option<MarkerOperator> {
+    pub(crate) fn negate(self) -> Option<Self> {
         Some(match self {
             Self::Equal => Self::NotEqual,
             Self::NotEqual => Self::Equal,
@@ -307,37 +307,34 @@ impl MarkerOperator {
     /// Returns the marker operator and value whose union represents the given range.
     pub fn from_bounds(
         bounds: (&Bound<ArcStr>, &Bound<ArcStr>),
-    ) -> impl Iterator<Item = (MarkerOperator, ArcStr)> {
+    ) -> impl Iterator<Item = (Self, ArcStr)> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
-                (Some((MarkerOperator::Equal, v1.clone())), None)
+                (Some((Self::Equal, v1.clone())), None)
             }
             (Bound::Excluded(v1), Bound::Excluded(v2)) if v1 == v2 => {
-                (Some((MarkerOperator::NotEqual, v1.clone())), None)
+                (Some((Self::NotEqual, v1.clone())), None)
             }
-            (lower, upper) => (
-                MarkerOperator::from_lower_bound(lower),
-                MarkerOperator::from_upper_bound(upper),
-            ),
+            (lower, upper) => (Self::from_lower_bound(lower), Self::from_upper_bound(upper)),
         };
 
         b1.into_iter().chain(b2)
     }
 
     /// Returns a value specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(MarkerOperator, ArcStr)> {
+    pub fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
         match bound {
-            Bound::Included(value) => Some((MarkerOperator::GreaterEqual, value.clone())),
-            Bound::Excluded(value) => Some((MarkerOperator::GreaterThan, value.clone())),
+            Bound::Included(value) => Some((Self::GreaterEqual, value.clone())),
+            Bound::Excluded(value) => Some((Self::GreaterThan, value.clone())),
             Bound::Unbounded => None,
         }
     }
 
     /// Returns a value specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(MarkerOperator, ArcStr)> {
+    pub fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(Self, ArcStr)> {
         match bound {
-            Bound::Included(value) => Some((MarkerOperator::LessEqual, value.clone())),
-            Bound::Excluded(value) => Some((MarkerOperator::LessThan, value.clone())),
+            Bound::Included(value) => Some((Self::LessEqual, value.clone())),
+            Bound::Excluded(value) => Some((Self::LessThan, value.clone())),
             Bound::Unbounded => None,
         }
     }
@@ -574,19 +571,19 @@ impl ExtraOperator {
     /// Creates a [`ExtraOperator`] from an equivalent [`MarkerOperator`].
     ///
     /// Returns `None` if the operator is not supported for extras.
-    pub(crate) fn from_marker_operator(operator: MarkerOperator) -> Option<ExtraOperator> {
+    pub(crate) fn from_marker_operator(operator: MarkerOperator) -> Option<Self> {
         match operator {
-            MarkerOperator::Equal => Some(ExtraOperator::Equal),
-            MarkerOperator::NotEqual => Some(ExtraOperator::NotEqual),
+            MarkerOperator::Equal => Some(Self::Equal),
+            MarkerOperator::NotEqual => Some(Self::NotEqual),
             _ => None,
         }
     }
 
     /// Negates this operator.
-    pub(crate) fn negate(&self) -> ExtraOperator {
-        match *self {
-            ExtraOperator::Equal => ExtraOperator::NotEqual,
-            ExtraOperator::NotEqual => ExtraOperator::Equal,
+    pub(crate) fn negate(&self) -> Self {
+        match self {
+            Self::Equal => Self::NotEqual,
+            Self::NotEqual => Self::Equal,
         }
     }
 }
@@ -613,10 +610,10 @@ impl ContainerOperator {
     /// Creates a [`ContainerOperator`] from an equivalent [`MarkerOperator`].
     ///
     /// Returns `None` if the operator is not supported for containers.
-    pub(crate) fn from_marker_operator(operator: MarkerOperator) -> Option<ContainerOperator> {
+    pub(crate) fn from_marker_operator(operator: MarkerOperator) -> Option<Self> {
         match operator {
-            MarkerOperator::In => Some(ContainerOperator::In),
-            MarkerOperator::NotIn => Some(ContainerOperator::NotIn),
+            MarkerOperator::In => Some(Self::In),
+            MarkerOperator::NotIn => Some(Self::NotIn),
             _ => None,
         }
     }
@@ -660,17 +657,17 @@ impl MarkerExpression {
     /// that are ignored, such as `os_name ~= 'foo'`.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Option<Self>, Pep508Error> {
-        MarkerExpression::parse_reporter(s, &mut TracingReporter)
+        Self::parse_reporter(s, &mut TracingReporter)
     }
 
     /// Return the kind of this marker expression.
     pub(crate) fn kind(&self) -> MarkerExpressionKind {
         match self {
-            MarkerExpression::Version { key, .. } => MarkerExpressionKind::Version(*key),
-            MarkerExpression::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
-            MarkerExpression::String { key, .. } => MarkerExpressionKind::String(*key),
-            MarkerExpression::List { pair, .. } => MarkerExpressionKind::List(pair.key()),
-            MarkerExpression::Extra { .. } => MarkerExpressionKind::Extra,
+            Self::Version { key, .. } => MarkerExpressionKind::Version(*key),
+            Self::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
+            Self::String { key, .. } => MarkerExpressionKind::String(*key),
+            Self::List { pair, .. } => MarkerExpressionKind::List(pair.key()),
+            Self::Extra { .. } => MarkerExpressionKind::Extra,
         }
     }
 }
@@ -678,7 +675,7 @@ impl MarkerExpression {
 impl Display for MarkerExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            MarkerExpression::Version { key, specifier } => {
+            Self::Version { key, specifier } => {
                 let (op, version) = (specifier.operator(), specifier.version());
                 if op == &uv_pep440::Operator::EqualStar || op == &uv_pep440::Operator::NotEqualStar
                 {
@@ -686,7 +683,7 @@ impl Display for MarkerExpression {
                 }
                 write!(f, "{key} {op} '{version}'")
             }
-            MarkerExpression::VersionIn {
+            Self::VersionIn {
                 key,
                 versions,
                 operator,
@@ -694,7 +691,7 @@ impl Display for MarkerExpression {
                 let versions = versions.iter().map(ToString::to_string).join(" ");
                 write!(f, "{key} {operator} '{versions}'")
             }
-            MarkerExpression::String {
+            Self::String {
                 key,
                 operator,
                 value,
@@ -708,10 +705,10 @@ impl Display for MarkerExpression {
 
                 write!(f, "{key} {operator} '{value}'")
             }
-            MarkerExpression::List { pair, operator } => {
+            Self::List { pair, operator } => {
                 write!(f, "'{}' {} {}", pair.value(), operator, pair.key())
             }
-            MarkerExpression::Extra { operator, name } => {
+            Self::Extra { operator, name } => {
                 write!(f, "extra {operator} '{name}'")
             }
         }
@@ -773,7 +770,7 @@ pub struct MarkerTree(NodeId);
 
 impl Default for MarkerTree {
     fn default() -> Self {
-        MarkerTree::TRUE
+        Self::TRUE
     }
 }
 
@@ -823,14 +820,14 @@ impl MarkerTree {
     }
 
     /// An empty marker that always evaluates to `true`.
-    pub const TRUE: MarkerTree = MarkerTree(NodeId::TRUE);
+    pub const TRUE: Self = Self(NodeId::TRUE);
 
     /// An unsatisfiable marker that always evaluates to `false`.
-    pub const FALSE: MarkerTree = MarkerTree(NodeId::FALSE);
+    pub const FALSE: Self = Self(NodeId::FALSE);
 
     /// Returns a marker tree for a single expression.
-    pub fn expression(expr: MarkerExpression) -> MarkerTree {
-        MarkerTree(INTERNER.lock().expression(expr))
+    pub fn expression(expr: MarkerExpression) -> Self {
+        Self(INTERNER.lock().expression(expr))
     }
 
     /// Whether the marker always evaluates to `true`.
@@ -856,17 +853,17 @@ impl MarkerTree {
 
     /// Returns a new marker tree that is the negation of this one.
     #[must_use]
-    pub fn negate(self) -> MarkerTree {
-        MarkerTree(self.0.not())
+    pub fn negate(self) -> Self {
+        Self(self.0.not())
     }
 
     /// Combine this marker tree with the one given via a conjunction.
-    pub fn and(&mut self, tree: MarkerTree) {
+    pub fn and(&mut self, tree: Self) {
         self.0 = INTERNER.lock().and(self.0, tree.0);
     }
 
     /// Combine this marker tree with the one given via a disjunction.
-    pub fn or(&mut self, tree: MarkerTree) {
+    pub fn or(&mut self, tree: Self) {
         self.0 = INTERNER.lock().or(self.0, tree.0);
     }
 
@@ -875,7 +872,7 @@ impl MarkerTree {
     ///
     /// If the marker set is always `true`, then it can be said that `self`
     /// implies `consequent`.
-    pub fn implies(&mut self, consequent: MarkerTree) {
+    pub fn implies(&mut self, consequent: Self) {
         // This could probably be optimized, but is clearly
         // correct, since logical implication is `-P or Q`.
         *self = self.negate();
@@ -889,7 +886,7 @@ impl MarkerTree {
     /// never both evaluate to `true` in a given environment. However, this method may return
     /// false negatives, i.e. it may not be able to detect that two markers are disjoint for
     /// complex expressions.
-    pub fn is_disjoint(self, other: MarkerTree) -> bool {
+    pub fn is_disjoint(self, other: Self) -> bool {
         INTERNER.lock().is_disjoint(self.0, other.0)
     }
 
@@ -1161,6 +1158,32 @@ impl MarkerTree {
         }
     }
 
+    /// Returns true if this marker simplifies to true if the given set of extras is activated.
+    pub fn evaluate_only_extras(self, extras: &[ExtraName]) -> bool {
+        match self.kind() {
+            MarkerTreeKind::True => true,
+            MarkerTreeKind::False => false,
+            MarkerTreeKind::Version(marker) => marker
+                .edges()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+            MarkerTreeKind::String(marker) => marker
+                .children()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+            MarkerTreeKind::In(marker) => marker
+                .children()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+            MarkerTreeKind::Contains(marker) => marker
+                .children()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+            MarkerTreeKind::List(marker) => marker
+                .children()
+                .all(|(_, tree)| tree.evaluate_only_extras(extras)),
+            MarkerTreeKind::Extra(marker) => marker
+                .edge(extras.contains(marker.name().extra()))
+                .evaluate_only_extras(extras),
+        }
+    }
+
     /// Find a top level `extra == "..."` expression.
     ///
     /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
@@ -1240,12 +1263,8 @@ impl MarkerTree {
     /// results of that simplification. (If `requires-python` changes, then one
     /// should reconstitute all relevant markers from the source data.)
     #[must_use]
-    pub fn simplify_python_versions(
-        self,
-        lower: Bound<&Version>,
-        upper: Bound<&Version>,
-    ) -> MarkerTree {
-        MarkerTree(
+    pub fn simplify_python_versions(self, lower: Bound<&Version>, upper: Bound<&Version>) -> Self {
+        Self(
             INTERNER
                 .lock()
                 .simplify_python_versions(self.0, lower, upper),
@@ -1264,8 +1283,8 @@ impl MarkerTree {
         self,
         lower: Bound<&Version>,
         upper: Bound<&Version>,
-    ) -> MarkerTree {
-        MarkerTree(
+    ) -> Self {
+        Self(
             INTERNER
                 .lock()
                 .complexify_python_versions(self.0, lower, upper),
@@ -1281,7 +1300,7 @@ impl MarkerTree {
     /// For example, if `dev` is a provided extra, given `sys_platform == 'linux' and extra == 'dev'`,
     /// the marker will be simplified to `sys_platform == 'linux'`.
     #[must_use]
-    pub fn simplify_extras(self, extras: &[ExtraName]) -> MarkerTree {
+    pub fn simplify_extras(self, extras: &[ExtraName]) -> Self {
         self.simplify_extras_with(|name| extras.contains(name))
     }
 
@@ -1296,7 +1315,7 @@ impl MarkerTree {
     /// == 'linux' and extra != 'dev'`, the marker will be simplified to
     /// `sys_platform == 'linux'`.
     #[must_use]
-    pub fn simplify_not_extras(self, extras: &[ExtraName]) -> MarkerTree {
+    pub fn simplify_not_extras(self, extras: &[ExtraName]) -> Self {
         self.simplify_not_extras_with(|name| extras.contains(name))
     }
 
@@ -1310,7 +1329,7 @@ impl MarkerTree {
     /// `sys_platform == 'linux' and extra == 'dev'`, the marker will be simplified to
     /// `sys_platform == 'linux'`.
     #[must_use]
-    pub fn simplify_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> MarkerTree {
+    pub fn simplify_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> Self {
         // Because `simplify_extras_with_impl` is recursive, and we need to use
         // our predicate in recursive calls, we need the predicate itself to
         // have some indirection (or else we'd have to clone it). To avoid a
@@ -1330,7 +1349,7 @@ impl MarkerTree {
     /// `sys_platform == 'linux' and extra != 'dev'`, the marker will be simplified to
     /// `sys_platform == 'linux'`.
     #[must_use]
-    pub fn simplify_not_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> MarkerTree {
+    pub fn simplify_not_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> Self {
         // Because `simplify_extras_with_impl` is recursive, and we need to use
         // our predicate in recursive calls, we need the predicate itself to
         // have some indirection (or else we'd have to clone it). To avoid a
@@ -1344,8 +1363,8 @@ impl MarkerTree {
     /// If the marker only consisted of `extra` expressions, then a marker that
     /// is always true is returned.
     #[must_use]
-    pub fn without_extras(self) -> MarkerTree {
-        MarkerTree(INTERNER.lock().without_extras(self.0))
+    pub fn without_extras(self) -> Self {
+        Self(INTERNER.lock().without_extras(self.0))
     }
 
     /// Returns a new `MarkerTree` where only `extra` expressions are removed.
@@ -1353,8 +1372,8 @@ impl MarkerTree {
     /// If the marker did not contain any `extra` expressions, then a marker
     /// that is always true is returned.
     #[must_use]
-    pub fn only_extras(self) -> MarkerTree {
-        MarkerTree(INTERNER.lock().only_extras(self.0))
+    pub fn only_extras(self) -> Self {
+        Self(INTERNER.lock().only_extras(self.0))
     }
 
     /// Calls the provided function on every `extra` in this tree.
@@ -1405,15 +1424,15 @@ impl MarkerTree {
         imp(self, &mut f);
     }
 
-    fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
-        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
+    fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
+        Self(INTERNER.lock().restrict(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(true),
             _ => None,
         }))
     }
 
-    fn simplify_not_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
-        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
+    fn simplify_not_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
+        Self(INTERNER.lock().restrict(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(false),
             _ => None,
         }))
@@ -3666,5 +3685,28 @@ mod test {
         let left = left_tree.try_to_string().unwrap();
         let right = "python_full_version == '3.10.*'";
         assert_eq!(left, right, "{left} != {right}");
+    }
+
+    #[test]
+    fn evaluate_only_extras() {
+        let a = ExtraName::from_str("a").unwrap();
+        let b = ExtraName::from_str("b").unwrap();
+
+        let marker = m("extra == 'a' and extra == 'b'");
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&a)));
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&b)));
+        assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
+
+        let marker = m("(platform_machine == 'inapplicable' and extra == 'b') or extra == 'a'");
+        assert!(marker.evaluate_only_extras(std::slice::from_ref(&a)));
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&b)));
+        assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
+
+        let marker = m(
+            "(platform_machine == 'inapplicable' and extra == 'a') or (platform_machine != 'inapplicable' and extra == 'b')",
+        );
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&a)));
+        assert!(!marker.evaluate_only_extras(std::slice::from_ref(&b)));
+        assert!(marker.evaluate_only_extras(&[a.clone(), b.clone()]));
     }
 }

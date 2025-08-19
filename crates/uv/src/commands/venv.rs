@@ -10,13 +10,14 @@ use thiserror::Error;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures,
-    SourceStrategy,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, IndexStrategy, KeyringProviderType,
+    NoBinary, NoBuild, Preview, PreviewFeatures, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution_types::Requirement;
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
+use uv_distribution_types::{
+    ConfigSettings, DependencyMetadata, ExtraBuildRequires, Index, IndexLocations,
+    PackageConfigSettings, Requirement,
+};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
@@ -29,7 +30,6 @@ use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
@@ -267,13 +267,13 @@ pub(crate) async fn venv(
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
-        let extra_build_requires =
-            uv_distribution::ExtraBuildRequires::from_lowered(ExtraBuildDependencies::default());
+        let extra_build_requires = ExtraBuildRequires::default();
+        let extra_build_variables = uv_distribution_types::ExtraBuildVariables::default();
         // Prep the build context.
         let build_dispatch = BuildDispatch::new(
             &client,
             cache,
-            build_constraints,
+            &build_constraints,
             interpreter,
             index_locations,
             &flat_index,
@@ -284,6 +284,7 @@ pub(crate) async fn venv(
             &config_settings_package,
             BuildIsolation::Isolated,
             &extra_build_requires,
+            &extra_build_variables,
             link_mode,
             &build_options,
             &build_hasher,

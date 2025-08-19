@@ -20,7 +20,8 @@ use uv_client::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, IndexUrl, InstalledDist, Name, SourceDist,
+    BuildInfo, BuildableSource, BuiltDist, Dist, HashPolicy, Hashed, IndexUrl, InstalledDist, Name,
+    SourceDist,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
@@ -140,7 +141,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         }
 
         let metadata = dist
-            .metadata()
+            .read_metadata()
             .map_err(|err| Error::ReadInstalled(Box::new(dist.clone()), err))?;
 
         Ok(ArchiveMetadata::from_metadata23(metadata))
@@ -220,6 +221,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                         cache: CacheInfo::default(),
+                        build: None,
                     }),
                     Err(Error::Extract(name, err)) => {
                         if err.is_http_streaming_unsupported() {
@@ -256,6 +258,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                             cache: CacheInfo::default(),
+                            build: None,
                         })
                     }
                     Err(err) => Err(err),
@@ -293,6 +296,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                         cache: CacheInfo::default(),
+                        build: None,
                     }),
                     Err(Error::Client(err)) if err.is_http_streaming_unsupported() => {
                         warn!(
@@ -322,6 +326,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                             cache: CacheInfo::default(),
+                            build: None,
                         })
                     }
                     Err(err) => Err(err),
@@ -387,6 +392,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     filename: built_wheel.filename,
                     hashes: built_wheel.hashes,
                     cache: built_wheel.cache_info,
+                    build: Some(built_wheel.build_info),
                 });
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
@@ -404,6 +410,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
             cache: built_wheel.cache_info,
+            build: Some(built_wheel.build_info),
         })
     }
 
@@ -726,7 +733,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Download the wheel to a temporary file.
                 let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
-                let mut writer = tokio::io::BufWriter::new(tokio::fs::File::from_std(temp_file));
+                let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
+                    // It's an unnamed file on Linux so that's the best approximation.
+                    fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
+                ));
 
                 match progress {
                     Some((reporter, progress)) => {
@@ -912,6 +922,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
+                build: None,
             })
         } else if hashes.is_none() {
             // Otherwise, unzip the wheel.
@@ -938,6 +949,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
+                build: None,
             })
         } else {
             // If necessary, compute the hashes of the wheel.
@@ -990,6 +1002,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
+                build: None,
             })
         }
     }
@@ -1051,7 +1064,7 @@ pub struct ManagedClient<'a> {
 
 impl<'a> ManagedClient<'a> {
     /// Create a new `ManagedClient` using the given client and concurrency limit.
-    fn new(client: &'a RegistryClient, concurrency: usize) -> ManagedClient<'a> {
+    fn new(client: &'a RegistryClient, concurrency: usize) -> Self {
         ManagedClient {
             unmanaged: client,
             control: Semaphore::new(concurrency),
@@ -1161,6 +1174,11 @@ impl HttpArchivePointer {
     pub fn to_cache_info(&self) -> CacheInfo {
         CacheInfo::default()
     }
+
+    /// Return the [`BuildInfo`] from the pointer.
+    pub fn to_build_info(&self) -> Option<BuildInfo> {
+        None
+    }
 }
 
 /// A pointer to an archive in the cache, fetched from a local path.
@@ -1176,7 +1194,7 @@ impl LocalArchivePointer {
     /// Read an [`LocalArchivePointer`] from the cache.
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::read(path) {
-            Ok(cached) => Ok(Some(rmp_serde::from_slice::<LocalArchivePointer>(&cached)?)),
+            Ok(cached) => Ok(Some(rmp_serde::from_slice::<Self>(&cached)?)),
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(Error::CacheRead(err)),
         }
@@ -1202,5 +1220,10 @@ impl LocalArchivePointer {
     /// Return the [`CacheInfo`] from the pointer.
     pub fn to_cache_info(&self) -> CacheInfo {
         CacheInfo::from_timestamp(self.timestamp)
+    }
+
+    /// Return the [`BuildInfo`] from the pointer.
+    pub fn to_build_info(&self) -> Option<BuildInfo> {
+        None
     }
 }

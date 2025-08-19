@@ -164,7 +164,7 @@ impl Name for ResolvedDistRef<'_> {
 }
 
 impl DistributionMetadata for ResolvedDistRef<'_> {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Installed { dist } => VersionOrUrlRef::Version(dist.version()),
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.version_or_url(),
@@ -201,7 +201,7 @@ impl Name for ResolvedDist {
 }
 
 impl DistributionMetadata for ResolvedDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Installed { dist } => dist.version_or_url(),
             Self::Installable { dist, .. } => dist.version_or_url(),

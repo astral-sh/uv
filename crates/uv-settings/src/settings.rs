@@ -4,15 +4,15 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageConfigSettings,
-    PackageNameSpecifier, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing,
+    IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion, TargetTriple,
+    TrustedHost, TrustedPublishing,
 };
 use uv_distribution_types::{
-    Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
+    PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
-
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
@@ -24,7 +24,8 @@ use uv_resolver::{
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
-use uv_workspace::{pyproject::ExtraBuildDependencies, pyproject_mut::AddBoundsKind};
+use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -377,6 +378,7 @@ pub struct ResolverOptions {
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+    pub extra_build_variables: Option<ExtraBuildVariables>,
     pub no_sources: Option<bool>,
 }
 
@@ -638,11 +640,24 @@ pub struct ResolverInstallerOptions {
         default = "[]",
         value_type = "dict",
         example = r#"
-        [extra-build-dependencies] 
+        [extra-build-dependencies]
         pytest = ["setuptools"]
     "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+    /// Extra environment variables to set when building certain packages.
+    ///
+    /// Environment variables will be added to the environment when building the
+    /// specified packages.
+    #[option(
+        default = r#"{}"#,
+        value_type = r#"dict[str, dict[str, str]]"#,
+        example = r#"
+            [tool.uv.extra-build-variables]
+            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+        "#
+    )]
+    pub extra_build_variables: Option<ExtraBuildVariables>,
     /// Limit candidate packages to those that were uploaded prior to a given point in time.
     ///
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
@@ -671,6 +686,11 @@ pub struct ResolverInstallerOptions {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[option(
         default = "\"clone\" (macOS) or \"hardlink\" (Linux, Windows)",
         value_type = "str",
@@ -886,7 +906,7 @@ pub struct PythonInstallMirrors {
 
 impl Default for PythonInstallMirrors {
     fn default() -> Self {
-        PythonInstallMirrors::resolve(None, None, None)
+        Self::resolve(None, None, None)
     }
 }
 
@@ -900,7 +920,7 @@ impl PythonInstallMirrors {
         let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
         let python_downloads_json_url_env =
             std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok();
-        PythonInstallMirrors {
+        Self {
             python_install_mirror: python_mirror_env.or(python_mirror),
             pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
             python_downloads_json_url: python_downloads_json_url_env.or(python_downloads_json_url),
@@ -1164,6 +1184,19 @@ pub struct PipOptions {
         "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+    /// Extra environment variables to set when building certain packages.
+    ///
+    /// Environment variables will be added to the environment when building the
+    /// specified packages.
+    #[option(
+        default = r#"{}"#,
+        value_type = r#"dict[str, dict[str, str]]"#,
+        example = r#"
+            [extra-build-variables]
+            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+        "#
+    )]
+    pub extra_build_variables: Option<ExtraBuildVariables>,
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[option(
@@ -1541,6 +1574,11 @@ pub struct PipOptions {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[option(
         default = "\"clone\" (macOS) or \"hardlink\" (Linux, Windows)",
         value_type = "str",
@@ -1749,6 +1787,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             extra_build_dependencies: value.extra_build_dependencies,
+            extra_build_variables: value.extra_build_variables,
             no_sources: value.no_sources,
         }
     }
@@ -1815,6 +1854,7 @@ pub struct ToolOptions {
     pub no_build_isolation: Option<bool>,
     pub no_build_isolation_package: Option<Vec<PackageName>>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+    pub extra_build_variables: Option<ExtraBuildVariables>,
     pub exclude_newer: Option<ExcludeNewerTimestamp>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
@@ -1845,6 +1885,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             extra_build_dependencies: value.extra_build_dependencies,
+            extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
@@ -1877,6 +1918,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_build_isolation: value.no_build_isolation,
             no_build_isolation_package: value.no_build_isolation_package,
             extra_build_dependencies: value.extra_build_dependencies,
+            extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
@@ -1932,6 +1974,7 @@ pub struct OptionsWire {
     no_build_isolation: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
+    extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerTimestamp>,
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
@@ -2052,6 +2095,7 @@ impl From<OptionsWire> for Options {
             default_groups,
             dependency_groups,
             extra_build_dependencies,
+            extra_build_variables,
             dev_dependencies,
             managed,
             package,
@@ -2093,6 +2137,7 @@ impl From<OptionsWire> for Options {
                 no_build_isolation,
                 no_build_isolation_package,
                 extra_build_dependencies,
+                extra_build_variables,
                 exclude_newer,
                 exclude_newer_package,
                 link_mode,

@@ -56,19 +56,18 @@ impl FlatDependencyGroups {
             .unwrap_or(&empty_settings);
 
         // Flatten the dependency groups.
-        let mut dependency_groups = FlatDependencyGroups::from_dependency_groups(
-            &dependency_groups,
-            group_settings.inner(),
-        )
-        .map_err(|err| DependencyGroupError {
-            package: pyproject_toml
-                .project
-                .as_ref()
-                .map(|project| project.name.to_string())
-                .unwrap_or_default(),
-            path: path.user_display().to_string(),
-            error: err.with_dev_dependencies(dev_dependencies),
-        })?;
+        let mut dependency_groups =
+            Self::from_dependency_groups(&dependency_groups, group_settings.inner()).map_err(
+                |err| DependencyGroupError {
+                    package: pyproject_toml
+                        .project
+                        .as_ref()
+                        .map(|project| project.name.to_string())
+                        .unwrap_or_default(),
+                    path: path.user_display().to_string(),
+                    error: err.with_dev_dependencies(dev_dependencies),
+                },
+            )?;
 
         // Add the `dev` group, if the legacy `dev-dependencies` is defined.
         //
@@ -226,7 +225,7 @@ impl FlatDependencyGroups {
     }
 
     /// Return the entry for a given group, if any.
-    pub fn entry(&mut self, group: GroupName) -> Entry<GroupName, FlatDependencyGroup> {
+    pub fn entry(&mut self, group: GroupName) -> Entry<'_, GroupName, FlatDependencyGroup> {
         self.0.entry(group)
     }
 

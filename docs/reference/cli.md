@@ -152,6 +152,7 @@ uv run [OPTIONS] [COMMAND]
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-run--link-mode"><a href="#uv-run--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -185,7 +186,7 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt id="uv-run--no-dev"><a href="#uv-run--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 <p>This option is only available when running in a project.</p>
-</dd><dt id="uv-run--no-editable"><a href="#uv-run--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-run--no-editable"><a href="#uv-run--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-run--no-env-file"><a href="#uv-run--no-env-file"><code>--no-env-file</code></a></dt><dd><p>Avoid reading environment variables from a <code>.env</code> file</p>
 <p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p></dd><dt id="uv-run--no-extra"><a href="#uv-run--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 <p>May be provided multiple times.</p>
@@ -457,7 +458,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-add--dev"><a href="#uv-add--dev"><code>--dev</code></a></dt><dd><p>Add the requirements to the development dependency group.</p>
 <p>This option is an alias for <code>--group dev</code>.</p>
-</dd><dt id="uv-add--directory"><a href="#uv-add--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>May also be set with the <code>UV_DEV</code> environment variable.</p></dd><dt id="uv-add--directory"><a href="#uv-add--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-add--editable"><a href="#uv-add--editable"><code>--editable</code></a></dt><dd><p>Add the requirements as editable</p>
@@ -510,6 +511,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-add--link-mode"><a href="#uv-add--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -655,7 +657,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
 <p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p></dd><dt id="uv-remove--dev"><a href="#uv-remove--dev"><code>--dev</code></a></dt><dd><p>Remove the packages from the development dependency group.</p>
 <p>This option is an alias for <code>--group dev</code>.</p>
-</dd><dt id="uv-remove--directory"><a href="#uv-remove--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>May also be set with the <code>UV_DEV</code> environment variable.</p></dd><dt id="uv-remove--directory"><a href="#uv-remove--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
 </dd><dt id="uv-remove--exclude-newer"><a href="#uv-remove--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
@@ -703,6 +705,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-remove--link-mode"><a href="#uv-remove--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -884,6 +887,7 @@ uv version [OPTIONS] [VALUE]
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-version--link-mode"><a href="#uv-version--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1081,6 +1085,7 @@ uv sync [OPTIONS]
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-sync--link-mode"><a href="#uv-sync--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1111,7 +1116,7 @@ uv sync [OPTIONS]
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-sync--no-dev"><a href="#uv-sync--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
-</dd><dt id="uv-sync--no-editable"><a href="#uv-sync--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-sync--no-editable"><a href="#uv-sync--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-sync--no-extra"><a href="#uv-sync--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-sync--no-group"><a href="#uv-sync--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
@@ -1177,6 +1182,7 @@ environment in the project.</p>
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -1322,6 +1328,7 @@ uv lock [OPTIONS]
 </ul></dd><dt id="uv-lock--link-mode"><a href="#uv-lock--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1500,6 +1507,7 @@ uv export [OPTIONS]
 </ul></dd><dt id="uv-export--link-mode"><a href="#uv-export--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1531,8 +1539,8 @@ uv export [OPTIONS]
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-export--no-dev"><a href="#uv-export--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
-</dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Export any editable dependencies, including the project and any workspace members, as non-editable</p>
-</dd><dt id="uv-export--no-emit-package"><a href="#uv-export--no-emit-package"><code>--no-emit-package</code></a>, <code>--no-install-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Export any editable dependencies, including the project and any workspace members, as non-editable</p>
+<p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-export--no-emit-package"><a href="#uv-export--no-emit-package"><code>--no-emit-package</code></a>, <code>--no-install-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
 <p>By default, all of the project's dependencies are included in the exported requirements file. The <code>--no-emit-package</code> option allows exclusion of specific packages.</p>
 </dd><dt id="uv-export--no-emit-project"><a href="#uv-export--no-emit-project"><code>--no-emit-project</code></a>, <code>--no-install-project</code></dt><dd><p>Do not emit the current project.</p>
 <p>By default, the current project is included in the exported requirements file with all of its dependencies. The <code>--no-emit-project</code> option allows the project to be excluded, but all of its dependencies to remain included.</p>
@@ -1691,6 +1699,7 @@ uv tree [OPTIONS]
 </ul></dd><dt id="uv-tree--link-mode"><a href="#uv-tree--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -1722,7 +1731,7 @@ uv tree [OPTIONS]
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-tree--no-dev"><a href="#uv-tree--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
-</dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
+<p>May also be set with the <code>UV_NO_DEV</code> environment variable.</p></dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-tree--no-index"><a href="#uv-tree--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
@@ -1771,6 +1780,7 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -2029,6 +2039,7 @@ uv tool run [OPTIONS] [COMMAND]
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-tool-run--link-mode"><a href="#uv-tool-run--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -2203,6 +2214,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-tool-install--link-mode"><a href="#uv-tool-install--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -2369,6 +2381,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-tool-upgrade--link-mode"><a href="#uv-tool-upgrade--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -3035,6 +3048,8 @@ uv python upgrade [OPTIONS] [TARGETS]...
 <p>Note that currently, only local paths are supported.</p>
 <p>May also be set with the <code>UV_PYTHON_DOWNLOADS_JSON_URL</code> environment variable.</p></dd><dt id="uv-python-upgrade--quiet"><a href="#uv-python-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-python-upgrade--reinstall"><a href="#uv-python-upgrade--reinstall"><code>--reinstall</code></a>, <code>-r</code></dt><dd><p>Reinstall the latest Python patch, if it's already installed.</p>
+<p>By default, uv will exit successfully if the latest patch is already installed.</p>
 </dd><dt id="uv-python-upgrade--verbose"><a href="#uv-python-upgrade--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
@@ -3541,6 +3556,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 </ul></dd><dt id="uv-pip-compile--link-mode"><a href="#uv-pip-compile--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -3619,6 +3635,7 @@ by <code>--python-version</code>.</p>
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -3831,6 +3848,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-pip-sync--link-mode"><a href="#uv-pip-sync--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -3887,6 +3905,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -4100,6 +4119,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
 </ul></dd><dt id="uv-pip-install--link-mode"><a href="#uv-pip-install--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -4173,6 +4193,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <li><code>linux</code>:  An alias for <code>x86_64-unknown-linux-gnu</code>, the default target for Linux</li>
 <li><code>macos</code>:  An alias for <code>aarch64-apple-darwin</code>, the default target for macOS</li>
 <li><code>x86_64-pc-windows-msvc</code>:  A 64-bit x86 Windows target</li>
+<li><code>aarch64-pc-windows-msvc</code>:  An ARM64 Windows target</li>
 <li><code>i686-pc-windows-msvc</code>:  A 32-bit x86 Windows target</li>
 <li><code>x86_64-unknown-linux-gnu</code>:  An x86 Linux target. Equivalent to <code>x86_64-manylinux_2_28</code></li>
 <li><code>aarch64-apple-darwin</code>:  An ARM-based macOS target, as seen on Apple Silicon devices</li>
@@ -4888,6 +4909,7 @@ uv venv [OPTIONS] [PATH]
 </ul></dd><dt id="uv-venv--link-mode"><a href="#uv-venv--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used for installing seed packages.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
@@ -5043,6 +5065,7 @@ uv build [OPTIONS] [SRC]
 </ul></dd><dt id="uv-build--link-mode"><a href="#uv-build--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
 <p>This option is only used when building source distributions.</p>
 <p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+<p>WARNING: The use of symlink link mode is discouraged, as they create tight coupling between the cache and the target environment. For example, clearing the cache (<code>uv cache clean</code>) will break all installed packages by way of removing the underlying source files. Use symlinks with caution.</p>
 <p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p><p>Possible values:</p>
 <ul>
 <li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>

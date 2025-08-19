@@ -1,17 +1,19 @@
 use std::borrow::Cow;
+
 use uv_cache::{Cache, CacheBucket, CacheShard, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_cache_key::cache_digest;
-use uv_configuration::{ConfigSettings, PackageConfigSettings};
 use uv_distribution_types::{
-    DirectUrlSourceDist, DirectorySourceDist, GitSourceDist, Hashed, PathSourceDist,
+    BuildInfo, BuildVariables, ConfigSettings, DirectUrlSourceDist, DirectorySourceDist,
+    ExtraBuildRequirement, ExtraBuildRequires, ExtraBuildVariables, GitSourceDist, Hashed,
+    PackageConfigSettings, PathSourceDist,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
+use uv_pypi_types::HashDigests;
 use uv_types::HashStrategy;
 
 use crate::Error;
-use crate::index::cached_wheel::CachedWheel;
+use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
 /// A local index of built distributions for a specific source distribution.
@@ -22,6 +24,8 @@ pub struct BuiltWheelIndex<'a> {
     hasher: &'a HashStrategy,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
+    extra_build_requires: &'a ExtraBuildRequires,
+    extra_build_variables: &'a ExtraBuildVariables,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
@@ -32,6 +36,8 @@ impl<'a> BuiltWheelIndex<'a> {
         hasher: &'a HashStrategy,
         config_settings: &'a ConfigSettings,
         config_settings_package: &'a PackageConfigSettings,
+        extra_build_requires: &'a ExtraBuildRequires,
+        extra_build_variables: &'a ExtraBuildVariables,
     ) -> Self {
         Self {
             cache,
@@ -39,6 +45,8 @@ impl<'a> BuiltWheelIndex<'a> {
             hasher,
             config_settings,
             config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
         }
     }
 
@@ -69,14 +77,25 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&config_settings))
-        };
+        let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
+        let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
-        Ok(self.find(&cache_shard))
+        Ok(self.find(&cache_shard).map(|wheel| {
+            CachedWheel::from_entry(
+                wheel,
+                revision.into_hashes(),
+                CacheInfo::default(),
+                build_info,
+            )
+        }))
     }
+
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a local path.
     pub fn path(&self, source_dist: &PathSourceDist) -> Result<Option<CachedWheel>, Error> {
         let cache_shard = self.cache.shard(
@@ -107,15 +126,18 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&config_settings))
-        };
+        let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
+        let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
-        Ok(self
-            .find(&cache_shard)
-            .map(|wheel| wheel.with_cache_info(cache_info)))
+        Ok(self.find(&cache_shard).map(|wheel| {
+            CachedWheel::from_entry(wheel, revision.into_hashes(), cache_info, build_info)
+        }))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution built from a
@@ -141,7 +163,6 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If the distribution is stale, omit it from the index.
         let cache_info = CacheInfo::from_directory(&source_dist.install_path)?;
-
         if cache_info != *pointer.cache_info() {
             return Ok(None);
         }
@@ -156,15 +177,18 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&config_settings))
-        };
+        let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
+        let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
-        Ok(self
-            .find(&cache_shard)
-            .map(|wheel| wheel.with_cache_info(cache_info)))
+        Ok(self.find(&cache_shard).map(|wheel| {
+            CachedWheel::from_entry(wheel, revision.into_hashes(), cache_info, build_info)
+        }))
     }
 
     /// Return the most compatible [`CachedWheel`] for a given source distribution at a git URL.
@@ -183,13 +207,23 @@ impl<'a> BuiltWheelIndex<'a> {
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(&source_dist.name);
-        let cache_shard = if config_settings.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&config_settings))
-        };
+        let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
+        let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
-        self.find(&cache_shard)
+        self.find(&cache_shard).map(|wheel| {
+            CachedWheel::from_entry(
+                wheel,
+                HashDigests::empty(),
+                CacheInfo::default(),
+                build_info,
+            )
+        })
     }
 
     /// Find the "best" distribution in the index for a given source distribution.
@@ -208,8 +242,8 @@ impl<'a> BuiltWheelIndex<'a> {
     /// ```
     ///
     /// The `shard` should be `built-wheels-v0/pypi/django-allauth-0.51.0.tar.gz`.
-    fn find(&self, shard: &CacheShard) -> Option<CachedWheel> {
-        let mut candidate: Option<CachedWheel> = None;
+    fn find(&self, shard: &CacheShard) -> Option<ResolvedWheel> {
+        let mut candidate: Option<ResolvedWheel> = None;
 
         // Unzipped wheels are stored as symlinks into the archive directory.
         for wheel_dir in uv_fs::entries(shard).ok().into_iter().flatten() {
@@ -221,7 +255,7 @@ impl<'a> BuiltWheelIndex<'a> {
                 continue;
             }
 
-            match CachedWheel::from_built_source(&wheel_dir, self.cache) {
+            match ResolvedWheel::from_built_source(&wheel_dir, self.cache) {
                 None => {}
                 Some(dist_info) => {
                     // Pick the wheel with the highest priority
@@ -256,5 +290,18 @@ impl<'a> BuiltWheelIndex<'a> {
         } else {
             Cow::Borrowed(self.config_settings)
         }
+    }
+
+    /// Determine the extra build requirements for the given package name.
+    fn extra_build_requires_for(&self, name: &PackageName) -> &[ExtraBuildRequirement] {
+        self.extra_build_requires
+            .get(name)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Determine the extra build variables for the given package name.
+    fn extra_build_variables_for(&self, name: &PackageName) -> Option<&BuildVariables> {
+        self.extra_build_variables.get(name)
     }
 }

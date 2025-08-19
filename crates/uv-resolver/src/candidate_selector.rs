@@ -616,8 +616,8 @@ impl CandidateDist<'_> {
     /// For an installable dist, return the prioritized distribution.
     fn prioritized(&self) -> Option<&PrioritizedDist> {
         match self {
-            CandidateDist::Compatible(dist) => dist.prioritized(),
-            CandidateDist::Incompatible {
+            Self::Compatible(dist) => dist.prioritized(),
+            Self::Incompatible {
                 incompatible_dist: _,
                 prioritized_dist: prioritized,
             } => Some(prioritized),
@@ -664,9 +664,9 @@ pub(crate) enum VersionChoiceKind {
 impl Display for VersionChoiceKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            VersionChoiceKind::Preference => f.write_str("preference"),
-            VersionChoiceKind::Installed => f.write_str("installed"),
-            VersionChoiceKind::Compatible => f.write_str("compatible"),
+            Self::Preference => f.write_str("preference"),
+            Self::Installed => f.write_str("installed"),
+            Self::Compatible => f.write_str("compatible"),
         }
     }
 }
@@ -740,7 +740,7 @@ impl Name for Candidate<'_> {
 }
 
 impl DistributionMetadata for Candidate<'_> {
-    fn version_or_url(&self) -> uv_distribution_types::VersionOrUrlRef {
+    fn version_or_url(&self) -> uv_distribution_types::VersionOrUrlRef<'_> {
         uv_distribution_types::VersionOrUrlRef::Version(self.version)
     }
 }

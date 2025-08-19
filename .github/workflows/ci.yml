@@ -6,6 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -29,6 +31,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: "Determine changed files"
         id: changed
@@ -73,6 +76,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -126,11 +131,13 @@ jobs:
     name: "cargo clippy | ubuntu"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Check uv_build dependencies"
-        uses: EmbarkStudios/cargo-deny-action@30f817c6f72275c6d54dc744fbca09ebc958599f # v2.0.12
+        uses: EmbarkStudios/cargo-deny-action@f2ba7abc2abebaf185c833c3961145a3c275caad # v2.0.13
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
@@ -147,6 +154,8 @@ jobs:
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -154,7 +163,7 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
@@ -175,6 +184,8 @@ jobs:
     name: "cargo dev generate-all"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -187,6 +198,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: "Install cargo shear"
         uses: taiki-e/install-action@a416ddeedbd372e614cc1386e8b642692f66865e # v2.57.1
         with:
@@ -205,8 +218,10 @@ jobs:
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -216,6 +231,17 @@ jobs:
       - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
       - name: "Install required Python versions"
         run: uv python install
+
+      - name: "Install secret service"
+        run: |
+          sudo apt update -y
+          sudo apt install -y gnome-keyring
+
+      - name: "Start gnome-keyring"
+        # run gnome-keyring with 'foobar' as password for the login keyring
+        # this will create a new login keyring and unlock it
+        # the login password doesn't matter, but the keyring must be unlocked for the tests to work
+        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a416ddeedbd372e614cc1386e8b642692f66865e # v2.57.1
@@ -228,7 +254,7 @@ jobs:
           UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
-            --features python-patch \
+            --features python-patch,keyring-tests,secret-service \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -237,12 +263,14 @@ jobs:
     needs: determine_changes
     # Only run macOS tests on main without opt-in
     if: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') || github.ref == 'refs/heads/main' }}
-    runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
+    runs-on: depot-macos-14
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -265,7 +293,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,python-managed,pypi,git,performance,crates-io \
+            --features python,python-managed,pypi,git,performance,crates-io,keyring-tests,apple-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
@@ -277,6 +305,8 @@ jobs:
     name: "cargo test | windows"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -284,7 +314,7 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
       - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
       - name: "Install required Python versions"
@@ -315,7 +345,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,pypi,python-managed \
+            --features python,pypi,python-managed,keyring-tests,windows-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -332,6 +362,8 @@ jobs:
         target-arch: ["x86_64", "i686", "aarch64"]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -339,7 +371,7 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
@@ -382,21 +414,25 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     name: "test windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
       matrix:
-        # Note, we exclude `aarch64` because it's not supported by the GitHub runner
-        target-arch: ["x86_64", "i686"]
+        include:
+          - { runner: windows-latest, target-arch: "x86_64" }
+          - { runner: windows-latest, target-arch: "i686" }
+          - { runner: windows-11-arm, target-arch: "aarch64" }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
@@ -427,7 +463,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: crate-ci/typos@master
+        with:
+          persist-credentials: false
+      - uses: crate-ci/typos@392b78fe18a52790c53f42456e46124f77346842 # v1.34.0
 
   docs:
     timeout-minutes: 10
@@ -439,6 +477,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       - name: "Add SSH key"
@@ -462,8 +501,10 @@ jobs:
     name: "build binary | linux libc"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -487,8 +528,10 @@ jobs:
     name: "build binary | linux aarch64"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -512,8 +555,10 @@ jobs:
     name: "build binary | linux musl"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - name: "Setup musl"
         run: |
@@ -542,8 +587,10 @@ jobs:
     name: "build binary | macos aarch64"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -566,8 +613,10 @@ jobs:
     name: "build binary | macos x86_64"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Build"
@@ -590,6 +639,8 @@ jobs:
     name: "build binary | windows x86_64"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -597,7 +648,7 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
@@ -625,6 +676,8 @@ jobs:
     name: "build binary | windows aarch64"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Create Dev Drive using ReFS
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -632,7 +685,7 @@ jobs:
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
         with:
@@ -662,17 +715,23 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: SebRollen/toml-action@b1b3628f55fc3a28208d4203ada8b737e9687876 # v1.2.0
         id: msrv
         with:
           file: "Cargo.toml"
           field: "workspace.package.rust-version"
       - name: "Install Rust toolchain"
-        run: rustup default ${{ steps.msrv.outputs.value }}
+        run: rustup default ${MSRV}
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
-        uses: rui314/setup-mold@v1
+        uses: rui314/setup-mold@7344740a9418dcdcb481c7df83d9fbd1d5072d7d # v1
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
-      - run: cargo +${{ steps.msrv.outputs.value }} build
+      - run: cargo +${MSRV} build
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
       - run: ./target/debug/uv --version
 
   build-binary-freebsd:
@@ -684,6 +743,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Cross build"
         run: |
@@ -695,7 +756,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@136ca0bce2adade21e526ceb07db643ad23dd2dd # v0.5.1
+        uses: acj/freebsd-firecracker-action@e8e9155e944111ea65be7a606c69b32092f3c4c8 # v0.5.2
         with:
           verbose: false
           checkout: false
@@ -753,6 +814,7 @@ jobs:
         with:
           repository: ${{ matrix.repo }}
           ref: ${{ matrix.ref }}
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -784,6 +846,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -811,6 +875,8 @@ jobs:
     runs-on: github-ubuntu-24.04-aarch64-2
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -839,6 +905,8 @@ jobs:
     container: alpine:latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -861,6 +929,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -888,6 +958,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -916,6 +988,8 @@ jobs:
     runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -944,6 +1018,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: conda-incubator/setup-miniconda@835234971496cad1653abb28a638a281cf32541f # v3.2.0
         with:
           miniconda-version: latest
@@ -1158,6 +1234,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -1282,6 +1360,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -1338,6 +1418,11 @@ jobs:
       - name: "Check install"
         run: |
           ./uv pip install anyio
+
+      - name: "Check a GraalPy dev version (different version parsing)"
+        run: |
+          curl -sLf https://github.com/graalvm/graal-languages-ea-builds/releases/download/graalpy-25.0.0-ea.31/graalpy-25.0.0-ea.31-linux-amd64.tar.gz | tar xz
+          ./uv run -p ./graalpy-25.0.0-dev-linux-amd64/bin/python python --version
 
   integration-test-graalpy-windows-x86_64:
     timeout-minutes: 10
@@ -1401,6 +1486,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -1415,9 +1502,9 @@ jobs:
           ./uv venv venv-native -p 3.12
           # We use features added in 0.30.3 but there is no known breakage in
           # newer versions.
-          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.3 pip
+          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.7 pip
 
-      - name: "Install pyodide interpreter"
+      - name: "Install Pyodide interpreter"
         run: |
           source ./venv-native/bin/activate
           pyodide xbuildenv install 0.27.5
@@ -1426,12 +1513,24 @@ jobs:
           echo "PYODIDE_PYTHON=$PYODIDE_PYTHON" >> $GITHUB_ENV
           echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
 
-      - name: "Create pyodide virtual environment"
+      - name: "Create Pyodide virtual environment"
         run: |
           ./uv venv -p $PYODIDE_PYTHON venv-pyodide
           source ./venv-pyodide/bin/activate
           ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
           python -c 'import numpy'
+
+      - name: "Install Pyodide with uv python"
+        run: |
+          ./uv python install cpython-3.13.2-emscripten-wasm32-musl
+
+      - name: "Create a Pyodide virtual environment using uv installed Python"
+        run: |
+          ./uv venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide2
+          # TODO: be able to install Emscripten wheels here...
+          source ./venv-pyodide2/bin/activate
+          ./uv pip install packaging
+          python -c 'import packaging'
 
   integration-test-github-actions:
     timeout-minutes: 10
@@ -1530,6 +1629,58 @@ jobs:
         run: |
           .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
 
+  integration-test-wsl:
+    timeout-minutes: 15
+    needs: build-binary-linux-musl
+    name: "integration test | pyenv on wsl x86-64"
+    runs-on: windows-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && github.event.pull_request.head.repo.fork != true }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-musl-${{ github.sha }}
+
+      - name: "Setup WSL"
+        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6
+        with:
+          distribution: Ubuntu-22.04
+
+      - name: "Install pyenv-win"
+        shell: pwsh
+        run: |
+          Write-Host "Installing pyenv-win..."
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"
+          .\install-pyenv-win.ps1
+
+          # Add pyenv-win to PATH for this session
+          $env:PYENV = "$env:USERPROFILE\.pyenv\pyenv-win"
+          $env:PATH = "$env:PYENV\bin;$env:PYENV\shims;$env:PATH"
+
+          # Add to GITHUB_PATH so WSL can find the shims
+          echo "$env:PYENV\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$env:PYENV\shims" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+          Write-Host "Installing Python 3.11.9 via pyenv-win..."
+          & "$env:PYENV\bin\pyenv.bat" install 3.11.9
+          & "$env:PYENV\bin\pyenv.bat" global 3.11.9
+
+          Write-Host "Verifying pyenv-win installation..."
+          & "$env:PYENV\bin\pyenv.bat" versions
+
+      - name: "Test uv"
+        shell: wsl-bash {0}
+        run: |
+          set -x
+          chmod +x ./uv
+
+          # Check that we don't fail on `pyenv-win` shims
+          ./uv python list -v
+
   integration-test-publish-changed:
     timeout-minutes: 10
     needs: build-binary-linux-libc
@@ -1544,7 +1695,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-
+          persist-credentials: false
       # Only publish a new release if the publishing code changed
       - name: "Determine changed files"
         id: changed
@@ -1580,6 +1731,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -1613,12 +1765,12 @@ jobs:
 
       - name: "Authenticate with GCP"
         id: "auth"
-        uses: "google-github-actions/auth@140bb5113ffb6b65a7e9b937a81fa96cf5064462"
+        uses: "google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5"
         with:
           credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
 
       - name: "Set up GCP SDK"
-        uses: "google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9"
+        uses: "google-github-actions/setup-gcloud@cb1e50a9932213ecece00a606661ae9ca44f3397"
 
       - name: "Get GCP Artifact Registry token"
         id: get_token
@@ -1628,7 +1780,7 @@ jobs:
           echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
 
       - name: "Run registry tests"
-        run: ./uv run -p ${{ env.PYTHON_VERSION }} scripts/registries-test.py --uv ./uv --color always --all
+        run: ./uv run -p "${PYTHON_VERSION}" scripts/registries-test.py --uv ./uv --color always --all
         env:
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
@@ -1669,6 +1821,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -1714,7 +1867,7 @@ jobs:
 
       - name: "Publish test packages"
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
-        run: ./uv run -p ${{ env.PYTHON_VERSION }} scripts/publish/test_publish.py --uv ./uv all
+        run: ./uv run -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
         env:
           RUST_LOG: uv=debug,uv_publish=trace
           UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
@@ -1731,6 +1884,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -1779,6 +1934,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -1805,6 +1962,8 @@ jobs:
     runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -1828,9 +1987,11 @@ jobs:
     container: debian:bookworm
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Install Python"
-        run: apt-get update && apt-get install -y python3.11 python3-pip python3.11-venv
+        run: apt-get update && apt-get install -y python3.11 python3-pip python3.11-venv python3-debian
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -1846,6 +2007,11 @@ jobs:
       - name: "Validate global Python install"
         run: python3.11 scripts/check_system_python.py --uv ./uv --externally-managed
 
+      - name: "Test `uv run` with system Python"
+        run: |
+          ./uv run -p python3.11 -v python -c "import debian"
+          ./uv run -p python3.11 -v --with anyio python -c "import debian"
+
   system-test-fedora:
     timeout-minutes: 10
     needs: build-binary-linux-libc
@@ -1854,6 +2020,8 @@ jobs:
     container: fedora:43
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Install Python"
         run: dnf install python3 which -y && python3 -m ensurepip
@@ -1879,6 +2047,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -1947,6 +2117,8 @@ jobs:
         rocky-version: ["8", "9"]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Install Python"
         if: matrix.rocky-version == '8'
@@ -1983,6 +2155,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -2009,6 +2183,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -2036,6 +2212,8 @@ jobs:
     container: pyston/pyston:2.3.5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -2059,6 +2237,8 @@ jobs:
     container: alpine:latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Install Python"
         run: apk add --update --no-cache python3 py3-pip
@@ -2084,6 +2264,8 @@ jobs:
     runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -2108,6 +2290,8 @@ jobs:
     runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Install Python"
         run: brew install python3
@@ -2133,6 +2317,8 @@ jobs:
     runs-on: macos-13 # github-macos-13-x86_64-4
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       # We test with GitHub's Python as a regression test for
       # https://github.com/astral-sh/uv/issues/2450
@@ -2159,6 +2345,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -2182,6 +2370,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -2206,6 +2396,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -2230,6 +2422,8 @@ jobs:
     runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -2252,6 +2446,8 @@ jobs:
     runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -2275,6 +2471,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -2292,6 +2490,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Install Python"
         run: choco install python3 --verbose --version=3.9.13
@@ -2314,6 +2514,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Install pyenv"
         run: |
@@ -2355,6 +2557,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -2411,6 +2615,8 @@ jobs:
             }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: conda-incubator/setup-miniconda@835234971496cad1653abb28a638a281cf32541f # v3.2.0
         with:
@@ -2455,6 +2661,8 @@ jobs:
           # Needed for `actions/checkout`
           yum install tar gzip which -y
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: "Install Python"
         run: yum install python3 python3-pip -y
 
@@ -2482,6 +2690,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -2516,6 +2726,8 @@ jobs:
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -2553,6 +2765,8 @@ jobs:
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 

@@ -68,15 +68,15 @@ pub(crate) enum ResolutionGraphNode {
 impl ResolutionGraphNode {
     pub(crate) fn marker(&self) -> &UniversalMarker {
         match self {
-            ResolutionGraphNode::Root => &UniversalMarker::TRUE,
-            ResolutionGraphNode::Dist(dist) => &dist.marker,
+            Self::Root => &UniversalMarker::TRUE,
+            Self::Dist(dist) => &dist.marker,
         }
     }
 
     pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => {
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => {
                 let extra = dist.extra.as_ref()?;
                 Some((&dist.name, extra))
             }
@@ -84,9 +84,9 @@ impl ResolutionGraphNode {
     }
 
     pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => {
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => {
                 let group = dist.dev.as_ref()?;
                 Some((&dist.name, group))
             }
@@ -94,9 +94,9 @@ impl ResolutionGraphNode {
     }
 
     pub(crate) fn package_name(&self) -> Option<&PackageName> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => Some(&dist.name),
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => Some(&dist.name),
         }
     }
 }
@@ -104,8 +104,8 @@ impl ResolutionGraphNode {
 impl Display for ResolutionGraphNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResolutionGraphNode::Root => f.write_str("root"),
-            ResolutionGraphNode::Dist(dist) => Display::fmt(dist, f),
+            Self::Root => f.write_str("root"),
+            Self::Dist(dist) => Display::fmt(dist, f),
         }
     }
 }
@@ -832,7 +832,7 @@ impl std::error::Error for ConflictingDistributionError {}
 
 impl Display for ConflictingDistributionError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let ConflictingDistributionError {
+        let Self {
             ref name,
             ref version1,
             ref version2,
@@ -928,7 +928,7 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
             }
         }
 
-        uv_distribution_types::Resolution::new(transformed).with_diagnostics(diagnostics)
+        Self::new(transformed).with_diagnostics(diagnostics)
     }
 }
 

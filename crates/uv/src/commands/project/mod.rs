@@ -16,10 +16,10 @@ use uv_configuration::{
     PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::{DistributionDatabase, LoweredRequirement};
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    Index, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -27,7 +27,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
@@ -36,8 +36,8 @@ use uv_python::{
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
-    ResolverOutput,
+    FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
+    ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -46,12 +46,13 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_workspace::pyproject::ExtraBuildDependency;
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
@@ -255,10 +256,16 @@ pub(crate) enum ProjectError {
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]
+    ExtraBuildRequires(#[from] uv_distribution_types::ExtraBuildRequiresError),
+
+    #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    RetryParsing(#[from] uv_client::RetryParsingError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -269,7 +276,7 @@ pub(crate) struct ConflictError {
     /// The set from which the conflict was derived.
     pub(crate) set: ConflictSet,
     /// The items from the set that were enabled, and thus create the conflict.
-    pub(crate) conflicts: Vec<ConflictPackage>,
+    pub(crate) conflicts: Vec<ConflictItem>,
     /// Enabled dependency groups with defaults applied.
     pub(crate) groups: DependencyGroupsWithDefaults,
 }
@@ -280,9 +287,10 @@ impl std::fmt::Display for ConflictError {
         let set = self
             .set
             .iter()
-            .map(|item| match item.conflict() {
-                ConflictPackage::Extra(extra) => format!("`{}[{}]`", item.package(), extra),
-                ConflictPackage::Group(group) => format!("`{}:{}`", item.package(), group),
+            .map(|item| match item.kind() {
+                ConflictKind::Project => format!("{}", item.package()),
+                ConflictKind::Extra(extra) => format!("`{}[{}]`", item.package(), extra),
+                ConflictKind::Group(group) => format!("`{}:{}`", item.package(), group),
             })
             .join(", ");
 
@@ -290,7 +298,7 @@ impl std::fmt::Display for ConflictError {
         if self
             .conflicts
             .iter()
-            .all(|conflict| matches!(conflict, ConflictPackage::Extra(..)))
+            .all(|conflict| matches!(conflict.kind(), ConflictKind::Extra(..)))
         {
             write!(
                 f,
@@ -298,9 +306,9 @@ impl std::fmt::Display for ConflictError {
                 conjunction(
                     self.conflicts
                         .iter()
-                        .map(|conflict| match conflict {
-                            ConflictPackage::Extra(extra) => format!("`{extra}`"),
-                            ConflictPackage::Group(..) => unreachable!(),
+                        .map(|conflict| match conflict.kind() {
+                            ConflictKind::Extra(extra) => format!("`{extra}`"),
+                            ConflictKind::Group(..) | ConflictKind::Project => unreachable!(),
                         })
                         .collect()
                 )
@@ -308,7 +316,7 @@ impl std::fmt::Display for ConflictError {
         } else if self
             .conflicts
             .iter()
-            .all(|conflict| matches!(conflict, ConflictPackage::Group(..)))
+            .all(|conflict| matches!(conflict.kind(), ConflictKind::Group(..)))
         {
             let conflict_source = if self.set.is_inferred_conflict() {
                 "transitively inferred"
@@ -321,12 +329,12 @@ impl std::fmt::Display for ConflictError {
                 conjunction(
                     self.conflicts
                         .iter()
-                        .map(|conflict| match conflict {
-                            ConflictPackage::Group(group)
+                        .map(|conflict| match conflict.kind() {
+                            ConflictKind::Group(group)
                                 if self.groups.contains_because_default(group) =>
                                 format!("`{group}` (enabled by default)"),
-                            ConflictPackage::Group(group) => format!("`{group}`"),
-                            ConflictPackage::Extra(..) => unreachable!(),
+                            ConflictKind::Group(group) => format!("`{group}`"),
+                            ConflictKind::Extra(..) | ConflictKind::Project => unreachable!(),
                         })
                         .collect()
                 )
@@ -340,14 +348,17 @@ impl std::fmt::Display for ConflictError {
                         .iter()
                         .enumerate()
                         .map(|(i, conflict)| {
-                            let conflict = match conflict {
-                                ConflictPackage::Extra(extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(group)
+                            let conflict = match conflict.kind() {
+                                ConflictKind::Project => {
+                                    format!("package `{}`", conflict.package())
+                                }
+                                ConflictKind::Extra(extra) => format!("extra `{extra}`"),
+                                ConflictKind::Group(group)
                                     if self.groups.contains_because_default(group) =>
                                 {
                                     format!("group `{group}` (enabled by default)")
                                 }
-                                ConflictPackage::Group(group) => format!("group `{group}`"),
+                                ConflictKind::Group(group) => format!("group `{group}`"),
                             };
                             if i == 0 {
                                 capitalize(&conflict)
@@ -738,8 +749,8 @@ impl ScriptInterpreter {
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            ScriptInterpreter::Interpreter(interpreter) => interpreter,
-            ScriptInterpreter::Environment(venv) => venv.into_interpreter(),
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.into_interpreter(),
         }
     }
 
@@ -1035,8 +1046,8 @@ impl ProjectInterpreter {
     /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            ProjectInterpreter::Interpreter(interpreter) => interpreter,
-            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.into_interpreter(),
         }
     }
 
@@ -1075,11 +1086,11 @@ pub(crate) enum PythonRequestSource {
 impl std::fmt::Display for PythonRequestSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PythonRequestSource::UserRequest => write!(f, "explicit request"),
-            PythonRequestSource::DotPythonVersion(file) => {
+            Self::UserRequest => write!(f, "explicit request"),
+            Self::DotPythonVersion(file) => {
                 write!(f, "version file at `{}`", file.path().user_display())
             }
-            PythonRequestSource::RequiresPython => write!(f, "`requires-python` metadata"),
+            Self::RequiresPython => write!(f, "`requires-python` metadata"),
         }
     }
 }
@@ -1573,7 +1584,7 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match fs_err::remove_dir_all(&root) {
+                let replaced = match remove_virtualenv(&root) {
                     Ok(()) => {
                         debug!(
                             "Removed virtual environment at: {}",
@@ -1581,7 +1592,11 @@ impl ScriptEnvironment {
                         );
                         true
                     }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(uv_virtualenv::Error::Io(err))
+                        if err.kind() == std::io::ErrorKind::NotFound =>
+                    {
+                        false
+                    }
                     Err(err) => return Err(err.into()),
                 };
 
@@ -1695,6 +1710,7 @@ pub(crate) async fn resolve_names(
                 no_build_isolation,
                 no_build_isolation_package,
                 extra_build_dependencies,
+                extra_build_variables,
                 prerelease: _,
                 resolution: _,
                 sources,
@@ -1706,7 +1722,7 @@ pub(crate) async fn resolve_names(
 
     let client_builder = BaseClientBuilder::new()
         .retries_from_env()
-        .map_err(uv_requirements::Error::ClientError)?
+        .map_err(|err| uv_requirements::Error::ClientError(err.into()))?
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
         .keyring(*keyring_provider)
@@ -1742,13 +1758,16 @@ pub(crate) async fn resolve_names(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -1759,6 +1778,7 @@ pub(crate) async fn resolve_names(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -1852,6 +1872,7 @@ pub(crate) async fn resolve_environment(
         no_build_isolation,
         no_build_isolation_package,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade: _,
@@ -1954,13 +1975,16 @@ pub(crate) async fn resolve_environment(
 
     let workspace_cache = WorkspaceCache::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -1971,6 +1995,7 @@ pub(crate) async fn resolve_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -2039,6 +2064,7 @@ pub(crate) async fn sync_environment(
         no_build_isolation,
         no_build_isolation_package,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -2096,13 +2122,16 @@ pub(crate) async fn sync_environment(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -2113,6 +2142,7 @@ pub(crate) async fn sync_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &build_hasher,
@@ -2132,9 +2162,6 @@ pub(crate) async fn sync_environment(
         build_options,
         link_mode,
         compile_bytecode,
-        index_locations,
-        config_setting,
-        config_settings_package,
         &hasher,
         tags,
         &client,
@@ -2147,6 +2174,7 @@ pub(crate) async fn sync_environment(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 
@@ -2178,7 +2206,7 @@ pub(crate) async fn update_environment(
     spec: RequirementsSpecification,
     modifications: Modifications,
     build_constraints: Constraints,
-    extra_build_requires: uv_distribution::ExtraBuildRequires,
+    extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     state: &SharedState,
@@ -2210,6 +2238,7 @@ pub(crate) async fn update_environment(
                 no_build_isolation,
                 no_build_isolation_package,
                 extra_build_dependencies: _,
+                extra_build_variables,
                 prerelease,
                 resolution,
                 sources,
@@ -2247,7 +2276,16 @@ pub(crate) async fn update_environment(
         && source_trees.is_empty()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
+        match site_packages.satisfies_spec(
+            &requirements,
+            &constraints,
+            &overrides,
+            &marker_env,
+            config_setting,
+            config_settings_package,
+            &extra_build_requires,
+            extra_build_variables,
+        )? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -2329,7 +2367,7 @@ pub(crate) async fn update_environment(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -2340,6 +2378,7 @@ pub(crate) async fn update_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -2394,9 +2433,6 @@ pub(crate) async fn update_environment(
         build_options,
         *link_mode,
         *compile_bytecode,
-        index_locations,
-        config_setting,
-        config_settings_package,
         &hasher,
         tags,
         &client,
@@ -2409,6 +2445,7 @@ pub(crate) async fn update_environment(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 
@@ -2506,31 +2543,33 @@ pub(crate) fn default_dependency_groups(
 /// are declared as conflicting.
 #[allow(clippy::result_large_err)]
 pub(crate) fn detect_conflicts(
-    lock: &Lock,
+    target: &InstallTarget,
     extras: &ExtrasSpecification,
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<(), ProjectError> {
-    // Note that we need to collect all extras and groups that match in
-    // a particular set, since extras can be declared as conflicting with
-    // groups. So if extra `x` and group `g` are declared as conflicting,
-    // then enabling both of those should result in an error.
+    // Validate that we aren't trying to install extras or groups that
+    // are declared as conflicting. Note that we need to collect all
+    // extras and groups that match in a particular set, since extras
+    // can be declared as conflicting with groups. So if extra `x` and
+    // group `g` are declared as conflicting, then enabling both of
+    // those should result in an error.
+    let lock = target.lock();
+    let packages = target.packages(extras, groups);
     let conflicts = lock.conflicts();
     for set in conflicts.iter() {
-        let mut conflicts: Vec<ConflictPackage> = vec![];
+        let mut conflicts: Vec<ConflictItem> = vec![];
         for item in set.iter() {
-            if item
-                .extra()
-                .map(|extra| extras.contains(extra))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.conflict().clone());
+            if !packages.contains(item.package()) {
+                // Ignore items that are not in the install targets
+                continue;
             }
-            if item
-                .group()
-                .map(|group| groups.contains(group))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.conflict().clone());
+            let is_conflicting = match item.kind() {
+                ConflictKind::Project => groups.prod(),
+                ConflictKind::Extra(extra) => extras.contains(extra),
+                ConflictKind::Group(group1) => groups.contains(group1),
+            };
+            if is_conflicting {
+                conflicts.push(item.clone());
             }
         }
         if conflicts.len() >= 2 {
@@ -2625,7 +2664,7 @@ pub(crate) fn script_specification(
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
-) -> Result<uv_distribution::ExtraBuildRequires, ProjectError> {
+) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
     let script_indexes = script.indexes(settings.sources);
     let script_sources = script.sources(settings.sources);
@@ -2640,28 +2679,36 @@ pub(crate) fn script_extra_build_requires(
         .and_then(|uv| uv.extra_build_dependencies.as_ref())
         .unwrap_or(&empty);
 
-    // Lower the extra build dependencies
-    let mut extra_build_dependencies = ExtraBuildDependencies::default();
+    // Lower the extra build dependencies.
+    let mut extra_build_requires = ExtraBuildRequires::default();
     for (name, requirements) in script_extra_build_dependencies {
         let lowered_requirements: Vec<_> = requirements
             .iter()
             .cloned()
-            .flat_map(|requirement| {
-                LoweredRequirement::from_non_workspace_requirement(
-                    requirement,
-                    script_dir.as_ref(),
-                    script_sources,
-                    script_indexes,
-                    &settings.index_locations,
-                )
-                .map_ok(|req| req.into_inner().into())
-            })
+            .flat_map(
+                |ExtraBuildDependency {
+                     requirement,
+                     match_runtime,
+                 }| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                    )
+                    .map_ok(move |requirement| ExtraBuildRequirement {
+                        requirement: requirement.into_inner(),
+                        match_runtime,
+                    })
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
-        extra_build_dependencies.insert(name.clone(), lowered_requirements);
+        extra_build_requires.insert(name.clone(), lowered_requirements);
     }
 
-    Ok(uv_distribution::ExtraBuildRequires::from_lowered(
-        extra_build_dependencies,
+    Ok(LoweredExtraBuildDependencies::from_lowered(
+        extra_build_requires,
     ))
 }
 

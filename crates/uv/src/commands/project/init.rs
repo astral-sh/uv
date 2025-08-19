@@ -684,7 +684,7 @@ pub(crate) enum InitKind {
 
 impl Default for InitKind {
     fn default() -> Self {
-        InitKind::Project(InitProjectKind::default())
+        Self::Project(InitProjectKind::default())
     }
 }
 
@@ -701,7 +701,7 @@ pub(crate) enum InitProjectKind {
 impl InitKind {
     /// Returns `true` if the project should be packaged by default.
     pub(crate) fn packaged_by_default(self) -> bool {
-        matches!(self, InitKind::Project(InitProjectKind::Library))
+        matches!(self, Self::Project(InitProjectKind::Library))
     }
 }
 
@@ -723,7 +723,7 @@ impl InitProjectKind {
         package: bool,
     ) -> Result<()> {
         match self {
-            InitProjectKind::Application => InitProjectKind::init_application(
+            Self::Application => Self::init_application(
                 name,
                 path,
                 requires_python,
@@ -736,7 +736,7 @@ impl InitProjectKind {
                 no_readme,
                 package,
             ),
-            InitProjectKind::Library => InitProjectKind::init_library(
+            Self::Library => Self::init_library(
                 name,
                 path,
                 requires_python,
@@ -768,6 +768,10 @@ impl InitProjectKind {
         package: bool,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
+
+        // Initialize the version control system first so that Git configuration can properly
+        // read conditional includes that depend on the repository path.
+        init_vcs(path, vcs)?;
 
         // Do no fill in `authors` for non-packaged applications unless explicitly requested.
         let author_from = author_from.unwrap_or_else(|| {
@@ -828,9 +832,6 @@ impl InitProjectKind {
         }
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-        // Initialize the version control system.
-        init_vcs(path, vcs)?;
-
         Ok(())
     }
 
@@ -854,6 +855,10 @@ impl InitProjectKind {
         }
 
         fs_err::create_dir_all(path)?;
+
+        // Initialize the version control system first so that Git configuration can properly
+        // read conditional includes that depend on the repository path.
+        init_vcs(path, vcs)?;
 
         let author = get_author_info(path, author_from.unwrap_or_default());
 
@@ -879,9 +884,6 @@ impl InitProjectKind {
         if !bare {
             generate_package_scripts(name, path, build_backend, true)?;
         }
-
-        // Initialize the version control system.
-        init_vcs(path, vcs)?;
 
         Ok(())
     }

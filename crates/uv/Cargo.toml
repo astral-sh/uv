@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.8.4"
+version = "0.8.12"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -80,6 +80,7 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+h2 = { workspace = true }
 jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
@@ -95,6 +96,7 @@ tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
@@ -117,6 +119,7 @@ windows-result = { workspace = true }
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 byteorder = { workspace = true }
 filetime = { workspace = true }
@@ -140,6 +143,7 @@ nix = { workspace = true }
 [package.metadata.cargo-shear]
 ignored = [
     "flate2",
+    "h2",
     "uv-performance-memory-allocator",
 ]
 
@@ -161,6 +165,7 @@ default-tests = [
     "crates-io",
     "git",
     "pypi",
+    "r2",
     "python",
     "python-managed",
     "python-eol",
@@ -173,6 +178,8 @@ crates-io = []
 git = []
 # Introduces a testing dependency on PyPI.
 pypi = []
+# Introduces a testing dependency on R2.
+r2 = []
 # Introduces a testing dependency on a local Python installation.
 python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.

@@ -149,7 +149,7 @@ impl LoweredRequirement {
             let mut remaining = total.negate();
             remaining.and(requirement.marker);
 
-            LoweredRequirement(Requirement {
+            Self(Requirement {
                 marker: remaining,
                 ..Requirement::from(requirement.clone())
             })
@@ -389,7 +389,7 @@ impl LoweredRequirement {
             let mut remaining = total.negate();
             remaining.and(requirement.marker);
 
-            LoweredRequirement(Requirement {
+            Self(Requirement {
                 marker: remaining,
                 ..Requirement::from(requirement.clone())
             })
@@ -565,10 +565,10 @@ pub enum SourceKind {
 impl std::fmt::Display for SourceKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceKind::Path => write!(f, "path"),
-            SourceKind::Url => write!(f, "URL"),
-            SourceKind::Git => write!(f, "Git"),
-            SourceKind::Registry => write!(f, "registry"),
+            Self::Path => write!(f, "path"),
+            Self::Url => write!(f, "URL"),
+            Self::Git => write!(f, "Git"),
+            Self::Registry => write!(f, "registry"),
         }
     }
 }

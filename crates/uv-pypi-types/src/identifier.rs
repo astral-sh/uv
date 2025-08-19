@@ -86,7 +86,7 @@ impl<'de> serde::de::Deserialize<'de> for Identifier {
         D: serde::de::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        Identifier::from_str(&s).map_err(serde::de::Error::custom)
+        Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 

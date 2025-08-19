@@ -81,6 +81,9 @@ mod python_find;
 #[cfg(feature = "python")]
 mod python_list;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod python_module;
+
 #[cfg(feature = "python-managed")]
 mod python_install;
 
@@ -131,4 +134,5 @@ mod version;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod workflow;
 
+mod extract;
 mod workspace;

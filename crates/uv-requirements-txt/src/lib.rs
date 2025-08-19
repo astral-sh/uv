@@ -428,7 +428,7 @@ impl RequirementsTxt {
 
     /// Merge the data from a nested `requirements` file (`other`) into this one.
     pub fn update_from(&mut self, other: Self) {
-        let RequirementsTxt {
+        let Self {
             requirements,
             constraints,
             editables,
@@ -469,33 +469,33 @@ impl UnsupportedOption {
     /// The name of the unsupported option.
     fn name(self) -> &'static str {
         match self {
-            UnsupportedOption::PreferBinary => "--prefer-binary",
-            UnsupportedOption::RequireHashes => "--require-hashes",
-            UnsupportedOption::Pre => "--pre",
-            UnsupportedOption::TrustedHost => "--trusted-host",
-            UnsupportedOption::UseFeature => "--use-feature",
+            Self::PreferBinary => "--prefer-binary",
+            Self::RequireHashes => "--require-hashes",
+            Self::Pre => "--pre",
+            Self::TrustedHost => "--trusted-host",
+            Self::UseFeature => "--use-feature",
         }
     }
 
     /// Returns `true` if the option is supported on the CLI.
     fn cli(self) -> bool {
         match self {
-            UnsupportedOption::PreferBinary => false,
-            UnsupportedOption::RequireHashes => true,
-            UnsupportedOption::Pre => true,
-            UnsupportedOption::TrustedHost => true,
-            UnsupportedOption::UseFeature => false,
+            Self::PreferBinary => false,
+            Self::RequireHashes => true,
+            Self::Pre => true,
+            Self::TrustedHost => true,
+            Self::UseFeature => false,
         }
     }
 
     /// Returns an iterator over all unsupported options.
-    fn iter() -> impl Iterator<Item = UnsupportedOption> {
+    fn iter() -> impl Iterator<Item = Self> {
         [
-            UnsupportedOption::PreferBinary,
-            UnsupportedOption::RequireHashes,
-            UnsupportedOption::Pre,
-            UnsupportedOption::TrustedHost,
-            UnsupportedOption::UseFeature,
+            Self::PreferBinary,
+            Self::RequireHashes,
+            Self::Pre,
+            Self::TrustedHost,
+            Self::UseFeature,
         ]
         .iter()
         .copied()
@@ -1131,7 +1131,7 @@ impl Display for RequirementsTxtParserError {
 
 impl std::error::Error for RequirementsTxtParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self {
+        match self {
             Self::Io(err) => err.source(),
             Self::Url { source, .. } => Some(source),
             Self::FileUrl { .. } => None,

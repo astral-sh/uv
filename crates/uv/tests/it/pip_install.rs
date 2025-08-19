@@ -2101,7 +2101,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
-        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2636,7 +2636,7 @@ fn install_no_binary_env() {
     let context = TestContext::new("3.12");
 
     let mut command = context.pip_install();
-    command.arg("anyio").env("UV_NO_BINARY", "1");
+    command.arg("anyio").env(EnvVars::UV_NO_BINARY, "1");
     uv_snapshot!(
         command,
         @r###"
@@ -2658,7 +2658,7 @@ fn install_no_binary_env() {
     command
         .arg("anyio")
         .arg("--reinstall")
-        .env("UV_NO_BINARY", "anyio");
+        .env(EnvVars::UV_NO_BINARY, "anyio");
     uv_snapshot!(
         command,
         @r###"
@@ -2684,7 +2684,7 @@ fn install_no_binary_env() {
         .arg("anyio")
         .arg("--reinstall")
         .arg("idna")
-        .env("UV_NO_BINARY_PACKAGE", "idna");
+        .env(EnvVars::UV_NO_BINARY_PACKAGE, "idna");
     uv_snapshot!(
         command,
         @r###"
@@ -3927,7 +3927,6 @@ fn config_settings_registry() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "
@@ -3999,43 +3998,13 @@ fn config_settings_path() -> Result<()> {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Reinstalling with `editable_mode=compat` should be a no-op; changes in build configuration
-    // don't invalidate the environment.
+    // Reinstalling with `editable_mode=compat` should force a reinstall.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("-C")
         .arg("editable_mode=compat")
-        , @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
-    );
-
-    // Uninstall the package.
-    uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("setuptools-editable"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
-    "###);
-
-    // Install the editable package with `editable_mode=compat`. We should ignore the cached
-    // build configuration and rebuild.
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
-        .arg("-C")
-        .arg("editable_mode=compat")
-        , @r###"
+        , @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4043,9 +4012,10 @@ fn config_settings_path() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
-    "###
+     ~ setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "
     );
 
     // When installed without `editable_mode=compat`, the `finder.py` file should _not_ be present.
@@ -4955,7 +4925,7 @@ fn no_build_isolation() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .arg("--no-build-isolation"), @r###"
+        .arg("--no-build-isolation"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4970,8 +4940,13 @@ fn no_build_isolation() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          anyio = ["setuptools"]
+
+          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `setuptools` and `wheel`.
@@ -5023,7 +4998,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
+        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5038,8 +5013,13 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          anyio = ["setuptools"]
+
+          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `setuptools` and `wheel`.
@@ -6662,6 +6642,49 @@ fn require_hashes() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
     "###
+    );
+
+    Ok(())
+}
+
+/// Use `--require-hashes` when there are no hashes for build dependencies.
+#[test]
+fn require_hashes_build_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio==4.0.0 \
+            --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+            --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        idna==3.6 \
+            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+            # via anyio
+        sniffio==1.3.1 \
+            --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+            --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+            # via anyio
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("--no-binary").arg(":all:")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
     );
 
     Ok(())
@@ -8310,7 +8333,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8337,7 +8360,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8595,12 +8618,9 @@ build-constraint-dependencies = [
 fn install_build_isolation_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an package.
+    // Create a package.
     let package = context.temp_dir.child("project");
-    package.create_dir_all()?;
-    let pyproject_toml = package.child("pyproject.toml");
-
-    pyproject_toml.write_str(
+    package.child("pyproject.toml").write_str(
         r#"
         [project]
         name = "project"
@@ -8609,11 +8629,6 @@ fn install_build_isolation_package() -> Result<()> {
         dependencies = [
             "iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
         ]
-        [build-system]
-        requires = [
-          "setuptools >= 40.9.0",
-        ]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -8621,7 +8636,7 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8636,8 +8651,13 @@ fn install_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          iniconfig = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `hatchinling`, `hatch-vs` for iniconfig
@@ -8665,18 +8685,20 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Prepared 1 package without build isolation in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
      + project==0.1.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     Ok(())
 }
@@ -9247,7 +9269,7 @@ fn bad_crc32() -> Result<()> {
     Resolved 7 packages in [TIME]
       × Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
       ├─▶ Failed to extract archive: osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      ╰─▶ Bad CRC (got ca5f1131, expected d5c95dfa) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
+      ╰─▶ Bad uncompressed size (got 0007b829, expected 0007b828) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
     "
     );
 
@@ -11913,7 +11935,7 @@ fn install_python_preference() {
 
     // This also works with `VIRTUAL_ENV` unset
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("anyio").arg("--no-managed-python").env_remove("VIRTUAL_ENV"), @r"
+        .arg("anyio").arg("--no-managed-python").env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12030,6 +12052,534 @@ fn config_settings_package() -> Result<()> {
         .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
+
+    Ok(())
+}
+
+#[test]
+fn reject_invalid_streaming_zip() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheelstreamtest==0.0.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheelstreamtest==0.0.1`
+      ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
+      ╰─▶ ZIP file contains multiple entries with different contents for: cbwheelstreamtest/__init__.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_double_zip() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheelziptest==0.0.2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download `cbwheelziptest==0.0.2`
+      ├─▶ Failed to extract archive: cbwheelziptest-0.0.2-py2.py3-none-any.whl
+      ╰─▶ ZIP file contains trailing contents after the end-of-central-directory record
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_central_directory_offset() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ├─▶ Invalid zip file structure
+      ╰─▶ the end of central directory offset (0xf0d9) did not match the actual offset (0xf9ac)
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_crc32_mismatch() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_crc32_non_data_descriptor() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_duplicate_extra_field() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ an extra field with id 0x7075 was duplicated in the header
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_short_usize() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad CRC (got 5100f20e, expected de0ffd6e) for file: attr/_make.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_chained_extra_field() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ an extra field with id 0x7075 was duplicated in the header
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_short_usize_zip64() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ zip64 extended information field was too long: expected 16 bytes, but 0 bytes were provided
+    "
+    );
+}
+
+/// Test that build dependencies respect locked versions from the resolution.
+#[test]
+fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // Create a build backend that checks for a specific version of anyio
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        if not expected_version:
+            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Create a project that will resolve to a non-latest version of `anyio`
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("parent")
+        .child("__init__.py")
+        .touch()?;
+
+    // Now add the child dependency.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Ensure our build backend is checking the version correctly
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 3.0 but got 4.3.0
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Now constrain the `anyio` build dependency to match the runtime
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+    "#})?;
+
+    // The child should be built with anyio 4.0
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.0.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + parent==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    ");
+
+    // Change the constraints on anyio
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+    "#})?;
+
+    // The child should be rebuilt with anyio 3.7, without `--reinstall`
+    uv_snapshot!(context.filters(), context.pip_install().arg(".")
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 4.0 but got 3.7.1
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(".")
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ parent==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // With preview enabled, there's no warning
+    uv_snapshot!(context.filters(), context.pip_install().arg(".")
+        .arg("--preview-features").arg("extra-build-dependencies")
+        .arg("--reinstall-package").arg("child")
+        .env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ parent==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
+/// Check that we warn for overlapping packages but not for correctly overlapping namespace
+/// packages.
+#[test]
+fn overlapping_packages_warning() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let built_by_uv = context.workspace_root.join("scripts/packages/built-by-uv");
+
+    // Overlaps with `built-by-uv`
+    let also_build_by_uv = context.temp_dir.child("also-built-by-uv");
+    also_build_by_uv.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "also-built-by-uv"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = "built_by_uv"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    also_build_by_uv
+        .child("src")
+        .child("built_by_uv")
+        .child("__init__.py")
+        .touch()?;
+
+    // Check that overlapping packages don't show a warning by default
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg(&built_by_uv)
+        .arg(also_build_by_uv.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
+    "
+    );
+
+    // Clean up for the next test
+    context.venv().arg("--clear").assert().success();
+
+    // Check that overlapping packages show a warning when preview feature is enabled
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg("--preview-features")
+        .arg("detect-module-conflicts")
+        .arg(&built_by_uv)
+        .arg(also_build_by_uv.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    warning: The module `built_by_uv` is provided by more than one package, which causes an install race condition and can result in a broken module. Consider removing your dependency on either `built-by-uv` (v0.1.0) or `also-built-by-uv` (v0.1.0).
+    Installed 2 packages in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
+    "
+    );
+
+    // Check that correctly overlapping namespace packages don't show a warning
+    uv_snapshot!(context.pip_install()
+        .arg("--no-deps")
+        .arg("poetry")
+        .arg("poetry-core"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + poetry==1.8.2
+     + poetry-core==1.9.0
+    "
+    );
+
+    // Check that we can uninstall even if the venv is bogus.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("built_by_uv"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
+    "
+    );
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("also_built_by_uv"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+    "
+    );
+
+    // Check that installing one of the packages on their own doesn't warn.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg(built_by_uv), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
+    "
+    );
+    // Currently, we don't warn if we install them one wheel at a time.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg(also_build_by_uv.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+    "
+    );
 
     Ok(())
 }

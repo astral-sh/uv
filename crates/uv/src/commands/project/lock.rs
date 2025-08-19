@@ -16,7 +16,7 @@ use uv_configuration::{
     PreviewFeatures, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     Requirement, RequiresPython, UnresolvedRequirementSpecification,
@@ -24,7 +24,7 @@ use uv_distribution_types::{
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pypi_types::{Conflicts, SupportedEnvironments};
+use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::ExtrasResolver;
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
@@ -62,15 +62,15 @@ pub(crate) enum LockResult {
 impl LockResult {
     pub(crate) fn lock(&self) -> &Lock {
         match self {
-            LockResult::Unchanged(lock) => lock,
-            LockResult::Changed(_, lock) => lock,
+            Self::Unchanged(lock) => lock,
+            Self::Changed(_, lock) => lock,
         }
     }
 
     pub(crate) fn into_lock(self) -> Lock {
         match self {
-            LockResult::Unchanged(lock) => lock,
-            LockResult::Changed(_, lock) => lock,
+            Self::Unchanged(lock) => lock,
+            Self::Changed(_, lock) => lock,
         }
     }
 }
@@ -436,6 +436,7 @@ async fn do_lock(
         no_build_isolation,
         no_build_isolation_package,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade,
@@ -484,6 +485,19 @@ async fn do_lock(
                 conflicts.expand_transitive_group_includes(&project.name, groups);
             }
         }
+    }
+
+    // Check if any conflicts contain project-level conflicts
+    if !preview.is_enabled(PreviewFeatures::PACKAGE_CONFLICTS)
+        && conflicts.iter().any(|set| {
+            set.iter()
+                .any(|item| matches!(item.kind(), ConflictKind::Project))
+        })
+    {
+        warn_user_once!(
+            "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::PACKAGE_CONFLICTS
+        );
     }
 
     // Collect the list of supported environments.
@@ -673,9 +687,9 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies.
     let extra_build_requires = match &target {
-        LockTarget::Workspace(workspace) => uv_distribution::ExtraBuildRequires::from_workspace(
+        LockTarget::Workspace(workspace) => LoweredExtraBuildDependencies::from_workspace(
             extra_build_dependencies.clone(),
             workspace,
             index_locations,
@@ -685,11 +699,17 @@ async fn do_lock(
             // Try to get extra build dependencies from the script metadata
             script_extra_build_requires((*script).into(), settings)?
         }
-    };
+    }
+    .into_inner();
+
+    // Convert to the `Constraints` format.
+    let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        Constraints::from_requirements(build_constraints.iter().cloned()),
+        &dispatch_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -700,6 +720,7 @@ async fn do_lock(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,

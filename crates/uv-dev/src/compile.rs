@@ -5,7 +5,7 @@ use tracing::info;
 
 use uv_cache::{Cache, CacheArgs};
 use uv_configuration::{Concurrency, Preview};
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
 #[derive(Parser)]
 pub(crate) struct CompileArgs {
@@ -25,6 +25,7 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
         let interpreter = PythonEnvironment::find(
             &PythonRequest::default(),
             EnvironmentPreference::OnlyVirtual,
+            PythonPreference::default(),
             &cache,
             Preview::default(),
         )?

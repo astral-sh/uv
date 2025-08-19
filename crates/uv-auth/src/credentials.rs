@@ -158,7 +158,7 @@ impl Credentials {
             return None;
         }
 
-        Some(Credentials::Basic {
+        Some(Self::Basic {
             username: Username::new(Some(entry.login.clone())),
             password: Some(Password(entry.password.clone())),
         })

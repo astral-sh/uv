@@ -133,7 +133,7 @@ impl<'de> Deserialize<'de> for CoreMetadata {
         D: Deserializer<'de>,
     {
         serde_untagged::UntaggedEnumVisitor::new()
-            .bool(|bool| Ok(CoreMetadata::Bool(bool)))
+            .bool(|bool| Ok(Self::Bool(bool)))
             .map(|map| map.deserialize().map(CoreMetadata::Hashes))
             .deserialize(deserializer)
     }
@@ -161,8 +161,8 @@ impl<'de> Deserialize<'de> for Yanked {
         D: Deserializer<'de>,
     {
         serde_untagged::UntaggedEnumVisitor::new()
-            .bool(|bool| Ok(Yanked::Bool(bool)))
-            .string(|string| Ok(Yanked::Reason(SmallString::from(string))))
+            .bool(|bool| Ok(Self::Bool(bool)))
+            .string(|string| Ok(Self::Reason(SmallString::from(string))))
             .deserialize(deserializer)
     }
 }
@@ -218,35 +218,35 @@ impl Hashes {
         }
 
         match name {
-            "md5" => Ok(Hashes {
+            "md5" => Ok(Self {
                 md5: Some(SmallString::from(value)),
                 sha256: None,
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             }),
-            "sha256" => Ok(Hashes {
+            "sha256" => Ok(Self {
                 md5: None,
                 sha256: Some(SmallString::from(value)),
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             }),
-            "sha384" => Ok(Hashes {
+            "sha384" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: Some(SmallString::from(value)),
                 sha512: None,
                 blake2b: None,
             }),
-            "sha512" => Ok(Hashes {
+            "sha512" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
                 sha512: Some(SmallString::from(value)),
                 blake2b: None,
             }),
-            "blake2b" => Ok(Hashes {
+            "blake2b" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
@@ -278,35 +278,35 @@ impl FromStr for Hashes {
         }
 
         match name {
-            "md5" => Ok(Hashes {
+            "md5" => Ok(Self {
                 md5: Some(SmallString::from(value)),
                 sha256: None,
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             }),
-            "sha256" => Ok(Hashes {
+            "sha256" => Ok(Self {
                 md5: None,
                 sha256: Some(SmallString::from(value)),
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             }),
-            "sha384" => Ok(Hashes {
+            "sha384" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: Some(SmallString::from(value)),
                 sha512: None,
                 blake2b: None,
             }),
-            "sha512" => Ok(Hashes {
+            "sha512" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
                 sha512: Some(SmallString::from(value)),
                 blake2b: None,
             }),
-            "blake2b" => Ok(Hashes {
+            "blake2b" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
@@ -523,7 +523,7 @@ impl From<Hashes> for HashDigests {
 
 impl From<HashDigests> for Hashes {
     fn from(value: HashDigests) -> Self {
-        let mut hashes = Hashes::default();
+        let mut hashes = Self::default();
         for digest in value {
             match digest.algorithm() {
                 HashAlgorithm::Md5 => hashes.md5 = Some(digest.digest),

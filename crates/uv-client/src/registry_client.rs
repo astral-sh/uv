@@ -69,6 +69,12 @@ impl RegistryClientBuilder<'_> {
 
 impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
+    pub fn with_reqwest_client(mut self, client: reqwest::Client) -> Self {
+        self.base_client_builder = self.base_client_builder.with_custom_client(client);
+        self
+    }
+
+    #[must_use]
     pub fn index_locations(mut self, index_locations: &IndexLocations) -> Self {
         self.index_urls = index_locations.index_urls();
         self.base_client_builder = self
@@ -297,7 +303,10 @@ impl RegistryClient {
     }
 
     /// Return the appropriate index URLs for the given [`PackageName`].
-    fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = IndexMetadataRef> {
+    fn index_urls_for(
+        &self,
+        package_name: &PackageName,
+    ) -> impl Iterator<Item = IndexMetadataRef<'_>> {
         self.torch_backend
             .as_ref()
             .and_then(|torch_backend| {
@@ -1179,11 +1188,7 @@ impl SimpleMetadata {
         let SimpleHtml { base, files } =
             SimpleHtml::parse(text, url).map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-        Ok(SimpleMetadata::from_files(
-            files,
-            package_name,
-            base.as_url(),
-        ))
+        Ok(Self::from_files(files, package_name, base.as_url()))
     }
 }
 

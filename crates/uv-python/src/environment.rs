@@ -152,19 +152,16 @@ impl PythonEnvironment {
     pub fn find(
         request: &PythonRequest,
         preference: EnvironmentPreference,
+        python_preference: PythonPreference,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation = match find_python_installation(
-            request,
-            preference,
-            PythonPreference::default(),
-            cache,
-            preview,
-        )? {
-            Ok(installation) => installation,
-            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
-        };
+        let installation =
+            match find_python_installation(request, preference, python_preference, cache, preview)?
+            {
+                Ok(installation) => installation,
+                Err(err) => return Err(EnvironmentNotFound::from(err).into()),
+            };
         Ok(Self::from_installation(installation))
     }
 
@@ -305,7 +302,7 @@ impl PythonEnvironment {
     ///
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
-    pub fn site_packages(&self) -> impl Iterator<Item = Cow<Path>> {
+    pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
         self.0.interpreter.site_packages()
     }
 

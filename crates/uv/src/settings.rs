@@ -21,13 +21,15 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DependencyGroups, DryRun, EditableMode,
-    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PackageConfigSettings, Preview, ProjectBuildBackend,
-    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
-    Upgrade, VersionControlSystem,
+    BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, ExportFormat,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
+    NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl, Requirement};
+use uv_distribution_types::{
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
+    PackageConfigSettings, Requirement,
+};
 use uv_install_wheel::LinkMode;
 use uv_normalize::{PackageName, PipGroupName};
 use uv_pep508::{ExtraName, MarkerTree, RequirementOrigin};
@@ -1017,6 +1019,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) reinstall: bool,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) bin: Option<bool>,
@@ -1049,6 +1052,7 @@ impl PythonUpgradeSettings {
             targets,
             mirror: _,
             pypy_mirror: _,
+            reinstall,
             python_downloads_json_url: _,
         } = args;
 
@@ -1059,6 +1063,7 @@ impl PythonUpgradeSettings {
             registry,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
+            reinstall,
             python_downloads_json_url,
             default,
             bin,
@@ -1437,9 +1442,9 @@ impl AddSettings {
 
         // Warn user if an ambiguous relative path was passed as a value for
         // `--index` or `--default-index`.
-        indexes
-            .iter()
-            .for_each(|index| index.url().warn_on_disambiguated_relative_path());
+        for index in &indexes {
+            index.url().warn_on_disambiguated_relative_path();
+        }
 
         // If the user passed an `--index-url` or `--extra-index-url`, warn.
         if installer
@@ -2749,6 +2754,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: &'a [PackageName],
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
+    pub(crate) extra_build_variables: &'a ExtraBuildVariables,
     pub(crate) exclude_newer: ExcludeNewer,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
@@ -2776,6 +2782,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
+    pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: SourceStrategy,
@@ -2829,6 +2836,7 @@ impl From<ResolverOptions> for ResolverSettings {
             no_build_isolation: value.no_build_isolation.unwrap_or_default(),
             no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
+            extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
             sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
@@ -2927,6 +2935,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 no_build_isolation: value.no_build_isolation.unwrap_or_default(),
                 no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
+                extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: value.prerelease.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
@@ -2970,6 +2979,7 @@ pub(crate) struct PipSettings {
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
+    pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) build_options: BuildOptions,
     pub(crate) allow_empty_requirements: bool,
     pub(crate) strict: bool,
@@ -3038,6 +3048,7 @@ impl PipSettings {
             no_build_isolation,
             no_build_isolation_package,
             extra_build_dependencies,
+            extra_build_variables,
             strict,
             extra,
             all_extras,
@@ -3098,6 +3109,7 @@ impl PipSettings {
             no_build_isolation: top_level_no_build_isolation,
             no_build_isolation_package: top_level_no_build_isolation_package,
             extra_build_dependencies: top_level_extra_build_dependencies,
+            extra_build_variables: top_level_extra_build_variables,
             exclude_newer: top_level_exclude_newer,
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
@@ -3136,6 +3148,7 @@ impl PipSettings {
             no_build_isolation_package.combine(top_level_no_build_isolation_package);
         let extra_build_dependencies =
             extra_build_dependencies.combine(top_level_extra_build_dependencies);
+        let extra_build_variables = extra_build_variables.combine(top_level_extra_build_variables);
         let exclude_newer = args
             .exclude_newer
             .combine(exclude_newer)
@@ -3242,6 +3255,10 @@ impl PipSettings {
             extra_build_dependencies: args
                 .extra_build_dependencies
                 .combine(extra_build_dependencies)
+                .unwrap_or_default(),
+            extra_build_variables: args
+                .extra_build_variables
+                .combine(extra_build_variables)
                 .unwrap_or_default(),
             config_setting: args
                 .config_settings
@@ -3351,6 +3368,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             no_build_isolation: settings.resolver.no_build_isolation,
             no_build_isolation_package: &settings.resolver.no_build_isolation_package,
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
+            extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: settings.resolver.exclude_newer.clone(),
             link_mode: settings.resolver.link_mode,
             compile_bytecode: settings.compile_bytecode,

@@ -40,6 +40,8 @@ env:
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/uv
   UV_DOCKERHUB_IMAGE: docker.io/astral/uv
 
+permissions: {}
+
 jobs:
   docker-plan:
     name: plan
@@ -57,13 +59,13 @@ jobs:
           IS_LOCAL_PR: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         id: plan
         run: |
-          if [ "${{ env.DRY_RUN }}" == "false" ]; then
+          if [ "${DRY_RUN}" == "false" ]; then
             echo "login=true" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"
-            echo "tag=${{ env.TAG }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "action=build and publish" >> "$GITHUB_OUTPUT"
           else
-            echo "login=${{ env.IS_LOCAL_PR }}" >> "$GITHUB_OUTPUT"
+            echo "login=${IS_LOCAL_PR}" >> "$GITHUB_OUTPUT"
             echo "push=false" >> "$GITHUB_OUTPUT"
             echo "tag=dry-run" >> "$GITHUB_OUTPUT"
             echo "action=build" >> "$GITHUB_OUTPUT"
@@ -91,6 +93,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
+          persist-credentials: false
 
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
@@ -111,14 +114,16 @@ jobs:
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         run: |
           version=$(grep "version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
-          if [ "${{ needs.docker-plan.outputs.tag }}" != "${version}" ]; then
+          if [ "${TAG}" != "${version}" ]; then
             echo "The input tag does not match the version from pyproject.toml:" >&2
-            echo "${{ needs.docker-plan.outputs.tag }}" >&2
+            echo "${TAG}" >&2
             echo "${version}" >&2
             exit 1
           else
             echo "Releasing ${version}"
           fi
+        env:
+          TAG: ${{ needs.docker-plan.outputs.tag }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -137,7 +142,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: depot/build-push-action@2583627a84956d07561420dcc1d0eb1f2af3fac0 # v1.15.0
+        uses: depot/build-push-action@9785b135c3c76c33db102e45be96a25ab55cd507 # v1.16.2
         with:
           project: 7hd4vdzmw5 # astral-sh/uv
           context: .
@@ -174,8 +179,11 @@ jobs:
         # Note, org.opencontainers.image.version label will use the first base tag (use the most specific tag first)
         image-mapping:
           - alpine:3.21,alpine3.21,alpine
+          - alpine:3.22,alpine3.22
           - debian:bookworm-slim,bookworm-slim,debian-slim
           - buildpack-deps:bookworm,bookworm,debian
+          - debian:trixie-slim,trixie-slim
+          - buildpack-deps:trixie,trixie
           - python:3.14-rc-alpine,python3.14-rc-alpine
           - python:3.13-alpine,python3.13-alpine
           - python:3.12-alpine,python3.12-alpine
@@ -197,6 +205,18 @@ jobs:
           - python:3.10-slim-bookworm,python3.10-bookworm-slim
           - python:3.9-slim-bookworm,python3.9-bookworm-slim
           - python:3.8-slim-bookworm,python3.8-bookworm-slim
+          - python:3.14-rc-trixie,python3.14-rc-trixie
+          - python:3.13-trixie,python3.13-trixie
+          - python:3.12-trixie,python3.12-trixie
+          - python:3.11-trixie,python3.11-trixie
+          - python:3.10-trixie,python3.10-trixie
+          - python:3.9-trixie,python3.9-trixie
+          - python:3.14-rc-slim-trixie,python3.14-rc-trixie-slim
+          - python:3.13-slim-trixie,python3.13-trixie-slim
+          - python:3.12-slim-trixie,python3.12-trixie-slim
+          - python:3.11-slim-trixie,python3.11-trixie-slim
+          - python:3.10-slim-trixie,python3.10-trixie-slim
+          - python:3.9-slim-trixie,python3.9-trixie-slim
     steps:
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
@@ -224,7 +244,7 @@ jobs:
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
-          COPY --from=${{ env.UV_GHCR_IMAGE }}:latest /uv /uvx /usr/local/bin/
+          COPY --from=${UV_GHCR_IMAGE}:latest /uv /uvx /usr/local/bin/
           ENV UV_TOOL_BIN_DIR="/usr/local/bin"
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
@@ -236,8 +256,8 @@ jobs:
           # Loop through all base tags and append its docker metadata pattern to the list
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
           IFS=','; for TAG in ${BASE_TAGS}; do
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${{ needs.docker-plan.outputs.tag }}\n"
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${{ needs.docker-plan.outputs.tag }}\n"
+            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${VERSION}\n"
+            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${VERSION}\n"
             TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
           done
 
@@ -250,6 +270,8 @@ jobs:
             echo -e "${TAG_PATTERNS}"
             echo EOF
           } >> $GITHUB_ENV
+        env:
+          VERSION: ${{ needs.docker-plan.outputs.tag }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -260,7 +282,9 @@ jobs:
         with:
           images: |
             ${{ env.UV_GHCR_IMAGE }}
-            ${{ env.UV_DOCKERHUB_IMAGE }}
+            # We are temporarily not publishing the extra images to DockerHub
+            # TODO(zanieb): Restore DockerHub support. See also, "Add annotations to images".
+            # ${{ env.UV_DOCKERHUB_IMAGE }}
           flavor: |
             latest=false
           tags: |
@@ -268,7 +292,7 @@ jobs:
 
       - name: Build and push
         id: build-and-push
-        uses: depot/build-push-action@2583627a84956d07561420dcc1d0eb1f2af3fac0 # v1.15.0
+        uses: depot/build-push-action@9785b135c3c76c33db102e45be96a25ab55cd507 # v1.16.2
         with:
           context: .
           project: 7hd4vdzmw5 # astral-sh/uv
@@ -291,7 +315,9 @@ jobs:
       - name: Add annotations to images
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         env:
-          IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
+          IMAGES: "${{ env.UV_GHCR_IMAGE }}"
+          # TODO(zanieb): Restore DockerHub support.
+          # IMAGES: "${{ env.UV_GHCR_IMAGE }} ${{ env.UV_DOCKERHUB_IMAGE }}"
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
           ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
@@ -334,6 +360,11 @@ jobs:
   docker-annotate-base:
     name: annotate uv
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for GHCR signing
+      packages: write # for GHCR image pushes
+      attestations: write # for GHCR attestations
     environment:
       name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
     needs:

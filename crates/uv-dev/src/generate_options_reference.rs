@@ -193,15 +193,15 @@ enum Set {
 impl Set {
     fn name(&self) -> Option<&str> {
         match self {
-            Set::Global { .. } => None,
-            Set::Named { name, .. } => Some(name),
+            Self::Global { .. } => None,
+            Self::Named { name, .. } => Some(name),
         }
     }
 
     fn metadata(&self) -> &OptionSet {
         match self {
-            Set::Global { set, .. } => set,
-            Set::Named { set, .. } => set,
+            Self::Global { set, .. } => set,
+            Self::Named { set, .. } => set,
         }
     }
 }

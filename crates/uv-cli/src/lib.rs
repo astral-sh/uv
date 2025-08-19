@@ -10,11 +10,13 @@ use clap::{Args, Parser, Subcommand};
 
 use uv_cache::CacheArgs;
 use uv_configuration::{
-    ConfigSettingEntry, ConfigSettingPackageEntry, ExportFormat, IndexStrategy,
-    KeyringProviderType, PackageNameSpecifier, PreviewFeatures, ProjectBuildBackend, TargetTriple,
-    TrustedHost, TrustedPublishing, VersionControlSystem,
+    ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PreviewFeatures,
+    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
-use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
+use uv_distribution_types::{
+    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
+    PipFindLinks, PipIndex,
+};
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
@@ -680,15 +682,15 @@ pub enum VersionBump {
 impl std::fmt::Display for VersionBump {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = match self {
-            VersionBump::Major => "major",
-            VersionBump::Minor => "minor",
-            VersionBump::Patch => "patch",
-            VersionBump::Stable => "stable",
-            VersionBump::Alpha => "alpha",
-            VersionBump::Beta => "beta",
-            VersionBump::Rc => "rc",
-            VersionBump::Post => "post",
-            VersionBump::Dev => "dev",
+            Self::Major => "major",
+            Self::Minor => "minor",
+            Self::Patch => "patch",
+            Self::Stable => "stable",
+            Self::Alpha => "alpha",
+            Self::Beta => "beta",
+            Self::Rc => "rc",
+            Self::Post => "post",
+            Self::Dev => "dev",
         };
         string.fmt(f)
     }
@@ -1032,13 +1034,13 @@ pub enum Maybe<T> {
 impl<T> Maybe<T> {
     pub fn into_option(self) -> Option<T> {
         match self {
-            Maybe::Some(value) => Some(value),
-            Maybe::None => None,
+            Self::Some(value) => Some(value),
+            Self::None => None,
         }
     }
 
     pub fn is_some(&self) -> bool {
-        matches!(self, Maybe::Some(_))
+        matches!(self, Self::Some(_))
     }
 }
 
@@ -2784,6 +2786,11 @@ pub struct VenvArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(long, value_enum, env = EnvVars::UV_LINK_MODE)]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
@@ -3032,7 +3039,7 @@ pub struct RunArgs {
     /// This option is an alias for `--group dev`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
@@ -3041,7 +3048,7 @@ pub struct RunArgs {
     /// See `--no-default-groups` to disable all default groups instead.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -3321,14 +3328,14 @@ pub struct SyncArgs {
     /// Include the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
@@ -3650,7 +3657,9 @@ pub struct AddArgs {
         long,
         conflicts_with("optional"),
         conflicts_with("group"),
-        conflicts_with("script")
+        conflicts_with("script"),
+        env = EnvVars::UV_DEV,
+        value_parser = clap::builder::BoolishValueParser::new()
     )]
     pub dev: bool,
 
@@ -3677,7 +3686,7 @@ pub struct AddArgs {
     #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    #[arg(long, overrides_with = "editable", hide = true)]
+    #[arg(long, overrides_with = "editable", hide = true, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Add a dependency as provided.
@@ -3829,7 +3838,7 @@ pub struct RemoveArgs {
     /// Remove the packages from the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
+    #[arg(long, conflicts_with("optional"), conflicts_with("group"), env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Remove the packages from the project's optional dependencies for the specified extra.
@@ -3934,7 +3943,7 @@ pub struct TreeArgs {
     /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Only include the development dependency group.
@@ -3949,7 +3958,7 @@ pub struct TreeArgs {
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -4109,14 +4118,14 @@ pub struct ExportArgs {
     /// Include the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true)]
+    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Disable the development dependency group.
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"))]
+    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
@@ -4179,7 +4188,7 @@ pub struct ExportArgs {
 
     /// Export any editable dependencies, including the project and any workspace members, as
     /// non-editable.
-    #[arg(long)]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
     pub no_editable: bool,
 
     /// Include hashes for all dependencies.
@@ -4849,6 +4858,11 @@ pub struct ToolUpgradeArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -5224,6 +5238,13 @@ pub struct PythonUpgradeArgs {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
     pub pypy_mirror: Option<String>,
+
+    /// Reinstall the latest Python patch, if it's already installed.
+    ///
+    /// By default, uv will exit successfully if the latest patch is already
+    /// installed.
+    #[arg(long, short)]
+    pub reinstall: bool,
 
     /// URL pointing to JSON of custom Python installations.
     ///
@@ -5653,6 +5674,11 @@ pub struct InstallerArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -5865,6 +5891,11 @@ pub struct ResolverArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,
@@ -6069,6 +6100,11 @@ pub struct ResolverInstallerArgs {
     ///
     /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
     /// Windows.
+    ///
+    /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
+    /// will break all installed packages by way of removing the underlying source files. Use
+    /// symlinks with caution.
     #[arg(
         long,
         value_enum,

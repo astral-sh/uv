@@ -14,8 +14,10 @@ bitflags::bitflags! {
         const JSON_OUTPUT = 1 << 2;
         const PYLOCK = 1 << 3;
         const ADD_BOUNDS = 1 << 4;
-        const EXTRA_BUILD_DEPENDENCIES = 1 << 5;
-        const FORMAT = 1 << 6;
+        const PACKAGE_CONFLICTS = 1 << 5;
+        const EXTRA_BUILD_DEPENDENCIES = 1 << 6;
+        const DETECT_MODULE_CONFLICTS = 1 << 7;
+        const FORMAT = 1 << 8;
     }
 }
 
@@ -30,7 +32,9 @@ impl PreviewFeatures {
             Self::JSON_OUTPUT => "json-output",
             Self::PYLOCK => "pylock",
             Self::ADD_BOUNDS => "add-bounds",
+            Self::PACKAGE_CONFLICTS => "package-conflicts",
             Self::EXTRA_BUILD_DEPENDENCIES => "extra-build-dependencies",
+            Self::DETECT_MODULE_CONFLICTS => "detect-module-conflicts",
             Self::FORMAT => "format",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
@@ -42,7 +46,7 @@ impl Display for PreviewFeatures {
         if self.is_empty() {
             write!(f, "none")
         } else {
-            let features: Vec<&str> = self.iter().map(PreviewFeatures::flag_as_str).collect();
+            let features: Vec<&str> = self.iter().map(Self::flag_as_str).collect();
             write!(f, "{}", features.join(","))
         }
     }
@@ -58,7 +62,7 @@ impl FromStr for PreviewFeatures {
     type Err = PreviewFeaturesParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut flags = PreviewFeatures::empty();
+        let mut flags = Self::empty();
 
         for part in s.split(',') {
             let part = part.trim();
@@ -74,7 +78,9 @@ impl FromStr for PreviewFeatures {
                 "json-output" => Self::JSON_OUTPUT,
                 "pylock" => Self::PYLOCK,
                 "add-bounds" => Self::ADD_BOUNDS,
+                "package-conflicts" => Self::PACKAGE_CONFLICTS,
                 "extra-build-dependencies" => Self::EXTRA_BUILD_DEPENDENCIES,
+                "detect-module-conflicts" => Self::DETECT_MODULE_CONFLICTS,
                 "format" => Self::FORMAT,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
@@ -239,8 +245,16 @@ mod tests {
         assert_eq!(PreviewFeatures::PYLOCK.flag_as_str(), "pylock");
         assert_eq!(PreviewFeatures::ADD_BOUNDS.flag_as_str(), "add-bounds");
         assert_eq!(
+            PreviewFeatures::PACKAGE_CONFLICTS.flag_as_str(),
+            "package-conflicts"
+        );
+        assert_eq!(
             PreviewFeatures::EXTRA_BUILD_DEPENDENCIES.flag_as_str(),
             "extra-build-dependencies"
+        );
+        assert_eq!(
+            PreviewFeatures::DETECT_MODULE_CONFLICTS.flag_as_str(),
+            "detect-module-conflicts"
         );
         assert_eq!(PreviewFeatures::FORMAT.flag_as_str(), "format");
     }
