@@ -282,8 +282,7 @@ jobs:
         with:
           images: |
             ${{ env.UV_GHCR_IMAGE }}
-            # We are temporarily not publishing the extra images to DockerHub
-            # ${{ env.UV_DOCKERHUB_IMAGE }}
+            ${{ env.UV_DOCKERHUB_IMAGE }}
           flavor: |
             latest=false
           tags: |
