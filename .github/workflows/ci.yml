@@ -1502,7 +1502,7 @@ jobs:
           ./uv venv venv-native -p 3.12
           # We use features added in 0.30.3 but there is no known breakage in
           # newer versions.
-          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.3 pip --prerelease=allow
+          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.7 pip
 
       - name: "Install Pyodide interpreter"
         run: |
