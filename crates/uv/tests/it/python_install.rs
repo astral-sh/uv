@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::{env, path::Path, process::Command};
 
 use crate::common::{TestContext, uv_snapshot};
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
     prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
@@ -2062,8 +2063,9 @@ fn python_install_314() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
-        .with_filtered_exe_suffix()
-        .with_python_download_cache();
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_exe_suffix();
 
     // Install 3.14
     // For now, this provides test coverage of pre-release handling
@@ -2087,17 +2089,21 @@ fn python_install_314() {
     Installed Python 3.14.0a4 in [TIME]
      + cpython-3.14.0a4-[PLATFORM]
     ");
+}
 
-    // Add name filtering for the `find` tests, we avoid it in `install` tests because it clobbers
-    // the version suffixes which matter in the install logs
-    let filters = context
-        .filters()
-        .iter()
-        .map(|(a, b)| ((*a).to_string(), (*b).to_string()))
-        .collect::<Vec<_>>();
-    let context = context
+#[test]
+fn python_find_314() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
         .with_filtered_python_install_bin()
-        .with_filtered_python_names();
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
+    // See [`python_install_314`] coverage of these.
+    context.python_install().arg("3.14").assert().success();
+    context.python_install().arg("3.14.0a4").assert().success();
 
     // We should be able to find this version without opt-in, because there is no stable release
     // installed
@@ -2130,7 +2136,7 @@ fn python_install_314() {
     ");
 
     // If we install a stable version, that should be preferred though
-    uv_snapshot!(filters, context.python_install().arg("3.13"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3165,9 +3171,12 @@ fn python_install_build_version() {
 
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
         .with_managed_python_dirs()
-        .with_python_download_cache();
+        .with_python_download_cache()
+        .with_filtered_python_sources()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
 
     uv_snapshot!(context.filters(), context.python_install()
         .arg("3.12")
@@ -3197,7 +3206,7 @@ fn python_install_build_version() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12
+    [TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -3211,7 +3220,7 @@ fn python_install_build_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python 3.12 in virtual environments, managed installations, or search path
+    error: No interpreter found for Python 3.12 in [PYTHON SOURCES]
     ");
 
     // If there's no install for a build number, we should fail
@@ -3245,9 +3254,12 @@ fn python_install_build_version_pypy() {
 
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
+        .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache();
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
 
     uv_snapshot!(context.filters(), context.python_install()
         .arg("pypy3.10")
@@ -3277,7 +3289,7 @@ fn python_install_build_version_pypy() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/pypy-3.10.16-[PLATFORM]/bin/pypy3.10
+    [TEMP_DIR]/managed/pypy-3.10.16-[PLATFORM]/[INSTALL-BIN]/[PYPY]
 
     ----- stderr -----
     ");
@@ -3291,7 +3303,7 @@ fn python_install_build_version_pypy() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for PyPy 3.10 in virtual environments, managed installations, or search path
+    error: No interpreter found for PyPy 3.10 in [PYTHON SOURCES]
     ");
 
     // If there's no install for a build number, we should fail

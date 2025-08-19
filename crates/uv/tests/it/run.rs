@@ -3332,14 +3332,14 @@ fn run_project_toml_error() -> Result<()> {
     init.touch()?;
 
     // `run` should fail
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
-    "###);
+    ");
 
     // `run --no-project` should not
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @r"
@@ -4086,7 +4086,7 @@ fn run_linked_environment_path() -> Result<()> {
 
     // Running `uv sync` should use the environment at `target``
     uv_snapshot!(context.filters(), context.sync()
-        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r###"
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4101,7 +4101,7 @@ fn run_linked_environment_path() -> Result<()> {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    "###);
+    ");
 
     // `sys.prefix` and `sys.executable` should be from the `target` directory
     uv_snapshot!(context.filters(), context.run()
