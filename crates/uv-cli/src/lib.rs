@@ -1800,7 +1800,7 @@ pub struct PipInstallArgs {
     #[arg(group = "sources")]
     pub package: Vec<String>,
 
-    /// Install all packages listed in the given `requirements.txt`, `PEP 723` scripts, or `pylock.toml` files.
+    /// Install all packages listed in the given `requirements.txt`, PEP 723 scripts, or `pylock.toml` files.
     ///
     /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will extract the
     /// requirements for the relevant project.

@@ -187,13 +187,13 @@ impl RequirementsSpecification {
                     Ok(Some(script)) => Pep723Item::Script(script),
                     Ok(None) => {
                         return Err(anyhow::anyhow!(
-                            "`{}` does not contain an inline script metadata tag.",
+                            "`{}` does not contain inline script metadata",
                             path.user_display(),
                         ));
                     }
                     Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
                         return Err(anyhow::anyhow!(
-                            "Failed to read `{}` (not found).",
+                            "Failed to read `{}` (not found)",
                             path.user_display(),
                         ));
                     }

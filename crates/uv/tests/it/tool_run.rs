@@ -2713,7 +2713,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `not_pep723_script.py` does not contain an inline script metadata tag.
+    error: `not_pep723_script.py` does not contain inline script metadata
     ");
 
     // Error when the script doesn't exist.
@@ -2726,7 +2726,7 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read `missing_file.py` (not found).
+    error: Failed to read `missing_file.py` (not found)
     ");
 
     Ok(())
