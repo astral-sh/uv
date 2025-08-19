@@ -733,7 +733,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Download the wheel to a temporary file.
                 let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
-                let mut writer = tokio::io::BufWriter::new(tokio::fs::File::from_std(temp_file));
+                let mut writer = tokio::io::BufWriter::new(fs_err::tokio::File::from_std(
+                    // It's an unnamed file on Linux so that's the best approximation.
+                    fs_err::File::from_parts(temp_file, self.build_context.cache().root()),
+                ));
 
                 match progress {
                     Some((reporter, progress)) => {
