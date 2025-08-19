@@ -3812,6 +3812,26 @@ pub struct AddArgs {
     /// as direct path dependency instead.
     #[arg(long, overrides_with = "workspace")]
     pub no_workspace: bool,
+
+    /// Do not install the current project.
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option allows the project to be excluded, but all of
+    /// its dependencies are still installed. This is particularly useful in situations like building
+    /// Docker images where installing the project separately from its dependencies allows optimal
+    /// layer caching.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_project: bool,
+
+    /// Do not install any workspace members, including the current project.
+    ///
+    /// By default, all of the workspace members and their dependencies are installed into the
+    /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
+    /// members while retaining their dependencies. This is particularly useful in situations like
+    /// building Docker images where installing the workspace separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_workspace: bool,
 }
 
 #[derive(Args)]
