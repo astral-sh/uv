@@ -5,7 +5,6 @@ use tokio::process::Command;
 
 use uv_bin_install::{Binary, bin_install};
 use uv_cache::Cache;
-use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Preview, PreviewFeatures};
 use uv_pep440::Version;
@@ -21,7 +20,7 @@ use crate::settings::NetworkSettings;
 pub(crate) async fn format(
     check: bool,
     diff: bool,
-    args: Option<ExternalCommand>,
+    extra_args: Vec<String>,
     version: Option<String>,
     network_settings: NetworkSettings,
     cache: Cache,
@@ -47,15 +46,11 @@ pub(crate) async fn format(
 
     // Get the path to Ruff, downloading it if necessary
     let reporter = BinaryDownloadReporter::single(printer);
-    let ruff_path = bin_install(
-        Binary::Ruff,
-        version.as_ref(),
-        &client,
-        &cache,
-        Some(&reporter),
-    )
-    .await
-    .context("Failed to install Ruff")?;
+    let default_version = Binary::Ruff.default_version();
+    let version = version.as_ref().unwrap_or(&default_version);
+    let ruff_path = bin_install(Binary::Ruff, version, &client, &cache, &reporter)
+        .await
+        .context("Failed to install ruff {version}")?;
 
     let mut command = Command::new(&ruff_path);
     command.arg("format");
@@ -68,11 +63,7 @@ pub(crate) async fn format(
     }
 
     // Add any additional arguments passed after `--`
-    if let Some(args) = args {
-        for arg in args.iter() {
-            command.arg(arg);
-        }
-    }
+    command.args(extra_args.iter());
 
     let handle = command.spawn().context("Failed to spawn `ruff format`")?;
     run_to_completion(handle).await

@@ -1841,8 +1841,14 @@ Additional arguments can be passed to Ruff after `--`.
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv format [OPTIONS] [COMMAND]
+uv format [OPTIONS] [-- <EXTRA_ARGS>...]
 ```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-format--extra_args"><a href="#uv-format--extra_args"<code>EXTRA_ARGS</code></a></dt><dd><p>Additional arguments to pass to Ruff.</p>
+<p>For example, use <code>uv format -- --line-length 100</code> to set the line length or <code>uv format -- src/module/foo.py</code> to format a specific file.</p>
+</dd></dl>
 
 <h3 class="cli-reference">Options</h3>
 

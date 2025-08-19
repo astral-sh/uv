@@ -5,19 +5,22 @@
 
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::str::FromStr;
 use std::task::{Context, Poll};
+use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
+use reqwest_retry::RetryPolicy;
+use std::fmt;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::debug;
 use url::Url;
+use uv_distribution_filename::SourceDistExtension;
 
 use uv_cache::{Cache, CacheBucket, CacheEntry};
-use uv_client::BaseClient;
-use uv_distribution_filename::SourceDistExtension;
-use uv_extract::stream;
+use uv_client::{BaseClient, is_extended_transient_error};
+use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::Version;
 use uv_platform::{Arch, Libc, Os};
 
@@ -31,7 +34,8 @@ impl Binary {
     /// Get the default version for this binary.
     pub fn default_version(&self) -> Version {
         match self {
-            Binary::Ruff => Version::from_str("0.12.5").expect("valid version"),
+            // TODO(zanieb): Figure out a nice way to automate updating this
+            Binary::Ruff => Version::new([0, 12, 5]),
         }
     }
 
@@ -49,12 +53,13 @@ impl Binary {
         &self,
         version: &Version,
         platform: &str,
-        ext: &SourceDistExtension,
+        format: ArchiveFormat,
     ) -> Result<Url, Error> {
         match self {
             Binary::Ruff => {
                 let url = format!(
-                    "https://github.com/astral-sh/ruff/releases/download/{version}/ruff-{platform}.{ext}"
+                    "https://github.com/astral-sh/ruff/releases/download/{version}/ruff-{platform}.{}",
+                    format.extension()
                 );
                 Url::parse(&url).map_err(|err| Error::UrlParse { url, source: err })
             }
@@ -67,46 +72,87 @@ impl Binary {
     }
 }
 
+impl fmt::Display for Binary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// Archive formats for binary downloads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArchiveFormat {
+    Zip,
+    TarGz,
+}
+
+impl ArchiveFormat {
+    /// Get the file extension for this archive format.
+    pub fn extension(&self) -> &'static str {
+        match self {
+            Self::Zip => "zip",
+            Self::TarGz => "tar.gz",
+        }
+    }
+}
+
+impl From<ArchiveFormat> for SourceDistExtension {
+    fn from(val: ArchiveFormat) -> Self {
+        match val {
+            ArchiveFormat::Zip => SourceDistExtension::Zip,
+            ArchiveFormat::TarGz => SourceDistExtension::TarGz,
+        }
+    }
+}
+
 /// Errors that can occur during binary download and installation.
 #[derive(Debug, Error)]
 pub enum Error {
-    /// Failed to download binary.
-    #[error("Failed to download {tool} {version} from {url}")]
+    #[error("Failed to download from: {url}")]
     Download {
-        tool: String,
-        version: String,
-        url: String,
+        url: Url,
         #[source]
         source: reqwest_middleware::Error,
     },
 
-    /// Failed to parse download URL.
-    #[error("Failed to parse download URL: {url}")]
+    #[error("Failed to parse URL: {url}")]
     UrlParse {
         url: String,
         #[source]
         source: url::ParseError,
     },
 
-    /// Failed to extract archive.
-    #[error("Failed to extract {tool} archive")]
+    #[error("Failed to extract archive")]
     Extract {
-        tool: String,
         #[source]
-        source: anyhow::Error,
+        source: ExtractError,
     },
 
-    /// Binary not found in extracted archive.
-    #[error("Binary not found in {tool} archive at expected location: {expected}")]
-    BinaryNotFound { tool: String, expected: PathBuf },
+    #[error("Binary not found in archive at expected location: {expected}")]
+    BinaryNotFound { expected: PathBuf },
 
-    /// I/O error during installation.
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// Platform detection error.
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),
+
+    #[error("Request failed after {retries} retries")]
+    NetworkErrorWithRetries {
+        #[source]
+        err: Box<Error>,
+        retries: u32,
+    },
+}
+
+impl Error {
+    /// Return the number of attempts that were made to complete this request before this error was
+    /// returned. Note that e.g. 3 retries equates to 4 attempts.
+    fn attempts(&self) -> u32 {
+        if let Error::NetworkErrorWithRetries { retries, .. } = self {
+            return retries + 1;
+        }
+        1
+    }
 }
 
 /// Progress reporter for binary downloads.
@@ -146,34 +192,80 @@ where
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
-        let before = buf.filled().len();
-        match Pin::new(&mut self.reader).poll_read(cx, buf) {
-            Poll::Ready(Ok(())) => {
-                let after = buf.filled().len();
-                let bytes = after - before;
-                if bytes > 0 {
-                    self.reporter.on_download_progress(self.index, bytes as u64);
-                }
-                Poll::Ready(Ok(()))
-            }
-            poll => poll,
-        }
+        Pin::new(&mut self.as_mut().reader)
+            .poll_read(cx, buf)
+            .map_ok(|()| {
+                self.reporter
+                    .on_download_progress(self.index, buf.filled().len() as u64);
+            })
     }
 }
 
-/// Install a binary for the given tool.
+/// Install a binary for the given tool with retry on failure.
 pub async fn bin_install(
     binary: Binary,
-    version: Option<&Version>,
+    version: &Version,
     client: &BaseClient,
     cache: &Cache,
-    reporter: Option<&dyn Reporter>,
+    reporter: &dyn Reporter,
+) -> Result<PathBuf, Error> {
+    let mut total_attempts = 0;
+    let mut retried_here = false;
+    let start_time = SystemTime::now();
+    let retry_policy = client.retry_policy();
+
+    loop {
+        let result = bin_install_inner(binary, version, client, cache, reporter).await;
+
+        let result = match result {
+            Ok(path) => Ok(path),
+            Err(err) => {
+                total_attempts += err.attempts();
+                let n_past_retries = total_attempts - 1;
+
+                if is_extended_transient_error(&err) {
+                    let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+                    if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                        debug!(
+                            "Transient failure while installing {} {}; retrying...",
+                            binary.name(),
+                            version
+                        );
+                        let duration = execute_after
+                            .duration_since(SystemTime::now())
+                            .unwrap_or_else(|_| Duration::default());
+                        tokio::time::sleep(duration).await;
+                        retried_here = true;
+                        continue; // Retry
+                    }
+                }
+
+                if retried_here {
+                    Err(Error::NetworkErrorWithRetries {
+                        err: Box::new(err),
+                        retries: n_past_retries,
+                    })
+                } else {
+                    Err(err)
+                }
+            }
+        };
+        return result;
+    }
+}
+
+/// Install a binary for the given tool (internal implementation without retry).
+async fn bin_install_inner(
+    binary: Binary,
+    version: &Version,
+    client: &BaseClient,
+    cache: &Cache,
+    reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
     let os = Os::from_env();
     let arch = Arch::from_env();
     let libc = Libc::from_env()?;
-    let version = version.cloned().unwrap_or_else(|| binary.default_version());
-    let platform_name = platform_name_for_binary(os, arch, libc);
+    let platform_name = cargo_dist_platform(os, arch, libc);
 
     // Check the cache first
     let cache_entry = CacheEntry::new(
@@ -185,23 +277,23 @@ pub async fn bin_install(
         binary.executable(),
     );
 
-    if let Ok(true) = cache_entry.path().try_exists() {
+    if cache_entry.path().exists() {
         return Ok(cache_entry.into_path_buf());
     }
 
-    let ext = if os.is_windows() {
-        SourceDistExtension::Zip
+    let format = if os.is_windows() {
+        ArchiveFormat::Zip
     } else {
-        SourceDistExtension::TarGz
+        ArchiveFormat::TarGz
     };
 
-    let download_url = binary.download_url(&version, &platform_name, &ext)?;
+    let download_url = binary.download_url(version, &platform_name, format)?;
 
     let cache_dir = cache_entry.dir();
-    tokio::fs::create_dir_all(&cache_dir).await?;
+    fs_err::tokio::create_dir_all(&cache_dir).await?;
 
     // Create a temporary directory for extraction
-    let temp_dir = tempfile::tempdir_in(cache_dir.parent().unwrap())?;
+    let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::Binaries))?;
 
     let response = client
         .for_host(&download_url.clone().into())
@@ -209,16 +301,12 @@ pub async fn bin_install(
         .send()
         .await
         .map_err(|err| Error::Download {
-            tool: binary.name().to_string(),
-            version: version.to_string(),
-            url: download_url.to_string(),
+            url: download_url.clone(),
             source: err,
         })?;
 
     let response = response.error_for_status().map_err(|err| Error::Download {
-        tool: binary.name().to_string(),
-        version: version.to_string(),
-        url: download_url.to_string(),
+        url: download_url.clone(),
         source: reqwest_middleware::Error::Reqwest(err),
     })?;
 
@@ -230,64 +318,59 @@ pub async fn bin_install(
         .and_then(|val| val.parse::<u64>().ok());
 
     // Stream download directly to extraction
-    let mut reader = response
+    let reader = response
         .bytes_stream()
         .map_err(std::io::Error::other)
         .into_async_read()
         .compat();
 
-    if let Some(reporter) = reporter {
-        let id = reporter.on_download_start(binary.name(), &version, size);
-        let mut progress_reader = ProgressReader::new(reader, id, reporter);
-        stream::archive(&mut progress_reader, ext, temp_dir.path())
-            .await
-            .map_err(|e| Error::Extract {
-                tool: binary.name().to_string(),
-                source: e.into(),
-            })?;
-        reporter.on_download_complete(id);
-    } else {
-        stream::archive(&mut reader, ext, temp_dir.path())
-            .await
-            .map_err(|e| Error::Extract {
-                tool: binary.name().to_string(),
-                source: e.into(),
-            })?;
-    }
+    let id = reporter.on_download_start(binary.name(), version, size);
+    let mut progress_reader = ProgressReader::new(reader, id, reporter);
+    stream::archive(&mut progress_reader, format.into(), temp_dir.path())
+        .await
+        .map_err(|e| Error::Extract { source: e })?;
+    reporter.on_download_complete(id);
 
     // Find the binary in the extracted files
-    let extracted_binary = match ext {
-        SourceDistExtension::Zip => {
+    let extracted_binary = match format {
+        ArchiveFormat::Zip => {
             // Windows ZIP archives contain the binary directly in the root
             temp_dir.path().join(binary.executable())
         }
-        SourceDistExtension::TarGz | SourceDistExtension::Tgz => {
+        ArchiveFormat::TarGz => {
             // tar.gz archives contain the binary in a subdirectory
             temp_dir
                 .path()
                 .join(format!("{}-{platform_name}", binary.name()))
                 .join(binary.executable())
         }
-        _ => unreachable!("Unsupported archive format"),
     };
 
     uv_fs::rename_with_retry(&extracted_binary, cache_entry.path()).await?;
 
     #[cfg(unix)]
     {
+        use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = tokio::fs::metadata(cache_entry.path()).await?.permissions();
-        perms.set_mode(0o755);
-        tokio::fs::set_permissions(cache_entry.path(), perms).await?;
+        let permissions = fs_err::tokio::metadata(cache_entry.path())
+            .await?
+            .permissions();
+        if permissions.mode() & 0o111 != 0o111 {
+            fs_err::tokio::set_permissions(
+                cache_entry.path(),
+                Permissions::from_mode(permissions.mode() | 0o111),
+            )
+            .await?;
+        }
     }
 
     Ok(cache_entry.into_path_buf())
 }
 
-/// Cast platform types to the binary target triple format.
+/// Cast platform types to the binary target triple format used by cargo-dist.
 ///
 /// This performs some normalization to match cargo-dist's styling.
-fn platform_name_for_binary(os: Os, arch: Arch, libc: Libc) -> String {
+fn cargo_dist_platform(os: Os, arch: Arch, libc: Libc) -> String {
     use target_lexicon::{
         Architecture, ArmArchitecture, OperatingSystem, Riscv64Architecture, X86_32Architecture,
     };

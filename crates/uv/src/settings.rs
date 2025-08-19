@@ -1867,7 +1867,7 @@ impl ExportSettings {
 pub(crate) struct FormatSettings {
     pub(crate) check: bool,
     pub(crate) diff: bool,
-    pub(crate) args: Option<ExternalCommand>,
+    pub(crate) extra_args: Vec<String>,
     pub(crate) version: Option<String>,
 }
 
@@ -1877,14 +1877,14 @@ impl FormatSettings {
         let FormatArgs {
             check,
             diff,
-            args,
+            extra_args,
             version,
         } = args;
 
         Self {
             check,
             diff,
-            args,
+            extra_args,
             version,
         }
     }

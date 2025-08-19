@@ -7,7 +7,7 @@ use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn format_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new_with_versions(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -57,7 +57,7 @@ fn format_project() -> Result<()> {
 
 #[test]
 fn format_check() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new_with_versions(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -98,7 +98,7 @@ fn format_check() -> Result<()> {
 
 #[test]
 fn format_diff() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new_with_versions(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -146,7 +146,7 @@ fn format_diff() -> Result<()> {
 
 #[test]
 fn format_with_ruff_args() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new_with_versions(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -187,7 +187,7 @@ fn format_with_ruff_args() -> Result<()> {
 
 #[test]
 fn format_specific_files() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new_with_versions(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -239,7 +239,7 @@ fn format_specific_files() -> Result<()> {
 
 #[test]
 fn format_version_option() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context = TestContext::new_with_versions(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
