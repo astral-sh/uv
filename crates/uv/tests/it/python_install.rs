@@ -3171,33 +3171,33 @@ fn python_install_build_version() {
 
     uv_snapshot!(context.filters(), context.python_install()
         .arg("3.12")
-        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20250814"), @r"
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20240814"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.11 in [TIME]
-     + cpython-3.12.11-[PLATFORM] (python3.12)
+    Installed Python 3.12.5 in [TIME]
+     + cpython-3.12.5-[PLATFORM] (python3.12)
     ");
 
     // A BUILD file should be present with the version
     let cpython_dir = context.temp_dir.child("managed").child(format!(
-        "cpython-3.12.11-{}",
+        "cpython-3.12.5-{}",
         platform_key_from_env().unwrap()
     ));
     let build_file_path = cpython_dir.join("BUILD");
     let build_content = fs_err::read_to_string(&build_file_path).unwrap();
-    assert_eq!(build_content, "20250814");
+    assert_eq!(build_content, "20240814");
 
     // We should find the build
     uv_snapshot!(context.filters(), context.python_find()
         .arg("3.12")
-        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20250814"), @r"
+        .env(EnvVars::UV_PYTHON_CPYTHON_BUILD, "20240814"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.12.11-[PLATFORM]/bin/python3.12
+    [TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12
 
     ----- stderr -----
     ");
