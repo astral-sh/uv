@@ -1264,16 +1264,16 @@ optional-dependencies.foo = [
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("invalid name!"), @r###"
+            .arg("invalid name!"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'invalid name!' for '--extra <EXTRA>': Invalid extra name 'invalid name!': Extra names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters
+    error: invalid value 'invalid name!' for '--extra <EXTRA>': Not a valid package or extra name: "invalid name!". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
 
     For more information, try '--help'.
-    "###
+    "#
     );
 
     Ok(())
