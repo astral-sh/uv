@@ -141,6 +141,24 @@ impl<'a> Planner<'a> {
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
+
+                                // If we made it here, something went wrong in the resolver, because it returned an
+                                // already-installed distribution that we "shouldn't" use. Typically, this means the
+                                // distribution was considered out-of-date, but in a way that the resolver didn't
+                                // detect, and is indicative of drift between the resolver's candidate selector and
+                                // the install plan. For example, at present, the resolver doesn't check that an
+                                // installed distribution was built with the expected build settings. Treat it as
+                                // up-to-date for now; it's just means we may not rebuild a package when we otherwise
+                                // should. This is a known issue, but should only affect the `uv pip` CLI, as the
+                                // project APIs never return installed distributions during resolution (i.e., the
+                                // resolver is stateless).
+                                // TODO(charlie): Incorporate these checks into the resolver.
+                                if matches!(dist, ResolvedDist::Installed { .. }) {
+                                    warn!(
+                                        "Installed distribution was considered out-of-date, but returned by the resolver: {dist}"
+                                    );
+                                    continue;
+                                }
                             }
                             RequirementSatisfaction::CacheInvalid => {
                                 // Already logged
