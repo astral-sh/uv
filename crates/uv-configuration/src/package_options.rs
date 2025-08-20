@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
 use uv_distribution_types::Requirement;
-use uv_pep508::{PackageName, VerbatimUrl};
+use uv_pep508::PackageName;
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -140,7 +140,42 @@ pub struct UpgradeArgs {
     pub upgrade: Option<bool>,
 
     /// Packages to upgrade, with optional constraints.
-    pub upgrade_package: Vec<uv_pep508::Requirement<VerbatimUrl>>,
+    pub upgrade_package: Vec<Requirement>,
+}
+
+impl UpgradeArgs {
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
+        match self.upgrade {
+            Some(true) => self,
+            Some(false) => self,
+            None => match other.upgrade {
+                Some(true) => other,
+                Some(false) => {
+                    if self.upgrade_package.is_empty() {
+                        other
+                    } else {
+                        Self {
+                            upgrade: None,
+                            upgrade_package: self.upgrade_package,
+                        }
+                    }
+                }
+                None => {
+                    if self.upgrade_package.is_empty() {
+                        other
+                    } else {
+                        let mut combined = self.upgrade_package;
+                        combined.extend(other.upgrade_package);
+                        Self {
+                            upgrade: None,
+                            upgrade_package: combined,
+                        }
+                    }
+                }
+            },
+        }
+    }
 }
 
 /// Whether to allow package upgrades.
@@ -158,17 +193,17 @@ pub enum Upgrade {
     Packages(FxHashMap<PackageName, Vec<Requirement>>),
 }
 
-impl Upgrade {
-    /// Determine the [`Upgrade`] strategy from the command-line arguments.
-    pub fn from_args(args: UpgradeArgs) -> Self {
-        match upgrade {
+/// Determine the [`Upgrade`] strategy from the command-line arguments.
+impl From<UpgradeArgs> for Upgrade {
+    fn from(value: UpgradeArgs) -> Self {
+        match value.upgrade {
             Some(true) => Self::All,
             Some(false) => Self::None,
             None => {
-                if upgrade_package.is_empty() {
+                if value.upgrade_package.is_empty() {
                     Self::None
                 } else {
-                    Self::Packages(upgrade_package.into_iter().fold(
+                    Self::Packages(value.upgrade_package.into_iter().fold(
                         FxHashMap::default(),
                         |mut map, requirement| {
                             map.entry(requirement.name.clone())
@@ -181,7 +216,9 @@ impl Upgrade {
             }
         }
     }
+}
 
+impl Upgrade {
     /// Create an [`Upgrade`] strategy to upgrade a single package.
     pub fn package(package_name: PackageName) -> Self {
         Self::Packages({
