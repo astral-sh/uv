@@ -3,7 +3,7 @@ use std::{ffi::OsString, path::PathBuf};
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("I/O operation failed during extraction")]
-    Io(std::io::Error),
+    Io(#[source] std::io::Error),
     #[error("Invalid zip file")]
     Zip(#[from] zip::result::ZipError),
     #[error("Invalid zip file structure")]
