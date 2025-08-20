@@ -136,8 +136,8 @@ pub enum Error {
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),
 
-    #[error("Request failed after {retries} retries")]
-    NetworkErrorWithRetries {
+    #[error("Attempt failed after {retries} retries")]
+    RetriedError {
         #[source]
         err: Box<Error>,
         retries: u32,
@@ -148,7 +148,7 @@ impl Error {
     /// Return the number of attempts that were made to complete this request before this error was
     /// returned. Note that e.g. 3 retries equates to 4 attempts.
     fn attempts(&self) -> u32 {
-        if let Self::NetworkErrorWithRetries { retries, .. } = self {
+        if let Self::RetriedError { retries, .. } = self {
             return retries + 1;
         }
         1
@@ -204,6 +204,7 @@ pub async fn bin_install(
     )
     .await?;
 
+    // Add executable bit
     #[cfg(unix)]
     {
         use std::fs::Permissions;
@@ -256,10 +257,10 @@ async fn download_and_unpack_with_retry(
             Ok(path) => Ok(path),
             Err(err) => {
                 total_attempts += err.attempts();
-                let n_past_retries = total_attempts - 1;
+                let past_retries = total_attempts - 1;
 
                 if is_extended_transient_error(&err) {
-                    let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+                    let retry_decision = retry_policy.should_retry(start_time, past_retries);
                     if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
                         debug!(
                             "Transient failure while installing {} {}; retrying...",
@@ -271,14 +272,14 @@ async fn download_and_unpack_with_retry(
                             .unwrap_or_else(|_| Duration::default());
                         tokio::time::sleep(duration).await;
                         retried_here = true;
-                        continue; // Retry
+                        continue;
                     }
                 }
 
                 if retried_here {
-                    Err(Error::NetworkErrorWithRetries {
+                    Err(Error::RetriedError {
                         err: Box::new(err),
-                        retries: n_past_retries,
+                        retries: past_retries,
                     })
                 } else {
                     Err(err)
@@ -316,10 +317,24 @@ async fn download_and_unpack(
             source: err,
         })?;
 
-    let response = response.error_for_status().map_err(|err| Error::Download {
-        url: download_url.clone(),
-        source: reqwest_middleware::Error::Reqwest(err),
-    })?;
+    let inner_retries = response
+        .extensions()
+        .get::<reqwest_retry::RetryCount>()
+        .map(|retries| retries.value());
+
+    if let Err(status_error) = response.error_for_status_ref() {
+        let err = Error::Download {
+            url: download_url.clone(),
+            source: reqwest_middleware::Error::from(status_error),
+        };
+        if let Some(retries) = inner_retries {
+            return Err(Error::RetriedError {
+                err: Box::new(err),
+                retries,
+            });
+        }
+        return Err(err);
+    }
 
     // Get the download size from headers if available
     let size = response
