@@ -115,7 +115,7 @@ The comments tell Coiled to use the official [uv Docker image](../integration/do
 running the script (ensuring uv is available) and to run in the `us-east-2` region on AWS (where
 this example data file happens to live) to avoid any data egress.
 
-To run the script, use
+To submit a batch job for Coiled to run, use
 [`coiled batch run`](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-batch-run)
 to execute the `uv run` command in the cloud:
 
@@ -124,32 +124,18 @@ $ uvx coiled batch run \
     uv run process.py
 ```
 
-<!-- TODO
-This command returns immediately, it doesn't wait for the job to finish and it doesn't seem
-like there's a flag for that. It also doesn't happen much faster, because a remote job needs to
-spawn. I also wasn't sure how to get the logs for the job. I eventually found it with
-`uvx coiled batch logs 1067394`. I also tried `uvx coiled batch wait 1067394`, but it didn't have
-an option to show logs and that retrieving the id in the first place was a bit challenging, e.g.,
-`uvx coiled batch status` shows it as a cluster ID at the top but that's not obvious.
-
-I presume some of these problems are because this API is designed around running multiple batch
-jobs, however, if the user experience for running the script locally is that it waits for execution
-and shows the output, then we need to address that difference in user experience here.
-
-It looks like `uvx coiled batch run -- uv run process.py` isn't supported (using the `--` as a
-separator), I wanted to use that for a single-line command that still separated the `uv run`
-command.
--->
-
-The same exact thing that happened locally before now happens on a cloud VM on AWS, only this time
-the script is faster because we didn't have to transfer any data from S3 to a local laptop.
-
-There are other options we could have specified, like, the instance type (the default is a 4-core
-virtual machine with 16 GiB of memory), whether to use spot instance, etc. See the
-[Coiled Batch documentation](https://docs.coiled.io/user_guide/batch.html?utm_source=uv-docs) for
-more details.
+The same exact thing that happened locally before now happens on a remote cloud VM on AWS. To
+monitor batch jobs, either view them on [cloud.coiled.io](https://cloud.coiled.io)
+(`coiled batch run` prints a link in its terminal output) or use the `coiled batch status`,
+`coiled batch wait`, and `coiled batch logs` CLI command.
 
 ![Coiled UI](https://docs.coiled.io/_images/uv-coiled.png)
+
+Note there are several other options we could have specified, like, the instance type (the default
+is a 4-core virtual machine with 16 GiB of memory), disk size, whether to use spot instance, etc.
+See the
+[Coiled Batch documentation](https://docs.coiled.io/user_guide/batch.html?utm_source=uv-docs) for
+more details.
 
 For more details on Coiled, and how it can be used in other use cases, see the
 [Coiled documentation](https://docs.coiled.io?utm_source=uv-docs).
