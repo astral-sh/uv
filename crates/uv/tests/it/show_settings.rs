@@ -8379,14 +8379,14 @@ fn preview_features() {
     );
 }
 
-/// Track the interactions between `upgrade` and `upgrade-package` across the CLI and a
+/// Track the interactions between `upgrade` and `upgrade-package` across the `uv pip` CLI and a
 /// configuration file.
 #[test]
 #[cfg_attr(
     windows,
     ignore = "Configuration tests are not yet supported on Windows"
 )]
-fn upgrade_cli_config_interaction() -> anyhow::Result<()> {
+fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -8728,6 +8728,180 @@ fn upgrade_cli_config_interaction() -> anyhow::Result<()> {
                 Verify,
             ),
             upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    // Write a `uv.toml` file to the directory.
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r"
+        [pip]
+        upgrade = true
+    "})?;
+
+    // Despite `--upgrade-package idna` in the command line, we should upgrade all packages.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+        .arg("--upgrade-package")
+        .arg("idna")
+        .arg("--show-settings")
+        .arg("requirements.in"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        format: None,
+        src_file: [
+            "requirements.in",
+        ],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        build_constraints_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+                python_downloads_json_url: None,
+            },
+            system: false,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
+            groups: [],
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            torch_backend: None,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: Some(
+                Verify,
+            ),
+            upgrade: All,
             reinstall: None,
         },
     }
@@ -9277,6 +9451,745 @@ fn upgrade_cli_config_interaction() -> anyhow::Result<()> {
                 },
             ),
             reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    Ok(())
+}
+
+/// Track the interactions between `upgrade` and `upgrade-package` across the project CLI and a
+/// configuration file.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = ["anyio>3.0.0"]
+    "#})?;
+
+    // `--no-upgrade` overrides `--upgrade-package`.
+    // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+        .arg("--no-upgrade")
+        .arg("--upgrade-package")
+        .arg("sniffio")
+        .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    LockSettings {
+        locked: false,
+        frozen: false,
+        dry_run: Disabled,
+        script: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverSettings {
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            fork_strategy: RequiresPython,
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            link_mode: Clone,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            prerelease: IfNecessaryOrExplicit,
+            resolution: Highest,
+            sources: Enabled,
+            upgrade: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    // Add `upgrade = false` to the configuration file.
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = ["anyio>3.0.0"]
+
+        [tool.uv]
+        upgrade = false
+    "#})?;
+
+    // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
+    // TODO(charlie): This doesn't mark `idna` for upgrade; it just disables upgrades.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+        .arg("--upgrade-package")
+        .arg("idna")
+        .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    LockSettings {
+        locked: false,
+        frozen: false,
+        dry_run: Disabled,
+        script: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverSettings {
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            fork_strategy: RequiresPython,
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            link_mode: Clone,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            prerelease: IfNecessaryOrExplicit,
+            resolution: Highest,
+            sources: Enabled,
+            upgrade: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    // Add `upgrade = true` to the configuration file.
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = ["anyio>3.0.0"]
+
+        [tool.uv]
+        upgrade = true
+    "#})?;
+
+    // Despite `--upgrade-package idna` on the CLI, we should upgrade all packages.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+        .arg("--upgrade-package")
+        .arg("idna")
+        .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    LockSettings {
+        locked: false,
+        frozen: false,
+        dry_run: Disabled,
+        script: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverSettings {
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            fork_strategy: RequiresPython,
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            link_mode: Clone,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            prerelease: IfNecessaryOrExplicit,
+            resolution: Highest,
+            sources: Enabled,
+            upgrade: All,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.0.0"
+        dependencies = ["anyio>3.0.0"]
+
+        [tool.uv]
+        upgrade-package = ["idna"]
+    "#})?;
+
+    // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+        .arg("--no-upgrade")
+        .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    LockSettings {
+        locked: false,
+        frozen: false,
+        dry_run: Disabled,
+        script: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverSettings {
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            fork_strategy: RequiresPython,
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            link_mode: Clone,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            prerelease: IfNecessaryOrExplicit,
+            resolution: Highest,
+            sources: Enabled,
+            upgrade: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+        .arg("--upgrade")
+        .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    LockSettings {
+        locked: false,
+        frozen: false,
+        dry_run: Disabled,
+        script: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverSettings {
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            fork_strategy: RequiresPython,
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            link_mode: Clone,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            prerelease: IfNecessaryOrExplicit,
+            resolution: Highest,
+            sources: Enabled,
+            upgrade: All,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    // Mark both `sniffio` and `idna` for upgrade.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+        .arg("--upgrade-package")
+        .arg("sniffio")
+        .arg("--show-settings"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: PreviewFeatures(
+                0x0,
+            ),
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    LockSettings {
+        locked: false,
+        frozen: false,
+        dry_run: Disabled,
+        script: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverSettings {
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            fork_strategy: RequiresPython,
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            link_mode: Clone,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            prerelease: IfNecessaryOrExplicit,
+            resolution: Highest,
+            sources: Enabled,
+            upgrade: Packages(
+                {
+                    PackageName(
+                        "sniffio",
+                    ): [
+                        Requirement {
+                            name: PackageName(
+                                "sniffio",
+                            ),
+                            extras: [],
+                            groups: [],
+                            marker: true,
+                            source: Registry {
+                                specifier: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                                conflict: None,
+                            },
+                            origin: None,
+                        },
+                    ],
+                    PackageName(
+                        "idna",
+                    ): [
+                        Requirement {
+                            name: PackageName(
+                                "idna",
+                            ),
+                            extras: [],
+                            groups: [],
+                            marker: true,
+                            source: Registry {
+                                specifier: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                                conflict: None,
+                            },
+                            origin: None,
+                        },
+                    ],
+                },
+            ),
         },
     }
 
