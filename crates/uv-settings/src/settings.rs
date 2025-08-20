@@ -3,10 +3,7 @@ use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
-use uv_configuration::{
-    IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion, TargetTriple,
-    TrustedHost, TrustedPublishing,
-};
+use uv_configuration::{IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, UpgradeArgs};
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
     PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
@@ -369,8 +366,7 @@ pub struct ResolverOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
-    pub upgrade: Option<bool>,
-    pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub upgrade: UpgradeArgs,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,

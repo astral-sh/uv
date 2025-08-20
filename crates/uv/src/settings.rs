@@ -2798,6 +2798,8 @@ pub(crate) struct ResolverSettings {
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
     pub(crate) fn combine(args: ResolverOptions, filesystem: Option<FilesystemOptions>) -> Self {
+        // The problem is that for `upgrade`... we want to combine the two `Upgrade` structs,
+        // not the individual fields.
         let options = args.combine(ResolverOptions::from(
             filesystem
                 .map(FilesystemOptions::into_options)

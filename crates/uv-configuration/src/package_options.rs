@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
 use uv_distribution_types::Requirement;
-use uv_pep508::PackageName;
+use uv_pep508::{PackageName, VerbatimUrl};
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -134,6 +134,15 @@ impl From<Reinstall> for Refresh {
     }
 }
 
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UpgradeArgs {
+    /// Whether to allow package upgrades.
+    pub upgrade: Option<bool>,
+
+    /// Packages to upgrade, with optional constraints.
+    pub upgrade_package: Vec<uv_pep508::Requirement<VerbatimUrl>>,
+}
+
 /// Whether to allow package upgrades.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -151,7 +160,7 @@ pub enum Upgrade {
 
 impl Upgrade {
     /// Determine the [`Upgrade`] strategy from the command-line arguments.
-    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Self {
+    pub fn from_args(args: UpgradeArgs) -> Self {
         match upgrade {
             Some(true) => Self::All,
             Some(false) => Self::None,
