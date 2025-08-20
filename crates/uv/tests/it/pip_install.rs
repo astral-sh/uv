@@ -12590,8 +12590,12 @@ fn transitive_dependency_config_settings_invalidation() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Create a local package named `idna`.
-    context.temp_dir.child("idna").child("pyproject.toml").write_str(indoc! {
-        r#"
+    context
+        .temp_dir
+        .child("idna")
+        .child("pyproject.toml")
+        .write_str(indoc! {
+            r#"
         [project]
         name = "idna"
         version = "3.6"
@@ -12600,7 +12604,7 @@ fn transitive_dependency_config_settings_invalidation() -> Result<()> {
         requires = ["hatchling"]
         build-backend = "hatchling.build"
         "#
-    })?;
+        })?;
     context
         .temp_dir
         .child("idna")
