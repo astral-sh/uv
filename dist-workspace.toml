@@ -29,6 +29,7 @@ targets = [
     "powerpc64le-unknown-linux-gnu",
     "riscv64gc-unknown-linux-gnu",
     "s390x-unknown-linux-gnu",
+    "loongarch64-unknown-linux-gnu",
     "x86_64-unknown-linux-gnu",
     "x86_64-unknown-linux-musl",
     "x86_64-pc-windows-msvc",
@@ -72,6 +73,7 @@ global = "depot-ubuntu-latest-4"
 # Override glibc version for specific target triplets.
 aarch64-unknown-linux-gnu = "2.28"
 riscv64gc-unknown-linux-gnu = "2.31"
+loongarch64-unknown-linux-gnu = "2.36"
 # Override all remaining glibc versions.
 "*" = "2.17"
 
