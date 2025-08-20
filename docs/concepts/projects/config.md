@@ -323,9 +323,9 @@ deep_gemm = [{ requirement = "torch", match-runtime = true }]
 ```
 
 The use of `extra-build-dependencies` and `extra-build-variables` are tracked in the uv cache, such
-that changes to these settings will not trigger a reinstall and rebuild of the affected packages.
-For example, in the case of `flash-attn`, upgrading the version of `torch` used in your project
-would subsequently trigger a rebuild of `flash-attn` with the new version of `torch`.
+that changes to these settings will trigger a reinstall and rebuild of the affected packages. For
+example, in the case of `flash-attn`, upgrading the version of `torch` used in your project would
+subsequently trigger a rebuild of `flash-attn` with the new version of `torch`.
 
 #### Dynamic metadata
 
