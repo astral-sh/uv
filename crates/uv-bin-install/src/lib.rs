@@ -155,53 +155,7 @@ impl Error {
     }
 }
 
-/// Progress reporter for binary downloads.
-pub trait Reporter: Send + Sync {
-    /// Called when a download starts.
-    fn on_download_start(&self, name: &str, version: &Version, size: Option<u64>) -> usize;
-    /// Called when download progress is made.
-    fn on_download_progress(&self, id: usize, inc: u64);
-    /// Called when a download completes.
-    fn on_download_complete(&self, id: usize);
-}
-
-/// An asynchronous reader that reports progress as bytes are read.
-struct ProgressReader<'a, R> {
-    reader: R,
-    index: usize,
-    reporter: &'a dyn Reporter,
-}
-
-impl<'a, R> ProgressReader<'a, R> {
-    /// Create a new [`ProgressReader`] that wraps another reader.
-    fn new(reader: R, index: usize, reporter: &'a dyn Reporter) -> Self {
-        Self {
-            reader,
-            index,
-            reporter,
-        }
-    }
-}
-
-impl<R> AsyncRead for ProgressReader<'_, R>
-where
-    R: AsyncRead + Unpin,
-{
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.as_mut().reader)
-            .poll_read(cx, buf)
-            .map_ok(|()| {
-                self.reporter
-                    .on_download_progress(self.index, buf.filled().len() as u64);
-            })
-    }
-}
-
-/// Install a binary for the given tool with retry on failure.
+/// Install the given binary.
 pub async fn bin_install(
     binary: Binary,
     version: &Version,
@@ -209,13 +163,94 @@ pub async fn bin_install(
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
+    let platform = Platform::from_env()?;
+    let platform_name = platform.as_cargo_dist_triple();
+
+    // Check the cache first
+    let cache_entry = CacheEntry::new(
+        cache
+            .bucket(CacheBucket::Binaries)
+            .join(binary.name())
+            .join(version.to_string())
+            .join(&platform_name),
+        binary.executable(),
+    );
+
+    if cache_entry.path().exists() {
+        return Ok(cache_entry.into_path_buf());
+    }
+
+    let format = if platform.os.is_windows() {
+        ArchiveFormat::Zip
+    } else {
+        ArchiveFormat::TarGz
+    };
+
+    let download_url = binary.download_url(version, &platform_name, format)?;
+
+    let cache_dir = cache_entry.dir();
+    fs_err::tokio::create_dir_all(&cache_dir).await?;
+
+    let path = download_and_unpack_with_retry(
+        binary,
+        version,
+        client,
+        cache,
+        reporter,
+        &platform_name,
+        format,
+        &download_url,
+        &cache_entry,
+    )
+    .await?;
+
+    #[cfg(unix)]
+    {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
+        let permissions = fs_err::tokio::metadata(&path).await?.permissions();
+        if permissions.mode() & 0o111 != 0o111 {
+            fs_err::tokio::set_permissions(
+                &path,
+                Permissions::from_mode(permissions.mode() | 0o111),
+            )
+            .await?;
+        }
+    }
+
+    Ok(path)
+}
+
+/// Download and unpack a binary with retry on stream failures.
+async fn download_and_unpack_with_retry(
+    binary: Binary,
+    version: &Version,
+    client: &BaseClient,
+    cache: &Cache,
+    reporter: &dyn Reporter,
+    platform_name: &str,
+    format: ArchiveFormat,
+    download_url: &Url,
+    cache_entry: &CacheEntry,
+) -> Result<PathBuf, Error> {
     let mut total_attempts = 0;
     let mut retried_here = false;
     let start_time = SystemTime::now();
     let retry_policy = client.retry_policy();
 
     loop {
-        let result = bin_install_inner(binary, version, client, cache, reporter).await;
+        let result = download_and_unpack(
+            binary,
+            version,
+            client,
+            cache,
+            reporter,
+            platform_name,
+            format,
+            download_url,
+            cache_entry,
+        )
+        .await;
 
         let result = match result {
             Ok(path) => Ok(path),
@@ -254,42 +289,20 @@ pub async fn bin_install(
     }
 }
 
-/// Install a binary for the given tool (internal implementation without retry).
-async fn bin_install_inner(
+/// Download and unpackage a binary,
+///
+/// NOTE [`download_and_unpack_with_retry`] should be used instead.
+async fn download_and_unpack(
     binary: Binary,
     version: &Version,
     client: &BaseClient,
     cache: &Cache,
     reporter: &dyn Reporter,
+    platform_name: &str,
+    format: ArchiveFormat,
+    download_url: &Url,
+    cache_entry: &CacheEntry,
 ) -> Result<PathBuf, Error> {
-    let platform = Platform::from_env()?;
-    let platform_name = platform.as_cargo_dist_triple();
-
-    // Check the cache first
-    let cache_entry = CacheEntry::new(
-        cache
-            .bucket(CacheBucket::Binaries)
-            .join(binary.name())
-            .join(version.to_string())
-            .join(&platform_name),
-        binary.executable(),
-    );
-
-    if cache_entry.path().exists() {
-        return Ok(cache_entry.into_path_buf());
-    }
-
-    let format = if platform.os.is_windows() {
-        ArchiveFormat::Zip
-    } else {
-        ArchiveFormat::TarGz
-    };
-
-    let download_url = binary.download_url(version, &platform_name, format)?;
-
-    let cache_dir = cache_entry.dir();
-    fs_err::tokio::create_dir_all(&cache_dir).await?;
-
     // Create a temporary directory for extraction
     let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::Binaries))?;
 
@@ -344,23 +357,60 @@ async fn bin_install_inner(
         }
     };
 
-    uv_fs::rename_with_retry(&extracted_binary, cache_entry.path()).await?;
-
-    #[cfg(unix)]
-    {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-        let permissions = fs_err::tokio::metadata(cache_entry.path())
-            .await?
-            .permissions();
-        if permissions.mode() & 0o111 != 0o111 {
-            fs_err::tokio::set_permissions(
-                cache_entry.path(),
-                Permissions::from_mode(permissions.mode() | 0o111),
-            )
-            .await?;
-        }
+    if !extracted_binary.exists() {
+        return Err(Error::BinaryNotFound {
+            expected: extracted_binary,
+        });
     }
 
-    Ok(cache_entry.into_path_buf())
+    // Move the binary to its final location before the temp directory is dropped
+    fs_err::tokio::rename(&extracted_binary, cache_entry.path()).await?;
+
+    Ok(cache_entry.path().to_path_buf())
+}
+
+/// Progress reporter for binary downloads.
+pub trait Reporter: Send + Sync {
+    /// Called when a download starts.
+    fn on_download_start(&self, name: &str, version: &Version, size: Option<u64>) -> usize;
+    /// Called when download progress is made.
+    fn on_download_progress(&self, id: usize, inc: u64);
+    /// Called when a download completes.
+    fn on_download_complete(&self, id: usize);
+}
+
+/// An asynchronous reader that reports progress as bytes are read.
+struct ProgressReader<'a, R> {
+    reader: R,
+    index: usize,
+    reporter: &'a dyn Reporter,
+}
+
+impl<'a, R> ProgressReader<'a, R> {
+    /// Create a new [`ProgressReader`] that wraps another reader.
+    fn new(reader: R, index: usize, reporter: &'a dyn Reporter) -> Self {
+        Self {
+            reader,
+            index,
+            reporter,
+        }
+    }
+}
+
+impl<R> AsyncRead for ProgressReader<'_, R>
+where
+    R: AsyncRead + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.as_mut().reader)
+            .poll_read(cx, buf)
+            .map_ok(|()| {
+                self.reporter
+                    .on_download_progress(self.index, buf.filled().len() as u64);
+            })
+    }
 }
