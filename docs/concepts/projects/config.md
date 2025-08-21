@@ -120,8 +120,6 @@ with the default build system.
     or install it with `uv pip`, uv will attempt to build and install it regardless of the presence
     of a `[build-system]` table.
 
-### Build system options
-
 Build systems are used to power the following features:
 
 - Including or excluding files from distributions

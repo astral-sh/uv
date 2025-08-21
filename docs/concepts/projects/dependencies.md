@@ -78,13 +78,15 @@ $ uv add "httpx>9999"
       we can conclude that your project's requirements are unsatisfiable.
 ```
 
-### Importing dependencies
+### Importing dependencies from requirements files
 
 Dependencies declared in a `requirements.txt` file can be added to the project with the `-r` option:
 
 ```
 uv add -r requirements.txt
 ```
+
+See the [pip migration guide](../../guides/migration/pip-to-project.md#importing-requirements-files) for more details.
 
 ## Removing dependencies
 
@@ -541,7 +543,7 @@ requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
 
 Optional dependencies are specified in `[project.optional-dependencies]`, a TOML table that maps
 from extra name to its dependencies, following
-[dependency specifiers](#dependency-specifiers-pep-508) syntax.
+[dependency specifiers](#dependency-specifiers) syntax.
 
 Optional dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 

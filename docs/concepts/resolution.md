@@ -139,7 +139,7 @@ bounds on `requires-python` often leads to formally correct but practically inco
 as, e.g., resolvers will backtrack to the first published version that omits the upper bound (see:
 [`Requires-Python` upper limits](https://discuss.python.org/t/requires-python-upper-limits/12663)).
 
-### Limited resolution environments
+## Limited resolution environments
 
 By default, the universal resolver attempts to solve for all platforms and Python versions.
 
@@ -172,7 +172,7 @@ Entries in the `environments` setting must be disjoint (i.e., they must not over
 `sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
 same time.
 
-### Required environments
+## Required environments
 
 In the Python ecosystem, packages can be published as source distributions, built distributions
 (wheels), or both; but to install a package, a built distribution is required. If a package lacks a
