@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
+use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -14,10 +15,9 @@ use uv_static::EnvVars;
 use crate::implementation::ImplementationName;
 
 #[derive(Error, Debug)]
-#[error("Invalid build target value in {variable}: {err}")]
-pub struct BuildVersionError {
-    pub variable: &'static str,
-    pub err: anyhow::Error,
+pub enum BuildVersionError {
+    #[error("`{0}` is not valid unicode: {1:?}")]
+    NotUnicode(&'static str, OsString),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -239,10 +239,9 @@ pub(crate) fn python_build_version_from_env(
         return Ok(None);
     };
 
-    let build = build_os.into_string().map_err(|_| BuildVersionError {
-        variable,
-        err: anyhow::anyhow!("not valid UTF-8"),
-    })?;
+    let build = build_os
+        .into_string()
+        .map_err(|raw| BuildVersionError::NotUnicode(variable, raw))?;
 
     let trimmed = build.trim();
     if trimmed.is_empty() {

@@ -36,8 +36,7 @@ use crate::implementation::{
 };
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
-use crate::python_version::BuildVersionError;
-use crate::python_version::python_build_version_from_env;
+use crate::python_version::{BuildVersionError, python_build_version_from_env};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
@@ -1587,6 +1586,10 @@ async fn read_url(
 
 #[cfg(test)]
 mod tests {
+    use crate::implementation::LenientImplementationName;
+    use crate::installation::PythonInstallationKey;
+    use uv_platform::{Arch, Libc, Os, Platform};
+
     use super::*;
 
     /// Parse a request with all of its fields.
@@ -1804,37 +1807,22 @@ mod tests {
     /// Test that build filtering works correctly
     #[test]
     fn test_python_download_request_build_filtering() {
-        // Create a request with a specific build
         let request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
             .with_implementation(ImplementationName::CPython)
-            .with_build("20250814".to_string());
+            .with_build("20240814".to_string());
 
-        // Get all downloads and find one that matches
-        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None).unwrap().collect();
-
-        // Count how many downloads match without build constraint
-        let request_no_build = PythonDownloadRequest::default()
-            .with_version(VersionRequest::from_str("3.12").unwrap())
-            .with_implementation(ImplementationName::CPython);
-
-        let matches_without_build: Vec<_> = downloads
-            .iter()
-            .filter(|d| request_no_build.satisfied_by_download(d))
-            .collect();
-
-        // Count how many match with build constraint
-        let matches_with_build: Vec<_> = downloads
-            .iter()
+        let downloads: Vec<_> = ManagedPythonDownload::iter_all(None)
+            .unwrap()
             .filter(|d| request.satisfied_by_download(d))
             .collect();
 
-        // With build constraint should match fewer (or zero) downloads
-        assert!(matches_with_build.len() <= matches_without_build.len());
-
-        // If we have matches with the build, verify they all have the correct build
-        for download in matches_with_build {
-            assert_eq!(download.build(), Some("20250814"));
+        assert!(
+            !downloads.is_empty(),
+            "Should find at least one matching download"
+        );
+        for download in downloads {
+            assert_eq!(download.build(), Some("20240814"));
         }
     }
 
@@ -1859,10 +1847,6 @@ mod tests {
     /// Test build display
     #[test]
     fn test_managed_python_download_build_display() {
-        use crate::implementation::LenientImplementationName;
-        use crate::installation::PythonInstallationKey;
-        use uv_platform::{Arch, Libc, Os, Platform};
-
         // Create a test download with a build
         let key = PythonInstallationKey::new(
             LenientImplementationName::Known(crate::implementation::ImplementationName::CPython),
