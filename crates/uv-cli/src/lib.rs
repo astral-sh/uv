@@ -1006,6 +1006,21 @@ pub enum ProjectCommand {
     Export(ExportArgs),
     /// Display the project's dependency tree.
     Tree(TreeArgs),
+    /// Format Python code in the project.
+    ///
+    /// Formats Python code using the Ruff formatter. By default, all Python files in the project
+    /// are formatted. This command has the same behavior as running `ruff format` in the project
+    /// root.
+    ///
+    /// To check if files are formatted without modifying them, use `--check`. To see a diff of
+    /// formatting changes, use `--diff`.
+    ///
+    /// By default, Additional arguments can be passed to Ruff after `--`.
+    #[command(
+        after_help = "Use `uv help format` for more details.",
+        after_long_help = ""
+    )]
+    Format(FormatArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -3812,6 +3827,26 @@ pub struct AddArgs {
     /// as direct path dependency instead.
     #[arg(long, overrides_with = "workspace")]
     pub no_workspace: bool,
+
+    /// Do not install the current project.
+    ///
+    /// By default, the current project is installed into the environment with all of its
+    /// dependencies. The `--no-install-project` option allows the project to be excluded, but all of
+    /// its dependencies are still installed. This is particularly useful in situations like building
+    /// Docker images where installing the project separately from its dependencies allows optimal
+    /// layer caching.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_project: bool,
+
+    /// Do not install any workspace members, including the current project.
+    ///
+    /// By default, all of the workspace members and their dependencies are installed into the
+    /// environment. The `--no-install-workspace` option allows exclusion of all the workspace
+    /// members while retaining their dependencies. This is particularly useful in situations like
+    /// building Docker images where installing the workspace separately from its dependencies
+    /// allows optimal layer caching.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "no_sync")]
+    pub no_install_workspace: bool,
 }
 
 #[derive(Args)]
@@ -4259,6 +4294,32 @@ pub struct ExportArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+}
+
+#[derive(Args)]
+pub struct FormatArgs {
+    /// Check if files are formatted without applying changes.
+    #[arg(long)]
+    pub check: bool,
+
+    /// Show a diff of formatting changes without applying them.
+    ///
+    /// Implies `--check`.
+    #[arg(long)]
+    pub diff: bool,
+
+    /// The version of Ruff to use for formatting.
+    ///
+    /// By default, a version of Ruff pinned by uv will be used.
+    #[arg(long)]
+    pub version: Option<String>,
+
+    /// Additional arguments to pass to Ruff.
+    ///
+    /// For example, use `uv format -- --line-length 100` to set the line length or
+    /// `uv format -- src/module/foo.py` to format a specific file.
+    #[arg(last = true)]
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Args)]

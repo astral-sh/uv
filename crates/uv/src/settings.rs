@@ -15,8 +15,8 @@ use uv_cli::{
     ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
-    ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
+    ResolverInstallerArgs, ToolUpgradeArgs,
     options::{flag, resolver_installer_options, resolver_options},
 };
 use uv_client::Connectivity;
@@ -24,7 +24,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
     NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, UpgradeSelection, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -42,7 +42,7 @@ use uv_resolver::{
 };
 use uv_settings::{
     Combine, EnvironmentOptions, FilesystemOptions, Options, PipOptions, PublishOptions,
-    PythonInstallMirrors, ResolverInstallerOptions, ResolverOptions,
+    PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -538,13 +538,14 @@ impl ToolRunSettings {
             }
         }
 
-        let options = resolver_installer_options(installer, build).combine(
-            filesystem
-                .clone()
-                .map(FilesystemOptions::into_options)
-                .map(|options| options.top_level)
-                .unwrap_or_default(),
-        );
+        let options =
+            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
+                filesystem
+                    .clone()
+                    .map(FilesystemOptions::into_options)
+                    .map(|options| options.top_level)
+                    .unwrap_or_default(),
+            ));
 
         let install_mirrors = filesystem
             .map(FilesystemOptions::into_options)
@@ -636,13 +637,14 @@ impl ToolInstallSettings {
             python,
         } = args;
 
-        let options = resolver_installer_options(installer, build).combine(
-            filesystem
-                .clone()
-                .map(FilesystemOptions::into_options)
-                .map(|options| options.top_level)
-                .unwrap_or_default(),
-        );
+        let options =
+            resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
+                filesystem
+                    .clone()
+                    .map(FilesystemOptions::into_options)
+                    .map(|options| options.top_level)
+                    .unwrap_or_default(),
+            ));
 
         let install_mirrors = filesystem
             .map(FilesystemOptions::into_options)
@@ -777,9 +779,11 @@ impl ToolUpgradeSettings {
             .clone()
             .map(|options| options.install_mirrors)
             .unwrap_or_default();
-        let top_level = filesystem
-            .map(|options| options.top_level)
-            .unwrap_or_default();
+        let top_level = ResolverInstallerOptions::from(
+            filesystem
+                .map(|options| options.top_level)
+                .unwrap_or_default(),
+        );
 
         Self {
             names: if all { vec![] } else { name },
@@ -1370,6 +1374,8 @@ pub(crate) struct AddSettings {
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) workspace: Option<bool>,
+    pub(crate) no_install_project: bool,
+    pub(crate) no_install_workspace: bool,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
@@ -1409,6 +1415,8 @@ impl AddSettings {
             python,
             workspace,
             no_workspace,
+            no_install_project,
+            no_install_workspace,
         } = args;
 
         let dependency_type = if let Some(extra) = optional {
@@ -1510,6 +1518,8 @@ impl AddSettings {
             script,
             python: python.and_then(Maybe::into_option),
             workspace: flag(workspace, no_workspace, "workspace"),
+            no_install_project,
+            no_install_workspace,
             editable: flag(editable, no_editable, "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
@@ -1863,6 +1873,34 @@ impl ExportSettings {
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             install_mirrors,
+        }
+    }
+}
+
+/// The resolved settings to use for a `format` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct FormatSettings {
+    pub(crate) check: bool,
+    pub(crate) diff: bool,
+    pub(crate) extra_args: Vec<String>,
+    pub(crate) version: Option<String>,
+}
+
+impl FormatSettings {
+    /// Resolve the [`FormatSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: FormatArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let FormatArgs {
+            check,
+            diff,
+            extra_args,
+            version,
+        } = args;
+
+        Self {
+            check,
+            diff,
+            extra_args,
+            version,
         }
     }
 }
@@ -2764,6 +2802,8 @@ pub(crate) struct ResolverSettings {
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
     pub(crate) fn combine(args: ResolverOptions, filesystem: Option<FilesystemOptions>) -> Self {
+        // The problem is that for `upgrade`... we want to combine the two `Upgrade` structs,
+        // not the individual fields.
         let options = args.combine(ResolverOptions::from(
             filesystem
                 .map(FilesystemOptions::into_options)
@@ -2812,15 +2852,7 @@ impl From<ResolverOptions> for ResolverSettings {
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
             sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
-            upgrade: Upgrade::from_args(
-                value.upgrade,
-                value
-                    .upgrade_package
-                    .into_iter()
-                    .flatten()
-                    .map(Requirement::from)
-                    .collect(),
-            ),
+            upgrade: Upgrade::from(value.upgrade),
             build_options: BuildOptions::new(
                 NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
                 NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
@@ -2847,12 +2879,12 @@ impl ResolverInstallerSettings {
         args: ResolverInstallerOptions,
         filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let options = args.combine(
+        let options = args.combine(ResolverInstallerOptions::from(
             filesystem
                 .map(FilesystemOptions::into_options)
                 .map(|options| options.top_level)
                 .unwrap_or_default(),
-        );
+        ));
 
         Self::from(options)
     }
@@ -2911,15 +2943,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 prerelease: value.prerelease.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
-                upgrade: Upgrade::from_args(
-                    value.upgrade,
-                    value
-                        .upgrade_package
-                        .into_iter()
-                        .flatten()
-                        .map(Requirement::from)
-                        .collect(),
-                ),
+                upgrade: Upgrade::from(value.upgrade),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
             reinstall: Reinstall::from_args(
@@ -3064,7 +3088,7 @@ impl PipSettings {
             exclude_newer_package,
         } = pip.unwrap_or_default();
 
-        let ResolverInstallerOptions {
+        let ResolverInstallerSchema {
             index: top_level_index,
             index_url: top_level_index_url,
             extra_index_url: top_level_extra_index_url,
@@ -3293,14 +3317,23 @@ impl PipSettings {
                 args.no_sources.combine(no_sources).unwrap_or_default(),
             ),
             strict: args.strict.combine(strict).unwrap_or_default(),
-            upgrade: Upgrade::from_args(
-                args.upgrade.combine(upgrade),
-                args.upgrade_package
-                    .combine(upgrade_package)
-                    .into_iter()
-                    .flatten()
-                    .map(Requirement::from)
-                    .collect(),
+            upgrade: Upgrade::from(
+                UpgradeSelection::from_args(
+                    args.upgrade,
+                    args.upgrade_package
+                        .into_iter()
+                        .flatten()
+                        .map(Requirement::from)
+                        .collect(),
+                )
+                .combine(UpgradeSelection::from_args(
+                    upgrade,
+                    upgrade_package
+                        .into_iter()
+                        .flatten()
+                        .map(Requirement::from)
+                        .collect(),
+                )),
             ),
             reinstall: Reinstall::from_args(
                 args.reinstall.combine(reinstall),
@@ -3384,7 +3417,7 @@ impl PublishSettings {
             trusted_publishing,
             check_url,
         } = publish;
-        let ResolverInstallerOptions {
+        let ResolverInstallerSchema {
             keyring_provider,
             index,
             extra_index_url,

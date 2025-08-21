@@ -185,7 +185,8 @@ dependencies = [
 [[package]]
 name = "astral-tokio-tar"
 version = "0.5.3"
-source = "git+https://github.com/astral-sh/tokio-tar?rev=f1488188f1d1b54a73eb0c42a8b8f4b9ee87d688#f1488188f1d1b54a73eb0c42a8b8f4b9ee87d688"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0036af73142caf1291d4ec8ed667d3a1145bd55c8189517bd5aa07b3167ae1e1"
 dependencies = [
  "filetime",
  "futures-core",
@@ -2243,9 +2244,9 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
-version = "0.2.174"
+version = "0.2.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1171693293099992e19cddea4e8b849964e9846f4acee11b3948bcc337be8776"
+checksum = "6a82ae493e598baaea5209805c49bbf2ea7de956d50d7da0da1164f9c6d28543"
 
 [[package]]
 name = "libmimalloc-sys"
@@ -5042,6 +5043,7 @@ dependencies = [
  "unicode-width 0.2.1",
  "url",
  "uv-auth",
+ "uv-bin-install",
  "uv-build-backend",
  "uv-build-frontend",
  "uv-cache",
@@ -5154,6 +5156,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-bin-install"
+version = "0.0.1"
+dependencies = [
+ "fs-err",
+ "futures",
+ "reqwest",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uv-cache",
+ "uv-client",
+ "uv-distribution-filename",
+ "uv-extract",
+ "uv-pep440",
+ "uv-platform",
+]
+
+[[package]]
 name = "uv-build"
 version = "0.8.12"
 dependencies = [
@@ -5166,6 +5191,7 @@ dependencies = [
 name = "uv-build-backend"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "csv",
  "flate2",
  "fs-err",

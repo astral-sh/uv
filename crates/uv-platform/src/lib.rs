@@ -120,6 +120,49 @@ impl Platform {
 
         true
     }
+
+    /// Convert this platform to a `cargo-dist` style triple string.
+    pub fn as_cargo_dist_triple(&self) -> String {
+        use target_lexicon::{
+            Architecture, ArmArchitecture, OperatingSystem, Riscv64Architecture, X86_32Architecture,
+        };
+
+        let Self { os, arch, libc } = &self;
+
+        let arch_name = match arch.family() {
+            // Special cases where Display doesn't match target triple
+            Architecture::X86_32(X86_32Architecture::I686) => "i686".to_string(),
+            Architecture::Riscv64(Riscv64Architecture::Riscv64) => "riscv64gc".to_string(),
+            _ => arch.to_string(),
+        };
+        let vendor = match &**os {
+            OperatingSystem::Darwin(_) => "apple",
+            OperatingSystem::Windows => "pc",
+            _ => "unknown",
+        };
+        let os_name = match &**os {
+            OperatingSystem::Darwin(_) => "darwin",
+            _ => &os.to_string(),
+        };
+
+        let abi = match (&**os, libc) {
+            (OperatingSystem::Windows, _) => Some("msvc".to_string()),
+            (OperatingSystem::Linux, Libc::Some(env)) => Some({
+                // Special suffix for ARM with hardware float
+                if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7)) {
+                    format!("{env}eabihf")
+                } else {
+                    env.to_string()
+                }
+            }),
+            _ => None,
+        };
+
+        format!(
+            "{arch_name}-{vendor}-{os_name}{abi}",
+            abi = abi.map(|abi| format!("-{abi}")).unwrap_or_default()
+        )
+    }
 }
 
 impl fmt::Display for Platform {

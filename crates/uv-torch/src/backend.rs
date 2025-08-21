@@ -59,6 +59,8 @@ pub enum TorchMode {
     Auto,
     /// Use the CPU-only PyTorch index.
     Cpu,
+    /// Use the PyTorch index for CUDA 12.9.
+    Cu129,
     /// Use the PyTorch index for CUDA 12.8.
     Cu128,
     /// Use the PyTorch index for CUDA 12.6.
@@ -208,6 +210,7 @@ impl TorchStrategy {
                 None => Ok(Self::Backend(TorchBackend::Cpu)),
             },
             TorchMode::Cpu => Ok(Self::Backend(TorchBackend::Cpu)),
+            TorchMode::Cu129 => Ok(Self::Backend(TorchBackend::Cu129)),
             TorchMode::Cu128 => Ok(Self::Backend(TorchBackend::Cu128)),
             TorchMode::Cu126 => Ok(Self::Backend(TorchBackend::Cu126)),
             TorchMode::Cu125 => Ok(Self::Backend(TorchBackend::Cu125)),
@@ -267,6 +270,7 @@ impl TorchStrategy {
                 | "torchserve"
                 | "torchtext"
                 | "torchvision"
+                | "triton"
                 | "pytorch-triton"
                 | "pytorch-triton-rocm"
                 | "pytorch-triton-xpu"
@@ -379,6 +383,7 @@ impl TorchStrategy {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum TorchBackend {
     Cpu,
+    Cu129,
     Cu128,
     Cu126,
     Cu125,
@@ -427,6 +432,7 @@ impl TorchBackend {
     fn index_url(self) -> &'static IndexUrl {
         match self {
             Self::Cpu => &CPU_INDEX_URL,
+            Self::Cu129 => &CU129_INDEX_URL,
             Self::Cu128 => &CU128_INDEX_URL,
             Self::Cu126 => &CU126_INDEX_URL,
             Self::Cu125 => &CU125_INDEX_URL,
@@ -490,6 +496,7 @@ impl TorchBackend {
     pub fn cuda_version(&self) -> Option<Version> {
         match self {
             Self::Cpu => None,
+            Self::Cu129 => Some(Version::new([12, 9])),
             Self::Cu128 => Some(Version::new([12, 8])),
             Self::Cu126 => Some(Version::new([12, 6])),
             Self::Cu125 => Some(Version::new([12, 5])),
@@ -538,6 +545,7 @@ impl TorchBackend {
     pub fn rocm_version(&self) -> Option<Version> {
         match self {
             Self::Cpu => None,
+            Self::Cu129 => None,
             Self::Cu128 => None,
             Self::Cu126 => None,
             Self::Cu125 => None,
@@ -589,6 +597,7 @@ impl FromStr for TorchBackend {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "cpu" => Ok(Self::Cpu),
+            "cu129" => Ok(Self::Cu129),
             "cu128" => Ok(Self::Cu128),
             "cu126" => Ok(Self::Cu126),
             "cu125" => Ok(Self::Cu125),
@@ -638,10 +647,11 @@ impl FromStr for TorchBackend {
 /// Linux CUDA driver versions and the corresponding CUDA versions.
 ///
 /// See: <https://github.com/pmeier/light-the-torch/blob/33397cbe45d07b51ad8ee76b004571a4c236e37f/light_the_torch/_cb.py#L150-L213>
-static LINUX_CUDA_DRIVERS: LazyLock<[(TorchBackend, Version); 24]> = LazyLock::new(|| {
+static LINUX_CUDA_DRIVERS: LazyLock<[(TorchBackend, Version); 25]> = LazyLock::new(|| {
     [
         // Table 2 from
         // https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html
+        (TorchBackend::Cu129, Version::new([525, 60, 13])),
         (TorchBackend::Cu128, Version::new([525, 60, 13])),
         (TorchBackend::Cu126, Version::new([525, 60, 13])),
         (TorchBackend::Cu125, Version::new([525, 60, 13])),
@@ -676,10 +686,11 @@ static LINUX_CUDA_DRIVERS: LazyLock<[(TorchBackend, Version); 24]> = LazyLock::n
 /// Windows CUDA driver versions and the corresponding CUDA versions.
 ///
 /// See: <https://github.com/pmeier/light-the-torch/blob/33397cbe45d07b51ad8ee76b004571a4c236e37f/light_the_torch/_cb.py#L150-L213>
-static WINDOWS_CUDA_VERSIONS: LazyLock<[(TorchBackend, Version); 24]> = LazyLock::new(|| {
+static WINDOWS_CUDA_VERSIONS: LazyLock<[(TorchBackend, Version); 25]> = LazyLock::new(|| {
     [
         // Table 2 from
         // https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html
+        (TorchBackend::Cu129, Version::new([528, 33])),
         (TorchBackend::Cu128, Version::new([528, 33])),
         (TorchBackend::Cu126, Version::new([528, 33])),
         (TorchBackend::Cu125, Version::new([528, 33])),
@@ -780,6 +791,8 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 44]>
 
 static CPU_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cpu").unwrap());
+static CU129_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu129").unwrap());
 static CU128_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu128").unwrap());
 static CU126_INDEX_URL: LazyLock<IndexUrl> =

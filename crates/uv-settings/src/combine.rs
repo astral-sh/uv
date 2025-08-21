@@ -5,7 +5,7 @@ use url::Url;
 
 use uv_configuration::{
     ExportFormat, IndexStrategy, KeyringProviderType, RequiredVersion, TargetTriple,
-    TrustedPublishing,
+    TrustedPublishing, UpgradeSelection,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
@@ -176,6 +176,15 @@ impl Combine for Option<PackageConfigSettings> {
     fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.merge(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<UpgradeSelection> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
         }
     }

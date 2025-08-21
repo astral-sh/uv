@@ -21,6 +21,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 uv-auth = { path = "crates/uv-auth" }
+uv-bin-install = { path = "crates/uv-bin-install" }
 uv-build-backend = { path = "crates/uv-build-backend" }
 uv-build-frontend = { path = "crates/uv-build-frontend" }
 uv-cache = { path = "crates/uv-cache" }
@@ -77,7 +78,7 @@ anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
 arrayvec = { version = "0.7.6" }
-astral-tokio-tar = { git = "https://github.com/astral-sh/tokio-tar", rev = "f1488188f1d1b54a73eb0c42a8b8f4b9ee87d688" }
+astral-tokio-tar = { version = "0.5.3" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
