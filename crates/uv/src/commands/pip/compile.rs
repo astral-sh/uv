@@ -482,6 +482,8 @@ pub(crate) async fn pip_compile(
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
             .into_inner();
 
+    let top_level_resolution = None;
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -506,6 +508,7 @@ pub(crate) async fn pip_compile(
         WorkspaceCache::default(),
         concurrency,
         preview,
+        top_level_resolution,
     );
 
     let options = OptionsBuilder::new()
