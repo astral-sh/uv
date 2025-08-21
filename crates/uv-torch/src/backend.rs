@@ -267,6 +267,7 @@ impl TorchStrategy {
                 | "torchserve"
                 | "torchtext"
                 | "torchvision"
+                | "triton"
                 | "pytorch-triton"
                 | "pytorch-triton-rocm"
                 | "pytorch-triton-xpu"
