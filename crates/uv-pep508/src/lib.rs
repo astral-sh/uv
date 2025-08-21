@@ -26,28 +26,29 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
-use uv_cache_key::{CacheKey, CacheKeyHasher};
 
-use cursor::Cursor;
-pub use marker::{
+use uv_cache_key::{CacheKey, CacheKeyHasher};
+use uv_normalize::{ExtraName, PackageName};
+
+use crate::cursor::Cursor;
+pub use crate::marker::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
     MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
-pub use origin::RequirementOrigin;
+pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
-pub use unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
-pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
+pub use crate::unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
+pub use crate::verbatim_url::{
+    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
+    split_scheme, strip_host,
+};
 /// Version and version specifiers used in requirements (reexport).
 // https://github.com/konstin/pep508_rs/issues/19
 pub use uv_pep440;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
-pub use verbatim_url::{
-    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
-    split_scheme, strip_host,
-};
 
 mod cursor;
 pub mod marker;

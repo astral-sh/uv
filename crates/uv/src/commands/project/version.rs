@@ -15,8 +15,8 @@ use uv_configuration::{
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
+use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
-use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::pyproject_mut::Error;

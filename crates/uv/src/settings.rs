@@ -32,8 +32,8 @@ use uv_distribution_types::{
     PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
-use uv_normalize::{PackageName, PipGroupName};
-use uv_pep508::{ExtraName, MarkerTree, RequirementOrigin};
+use uv_normalize::{ExtraName, PackageName, PipGroupName};
+use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
