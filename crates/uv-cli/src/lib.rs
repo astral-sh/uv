@@ -312,7 +312,7 @@ pub struct GlobalArgs {
     /// parent directories, or user configuration directories.
     ///
     /// This option is deprecated in favor of `--no-config`.
-    #[arg(global = true, long, hide = true)]
+    #[arg(global = true, long, hide = true, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Show the resolved settings for the current command.
@@ -3169,7 +3169,7 @@ pub struct RunArgs {
     ///
     /// When used with `--with` or `--with-requirements`, the additional dependencies will still be
     /// layered in a second environment.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -4476,7 +4476,7 @@ pub struct ToolRunArgs {
     pub overrides: Vec<Maybe<PathBuf>>,
 
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
-    #[arg(long)]
+    #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Load environment variables from a `.env` file.

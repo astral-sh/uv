@@ -136,6 +136,10 @@ impl EnvVars {
     /// directories.
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
 
+    /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
+    /// a `pyproject.toml` or `uv.toml` file.
+    pub const UV_ISOLATED: &'static str = "UV_ISOLATED";
+
     /// Equivalent to the `--exclude-newer` command-line argument. If set, uv will
     /// exclude distributions published after the specified date.
     pub const UV_EXCLUDE_NEWER: &'static str = "UV_EXCLUDE_NEWER";
