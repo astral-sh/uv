@@ -409,17 +409,16 @@ pub(crate) async fn add(
 
             // Determine whether to enable build isolation.
             let environment;
-            let build_isolation = if settings.resolver.no_build_isolation {
-                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-                BuildIsolation::Shared(&environment)
-            } else if settings.resolver.no_build_isolation_package.is_empty() {
-                BuildIsolation::Isolated
-            } else {
-                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-                BuildIsolation::SharedPackage(
-                    &environment,
-                    &settings.resolver.no_build_isolation_package,
-                )
+            let build_isolation = match &settings.resolver.build_isolation {
+                uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+                uv_configuration::BuildIsolation::Shared => {
+                    environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                    BuildIsolation::Shared(&environment)
+                }
+                uv_configuration::BuildIsolation::SharedPackage(packages) => {
+                    environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                    BuildIsolation::SharedPackage(&environment, packages)
+                }
             };
 
             // Resolve the flat indexes from `--find-links`.
