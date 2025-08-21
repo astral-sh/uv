@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -18,6 +19,7 @@ use crate::settings::NetworkSettings;
 
 /// Run the formatter.
 pub(crate) async fn format(
+    project_dir: &Path,
     check: bool,
     diff: bool,
     extra_args: Vec<String>,
@@ -54,6 +56,9 @@ pub(crate) async fn format(
 
     let mut command = Command::new(&ruff_path);
     command.arg("format");
+
+    // Run ruff in the specified project directory
+    command.arg(project_dir);
 
     if check {
         command.arg("--check");
