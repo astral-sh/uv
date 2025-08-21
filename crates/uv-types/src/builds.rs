@@ -4,7 +4,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 
 use uv_configuration::{BuildKind, SourceStrategy};
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.

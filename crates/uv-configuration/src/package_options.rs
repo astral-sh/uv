@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
 use uv_distribution_types::Requirement;
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]

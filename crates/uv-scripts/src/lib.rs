@@ -10,8 +10,8 @@ use thiserror::Error;
 use url::Url;
 
 use uv_configuration::SourceStrategy;
+use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerSchema};

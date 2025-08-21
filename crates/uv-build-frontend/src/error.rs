@@ -13,8 +13,8 @@ use tracing::error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
 use uv_fs::Simplified;
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
 use uv_types::AnyErrorBuild;
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
@@ -468,8 +468,8 @@ mod test {
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
+    use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_pep508::PackageName;
 
     #[test]
     fn missing_header() {
