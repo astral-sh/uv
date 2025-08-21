@@ -246,9 +246,7 @@ pub(crate) async fn install(
     // If the user passed `--force`, it implies `--reinstall-package <from>`
     let settings = if force {
         ResolverInstallerSettings {
-            reinstall: settings
-                .reinstall
-                .combine(Reinstall::package(package_name.clone())),
+            reinstall: Reinstall::package(package_name.clone()).combine(settings.reinstall),
             ..settings
         }
     } else {

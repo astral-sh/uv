@@ -2946,10 +2946,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
-            reinstall: Reinstall::from_args(
-                value.reinstall,
-                value.reinstall_package.unwrap_or_default(),
-            ),
+            reinstall: value.reinstall.unwrap_or_default(),
         }
     }
 }
@@ -3335,11 +3332,14 @@ impl PipSettings {
             ))
             .unwrap_or_default(),
             reinstall: Reinstall::from_args(
-                args.reinstall.combine(reinstall),
-                args.reinstall_package
-                    .combine(reinstall_package)
-                    .unwrap_or_default(),
-            ),
+                args.reinstall,
+                args.reinstall_package.unwrap_or_default(),
+            )
+            .combine(Reinstall::from_args(
+                reinstall,
+                reinstall_package.unwrap_or_default(),
+            ))
+            .unwrap_or_default(),
             build_options: BuildOptions::new(
                 NoBinary::from_pip_args(args.no_binary.combine(no_binary).unwrap_or_default())
                     .combine(NoBinary::from_args(

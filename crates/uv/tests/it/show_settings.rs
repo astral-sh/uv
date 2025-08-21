@@ -3515,7 +3515,6 @@ fn resolve_tool() -> anyhow::Result<()> {
             no_sources: None,
             upgrade: None,
             reinstall: None,
-            reinstall_package: None,
             no_build: None,
             no_build_package: None,
             no_binary: None,

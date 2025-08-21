@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion, TargetTriple,
-    TrustedHost, TrustedPublishing, Upgrade,
+    IndexStrategy, KeyringProviderType, PackageNameSpecifier, Reinstall, RequiredVersion,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
@@ -408,8 +408,7 @@ pub struct ResolverInstallerOptions {
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
     pub upgrade: Option<Upgrade>,
-    pub reinstall: Option<bool>,
-    pub reinstall_package: Option<Vec<PackageName>>,
+    pub reinstall: Option<Reinstall>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
@@ -481,8 +480,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
                     .map(Into::into)
                     .collect(),
             ),
-            reinstall,
-            reinstall_package,
+            reinstall: Reinstall::from_args(reinstall, reinstall_package.unwrap_or_default()),
             no_build,
             no_build_package,
             no_binary,
@@ -2041,7 +2039,6 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_sources: value.no_sources,
             upgrade: None,
             reinstall: None,
-            reinstall_package: None,
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
