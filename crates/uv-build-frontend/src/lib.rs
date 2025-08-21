@@ -6,6 +6,7 @@ mod error;
 mod pipreqs;
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Formatter;
 use std::fmt::Write;
@@ -32,9 +33,10 @@ use tracing::{Instrument, debug, info_span, instrument, warn};
 use uv_cache_key::cache_digest;
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution::BuildRequires;
+use uv_distribution_types::Name;
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
-    Resolution,
+    RequirementSource, Resolution,
 };
 use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
@@ -109,6 +111,16 @@ struct Tool {
 #[serde(rename_all = "kebab-case")]
 struct ToolUv {
     workspace: Option<de::IgnoredAny>,
+    build_dependencies_metadata: Option<BuildDependenciesMetadata>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+struct BuildDependenciesMetadata(BTreeMap<PackageName, BuildDependencyMetadata>);
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+struct BuildDependencyMetadata {
+    match_runtime: Option<bool>,
 }
 
 impl BackendPath {
@@ -320,6 +332,13 @@ impl SourceBuild {
         .await
         .map_err(|e| *e)?;
 
+        let build_dep_metadata = pyproject_toml
+            .as_ref()
+            .and_then(|pyproj| pyproj.tool.as_ref())
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.build_dependencies_metadata.as_ref())
+            .cloned();
+
         let project = pyproject_toml.and_then(|pyproj| pyproj.project);
 
         let package_name = project
@@ -391,6 +410,7 @@ impl SourceBuild {
                 &pep517_backend,
                 extra_build_dependencies,
                 build_stack,
+                build_dep_metadata.as_ref(),
             )
             .await?;
 
@@ -514,6 +534,7 @@ impl SourceBuild {
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
         build_stack: &BuildStack,
+        build_dep_metadata: Option<&BuildDependenciesMetadata>,
     ) -> Result<Resolution, Error> {
         Ok(
             if pep517_backend.requirements == default_backend.requirements
@@ -533,7 +554,8 @@ impl SourceBuild {
                     resolved_requirements
                 }
             } else {
-                let (requirements, dependency_sources) = if extra_build_dependencies.is_empty() {
+                let (mut requirements, dependency_sources) = if extra_build_dependencies.is_empty()
+                {
                     (
                         Cow::Borrowed(&pep517_backend.requirements),
                         "`build-system.requires`",
@@ -548,6 +570,38 @@ impl SourceBuild {
                         "`build-system.requires` and `extra-build-dependencies`",
                     )
                 };
+                if let Some(build_dep_metadata) = build_dep_metadata {
+                    requirements =
+                        Cow::Owned(
+                            requirements
+                                .iter()
+                                .map(|req| {
+                                    if build_dep_metadata.0.get(&req.name).is_some_and(|metadata| {
+                                        metadata.match_runtime.unwrap_or(false)
+                                    }) {
+                                        let resolved_dist = build_context
+                                            .top_level_resolution()
+                                            .and_then(|resolution| {
+                                                resolution
+                                                    .distributions()
+                                                    .find(|dist| *dist.name() == req.name)
+                                            });
+                                        if let Some(dist) = resolved_dist {
+                                            return Requirement {
+                                                source: RequirementSource::from(dist),
+                                                ..req.clone()
+                                            };
+                                        }
+                                        // TODO: error
+                                        req.clone()
+                                    } else {
+                                        req.clone()
+                                    }
+                                })
+                                .collect(),
+                        );
+                }
+
                 build_context
                     .resolve(&requirements, build_stack)
                     .await
