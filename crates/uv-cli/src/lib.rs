@@ -1015,7 +1015,7 @@ pub enum ProjectCommand {
     /// To check if files are formatted without modifying them, use `--check`. To see a diff of
     /// formatting changes, use `--diff`.
     ///
-    /// By default, Additional arguments can be passed to Ruff after `--`.
+    /// Additional arguments can be passed to Ruff after `--`.
     #[command(
         after_help = "Use `uv help format` for more details.",
         after_long_help = ""
