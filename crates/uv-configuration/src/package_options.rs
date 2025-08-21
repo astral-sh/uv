@@ -134,55 +134,6 @@ impl From<Reinstall> for Refresh {
     }
 }
 
-/// An upgrade selection as specified by a user on the command line or in a configuration file.
-#[derive(Debug, Default, Clone)]
-pub enum UpgradeSelection {
-    /// Prefer pinned versions from the existing lockfile, if possible.
-    #[default]
-    None,
-
-    /// Allow package upgrades for all packages, ignoring the existing lockfile.
-    All,
-
-    /// Allow package upgrades, but only for the specified packages.
-    Packages(Vec<Requirement>),
-}
-
-impl UpgradeSelection {
-    /// Determine the upgrade selection strategy from the command-line arguments.
-    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Option<Self> {
-        match upgrade {
-            Some(true) => Some(Self::All),
-            // TODO(charlie): `--no-upgrade` with `--upgrade-package` should allow the specified
-            // packages to be upgraded. Right now, `--upgrade-package` is silently ignored.
-            Some(false) => Some(Self::None),
-            None if upgrade_package.is_empty() => None,
-            None => Some(Self::Packages(upgrade_package)),
-        }
-    }
-
-    /// Combine a set of [`UpgradeSelection`] values.
-    #[must_use]
-    pub fn combine(self, other: Self) -> Self {
-        match self {
-            // Setting `--upgrade` or `--no-upgrade` should clear previous `--upgrade-package` selections.
-            Self::All | Self::None => self,
-            Self::Packages(self_packages) => match other {
-                // If `--upgrade` was enabled previously, `--upgrade-package` is subsumed by upgrading all packages.
-                Self::All => other,
-                // If `--no-upgrade` was enabled previously, then `--upgrade-package` enables an explicit upgrade of those packages.
-                Self::None => Self::Packages(self_packages),
-                // If `--upgrade-package` was included twice, combine the requirements.
-                Self::Packages(other_packages) => {
-                    let mut combined = self_packages;
-                    combined.extend(other_packages);
-                    Self::Packages(combined)
-                }
-            },
-        }
-    }
-}
-
 /// Whether to allow package upgrades.
 #[derive(Debug, Default, Clone)]
 pub enum Upgrade {
@@ -197,28 +148,27 @@ pub enum Upgrade {
     Packages(FxHashMap<PackageName, Vec<Requirement>>),
 }
 
-/// Determine the [`Upgrade`] strategy from the command-line arguments.
-impl From<Option<UpgradeSelection>> for Upgrade {
-    fn from(value: Option<UpgradeSelection>) -> Self {
-        match value {
-            None => Self::None,
-            Some(UpgradeSelection::None) => Self::None,
-            Some(UpgradeSelection::All) => Self::All,
-            Some(UpgradeSelection::Packages(requirements)) => Self::Packages(
-                requirements
-                    .into_iter()
-                    .fold(FxHashMap::default(), |mut map, requirement| {
-                        map.entry(requirement.name.clone())
-                            .or_default()
-                            .push(requirement);
-                        map
-                    }),
-            ),
+impl Upgrade {
+    /// Determine the upgrade selection strategy from the command-line arguments.
+    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Option<Self> {
+        match upgrade {
+            Some(true) => Some(Self::All),
+            // TODO(charlie): `--no-upgrade` with `--upgrade-package` should allow the specified
+            // packages to be upgraded. Right now, `--upgrade-package` is silently ignored.
+            Some(false) => Some(Self::None),
+            None if upgrade_package.is_empty() => None,
+            None => Some(Self::Packages(upgrade_package.into_iter().fold(
+                FxHashMap::default(),
+                |mut map, requirement| {
+                    map.entry(requirement.name.clone())
+                        .or_default()
+                        .push(requirement);
+                    map
+                },
+            ))),
         }
     }
-}
 
-impl Upgrade {
     /// Create an [`Upgrade`] strategy to upgrade a single package.
     pub fn package(package_name: PackageName) -> Self {
         Self::Packages({
@@ -265,19 +215,23 @@ impl Upgrade {
     /// Combine a set of [`Upgrade`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        match (self, other) {
-            // If both are `None`, the result is `None`.
-            (Self::None, Self::None) => Self::None,
-            // If either is `All`, the result is `All`.
-            (Self::All, _) | (_, Self::All) => Self::All,
-            // If one is `None`, the result is the other.
-            (Self::Packages(a), Self::None) => Self::Packages(a),
-            (Self::None, Self::Packages(b)) => Self::Packages(b),
-            // If both are `Packages`, the result is the union of the two.
-            (Self::Packages(mut a), Self::Packages(b)) => {
-                a.extend(b);
-                Self::Packages(a)
-            }
+        match self {
+            // Setting `--upgrade` or `--no-upgrade` should clear previous `--upgrade-package` selections.
+            Self::All | Self::None => self,
+            Self::Packages(self_packages) => match other {
+                // If `--upgrade` was enabled previously, `--upgrade-package` is subsumed by upgrading all packages.
+                Self::All => other,
+                // If `--no-upgrade` was enabled previously, then `--upgrade-package` enables an explicit upgrade of those packages.
+                Self::None => Self::Packages(self_packages),
+                // If `--upgrade-package` was included twice, combine the requirements.
+                Self::Packages(other_packages) => {
+                    let mut combined = self_packages;
+                    for (package, requirements) in other_packages {
+                        combined.entry(package).or_default().extend(requirements);
+                    }
+                    Self::Packages(combined)
+                }
+            },
         }
     }
 }

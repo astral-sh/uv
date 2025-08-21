@@ -1,7 +1,7 @@
 use anstream::eprintln;
 
 use uv_cache::Refresh;
-use uv_configuration::UpgradeSelection;
+use uv_configuration::Upgrade;
 use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
@@ -334,7 +334,7 @@ pub fn resolver_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: UpgradeSelection::from_args(
+        upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "no-upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
         ),
@@ -445,7 +445,7 @@ pub fn resolver_installer_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: UpgradeSelection::from_args(
+        upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
         ),
