@@ -301,7 +301,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 allow_insecure_host,
             },
         top_level:
-            ResolverInstallerOptions {
+            ResolverInstallerSchema {
                 index,
                 index_url,
                 extra_index_url,

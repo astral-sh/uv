@@ -3514,7 +3514,6 @@ fn resolve_tool() -> anyhow::Result<()> {
             compile_bytecode: None,
             no_sources: None,
             upgrade: None,
-            upgrade_package: None,
             reinstall: None,
             reinstall_package: None,
             no_build: None,
@@ -8569,7 +8568,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
-    // TODO(charlie): This doesn't mark `idna` for upgrade; it just disables upgrades.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--upgrade-package")
         .arg("idna")
@@ -8727,7 +8725,30 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Packages(
+                {
+                    PackageName(
+                        "idna",
+                    ): [
+                        Requirement {
+                            name: PackageName(
+                                "idna",
+                            ),
+                            extras: [],
+                            groups: [],
+                            marker: true,
+                            source: Registry {
+                                specifier: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                                conflict: None,
+                            },
+                            origin: None,
+                        },
+                    ],
+                },
+            ),
             reinstall: None,
         },
     }
@@ -9600,7 +9621,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
-    // TODO(charlie): This doesn't mark `idna` for upgrade; it just disables upgrades.
     uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
         .arg("--upgrade-package")
         .arg("idna")
@@ -9699,7 +9719,30 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
-            upgrade: None,
+            upgrade: Packages(
+                {
+                    PackageName(
+                        "idna",
+                    ): [
+                        Requirement {
+                            name: PackageName(
+                                "idna",
+                            ),
+                            extras: [],
+                            groups: [],
+                            marker: true,
+                            source: Registry {
+                                specifier: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                                conflict: None,
+                            },
+                            origin: None,
+                        },
+                    ],
+                },
+            ),
         },
     }
 
