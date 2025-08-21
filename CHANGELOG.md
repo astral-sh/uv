@@ -3,6 +3,28 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.13
+
+### Enhancements
+
+- Add `--no-install-*` arguments to `uv add` ([#15375](https://github.com/astral-sh/uv/pull/15375))
+- Initialize Git prior to reading author in `uv init` ([#15377](https://github.com/astral-sh/uv/pull/15377))
+- Add CUDA 129 to available torch backends ([#15416](https://github.com/astral-sh/uv/pull/15416))
+- Update Pyodide to 0.28.2 ([#15385](https://github.com/astral-sh/uv/pull/15385))
+
+### Preview features
+
+- Add an experimental `uv format` command ([#15017](https://github.com/astral-sh/uv/pull/15017))
+- Allow version specifiers in `extra-build-dependencies` if match-runtime is explicitly `false` ([#15420](https://github.com/astral-sh/uv/pull/15420))
+
+### Bug fixes
+
+- Add `triton` to `torch-backend` manifest ([#15405](https://github.com/astral-sh/uv/pull/15405))
+- Avoid panicking when resolver returns stale distributions ([#15389](https://github.com/astral-sh/uv/pull/15389))
+- Fix `uv_build` wheel hashes ([#15400](https://github.com/astral-sh/uv/pull/15400))
+- Treat `--upgrade-package` on the command-line as overriding `upgrade = false` in configuration ([#15395](https://github.com/astral-sh/uv/pull/15395))
+- Restore DockerHub publishing ([#15381](https://github.com/astral-sh/uv/pull/15381))
+
 ## 0.8.12
 
 ### Python
