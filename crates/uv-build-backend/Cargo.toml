@@ -26,6 +26,7 @@ uv-pypi-types = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 
+base64 = { workspace = true }
 csv = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true }
