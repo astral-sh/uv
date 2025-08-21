@@ -97,7 +97,7 @@ pub enum Error {
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
     #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {0}")]
-    Mirror(&'static str, &'static str),
+    Mirror(&'static str, String),
     #[error("Failed to determine the libc used on the current platform")]
     LibcDetection(#[from] platform::LibcDetectionError),
     #[error("Remote Python downloads JSON is not yet supported, please use a local path")]
@@ -142,8 +142,8 @@ impl Error {
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
-    url: &'static str,
-    sha256: Option<&'static str>,
+    url: Cow<'static, str>,
+    sha256: Option<Cow<'static, str>>,
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
@@ -836,8 +836,8 @@ impl ManagedPythonDownload {
         Ok(downloads.iter())
     }
 
-    pub fn url(&self) -> &'static str {
-        self.url
+    pub fn url(&self) -> &Cow<'static, str> {
+        &self.url
     }
 
     pub fn key(&self) -> &PythonInstallationKey {
@@ -848,8 +848,8 @@ impl ManagedPythonDownload {
         self.key.os()
     }
 
-    pub fn sha256(&self) -> Option<&'static str> {
-        self.sha256
+    pub fn sha256(&self) -> Option<&Cow<'static, str>> {
+        self.sha256.as_ref()
     }
 
     /// Download and extract a Python distribution, retrying on failure.
@@ -963,7 +963,7 @@ impl ManagedPythonDownload {
         {
             let python_builds_dir = PathBuf::from(python_builds_dir);
             fs_err::create_dir_all(&python_builds_dir)?;
-            let hash_prefix = match self.sha256 {
+            let hash_prefix = match self.sha256.as_deref() {
                 Some(sha) => {
                     // Shorten the hash to avoid too-long-filename errors
                     &sha[..9]
@@ -1169,11 +1169,11 @@ impl ManagedPythonDownload {
         reporter: Option<&dyn Reporter>,
         direction: Direction,
     ) -> Result<(), Error> {
-        let mut hashers = self
-            .sha256
-            .into_iter()
-            .map(|_| Hasher::from(HashAlgorithm::Sha256))
-            .collect::<Vec<_>>();
+        let mut hashers = if self.sha256.is_some() {
+            vec![Hasher::from(HashAlgorithm::Sha256)]
+        } else {
+            vec![]
+        };
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         if let Some(reporter) = reporter {
@@ -1191,7 +1191,7 @@ impl ManagedPythonDownload {
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
         // Check the hash
-        if let Some(expected) = self.sha256 {
+        if let Some(expected) = self.sha256.as_deref() {
             let actual = HashDigest::from(hashers.pop().unwrap()).digest;
             if !actual.eq_ignore_ascii_case(expected) {
                 return Err(Error::HashMismatch {
@@ -1222,7 +1222,10 @@ impl ManagedPythonDownload {
                     let Some(suffix) = self.url.strip_prefix(
                         "https://github.com/astral-sh/python-build-standalone/releases/download/",
                     ) else {
-                        return Err(Error::Mirror(EnvVars::UV_PYTHON_INSTALL_MIRROR, self.url));
+                        return Err(Error::Mirror(
+                            EnvVars::UV_PYTHON_INSTALL_MIRROR,
+                            self.url.to_string(),
+                        ));
                     };
                     return Ok(Url::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
@@ -1234,7 +1237,10 @@ impl ManagedPythonDownload {
                 if let Some(mirror) = pypy_install_mirror {
                     let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
                     else {
-                        return Err(Error::Mirror(EnvVars::UV_PYPY_INSTALL_MIRROR, self.url));
+                        return Err(Error::Mirror(
+                            EnvVars::UV_PYPY_INSTALL_MIRROR,
+                            self.url.to_string(),
+                        ));
                     };
                     return Ok(Url::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
@@ -1245,7 +1251,7 @@ impl ManagedPythonDownload {
             _ => {}
         }
 
-        Ok(Url::parse(self.url)?)
+        Ok(Url::parse(&self.url)?)
     }
 }
 
@@ -1337,10 +1343,8 @@ fn parse_json_downloads(
                 }
             };
 
-            let url = Box::leak(entry.url.into_boxed_str()) as &'static str;
-            let sha256 = entry
-                .sha256
-                .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
+            let url = Cow::Owned(entry.url);
+            let sha256 = entry.sha256.map(Cow::Owned);
 
             Some(ManagedPythonDownload {
                 key: PythonInstallationKey::new_from_version(
