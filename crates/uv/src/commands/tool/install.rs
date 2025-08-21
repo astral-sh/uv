@@ -234,10 +234,7 @@ pub(crate) async fn install(
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
             resolver: ResolverSettings {
-                upgrade: settings
-                    .resolver
-                    .upgrade
-                    .combine(Upgrade::package(package_name.clone())),
+                upgrade: Upgrade::package(package_name.clone()).combine(settings.resolver.upgrade),
                 ..settings.resolver
             },
             ..settings

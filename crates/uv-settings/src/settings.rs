@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uv_cache_info::CacheKey;
 use uv_configuration::{
     IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion, TargetTriple,
-    TrustedHost, TrustedPublishing, UpgradeSelection,
+    TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
@@ -369,7 +369,7 @@ pub struct ResolverOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
-    pub upgrade: Option<UpgradeSelection>,
+    pub upgrade: Option<Upgrade>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
@@ -407,7 +407,7 @@ pub struct ResolverInstallerOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
-    pub upgrade: Option<UpgradeSelection>,
+    pub upgrade: Option<Upgrade>,
     pub reinstall: Option<bool>,
     pub reinstall_package: Option<Vec<PackageName>>,
     pub no_build: Option<bool>,
@@ -473,7 +473,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             link_mode,
             compile_bytecode,
             no_sources,
-            upgrade: UpgradeSelection::from_args(
+            upgrade: Upgrade::from_args(
                 upgrade,
                 upgrade_package
                     .into_iter()
@@ -1886,7 +1886,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
                     .collect(),
             ),
             link_mode: value.link_mode,
-            upgrade: UpgradeSelection::from_args(
+            upgrade: Upgrade::from_args(
                 value.upgrade,
                 value
                     .upgrade_package

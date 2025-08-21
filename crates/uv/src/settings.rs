@@ -24,7 +24,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
     NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, UpgradeSelection, VersionControlSystem,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -2852,7 +2852,7 @@ impl From<ResolverOptions> for ResolverSettings {
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
             sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
-            upgrade: Upgrade::from(value.upgrade),
+            upgrade: value.upgrade.unwrap_or_default(),
             build_options: BuildOptions::new(
                 NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
                 NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
@@ -2943,7 +2943,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 prerelease: value.prerelease.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
-                upgrade: Upgrade::from(value.upgrade),
+                upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
             reinstall: Reinstall::from_args(
@@ -3317,24 +3317,23 @@ impl PipSettings {
                 args.no_sources.combine(no_sources).unwrap_or_default(),
             ),
             strict: args.strict.combine(strict).unwrap_or_default(),
-            upgrade: Upgrade::from(
-                UpgradeSelection::from_args(
-                    args.upgrade,
-                    args.upgrade_package
-                        .into_iter()
-                        .flatten()
-                        .map(Requirement::from)
-                        .collect(),
-                )
-                .combine(UpgradeSelection::from_args(
-                    upgrade,
-                    upgrade_package
-                        .into_iter()
-                        .flatten()
-                        .map(Requirement::from)
-                        .collect(),
-                )),
-            ),
+            upgrade: Upgrade::from_args(
+                args.upgrade,
+                args.upgrade_package
+                    .into_iter()
+                    .flatten()
+                    .map(Requirement::from)
+                    .collect(),
+            )
+            .combine(Upgrade::from_args(
+                upgrade,
+                upgrade_package
+                    .into_iter()
+                    .flatten()
+                    .map(Requirement::from)
+                    .collect(),
+            ))
+            .unwrap_or_default(),
             reinstall: Reinstall::from_args(
                 args.reinstall.combine(reinstall),
                 args.reinstall_package
