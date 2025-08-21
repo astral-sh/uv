@@ -1,7 +1,7 @@
 use anstream::eprintln;
 
 use uv_cache::Refresh;
-use uv_configuration::{Reinstall, Upgrade};
+use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
@@ -355,8 +355,10 @@ pub fn resolver_options(
                 .into_iter()
                 .collect::<PackageConfigSettings>()
         }),
-        no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
-        no_build_isolation_package: Some(no_build_isolation_package),
+        build_isolation: BuildIsolation::from_args(
+            flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation_package,
+        ),
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer: ExcludeNewer::from_args(
@@ -470,12 +472,10 @@ pub fn resolver_installer_options(
                 .into_iter()
                 .collect::<PackageConfigSettings>()
         }),
-        no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
-        no_build_isolation_package: if no_build_isolation_package.is_empty() {
-            None
-        } else {
-            Some(no_build_isolation_package)
-        },
+        build_isolation: BuildIsolation::from_args(
+            flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation_package,
+        ),
         extra_build_dependencies: None,
         extra_build_variables: None,
         exclude_newer,
