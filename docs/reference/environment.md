@@ -191,6 +191,11 @@ in lieu of the default GitHub URL.
 The directory in which to install uv using the standalone installer and `self update` feature.
 Defaults to `~/.local/bin`.
 
+### `UV_ISOLATED`
+
+Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
+a `pyproject.toml` or `uv.toml` file.
+
 ### `UV_KEYRING_PROVIDER`
 
 Equivalent to the `--keyring-provider` command-line argument. If set, uv
