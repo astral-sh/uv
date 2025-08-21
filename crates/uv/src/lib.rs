@@ -2187,6 +2187,26 @@ async fn run_project(
             .boxed_local()
             .await
         }
+        ProjectCommand::Format(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::FormatSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?;
+
+            Box::pin(commands::format(
+                args.check,
+                args.diff,
+                args.extra_args,
+                args.version,
+                globals.network_settings,
+                cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
     }
 }
 

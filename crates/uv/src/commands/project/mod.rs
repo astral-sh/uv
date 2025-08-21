@@ -63,6 +63,7 @@ use crate::settings::{
 pub(crate) mod add;
 pub(crate) mod environment;
 pub(crate) mod export;
+pub(crate) mod format;
 pub(crate) mod init;
 mod install_target;
 pub(crate) mod lock;

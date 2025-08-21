@@ -21,6 +21,7 @@ uv [OPTIONS] <COMMAND>
 <dt><a href="#uv-lock"><code>uv lock</code></a></dt><dd><p>Update the project's lockfile</p></dd>
 <dt><a href="#uv-export"><code>uv export</code></a></dt><dd><p>Export the project's lockfile to an alternate format</p></dd>
 <dt><a href="#uv-tree"><code>uv tree</code></a></dt><dd><p>Display the project's dependency tree</p></dd>
+<dt><a href="#uv-format"><code>uv format</code></a></dt><dd><p>Format Python code in the project</p></dd>
 <dt><a href="#uv-tool"><code>uv tool</code></a></dt><dd><p>Run and install commands provided by Python packages</p></dd>
 <dt><a href="#uv-python"><code>uv python</code></a></dt><dd><p>Manage Python versions and installations</p></dd>
 <dt><a href="#uv-pip"><code>uv pip</code></a></dt><dd><p>Manage Python packages with a pip-compatible interface</p></dd>
@@ -1839,6 +1840,81 @@ interpreter. Use <code>--universal</code> to display the tree for all platforms,
 </dd><dt id="uv-tree--upgrade-package"><a href="#uv-tree--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-tree--verbose"><a href="#uv-tree--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
+</dd></dl>
+
+## uv format
+
+Format Python code in the project.
+
+Formats Python code using the Ruff formatter. By default, all Python files in the project are formatted. This command has the same behavior as running `ruff format` in the project root.
+
+To check if files are formatted without modifying them, use `--check`. To see a diff of formatting changes, use `--diff`.
+
+By default, Additional arguments can be passed to Ruff after `--`.
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv format [OPTIONS] [-- <EXTRA_ARGS>...]
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-format--extra_args"><a href="#uv-format--extra_args"<code>EXTRA_ARGS</code></a></dt><dd><p>Additional arguments to pass to Ruff.</p>
+<p>For example, use <code>uv format -- --line-length 100</code> to set the line length or <code>uv format -- src/module/foo.py</code> to format a specific file.</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-format--allow-insecure-host"><a href="#uv-format--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<p>Can be provided multiple times.</p>
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+<p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-format--cache-dir"><a href="#uv-format--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-format--check"><a href="#uv-format--check"><code>--check</code></a></dt><dd><p>Check if files are formatted without applying changes</p>
+</dd><dt id="uv-format--color"><a href="#uv-format--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="uv-format--config-file"><a href="#uv-format--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-format--diff"><a href="#uv-format--diff"><code>--diff</code></a></dt><dd><p>Show a diff of formatting changes without applying them.</p>
+<p>Implies <code>--check</code>.</p>
+</dd><dt id="uv-format--directory"><a href="#uv-format--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>Relative paths are resolved with the given directory as the base.</p>
+<p>See <code>--project</code> to only change the project root directory.</p>
+</dd><dt id="uv-format--help"><a href="#uv-format--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-format--managed-python"><a href="#uv-format--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-format--native-tls"><a href="#uv-format--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+<p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-format--no-cache"><a href="#uv-format--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-format--no-config"><a href="#uv-format--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-format--no-managed-python"><a href="#uv-format--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-format--no-progress"><a href="#uv-format--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-format--no-python-downloads"><a href="#uv-format--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-format--offline"><a href="#uv-format--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-format--project"><a href="#uv-format--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-format--quiet"><a href="#uv-format--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-format--verbose"><a href="#uv-format--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
+</dd><dt id="uv-format--version"><a href="#uv-format--version"><code>--version</code></a> <i>version</i></dt><dd><p>The version of Ruff to use for formatting.</p>
+<p>By default, a version of Ruff pinned by uv will be used.</p>
 </dd></dl>
 
 ## uv tool

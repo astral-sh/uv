@@ -15,8 +15,8 @@ use uv_cli::{
     ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
-    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
-    ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
+    ResolverInstallerArgs, ToolUpgradeArgs,
     options::{flag, resolver_installer_options, resolver_options},
 };
 use uv_client::Connectivity;
@@ -1869,6 +1869,34 @@ impl ExportSettings {
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
             install_mirrors,
+        }
+    }
+}
+
+/// The resolved settings to use for a `format` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct FormatSettings {
+    pub(crate) check: bool,
+    pub(crate) diff: bool,
+    pub(crate) extra_args: Vec<String>,
+    pub(crate) version: Option<String>,
+}
+
+impl FormatSettings {
+    /// Resolve the [`FormatSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: FormatArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let FormatArgs {
+            check,
+            diff,
+            extra_args,
+            version,
+        } = args;
+
+        Self {
+            check,
+            diff,
+            extra_args,
+            version,
         }
     }
 }
