@@ -55,10 +55,8 @@ pub(crate) async fn format(
         .context("Failed to install ruff {version}")?;
 
     let mut command = Command::new(&ruff_path);
+    command.current_dir(project_dir);
     command.arg("format");
-
-    // Run ruff in the specified project directory
-    command.arg(project_dir);
 
     if check {
         command.arg("--check");
