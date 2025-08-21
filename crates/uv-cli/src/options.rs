@@ -1,7 +1,7 @@
 use anstream::eprintln;
 
 use uv_cache::Refresh;
-use uv_configuration::Upgrade;
+use uv_configuration::{Reinstall, Upgrade};
 use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
@@ -449,12 +449,10 @@ pub fn resolver_installer_options(
             flag(upgrade, no_upgrade, "upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
         ),
-        reinstall: flag(reinstall, no_reinstall, "reinstall"),
-        reinstall_package: if reinstall_package.is_empty() {
-            None
-        } else {
-            Some(reinstall_package)
-        },
+        reinstall: Reinstall::from_args(
+            flag(reinstall, no_reinstall, "reinstall"),
+            reinstall_package,
+        ),
         index_strategy,
         keyring_provider,
         resolution,

@@ -25,17 +25,12 @@ pub enum Reinstall {
 
 impl Reinstall {
     /// Determine the reinstall strategy to use.
-    pub fn from_args(reinstall: Option<bool>, reinstall_package: Vec<PackageName>) -> Self {
+    pub fn from_args(reinstall: Option<bool>, reinstall_package: Vec<PackageName>) -> Option<Self> {
         match reinstall {
-            Some(true) => Self::All,
-            Some(false) => Self::None,
-            None => {
-                if reinstall_package.is_empty() {
-                    Self::None
-                } else {
-                    Self::Packages(reinstall_package, Vec::new())
-                }
-            }
+            Some(true) => Some(Self::All),
+            Some(false) => Some(Self::None),
+            None if reinstall_package.is_empty() => None,
+            None => Some(Self::Packages(reinstall_package, Vec::new())),
         }
     }
 
@@ -72,20 +67,23 @@ impl Reinstall {
     /// Combine a set of [`Reinstall`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        match (self, other) {
-            // If both are `None`, the result is `None`.
-            (Self::None, Self::None) => Self::None,
-            // If either is `All`, the result is `All`.
-            (Self::All, _) | (_, Self::All) => Self::All,
-            // If one is `None`, the result is the other.
-            (Self::Packages(a1, a2), Self::None) => Self::Packages(a1, a2),
-            (Self::None, Self::Packages(b1, b2)) => Self::Packages(b1, b2),
-            // If both are `Packages`, the result is the union of the two.
-            (Self::Packages(mut a1, mut a2), Self::Packages(b1, b2)) => {
-                a1.extend(b1);
-                a2.extend(b2);
-                Self::Packages(a1, a2)
-            }
+        match self {
+            // Setting `--reinstall` or `--no-reinstall` should clear previous `--reinstall-package` selections.
+            Self::All | Self::None => self,
+            Self::Packages(self_packages, self_paths) => match other {
+                // If `--reinstall` was enabled previously, `--reinstall-package` is subsumed by reinstalling all packages.
+                Self::All => other,
+                // If `--no-reinstall` was enabled previously, then `--reinstall-package` enables an explicit reinstall of those packages.
+                Self::None => Self::Packages(self_packages, self_paths),
+                // If `--reinstall-package` was included twice, combine the requirements.
+                Self::Packages(other_packages, other_paths) => {
+                    let mut combined_packages = self_packages;
+                    combined_packages.extend(other_packages);
+                    let mut combined_paths = self_paths;
+                    combined_paths.extend(other_paths);
+                    Self::Packages(combined_packages, combined_paths)
+                }
+            },
         }
     }
 

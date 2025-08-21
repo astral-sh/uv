@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, RequiredVersion, TargetTriple,
+    ExportFormat, IndexStrategy, KeyringProviderType, Reinstall, RequiredVersion, TargetTriple,
     TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
@@ -182,6 +182,15 @@ impl Combine for Option<PackageConfigSettings> {
 }
 
 impl Combine for Option<Upgrade> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<Reinstall> {
     fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
