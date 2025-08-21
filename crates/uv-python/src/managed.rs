@@ -1,4 +1,5 @@
 use core::fmt;
+use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io::{self, Write};
@@ -314,11 +315,11 @@ pub struct ManagedPythonInstallation {
     /// The URL with the Python archive.
     ///
     /// Empty when self was constructed from a path.
-    url: Option<&'static str>,
+    url: Option<Cow<'static, str>>,
     /// The SHA256 of the Python archive at the URL.
     ///
     /// Empty when self was constructed from a path.
-    sha256: Option<&'static str>,
+    sha256: Option<Cow<'static, str>>,
 }
 
 impl ManagedPythonInstallation {
@@ -326,8 +327,8 @@ impl ManagedPythonInstallation {
         Self {
             path,
             key: download.key().clone(),
-            url: Some(download.url()),
-            sha256: download.sha256(),
+            url: Some(download.url().clone()),
+            sha256: download.sha256().cloned(),
         }
     }
 
@@ -668,12 +669,12 @@ impl ManagedPythonInstallation {
         self.key.patch != other.key.patch
     }
 
-    pub fn url(&self) -> Option<&'static str> {
-        self.url
+    pub fn url(&self) -> Option<&str> {
+        self.url.as_deref()
     }
 
-    pub fn sha256(&self) -> Option<&'static str> {
-        self.sha256
+    pub fn sha256(&self) -> Option<&str> {
+        self.sha256.as_deref()
     }
 }
 
