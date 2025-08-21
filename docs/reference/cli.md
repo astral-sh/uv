@@ -1850,7 +1850,7 @@ Formats Python code using the Ruff formatter. By default, all Python files in th
 
 To check if files are formatted without modifying them, use `--check`. To see a diff of formatting changes, use `--diff`.
 
-By default, Additional arguments can be passed to Ruff after `--`.
+Additional arguments can be passed to Ruff after `--`.
 
 <h3 class="cli-reference">Usage</h3>
 
