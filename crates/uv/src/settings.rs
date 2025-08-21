@@ -24,7 +24,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
     NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, UpgradeArgs, VersionControlSystem,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, UpgradeSelection, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3318,23 +3318,22 @@ impl PipSettings {
             ),
             strict: args.strict.combine(strict).unwrap_or_default(),
             upgrade: Upgrade::from(
-                UpgradeArgs {
-                    upgrade: args.upgrade,
-                    upgrade_package: args
-                        .upgrade_package
+                UpgradeSelection::from_args(
+                    args.upgrade,
+                    args.upgrade_package
                         .into_iter()
                         .flatten()
                         .map(Requirement::from)
                         .collect(),
-                }
-                .combine(UpgradeArgs {
+                )
+                .combine(UpgradeSelection::from_args(
                     upgrade,
-                    upgrade_package: upgrade_package
+                    upgrade_package
                         .into_iter()
                         .flatten()
                         .map(Requirement::from)
                         .collect(),
-                }),
+                )),
             ),
             reinstall: Reinstall::from_args(
                 args.reinstall.combine(reinstall),

@@ -3513,10 +3513,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             ),
             compile_bytecode: None,
             no_sources: None,
-            upgrade: UpgradeArgs {
-                upgrade: None,
-                upgrade_package: [],
-            },
+            upgrade: None,
             reinstall: None,
             reinstall_package: None,
             no_build: None,

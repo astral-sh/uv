@@ -1,7 +1,7 @@
 use anstream::eprintln;
 
 use uv_cache::Refresh;
-use uv_configuration::UpgradeArgs;
+use uv_configuration::UpgradeSelection;
 use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
@@ -334,10 +334,10 @@ pub fn resolver_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: UpgradeArgs {
-            upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
-            upgrade_package: upgrade_package.into_iter().map(Requirement::from).collect(),
-        },
+        upgrade: UpgradeSelection::from_args(
+            flag(upgrade, no_upgrade, "no-upgrade"),
+            upgrade_package.into_iter().map(Requirement::from).collect(),
+        ),
         index_strategy,
         keyring_provider,
         resolution,
@@ -445,10 +445,10 @@ pub fn resolver_installer_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: UpgradeArgs {
-            upgrade: flag(upgrade, no_upgrade, "upgrade"),
-            upgrade_package: upgrade_package.into_iter().map(Requirement::from).collect(),
-        },
+        upgrade: UpgradeSelection::from_args(
+            flag(upgrade, no_upgrade, "upgrade"),
+            upgrade_package.into_iter().map(Requirement::from).collect(),
+        ),
         reinstall: flag(reinstall, no_reinstall, "reinstall"),
         reinstall_package: if reinstall_package.is_empty() {
             None

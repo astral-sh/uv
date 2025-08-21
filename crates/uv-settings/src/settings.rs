@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use uv_cache_info::CacheKey;
 use uv_configuration::{
     IndexStrategy, KeyringProviderType, PackageNameSpecifier, RequiredVersion, TargetTriple,
-    TrustedHost, TrustedPublishing, UpgradeArgs,
+    TrustedHost, TrustedPublishing, UpgradeSelection,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
@@ -369,7 +369,7 @@ pub struct ResolverOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
-    pub upgrade: UpgradeArgs,
+    pub upgrade: Option<UpgradeSelection>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
@@ -407,7 +407,7 @@ pub struct ResolverInstallerOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
-    pub upgrade: UpgradeArgs,
+    pub upgrade: Option<UpgradeSelection>,
     pub reinstall: Option<bool>,
     pub reinstall_package: Option<Vec<PackageName>>,
     pub no_build: Option<bool>,
@@ -473,14 +473,14 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             link_mode,
             compile_bytecode,
             no_sources,
-            upgrade: UpgradeArgs {
+            upgrade: UpgradeSelection::from_args(
                 upgrade,
-                upgrade_package: upgrade_package
+                upgrade_package
                     .into_iter()
                     .flatten()
                     .map(Into::into)
                     .collect(),
-            },
+            ),
             reinstall,
             reinstall_package,
             no_build,
@@ -1886,15 +1886,15 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
                     .collect(),
             ),
             link_mode: value.link_mode,
-            upgrade: UpgradeArgs {
-                upgrade: value.upgrade,
-                upgrade_package: value
+            upgrade: UpgradeSelection::from_args(
+                value.upgrade,
+                value
                     .upgrade_package
                     .into_iter()
                     .flatten()
                     .map(Into::into)
                     .collect(),
-            },
+            ),
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
@@ -2039,7 +2039,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
-            upgrade: UpgradeArgs::default(),
+            upgrade: None,
             reinstall: None,
             reinstall_package: None,
             no_build: value.no_build,
