@@ -1788,6 +1788,7 @@ pub(crate) async fn resolve_names(
         workspace_cache.clone(),
         concurrency,
         preview,
+        None,
     );
 
     // Resolve the unnamed requirements.
@@ -2006,6 +2007,7 @@ pub(crate) async fn resolve_environment(
         workspace_cache,
         concurrency,
         preview,
+        None,
     );
 
     // Resolve the requirements.
@@ -2152,6 +2154,7 @@ pub(crate) async fn sync_environment(
         workspace_cache,
         concurrency,
         preview,
+        None,
     );
 
     // Sync the environment.
@@ -2387,6 +2390,7 @@ pub(crate) async fn update_environment(
         workspace_cache,
         concurrency,
         preview,
+        None,
     );
 
     // Resolve the requirements.
