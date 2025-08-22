@@ -563,7 +563,7 @@ pub trait Installable<'lock> {
         install_options: &InstallOptions,
     ) -> Result<Node, LockError> {
         if install_options.include_package(
-            package.name(),
+            package.as_install_target(),
             self.project_name(),
             self.lock().members(),
         ) {

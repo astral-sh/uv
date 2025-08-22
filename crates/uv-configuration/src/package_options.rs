@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
 use uv_distribution_types::Requirement;
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -245,6 +245,58 @@ impl From<Upgrade> for Refresh {
                 Vec::new(),
                 Timestamp::now(),
             ),
+        }
+    }
+}
+
+/// Whether to isolate builds.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum BuildIsolation {
+    /// Isolate all builds.
+    #[default]
+    Isolate,
+
+    /// Do not isolate any builds.
+    Shared,
+
+    /// Do not isolate builds for the specified packages.
+    SharedPackage(Vec<PackageName>),
+}
+
+impl BuildIsolation {
+    /// Determine the build isolation strategy from the command-line arguments.
+    pub fn from_args(
+        no_build_isolation: Option<bool>,
+        no_build_isolation_package: Vec<PackageName>,
+    ) -> Option<Self> {
+        match no_build_isolation {
+            Some(true) => Some(Self::Shared),
+            Some(false) => Some(Self::Isolate),
+            None if no_build_isolation_package.is_empty() => None,
+            None => Some(Self::SharedPackage(no_build_isolation_package)),
+        }
+    }
+
+    /// Combine a set of [`BuildIsolation`] values.
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
+        match self {
+            // Setting `--build-isolation` or `--no-build-isolation` should clear previous `--no-build-isolation-package` selections.
+            Self::Isolate | Self::Shared => self,
+            Self::SharedPackage(self_packages) => match other {
+                // If `--no-build-isolation` was enabled previously, `--no-build-isolation-package` is subsumed by sharing all builds.
+                Self::Shared => other,
+                // If `--build-isolation` was enabled previously, then `--no-build-isolation-package` enables specific packages to be shared.
+                Self::Isolate => Self::SharedPackage(self_packages),
+                // If `--no-build-isolation-package` was included twice, combine the packages.
+                Self::SharedPackage(other_packages) => {
+                    let mut combined = self_packages;
+                    combined.extend(other_packages);
+                    Self::SharedPackage(combined)
+                }
+            },
         }
     }
 }

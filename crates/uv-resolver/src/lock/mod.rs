@@ -19,7 +19,7 @@ use tracing::debug;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::{BuildOptions, Constraints};
+use uv_configuration::{BuildOptions, Constraints, InstallTarget};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
@@ -3123,6 +3123,14 @@ impl Package {
     pub fn resolved_dependency_groups(&self) -> &BTreeMap<GroupName, Vec<Dependency>> {
         &self.dependency_groups
     }
+
+    /// Returns an [`InstallTarget`] view for filtering decisions.
+    pub fn as_install_target(&self) -> InstallTarget<'_> {
+        InstallTarget {
+            name: self.name(),
+            is_local: self.id.source.is_local(),
+        }
+    }
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given normalized `Path`.
@@ -3687,6 +3695,14 @@ impl Source {
                 Some(false)
             }
         }
+    }
+
+    /// Check if a package is local by examining its source.
+    pub(crate) fn is_local(&self) -> bool {
+        matches!(
+            self,
+            Self::Path(_) | Self::Directory(_) | Self::Editable(_) | Self::Virtual(_)
+        )
     }
 }
 

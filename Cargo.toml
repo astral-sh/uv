@@ -12,7 +12,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.86"
+rust-version = "1.87"
 homepage = "https://pypi.org/project/uv/"
 documentation = "https://pypi.org/project/uv/"
 repository = "https://github.com/astral-sh/uv"

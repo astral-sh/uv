@@ -665,8 +665,8 @@ pub(crate) fn install_data(
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
-                    "Unknown wheel data type: {:?}",
-                    entry.file_name()
+                    "Unknown wheel data type: {}",
+                    entry.file_name().display()
                 )));
             }
         }

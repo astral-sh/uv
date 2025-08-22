@@ -1,7 +1,8 @@
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::Requirement;
-use uv_pep508::{MarkerTree, PackageName};
+use uv_normalize::PackageName;
+use uv_pep508::MarkerTree;
 
 use crate::ResolverEnvironment;
 

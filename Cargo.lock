@@ -561,9 +561,9 @@ dependencies = [
 
 [[package]]
 name = "cargo-util"
-version = "0.2.21"
+version = "0.2.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c95ec8b2485b20aed818bd7460f8eecc6c87c35c84191b353a3aba9aa1736c36"
+checksum = "4f46ba11692cd1e4b09cd123877e02b74e180acae237caf905ef20b42e14e206"
 dependencies = [
  "anyhow",
  "core-foundation 0.10.1",
@@ -811,7 +811,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2093,7 +2093,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2153,7 +2153,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3117,7 +3117,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3584,7 +3584,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4245,7 +4245,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix 1.0.8",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6248,6 +6248,7 @@ dependencies = [
  "url",
  "uv-configuration",
  "uv-distribution-types",
+ "uv-normalize",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
@@ -6352,6 +6353,7 @@ dependencies = [
  "uv-fs",
  "uv-install-wheel",
  "uv-installer",
+ "uv-normalize",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
@@ -6411,7 +6413,6 @@ dependencies = [
  "uv-normalize",
  "uv-once-map",
  "uv-pep440",
- "uv-pep508",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",
@@ -6745,7 +6746,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

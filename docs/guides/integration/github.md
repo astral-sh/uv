@@ -15,7 +15,7 @@ PATH, (optionally) persists the cache, and more, with support for all uv-support
 
 To install the latest version of uv:
 
-```yaml title="example.yml" hl_lines="11-12"
+```yaml title="example.yml" hl_lines="11 12"
 name: Example
 
 jobs:
@@ -81,7 +81,7 @@ Set the
 [`python-version-file`](https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-the-python-version-file-input)
 option to use the pinned version for the project:
 
-```yaml title="example.yml" hl_lines="14 15 16 17"
+```yaml title="example.yml" hl_lines="14"
 name: Example
 
 jobs:
@@ -104,7 +104,7 @@ jobs:
 Or, specify the `pyproject.toml` file to ignore the pin and use the latest version compatible with
 the project's `requires-python` constraint:
 
-```yaml title="example.yml" hl_lines="17"
+```yaml title="example.yml" hl_lines="14"
 name: Example
 
 jobs:
@@ -175,7 +175,7 @@ jobs:
 Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
 run in the environment with `uv run`:
 
-```yaml title="example.yml" hl_lines="17-22"
+```yaml title="example.yml" hl_lines="15 17-22"
 name: Example
 
 jobs:

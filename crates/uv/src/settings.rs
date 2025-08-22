@@ -21,18 +21,19 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, ExportFormat,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall, RequiredVersion, SourceStrategy,
-    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode,
+    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
+    KeyringProviderType, NoBinary, NoBuild, Preview, ProjectBuildBackend, Reinstall,
+    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
     PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
-use uv_normalize::{PackageName, PipGroupName};
-use uv_pep508::{ExtraName, MarkerTree, RequirementOrigin};
+use uv_normalize::{ExtraName, PackageName, PipGroupName};
+use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
@@ -1220,6 +1221,7 @@ impl SyncSettings {
             exact,
             no_install_project,
             no_install_workspace,
+            no_install_local,
             no_install_package,
             locked,
             frozen,
@@ -1285,6 +1287,7 @@ impl SyncSettings {
             install_options: InstallOptions::new(
                 no_install_project,
                 no_install_workspace,
+                no_install_local,
                 no_install_package,
             ),
             modifications: if flag(exact, inexact, "inexact").unwrap_or(true) {
@@ -1376,6 +1379,7 @@ pub(crate) struct AddSettings {
     pub(crate) workspace: Option<bool>,
     pub(crate) no_install_project: bool,
     pub(crate) no_install_workspace: bool,
+    pub(crate) no_install_local: bool,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
@@ -1417,6 +1421,7 @@ impl AddSettings {
             no_workspace,
             no_install_project,
             no_install_workspace,
+            no_install_local,
         } = args;
 
         let dependency_type = if let Some(extra) = optional {
@@ -1520,6 +1525,7 @@ impl AddSettings {
             workspace: flag(workspace, no_workspace, "workspace"),
             no_install_project,
             no_install_workspace,
+            no_install_local,
             editable: flag(editable, no_editable, "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
@@ -1819,6 +1825,7 @@ impl ExportSettings {
             no_emit_project,
             no_emit_workspace,
             no_emit_package,
+            no_emit_local,
             locked,
             frozen,
             resolver,
@@ -1861,6 +1868,7 @@ impl ExportSettings {
             install_options: InstallOptions::new(
                 no_emit_project,
                 no_emit_workspace,
+                no_emit_local,
                 no_emit_package,
             ),
             output_file,
@@ -2761,11 +2769,10 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) config_settings_package: &'a PackageConfigSettings,
-    pub(crate) no_build_isolation: bool,
-    pub(crate) no_build_isolation_package: &'a [PackageName],
+    pub(crate) build_isolation: &'a BuildIsolation,
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
-    pub(crate) exclude_newer: ExcludeNewer,
+    pub(crate) exclude_newer: &'a ExcludeNewer,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
@@ -2789,8 +2796,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) link_mode: LinkMode,
-    pub(crate) no_build_isolation: bool,
-    pub(crate) no_build_isolation_package: Vec<PackageName>,
+    pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) prerelease: PrereleaseMode,
@@ -2845,8 +2851,7 @@ impl From<ResolverOptions> for ResolverSettings {
             keyring_provider: value.keyring_provider.unwrap_or_default(),
             config_setting: value.config_settings.unwrap_or_default(),
             config_settings_package: value.config_settings_package.unwrap_or_default(),
-            no_build_isolation: value.no_build_isolation.unwrap_or_default(),
-            no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
+            build_isolation: value.build_isolation.unwrap_or_default(),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
@@ -2936,8 +2941,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 index_strategy: value.index_strategy.unwrap_or_default(),
                 keyring_provider: value.keyring_provider.unwrap_or_default(),
                 link_mode: value.link_mode.unwrap_or_default(),
-                no_build_isolation: value.no_build_isolation.unwrap_or_default(),
-                no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
+                build_isolation: value.build_isolation.unwrap_or_default(),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: value.prerelease.unwrap_or_default(),
@@ -2969,8 +2973,7 @@ pub(crate) struct PipSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) torch_backend: Option<TorchMode>,
-    pub(crate) no_build_isolation: bool,
-    pub(crate) no_build_isolation_package: Vec<PackageName>,
+    pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) build_options: BuildOptions,
@@ -3237,14 +3240,15 @@ impl PipSettings {
                 .allow_empty_requirements
                 .combine(allow_empty_requirements)
                 .unwrap_or_default(),
-            no_build_isolation: args
-                .no_build_isolation
-                .combine(no_build_isolation)
-                .unwrap_or_default(),
-            no_build_isolation_package: args
-                .no_build_isolation_package
-                .combine(no_build_isolation_package)
-                .unwrap_or_default(),
+            build_isolation: BuildIsolation::from_args(
+                args.no_build_isolation,
+                args.no_build_isolation_package.unwrap_or_default(),
+            )
+            .combine(BuildIsolation::from_args(
+                no_build_isolation,
+                no_build_isolation_package.unwrap_or_default(),
+            ))
+            .unwrap_or_default(),
             extra_build_dependencies: args
                 .extra_build_dependencies
                 .combine(extra_build_dependencies)
@@ -3369,11 +3373,10 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             dependency_metadata: &settings.resolver.dependency_metadata,
             config_setting: &settings.resolver.config_setting,
             config_settings_package: &settings.resolver.config_settings_package,
-            no_build_isolation: settings.resolver.no_build_isolation,
-            no_build_isolation_package: &settings.resolver.no_build_isolation_package,
+            build_isolation: &settings.resolver.build_isolation,
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,
-            exclude_newer: settings.resolver.exclude_newer.clone(),
+            exclude_newer: &settings.resolver.exclude_newer,
             link_mode: settings.resolver.link_mode,
             compile_bytecode: settings.compile_bytecode,
             reinstall: &settings.reinstall,

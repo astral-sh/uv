@@ -17,8 +17,8 @@ use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_installer::SitePackages;
+use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, VersionRequest,

@@ -9,8 +9,8 @@ use tracing::{Level, debug, enabled, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -24,7 +24,6 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
-use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
@@ -36,7 +35,7 @@ use uv_resolver::{
     PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
-use uv_types::{BuildIsolation, HashStrategy};
+use uv_types::HashStrategy;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -78,8 +77,7 @@ pub(crate) async fn pip_install(
     installer_metadata: bool,
     config_settings: &ConfigSettings,
     config_settings_package: &PackageConfigSettings,
-    no_build_isolation: bool,
-    no_build_isolation_package: Vec<PackageName>,
+    build_isolation: BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
@@ -409,12 +407,12 @@ pub(crate) async fn pip_install(
     };
 
     // Determine whether to enable build isolation.
-    let build_isolation = if no_build_isolation {
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => uv_types::BuildIsolation::Shared(&environment),
+        BuildIsolation::SharedPackage(ref packages) => {
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Enforce (but never require) the build constraints, if `--require-hashes` or `--verify-hashes`
@@ -453,7 +451,7 @@ pub(crate) async fn pip_install(
         index_strategy,
         config_settings,
         config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
         link_mode,
@@ -586,7 +584,7 @@ pub(crate) async fn pip_install(
         index_strategy,
         config_settings,
         config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
         link_mode,

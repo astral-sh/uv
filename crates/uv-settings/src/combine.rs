@@ -4,8 +4,8 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    ExportFormat, IndexStrategy, KeyringProviderType, Reinstall, RequiredVersion, TargetTriple,
-    TrustedPublishing, Upgrade,
+    BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, Reinstall, RequiredVersion,
+    TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
@@ -191,6 +191,15 @@ impl Combine for Option<Upgrade> {
 }
 
 impl Combine for Option<Reinstall> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<BuildIsolation> {
     fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),

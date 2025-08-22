@@ -39,8 +39,8 @@ use uv_distribution_types::{
 };
 use uv_fs::LockedFile;
 use uv_fs::{PythonExt, Simplified};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;

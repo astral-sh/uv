@@ -1839,6 +1839,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .torch_backend
                     .as_ref()
                     .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Cuda { .. }))
+                    .filter(|torch_backend| torch_backend.has_system_dependency(name))
                     .and_then(|_| pins.get(name, version).and_then(ResolvedDist::index))
                     .map(IndexUrl::url)
                     .and_then(SystemDependency::from_index)

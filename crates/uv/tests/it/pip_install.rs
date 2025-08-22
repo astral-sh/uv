@@ -9720,6 +9720,74 @@ fn dependency_group() -> Result<()> {
 }
 
 #[test]
+fn recursive_dependency_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Test a self-referencing group.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        test = [
+            { include-group = "test" },
+            "requests"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
+      Caused by: Project `myproject` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `test` -> `test`
+    ");
+
+    // Test mutually recursive groups.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        test = [
+            { include-group = "dev" },
+            "requests"
+        ]
+        dev = [
+            { include-group = "test" },
+            "pytest"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
+      Caused by: Project `myproject` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn virtual_dependency_group() -> Result<()> {
     // testing basic `uv pip install --group` functionality
     // when the pyproject.toml is virtual

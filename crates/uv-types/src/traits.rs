@@ -15,7 +15,7 @@ use uv_distribution_types::{
     PackageConfigSettings, Requirement, Resolution, SourceDist,
 };
 use uv_git::GitResolver;
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
