@@ -108,6 +108,7 @@ fn format_from_project_root() -> Result<()> {
 
     Ok(())
 }
+
 #[test]
 fn format_relative_project() -> Result<()> {
     let context = TestContext::new_with_versions(&[]);
