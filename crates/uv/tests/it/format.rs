@@ -56,6 +56,60 @@ fn format_project() -> Result<()> {
 }
 
 #[test]
+fn format_from_project_root() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r#"
+        import sys
+        def   hello():
+            print(  "Hello, World!"  )
+        if __name__=="__main__":
+            hello(   )
+    "#})?;
+
+    let subdir = context.temp_dir.child("subdir");
+    fs_err::create_dir_all(&subdir)?;
+
+    // Using format from a subdirectory should still run in the project root
+    uv_snapshot!(context.filters(), context.format().current_dir(&subdir), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ");
+
+    // Check that the file was formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @r#"
+    import sys
+
+
+    def hello():
+        print("Hello, World!")
+
+
+    if __name__ == "__main__":
+        hello()
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn format_relative_project() -> Result<()> {
     let context = TestContext::new_with_versions(&[]);
 

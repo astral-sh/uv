@@ -10,6 +10,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{Preview, PreviewFeatures};
 use uv_pep440::Version;
 use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
@@ -36,6 +37,12 @@ pub(crate) async fn format(
             PreviewFeatures::FORMAT
         );
     }
+
+    let workspace_cache = WorkspaceCache::default();
+    let project =
+        VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await?;
+
     // Parse version if provided
     let version = version.as_deref().map(Version::from_str).transpose()?;
 
@@ -55,7 +62,8 @@ pub(crate) async fn format(
         .context("Failed to install ruff {version}")?;
 
     let mut command = Command::new(&ruff_path);
-    command.current_dir(project_dir);
+    // Run ruff in the project root
+    command.current_dir(project.root());
     command.arg("format");
 
     if check {
