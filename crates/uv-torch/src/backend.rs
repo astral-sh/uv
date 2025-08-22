@@ -277,6 +277,25 @@ impl TorchStrategy {
         )
     }
 
+    /// Returns `true` if the given [`PackageName`] has a system dependency (e.g., CUDA or ROCm).
+    ///
+    /// For example, `triton` is hosted on the PyTorch indexes, but does not have a system
+    /// dependency on the associated CUDA version (i.e., the `triton` on the `cu128` index doesn't
+    /// depend on CUDA 12.8).
+    pub fn has_system_dependency(&self, package_name: &PackageName) -> bool {
+        matches!(
+            package_name.as_str(),
+            "torch"
+                | "torcharrow"
+                | "torchaudio"
+                | "torchcsprng"
+                | "torchdata"
+                | "torchdistx"
+                | "torchtext"
+                | "torchvision"
+        )
+    }
+
     /// Return the appropriate index URLs for the given [`TorchStrategy`].
     pub fn index_urls(&self) -> impl Iterator<Item = &IndexUrl> {
         match self {
