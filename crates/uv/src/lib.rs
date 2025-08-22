@@ -2193,6 +2193,7 @@ async fn run_project(
             let cache = cache.init()?;
 
             Box::pin(commands::format(
+                project_dir,
                 args.check,
                 args.diff,
                 args.extra_args,

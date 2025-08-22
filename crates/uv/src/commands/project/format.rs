@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -18,6 +19,7 @@ use crate::settings::NetworkSettings;
 
 /// Run the formatter.
 pub(crate) async fn format(
+    project_dir: &Path,
     check: bool,
     diff: bool,
     extra_args: Vec<String>,
@@ -53,6 +55,7 @@ pub(crate) async fn format(
         .context("Failed to install ruff {version}")?;
 
     let mut command = Command::new(&ruff_path);
+    command.current_dir(project_dir);
     command.arg("format");
 
     if check {
