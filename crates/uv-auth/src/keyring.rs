@@ -54,17 +54,17 @@ impl KeyringProvider {
     /// keyring provider backend is `Native`.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn store_if_native(&self, url: &DisplaySafeUrl, credentials: &Credentials) {
-        let Some(username) = credentials.username() else {
-            trace!("Unable to store credentials in keyring for {url} due to missing username");
-            return;
-        };
-        let Some(password) = credentials.password() else {
-            trace!("Unable to store credentials in keyring for {url} due to missing password");
-            return;
-        };
-
         match &self.backend {
             KeyringProviderBackend::Native => {
+                let Some(username) = credentials.username() else {
+                    trace!("Unable to store credentials in keyring for {url} due to missing username");
+                    return;
+                };
+                let Some(password) = credentials.password() else {
+                    trace!("Unable to store credentials in keyring for {url} due to missing password");
+                    return;
+                };
+
                 // Only store credentials if not already stored during this uv invocation.
                 if !STORED_KEYRING_URLS.contains(url) {
                     self.store_native(url.as_str(), username, password).await;
