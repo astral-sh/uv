@@ -459,7 +459,7 @@ impl GitCheckout {
 /// The `remote_url` argument is the git remote URL where we want to fetch from.
 fn fetch(
     repo: &mut GitRepository,
-    remote_url: &Url,
+    remote_url: &DisplaySafeUrl,
     reference: ReferenceOrOid<'_>,
     client: &ClientWithMiddleware,
     disable_ssl: bool,
@@ -601,7 +601,7 @@ fn fetch(
 /// Attempts to use `git` CLI installed on the system to fetch a repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
-    url: &Url,
+    url: &DisplaySafeUrl,
     refspecs: &[String],
     tags: bool,
     disable_ssl: bool,
@@ -733,7 +733,7 @@ enum FastPathRev {
 /// [^1]: <https://developer.github.com/v3/repos/commits/#get-the-sha-1-of-a-commit-reference>
 fn github_fast_path(
     git: &mut GitRepository,
-    url: &Url,
+    url: &DisplaySafeUrl,
     reference: ReferenceOrOid<'_>,
     client: &ClientWithMiddleware,
 ) -> Result<FastPathRev> {

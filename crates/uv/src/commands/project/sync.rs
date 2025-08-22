@@ -8,6 +8,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 use tracing::warn;
+use uv_auth::KeyringProvider;
 use uv_cache::Cache;
 use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -719,7 +720,7 @@ pub(super) async fn do_sync(
     index_locations.cache_index_credentials();
 
     // Populate credentials from the target.
-    store_credentials_from_target(target);
+    store_credentials_from_target(target, keyring_provider.to_provider().as_ref()).await;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
@@ -875,7 +876,10 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_target(target: InstallTarget<'_>) {
+async fn store_credentials_from_target(
+    target: InstallTarget<'_>,
+    keyring_provider: Option<&KeyringProvider>,
+) {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
         if let Some(credentials) = index.credentials() {
@@ -891,7 +895,7 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
     for source in target.sources() {
         match source {
             Source::Git { git, .. } => {
-                uv_git::store_credentials_from_url(git);
+                uv_git::store_credentials_from_url(git, keyring_provider).await;
             }
             Source::Url { url, .. } => {
                 uv_auth::store_credentials_from_url(url);
@@ -907,7 +911,7 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
         };
         match &url.parsed_url {
             ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.repository());
+                uv_git::store_credentials_from_url(url.repository(), keyring_provider).await;
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
                 uv_auth::store_credentials_from_url(url);

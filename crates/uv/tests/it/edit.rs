@@ -12624,6 +12624,140 @@ fn add_package_persist_system_keyring_credentials() -> Result<()> {
     Ok(())
 }
 
+/// Add a package from a private git repo using credentials stored in the system keyring.
+///
+/// TODO(john): This test currently relies on the system keyring not yet having the
+/// credentials for the git repo the test adds from. We need to update the test to clear those
+/// credentials, possibly both defensively at the beginning and at the end to clean up.
+#[cfg(feature = "keyring-tests")]
+#[cfg(feature = "git")]
+#[test]
+fn add_git_private_persist_system_keyring_credentials() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    // Configure `pyproject.toml` with native keyring provider.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [tool.uv]
+        keyring-provider = "native"
+        "#
+    })?;
+
+    // Try to add a private Git package with only username.
+    uv_snapshot!(context.filters(), context.add().arg("uv-private-pypackage @ git+https://git@github.com/astral-test/uv-private-pypackage"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+          --- stderr
+          fatal: could not read Username for 'https://github.com': terminal prompts disabled
+
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+
+    // Try again with credentials. This should persist the credentials to the system keyring.
+    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    // Remove the package and clean cache.
+    uv_snapshot!(context.filters(), context.remove().arg("uv-private-pypackage"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+     - uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([
+            // The cache entry does not have a stable key, so we filter it out.
+            (
+                r"\[CACHE_DIR\](\\|\/)(.+)(\\|\/).*",
+                "[CACHE_DIR]/$2/[ENTRY]",
+            ),
+            // The file count varies by operating system, so we filter it out.
+            ("Removed \\d+ files?", "Removed [N] files"),
+        ])
+        .collect();
+
+    uv_snapshot!(&filters, context.clean(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+
+    // Try to add the original package again with username only. This should use
+    // credentials stored in the system keyring.
+    uv_snapshot!(context.filters(), context.add().arg("uv-private-pypackage @ git+https://git@github.com/astral-test/uv-private-pypackage"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    // Verify that `pyproject.toml` doesn't contain credentials
+    let pyproject_toml = context.read("pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = [
+            "uv-private-pypackage",
+        ]
+
+        [tool.uv]
+        keyring-provider = "native"
+
+        [tool.uv.sources]
+        uv-private-pypackage = { git = "https://github.com/astral-test/uv-private-pypackage" }
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// If uv receives a 302 redirect to a cross-origin server, it should not forward
 /// credentials. In the absence of a netrc entry for the new location,
 /// it should fail.

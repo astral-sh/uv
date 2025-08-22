@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use tracing::trace;
-use uv_auth::Credentials;
+use uv_auth::{Credentials, KeyringProvider};
 use uv_cache_key::RepositoryUrl;
 use uv_redacted::DisplaySafeUrl;
 
@@ -16,7 +16,20 @@ pub struct GitStore(RwLock<HashMap<RepositoryUrl, Arc<Credentials>>>);
 
 impl GitStore {
     /// Insert [`Credentials`] for the given URL into the store.
-    pub fn insert(&self, url: RepositoryUrl, credentials: Credentials) -> Option<Arc<Credentials>> {
+    ///
+    /// If a native keyring provider is available, the credentials will also be
+    /// persisted to the system keyring for future use.
+    ///
+    /// Returns the previously stored credentials for this URL, if any.
+    pub async fn insert(
+        &self,
+        url: RepositoryUrl,
+        credentials: Credentials,
+        keyring_provider: Option<&KeyringProvider>,
+    ) -> Option<Arc<Credentials>> {
+        if let Some(keyring_provider) = keyring_provider {
+            keyring_provider.store_if_native(&url, &credentials).await;
+        }
         self.0.write().unwrap().insert(url, Arc::new(credentials))
     }
 
@@ -29,10 +42,15 @@ impl GitStore {
 /// Populate the global authentication store with credentials on a Git URL, if there are any.
 ///
 /// Returns `true` if the store was updated.
-pub fn store_credentials_from_url(url: &DisplaySafeUrl) -> bool {
+pub async fn store_credentials_from_url(
+    url: &DisplaySafeUrl,
+    keyring_provider: Option<&KeyringProvider>,
+) -> bool {
     if let Some(credentials) = Credentials::from_url(url) {
         trace!("Caching credentials for {url}");
-        GIT_STORE.insert(RepositoryUrl::new(url), credentials);
+        GIT_STORE
+            .insert(RepositoryUrl::new(url), credentials, keyring_provider)
+            .await;
         true
     } else {
         false

@@ -9,6 +9,7 @@ use fs_err::tokio as fs;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
+use uv_auth::KeyringProvider;
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::LockedFile;
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
@@ -148,6 +149,7 @@ impl GitResolver {
         offline: bool,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
+        keyring_provider: Option<&KeyringProvider>,
     ) -> Result<Fetch, GitResolverError> {
         debug!("Fetching source distribution from Git: {url}");
 
@@ -187,8 +189,9 @@ impl GitResolver {
             source
         };
 
-        let fetch = tokio::task::spawn_blocking(move || source.fetch())
-            .await?
+        let fetch = source
+            .fetch(keyring_provider)
+            .await
             .map_err(GitResolverError::Git)?;
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
