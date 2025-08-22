@@ -3,7 +3,7 @@
 !!! tip
 
     This document focuses on the internal workings of uv's resolver. For using uv, see the
-    [resolution concept](../concepts/resolution.md) documentation.
+    [resolution concept](../../concepts/resolution.md) documentation.
 
 ## Resolver
 
@@ -42,7 +42,7 @@ works in the following steps:
   requirements in the partial solution and must not be previously marked as incompatible. The
   resolver prefers versions from a lockfile (`uv.lock` or `-o requirements.txt`) and those installed
   in the current environment. Versions are checked from highest to lowest (unless using an
-  alternative [resolution strategy](../concepts/resolution.md#resolution-strategy)).
+  alternative [resolution strategy](../../concepts/resolution.md#resolution-strategy)).
 - All requirements of the selected package version are added to the undecided packages. uv
   prefetches their metadata in the background to improve performance.
 - The process is either repeated with the next package unless a conflict is detected, in which the
