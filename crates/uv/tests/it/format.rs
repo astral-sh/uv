@@ -81,6 +81,7 @@ fn format_from_project_root() -> Result<()> {
     let subdir = context.temp_dir.child("subdir");
     fs_err::create_dir_all(&subdir)?;
 
+    // Using format from a subdirectory should still run in the project root
     uv_snapshot!(context.filters(), context.format().current_dir(&subdir), @r"
     success: true
     exit_code: 0
