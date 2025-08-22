@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
 
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
 use uv_pypi_types::Yanked;
 
 use crate::{

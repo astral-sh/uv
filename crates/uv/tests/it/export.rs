@@ -1253,7 +1253,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
         "",
     ));
     filters.push(("failed to clone into: .*", "failed to clone into: [PATH]"));
-    uv_snapshot!(filters, context.export().env("GIT_SSH_COMMAND", failing_git_ssh_command), @r#"
+    uv_snapshot!(filters, context.export().env(EnvVars::GIT_SSH_COMMAND, failing_git_ssh_command), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1284,7 +1284,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
         ssh_deploy_key.portable_display()
     );
 
-    uv_snapshot!(context.filters(), context.export().env("GIT_SSH_COMMAND", git_ssh_command), @r"
+    uv_snapshot!(context.filters(), context.export().env(EnvVars::GIT_SSH_COMMAND, git_ssh_command), @r"
     success: true
     exit_code: 0
     ----- stdout -----

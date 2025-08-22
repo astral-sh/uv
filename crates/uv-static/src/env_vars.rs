@@ -136,6 +136,10 @@ impl EnvVars {
     /// directories.
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
 
+    /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
+    /// a `pyproject.toml` or `uv.toml` file.
+    pub const UV_ISOLATED: &'static str = "UV_ISOLATED";
+
     /// Equivalent to the `--exclude-newer` command-line argument. If set, uv will
     /// exclude distributions published after the specified date.
     pub const UV_EXCLUDE_NEWER: &'static str = "UV_EXCLUDE_NEWER";
@@ -562,6 +566,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_ALLOW_PROTOCOL: &'static str = "GIT_ALLOW_PROTOCOL";
 
+    /// Sets the SSH command used when Git tries to establish a connection using SSH.
+    #[attr_hidden]
+    pub const GIT_SSH_COMMAND: &'static str = "GIT_SSH_COMMAND";
+
     /// Disable interactive git prompts in terminals, e.g., for credentials. Does not disable
     /// GUI prompts.
     #[attr_hidden]
@@ -642,6 +650,18 @@ impl EnvVars {
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
 
+    /// If set, it can be used to display more stack trace details when a panic occurs.
+    /// This is used by uv particularly on windows to show more details during a platform exception.
+    ///
+    /// For example:
+    ///
+    /// * `RUST_BACKTRACE=1` will print a short backtrace.
+    /// * `RUST_BACKTRACE=full` will print a full backtrace.
+    ///
+    /// See the [Rust backtrace documentation](https://doc.rust-lang.org/std/backtrace/index.html)
+    /// for more.
+    pub const RUST_BACKTRACE: &'static str = "RUST_BACKTRACE";
+
     /// Add additional context and structure to log messages.
     ///
     /// If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
@@ -702,6 +722,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const ROOT_PATH: &'static str = "ROOT_PATH";
 
+    /// Used in testing extra build dependencies.
+    #[attr_hidden]
+    pub const EXPECTED_ANYIO_VERSION: &'static str = "EXPECTED_ANYIO_VERSION";
+
     /// Used to set test credentials for keyring tests.
     #[attr_hidden]
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
@@ -716,6 +740,14 @@ impl EnvVars {
     /// Used to set an index url for tests.
     #[attr_hidden]
     pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
+
+    /// Used for testing named indexes in tests.
+    #[attr_hidden]
+    pub const UV_INDEX_MY_INDEX_USERNAME: &'static str = "UV_INDEX_MY_INDEX_USERNAME";
+
+    /// Used for testing named indexes in tests.
+    #[attr_hidden]
+    pub const UV_INDEX_MY_INDEX_PASSWORD: &'static str = "UV_INDEX_MY_INDEX_PASSWORD";
 
     /// Used to set the GitHub fast-path url for tests.
     #[attr_hidden]

@@ -4,18 +4,18 @@ use std::collections::hash_map::Entry;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_cache_key::cache_digest;
-use uv_configuration::{ConfigSettings, PackageConfigSettings};
+use uv_cache_info::CacheInfo;
 use uv_distribution_types::{
-    BuildVariables, CachedRegistryDist, ExtraBuildRequirement, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
+    BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
+    ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
+    PackageConfigSettings,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
-use crate::index::cached_wheel::CachedWheel;
+use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
 /// An entry in the [`RegistryWheelIndex`].
@@ -226,18 +226,15 @@ impl<'a> RegistryWheelIndex<'a> {
                         config_settings,
                         config_settings_package,
                     );
-                    let cache_shard = if config_settings.is_empty()
-                        && extra_build_deps.is_empty()
-                        && extra_build_vars.is_none()
-                    {
-                        cache_shard
-                    } else {
-                        cache_shard.shard(cache_digest(&(
-                            &config_settings,
-                            extra_build_deps,
-                            extra_build_vars,
-                        )))
-                    };
+                    let build_info = BuildInfo::from_settings(
+                        &config_settings,
+                        extra_build_deps,
+                        extra_build_vars,
+                    );
+                    let cache_shard = build_info
+                        .cache_shard()
+                        .map(|digest| cache_shard.shard(digest))
+                        .unwrap_or(cache_shard);
 
                     for wheel_dir in uv_fs::entries(cache_shard).ok().into_iter().flatten() {
                         // Ignore any `.lock` files.
@@ -248,13 +245,19 @@ impl<'a> RegistryWheelIndex<'a> {
                             continue;
                         }
 
-                        if let Some(wheel) = CachedWheel::from_built_source(wheel_dir, cache) {
+                        if let Some(wheel) = ResolvedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
                                 if revision.satisfies(
                                     hasher
                                         .get_package(&wheel.filename.name, &wheel.filename.version),
                                 ) {
+                                    let wheel = CachedWheel::from_entry(
+                                        wheel,
+                                        revision.hashes().into(),
+                                        CacheInfo::default(),
+                                        build_info.clone(),
+                                    );
                                     entries.push(IndexEntry {
                                         dist: wheel.into_registry_dist(),
                                         index,

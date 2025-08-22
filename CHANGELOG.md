@@ -3,6 +3,93 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.8.13
+
+### Enhancements
+
+- Add `--no-install-*` arguments to `uv add` ([#15375](https://github.com/astral-sh/uv/pull/15375))
+- Initialize Git prior to reading author in `uv init` ([#15377](https://github.com/astral-sh/uv/pull/15377))
+- Add CUDA 129 to available torch backends ([#15416](https://github.com/astral-sh/uv/pull/15416))
+- Update Pyodide to 0.28.2 ([#15385](https://github.com/astral-sh/uv/pull/15385))
+
+### Preview features
+
+- Add an experimental `uv format` command ([#15017](https://github.com/astral-sh/uv/pull/15017))
+- Allow version specifiers in `extra-build-dependencies` if match-runtime is explicitly `false` ([#15420](https://github.com/astral-sh/uv/pull/15420))
+
+### Bug fixes
+
+- Add `triton` to `torch-backend` manifest ([#15405](https://github.com/astral-sh/uv/pull/15405))
+- Avoid panicking when resolver returns stale distributions ([#15389](https://github.com/astral-sh/uv/pull/15389))
+- Fix `uv_build` wheel hashes ([#15400](https://github.com/astral-sh/uv/pull/15400))
+- Treat `--upgrade-package` on the command-line as overriding `upgrade = false` in configuration ([#15395](https://github.com/astral-sh/uv/pull/15395))
+- Restore DockerHub publishing ([#15381](https://github.com/astral-sh/uv/pull/15381))
+
+## 0.8.12
+
+### Python
+
+- Add 3.13.7
+- Improve performance of zstd in Python 3.14
+
+See the [python-build-standalone release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250818) for details.
+
+### Enhancements
+
+- Add an `aarch64-pc-windows-msvc` target for `python-platform` ([#15347](https://github.com/astral-sh/uv/pull/15347))
+- Add fallback parent process detection to `uv tool update-shell` ([#15356](https://github.com/astral-sh/uv/pull/15356))
+- Install non-build-isolation packages in a second phase ([#15306](https://github.com/astral-sh/uv/pull/15306))
+- Add hint when virtual environments are included in source distributions ([#15202](https://github.com/astral-sh/uv/pull/15202))
+- Add Docker images derived from `buildpack-deps:trixie`, `debian:trixie-slim`, `alpine:3.22` ([#15351](https://github.com/astral-sh/uv/pull/15351))
+
+### Bug fixes
+
+- Reject already-installed wheels built with outdated settings ([#15289](https://github.com/astral-sh/uv/pull/15289))
+- Skip interpreters that are not found on query ([#15315](https://github.com/astral-sh/uv/pull/15315))
+- Handle dotted package names in script path resolution ([#15300](https://github.com/astral-sh/uv/pull/15300))
+- Reject `match-runtime = true` for dynamic packages ([#15292](https://github.com/astral-sh/uv/pull/15292))
+
+### Documentation
+
+- Document improvements to build-isolation setups ([#15326](https://github.com/astral-sh/uv/pull/15326))
+- Fix reference documentation recommendation to use `uv cache clean` instead of `clear` ([#15313](https://github.com/astral-sh/uv/pull/15313))
+
+## 0.8.11
+
+### Python
+
+- Add Python 3.14.0rc2
+- Update Pyodide to 0.28.1
+
+### Enhancements
+
+- Add Debian 13 trixie to published Docker images ([#15269](https://github.com/astral-sh/uv/pull/15269))
+- Add `extra-build-dependencies` hint for any missing module on build failure ([#15252](https://github.com/astral-sh/uv/pull/15252))
+- Make 'v' prefix cyan in overlap warnings ([#15259](https://github.com/astral-sh/uv/pull/15259))
+
+### Bug fixes
+
+- Fix missing uv version in extended Docker image tags ([#15263](https://github.com/astral-sh/uv/pull/15263))
+- Persist cache info when re-installing cached wheels ([#15274](https://github.com/astral-sh/uv/pull/15274))
+
+### Rust API
+
+- Allow passing custom `reqwest` clients to `RegistryClient` ([#15281](https://github.com/astral-sh/uv/pull/15281))
+
+## 0.8.10
+
+### Python
+
+- Add support for installing Pyodide versions ([#14518](https://github.com/astral-sh/uv/pull/14518))
+
+### Enhancements
+
+- Allow Python requests with missing segments, e.g., just `aarch64` ([#14399](https://github.com/astral-sh/uv/pull/14399))
+
+### Preview
+
+- Move warnings for conflicting modules into preview ([#15253](https://github.com/astral-sh/uv/pull/15253))
+
 ## 0.8.9
 
 ### Enhancements

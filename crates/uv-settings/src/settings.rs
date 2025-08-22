@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, PackageConfigSettings,
-    PackageNameSpecifier, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing,
+    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, Reinstall,
+    RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PipExtraIndex, PipFindLinks, PipIndex,
-    StaticMetadata,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
+    PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -24,7 +24,8 @@ use uv_resolver::{
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
-use uv_workspace::{pyproject::ExtraBuildDependencies, pyproject_mut::AddBoundsKind};
+use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -51,7 +52,7 @@ pub struct Options {
     pub globals: GlobalOptions,
 
     #[serde(flatten)]
-    pub top_level: ResolverInstallerOptions,
+    pub top_level: ResolverInstallerSchema,
 
     #[serde(flatten)]
     pub install_mirrors: PythonInstallMirrors,
@@ -160,7 +161,7 @@ pub struct Options {
 
 impl Options {
     /// Construct an [`Options`] with the given global and top-level settings.
-    pub fn simple(globals: GlobalOptions, top_level: ResolverInstallerOptions) -> Self {
+    pub fn simple(globals: GlobalOptions, top_level: ResolverInstallerSchema) -> Self {
         Self {
             globals,
             top_level,
@@ -340,13 +341,12 @@ pub struct InstallerOptions {
     pub exclude_newer: Option<ExcludeNewerTimestamp>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
-    pub reinstall: Option<bool>,
-    pub reinstall_package: Option<Vec<PackageName>>,
+    pub reinstall: Option<Reinstall>,
+    pub build_isolation: Option<BuildIsolation>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
-    pub no_build_isolation: Option<bool>,
     pub no_sources: Option<bool>,
 }
 
@@ -368,14 +368,12 @@ pub struct ResolverOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
-    pub upgrade: Option<bool>,
-    pub upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub upgrade: Option<Upgrade>,
+    pub build_isolation: Option<BuildIsolation>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
-    pub no_build_isolation: Option<bool>,
-    pub no_build_isolation_package: Option<Vec<PackageName>>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
     pub no_sources: Option<bool>,
@@ -383,10 +381,158 @@ pub struct ResolverOptions {
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
 /// union of [`InstallerOptions`] and [`ResolverOptions`].
+#[derive(Debug, Clone, Default, CombineOptions)]
+pub struct ResolverInstallerOptions {
+    pub index: Option<Vec<Index>>,
+    pub index_url: Option<PipIndex>,
+    pub extra_index_url: Option<Vec<PipExtraIndex>>,
+    pub no_index: Option<bool>,
+    pub find_links: Option<Vec<PipFindLinks>>,
+    pub index_strategy: Option<IndexStrategy>,
+    pub keyring_provider: Option<KeyringProviderType>,
+    pub resolution: Option<ResolutionMode>,
+    pub prerelease: Option<PrereleaseMode>,
+    pub fork_strategy: Option<ForkStrategy>,
+    pub dependency_metadata: Option<Vec<StaticMetadata>>,
+    pub config_settings: Option<ConfigSettings>,
+    pub config_settings_package: Option<PackageConfigSettings>,
+    pub build_isolation: Option<BuildIsolation>,
+    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
+    pub extra_build_variables: Option<ExtraBuildVariables>,
+    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
+    pub link_mode: Option<LinkMode>,
+    pub compile_bytecode: Option<bool>,
+    pub no_sources: Option<bool>,
+    pub upgrade: Option<Upgrade>,
+    pub reinstall: Option<Reinstall>,
+    pub no_build: Option<bool>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_binary: Option<bool>,
+    pub no_binary_package: Option<Vec<PackageName>>,
+}
+
+impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
+    fn from(value: ResolverInstallerSchema) -> Self {
+        let ResolverInstallerSchema {
+            index,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            fork_strategy,
+            dependency_metadata,
+            config_settings,
+            config_settings_package,
+            no_build_isolation,
+            no_build_isolation_package,
+            extra_build_dependencies,
+            extra_build_variables,
+            exclude_newer,
+            exclude_newer_package,
+            link_mode,
+            compile_bytecode,
+            no_sources,
+            upgrade,
+            upgrade_package,
+            reinstall,
+            reinstall_package,
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
+        } = value;
+        Self {
+            index,
+            index_url,
+            extra_index_url,
+            no_index,
+            find_links,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            fork_strategy,
+            dependency_metadata,
+            config_settings,
+            config_settings_package,
+            build_isolation: BuildIsolation::from_args(
+                no_build_isolation,
+                no_build_isolation_package.into_iter().flatten().collect(),
+            ),
+            extra_build_dependencies,
+            extra_build_variables,
+            exclude_newer,
+            exclude_newer_package,
+            link_mode,
+            compile_bytecode,
+            no_sources,
+            upgrade: Upgrade::from_args(
+                upgrade,
+                upgrade_package
+                    .into_iter()
+                    .flatten()
+                    .map(Into::into)
+                    .collect(),
+            ),
+            reinstall: Reinstall::from_args(reinstall, reinstall_package.unwrap_or_default()),
+            no_build,
+            no_build_package,
+            no_binary,
+            no_binary_package,
+        }
+    }
+}
+
+impl ResolverInstallerSchema {
+    /// Resolve the [`ResolverInstallerSchema`] relative to the given root directory.
+    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        Ok(Self {
+            index: self
+                .index
+                .map(|index| {
+                    index
+                        .into_iter()
+                        .map(|index| index.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            index_url: self
+                .index_url
+                .map(|index_url| index_url.relative_to(root_dir))
+                .transpose()?,
+            extra_index_url: self
+                .extra_index_url
+                .map(|extra_index_url| {
+                    extra_index_url
+                        .into_iter()
+                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            find_links: self
+                .find_links
+                .map(|find_links| {
+                    find_links
+                        .into_iter()
+                        .map(|find_link| find_link.relative_to(root_dir))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?,
+            ..self
+        })
+    }
+}
+
+/// The JSON schema for the `[tool.uv]` section of a `pyproject.toml` file.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ResolverInstallerOptions {
+pub struct ResolverInstallerSchema {
     /// The package indexes to use when resolving dependencies.
     ///
     /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
@@ -687,7 +833,7 @@ pub struct ResolverInstallerOptions {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
@@ -811,46 +957,6 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub no_binary_package: Option<Vec<PackageName>>,
-}
-
-impl ResolverInstallerOptions {
-    /// Resolve the [`ResolverInstallerOptions`] relative to the given root directory.
-    pub fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        Ok(Self {
-            index: self
-                .index
-                .map(|index| {
-                    index
-                        .into_iter()
-                        .map(|index| index.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            index_url: self
-                .index_url
-                .map(|index_url| index_url.relative_to(root_dir))
-                .transpose()?,
-            extra_index_url: self
-                .extra_index_url
-                .map(|extra_index_url| {
-                    extra_index_url
-                        .into_iter()
-                        .map(|extra_index_url| extra_index_url.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            find_links: self
-                .find_links
-                .map(|find_links| {
-                    find_links
-                        .into_iter()
-                        .map(|find_link| find_link.relative_to(root_dir))
-                        .collect::<Result<Vec<_>, _>>()
-                })
-                .transpose()?,
-            ..self
-        })
-    }
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.
@@ -1575,7 +1681,7 @@ pub struct PipOptions {
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
-    /// the cache and the target environment. For example, clearing the cache (`uv cache clear`)
+    /// the cache and the target environment. For example, clearing the cache (`uv cache clean`)
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
@@ -1751,8 +1857,8 @@ impl PipOptions {
     }
 }
 
-impl From<ResolverInstallerOptions> for ResolverOptions {
-    fn from(value: ResolverInstallerOptions) -> Self {
+impl From<ResolverInstallerSchema> for ResolverOptions {
+    fn from(value: ResolverInstallerSchema) -> Self {
         Self {
             index: value.index,
             index_url: value.index_url,
@@ -1777,14 +1883,23 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
                     .collect(),
             ),
             link_mode: value.link_mode,
-            upgrade: value.upgrade,
-            upgrade_package: value.upgrade_package,
+            upgrade: Upgrade::from_args(
+                value.upgrade,
+                value
+                    .upgrade_package
+                    .into_iter()
+                    .flatten()
+                    .map(Into::into)
+                    .collect(),
+            ),
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
-            no_build_isolation: value.no_build_isolation,
-            no_build_isolation_package: value.no_build_isolation_package,
+            build_isolation: BuildIsolation::from_args(
+                value.no_build_isolation,
+                value.no_build_isolation_package.unwrap_or_default(),
+            ),
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             no_sources: value.no_sources,
@@ -1792,8 +1907,8 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
     }
 }
 
-impl From<ResolverInstallerOptions> for InstallerOptions {
-    fn from(value: ResolverInstallerOptions) -> Self {
+impl From<ResolverInstallerSchema> for InstallerOptions {
+    fn from(value: ResolverInstallerSchema) -> Self {
         Self {
             index: value.index,
             index_url: value.index_url,
@@ -1815,13 +1930,18 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             .global,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
-            reinstall: value.reinstall,
-            reinstall_package: value.reinstall_package,
+            reinstall: Reinstall::from_args(
+                value.reinstall,
+                value.reinstall_package.unwrap_or_default(),
+            ),
+            build_isolation: BuildIsolation::from_args(
+                value.no_build_isolation,
+                value.no_build_isolation_package.unwrap_or_default(),
+            ),
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
-            no_build_isolation: value.no_build_isolation,
             no_sources: value.no_sources,
         }
     }
@@ -1829,7 +1949,7 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
 
 /// The options persisted alongside an installed tool.
 ///
-/// A mirror of [`ResolverInstallerOptions`], without upgrades and reinstalls, which shouldn't be
+/// A mirror of [`ResolverInstallerSchema`], without upgrades and reinstalls, which shouldn't be
 /// persisted in a tool receipt.
 #[derive(
     Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
@@ -1850,8 +1970,7 @@ pub struct ToolOptions {
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
-    pub no_build_isolation: Option<bool>,
-    pub no_build_isolation_package: Option<Vec<PackageName>>,
+    pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
     pub exclude_newer: Option<ExcludeNewerTimestamp>,
@@ -1881,8 +2000,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
-            no_build_isolation: value.no_build_isolation,
-            no_build_isolation_package: value.no_build_isolation_package,
+            build_isolation: value.build_isolation,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -1914,8 +2032,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
-            no_build_isolation: value.no_build_isolation,
-            no_build_isolation_package: value.no_build_isolation_package,
+            build_isolation: value.build_isolation,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -1924,9 +2041,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
             upgrade: None,
-            upgrade_package: None,
             reinstall: None,
-            reinstall_package: None,
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
@@ -2119,7 +2234,7 @@ impl From<OptionsWire> for Options {
                 // Used twice for backwards compatibility
                 allow_insecure_host: allow_insecure_host.clone(),
             },
-            top_level: ResolverInstallerOptions {
+            top_level: ResolverInstallerSchema {
                 index,
                 index_url,
                 extra_index_url,

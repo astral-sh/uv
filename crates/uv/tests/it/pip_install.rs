@@ -2101,7 +2101,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
-        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2636,7 +2636,7 @@ fn install_no_binary_env() {
     let context = TestContext::new("3.12");
 
     let mut command = context.pip_install();
-    command.arg("anyio").env("UV_NO_BINARY", "1");
+    command.arg("anyio").env(EnvVars::UV_NO_BINARY, "1");
     uv_snapshot!(
         command,
         @r###"
@@ -2658,7 +2658,7 @@ fn install_no_binary_env() {
     command
         .arg("anyio")
         .arg("--reinstall")
-        .env("UV_NO_BINARY", "anyio");
+        .env(EnvVars::UV_NO_BINARY, "anyio");
     uv_snapshot!(
         command,
         @r###"
@@ -2684,7 +2684,7 @@ fn install_no_binary_env() {
         .arg("anyio")
         .arg("--reinstall")
         .arg("idna")
-        .env("UV_NO_BINARY_PACKAGE", "idna");
+        .env(EnvVars::UV_NO_BINARY_PACKAGE, "idna");
     uv_snapshot!(
         command,
         @r###"
@@ -3998,43 +3998,13 @@ fn config_settings_path() -> Result<()> {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Reinstalling with `editable_mode=compat` should be a no-op; changes in build configuration
-    // don't invalidate the environment.
+    // Reinstalling with `editable_mode=compat` should force a reinstall.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("-C")
         .arg("editable_mode=compat")
-        , @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
-    );
-
-    // Uninstall the package.
-    uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("setuptools-editable"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
-    "###);
-
-    // Install the editable package with `editable_mode=compat`. We should ignore the cached
-    // build configuration and rebuild.
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
-        .arg("-C")
-        .arg("editable_mode=compat")
-        , @r###"
+        , @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4042,9 +4012,10 @@ fn config_settings_path() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
-    "###
+     ~ setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+    "
     );
 
     // When installed without `editable_mode=compat`, the `finder.py` file should _not_ be present.
@@ -4954,7 +4925,7 @@ fn no_build_isolation() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .arg("--no-build-isolation"), @r###"
+        .arg("--no-build-isolation"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4969,8 +4940,13 @@ fn no_build_isolation() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          anyio = ["setuptools"]
+
+          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `setuptools` and `wheel`.
@@ -5022,7 +4998,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
+        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5037,8 +5013,13 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          anyio = ["setuptools"]
+
+          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `setuptools` and `wheel`.
@@ -8352,7 +8333,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8379,7 +8360,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8637,12 +8618,9 @@ build-constraint-dependencies = [
 fn install_build_isolation_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an package.
+    // Create a package.
     let package = context.temp_dir.child("project");
-    package.create_dir_all()?;
-    let pyproject_toml = package.child("pyproject.toml");
-
-    pyproject_toml.write_str(
+    package.child("pyproject.toml").write_str(
         r#"
         [project]
         name = "project"
@@ -8651,11 +8629,6 @@ fn install_build_isolation_package() -> Result<()> {
         dependencies = [
             "iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
         ]
-        [build-system]
-        requires = [
-          "setuptools >= 40.9.0",
-        ]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -8663,7 +8636,7 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8678,8 +8651,13 @@ fn install_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          iniconfig = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `hatchinling`, `hatch-vs` for iniconfig
@@ -8707,18 +8685,20 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Prepared 1 package without build isolation in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
      + project==0.1.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     Ok(())
 }
@@ -11955,7 +11935,7 @@ fn install_python_preference() {
 
     // This also works with `VIRTUAL_ENV` unset
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("anyio").arg("--no-managed-python").env_remove("VIRTUAL_ENV"), @r"
+        .arg("anyio").arg("--no-managed-python").env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12128,7 +12108,7 @@ fn reject_invalid_central_directory_offset() {
     Resolved 1 package in [TIME]
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
       ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
-      ├─▶ Failed to read from zip file
+      ├─▶ Invalid zip file structure
       ╰─▶ the end of central directory offset (0xf0d9) did not match the actual offset (0xf9ac)
     "
     );
@@ -12329,7 +12309,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12363,7 +12343,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12397,7 +12377,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12417,7 +12397,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12438,7 +12418,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
         .arg("--preview-features").arg("extra-build-dependencies")
         .arg("--reinstall-package").arg("child")
-        .env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+        .env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12486,9 +12466,32 @@ fn overlapping_packages_warning() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    // Check that overlapping packages show a warning
+    // Check that overlapping packages don't show a warning by default
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
+        .arg(&built_by_uv)
+        .arg(also_build_by_uv.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/scripts/packages/built-by-uv)
+    "
+    );
+
+    // Clean up for the next test
+    context.venv().arg("--clear").assert().success();
+
+    // Check that overlapping packages show a warning when preview feature is enabled
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg("--preview-features")
+        .arg("detect-module-conflicts")
         .arg(&built_by_uv)
         .arg(also_build_by_uv.path()), @r"
     success: true
@@ -12575,6 +12578,73 @@ fn overlapping_packages_warning() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+    "
+    );
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/15386>
+#[test]
+fn transitive_dependency_config_settings_invalidation() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package named `idna`.
+    context
+        .temp_dir
+        .child("idna")
+        .child("pyproject.toml")
+        .write_str(indoc! {
+            r#"
+        [project]
+        name = "idna"
+        version = "3.6"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        })?;
+    context
+        .temp_dir
+        .child("idna")
+        .child("src")
+        .child("idna")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install the local `idna` package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(context.temp_dir.child("idna").path()),  @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6 (from file://[TEMP_DIR]/idna)
+    "
+    );
+
+    // Install a package that depends on `idna`, with a `--config-settings` value.
+    //
+    // This "should" rebuild `idna`, but for now, we reuse the "stale" distribution. Prior to
+    // https://github.com/astral-sh/uv/pull/15389, this would panic.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--config-settings=foo=bar"),  @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + sniffio==1.3.1
     "
     );
 

@@ -13,16 +13,15 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
-    SourceStrategy, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, ExportFormat, ExtrasSpecification,
+    IndexStrategy, NoBinary, NoBuild, Preview, PreviewFeatures, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
-    NameRequirementSpecification, Origin, Requirement, RequiresPython,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
+    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
     UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
@@ -44,8 +43,9 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
+use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchStrategy};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -96,8 +96,7 @@ pub(crate) async fn pip_compile(
     network_settings: &NetworkSettings,
     config_settings: ConfigSettings,
     config_settings_package: PackageConfigSettings,
-    no_build_isolation: bool,
-    no_build_isolation_package: Vec<PackageName>,
+    build_isolation: BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
@@ -166,7 +165,7 @@ pub(crate) async fn pip_compile(
 
     // Respect `UV_PYTHON`
     if python.is_none() && python_version.is_none() {
-        if let Ok(request) = std::env::var("UV_PYTHON") {
+        if let Ok(request) = std::env::var(EnvVars::UV_PYTHON) {
             if !request.is_empty() {
                 python = Some(request);
             }
@@ -466,14 +465,16 @@ pub(crate) async fn pip_compile(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::Shared(&environment)
+        }
+        BuildIsolation::SharedPackage(ref packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Don't enforce hashes in `pip compile`.
@@ -502,7 +503,7 @@ pub(crate) async fn pip_compile(
         index_strategy,
         &config_settings,
         &config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
         extra_build_variables,
         link_mode,

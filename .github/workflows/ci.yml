@@ -137,7 +137,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Check uv_build dependencies"
-        uses: EmbarkStudios/cargo-deny-action@30f817c6f72275c6d54dc744fbca09ebc958599f # v2.0.12
+        uses: EmbarkStudios/cargo-deny-action@f2ba7abc2abebaf185c833c3961145a3c275caad # v2.0.13
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
@@ -232,6 +232,17 @@ jobs:
       - name: "Install required Python versions"
         run: uv python install
 
+      - name: "Install secret service"
+        run: |
+          sudo apt update -y
+          sudo apt install -y gnome-keyring
+
+      - name: "Start gnome-keyring"
+        # run gnome-keyring with 'foobar' as password for the login keyring
+        # this will create a new login keyring and unlock it
+        # the login password doesn't matter, but the keyring must be unlocked for the tests to work
+        run: gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'foobar'
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a416ddeedbd372e614cc1386e8b642692f66865e # v2.57.1
         with:
@@ -243,7 +254,7 @@ jobs:
           UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
-            --features python-patch \
+            --features python-patch,keyring-tests,secret-service \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -252,7 +263,7 @@ jobs:
     needs: determine_changes
     # Only run macOS tests on main without opt-in
     if: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') || github.ref == 'refs/heads/main' }}
-    runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
+    runs-on: depot-macos-14
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -282,7 +293,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,python-managed,pypi,git,performance,crates-io \
+            --features python,python-managed,pypi,git,performance,crates-io,keyring-tests,apple-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
@@ -334,7 +345,7 @@ jobs:
         run: |
           cargo nextest run \
             --no-default-features \
-            --features python,pypi,python-managed \
+            --features python,pypi,python-managed,keyring-tests,windows-native \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
@@ -745,7 +756,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@136ca0bce2adade21e526ceb07db643ad23dd2dd # v0.5.1
+        uses: acj/freebsd-firecracker-action@e8e9155e944111ea65be7a606c69b32092f3c4c8 # v0.5.2
         with:
           verbose: false
           checkout: false
@@ -1491,9 +1502,9 @@ jobs:
           ./uv venv venv-native -p 3.12
           # We use features added in 0.30.3 but there is no known breakage in
           # newer versions.
-          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.3 pip
+          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.7 pip
 
-      - name: "Install pyodide interpreter"
+      - name: "Install Pyodide interpreter"
         run: |
           source ./venv-native/bin/activate
           pyodide xbuildenv install 0.27.5
@@ -1502,12 +1513,24 @@ jobs:
           echo "PYODIDE_PYTHON=$PYODIDE_PYTHON" >> $GITHUB_ENV
           echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
 
-      - name: "Create pyodide virtual environment"
+      - name: "Create Pyodide virtual environment"
         run: |
           ./uv venv -p $PYODIDE_PYTHON venv-pyodide
           source ./venv-pyodide/bin/activate
           ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
           python -c 'import numpy'
+
+      - name: "Install Pyodide with uv python"
+        run: |
+          ./uv python install cpython-3.13.2-emscripten-wasm32-musl
+
+      - name: "Create a Pyodide virtual environment using uv installed Python"
+        run: |
+          ./uv venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide2
+          # TODO: be able to install Emscripten wheels here...
+          source ./venv-pyodide2/bin/activate
+          ./uv pip install packaging
+          python -c 'import packaging'
 
   integration-test-github-actions:
     timeout-minutes: 10
@@ -1605,6 +1628,58 @@ jobs:
       - name: "Check is free-threaded"
         run: |
           .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+  integration-test-wsl:
+    timeout-minutes: 15
+    needs: build-binary-linux-musl
+    name: "integration test | pyenv on wsl x86-64"
+    runs-on: windows-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && github.event.pull_request.head.repo.fork != true }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-musl-${{ github.sha }}
+
+      - name: "Setup WSL"
+        uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6
+        with:
+          distribution: Ubuntu-22.04
+
+      - name: "Install pyenv-win"
+        shell: pwsh
+        run: |
+          Write-Host "Installing pyenv-win..."
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"
+          .\install-pyenv-win.ps1
+
+          # Add pyenv-win to PATH for this session
+          $env:PYENV = "$env:USERPROFILE\.pyenv\pyenv-win"
+          $env:PATH = "$env:PYENV\bin;$env:PYENV\shims;$env:PATH"
+
+          # Add to GITHUB_PATH so WSL can find the shims
+          echo "$env:PYENV\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "$env:PYENV\shims" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+          Write-Host "Installing Python 3.11.9 via pyenv-win..."
+          & "$env:PYENV\bin\pyenv.bat" install 3.11.9
+          & "$env:PYENV\bin\pyenv.bat" global 3.11.9
+
+          Write-Host "Verifying pyenv-win installation..."
+          & "$env:PYENV\bin\pyenv.bat" versions
+
+      - name: "Test uv"
+        shell: wsl-bash {0}
+        run: |
+          set -x
+          chmod +x ./uv
+
+          # Check that we don't fail on `pyenv-win` shims
+          ./uv python list -v
 
   integration-test-publish-changed:
     timeout-minutes: 10

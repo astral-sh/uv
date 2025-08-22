@@ -17,16 +17,15 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PackageConfigSettings,
-    Preview, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, Constraints, IndexStrategy, Preview, Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables, Identifier,
-    IndexCapabilities, IndexLocations, IsBuildBackendError, Name, Requirement, Resolution,
-    SourceDist, VersionOrUrlRef,
+    CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
+    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -204,6 +203,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn build_options(&self) -> &BuildOptions {
         self.build_options
+    }
+
+    fn build_isolation(&self) -> BuildIsolation<'_> {
+        self.build_isolation
     }
 
     fn config_settings(&self) -> &ConfigSettings {
@@ -390,7 +393,7 @@ impl BuildContext for BuildDispatch<'_> {
                 if wheels.len() == 1 { "" } else { "s" },
                 wheels.iter().map(ToString::to_string).join(", ")
             );
-            wheels = Installer::new(venv)
+            wheels = Installer::new(venv, self.preview)
                 .with_link_mode(self.link_mode)
                 .with_cache(self.cache)
                 .install(wheels)
@@ -481,7 +484,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.workspace_cache(),
             config_settings,
             self.build_isolation,
-            self.extra_build_requires(),
+            self.extra_build_requires,
             &build_stack,
             build_kind,
             environment_variables,

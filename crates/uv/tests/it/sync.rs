@@ -1387,14 +1387,13 @@ fn sync_build_isolation_package() -> Result<()> {
             "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
         ]
 
-        [build-system]
-        requires = ["setuptools >= 40.9.0"]
-        build-backend = "setuptools.build_meta"
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
         "#,
     )?;
 
-    // Running `uv sync` should fail for iniconfig.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r#"
+    // Running `uv sync` should fail.
+    uv_snapshot!(context.filters(), context.sync(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1410,7 +1409,12 @@ fn sync_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          source-distribution = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
       help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
     "#);
 
@@ -1432,23 +1436,184 @@ fn sync_build_isolation_package() -> Result<()> {
     "###);
 
     // Running `uv sync` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 5 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
      - hatchling==1.22.4
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
-     + project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
+    ");
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// By default, isolated dependencies should be installed before non-isolated dependencies.
+#[test]
+fn sync_build_isolation_package_order() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        ]
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
+        "#,
+    )?;
+
+    // Running `uv sync` should fail.
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+          ModuleNotFoundError: No module named 'hatchling'
+
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          source-distribution = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
+      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+    "#);
+
+    // Add `hatchling`.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "hatchling",
+            "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        ]
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
+        "#,
+    )?;
+
+    // Running `uv sync` should succeed; `hatchling` should be installed first.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+    Prepared 1 package without build isolation in [TIME]
+    Installed 1 package in [TIME]
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + trove-classifiers==2024.3.3
+    ");
+
+    // Modify the version.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz",
+        ]
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
+        "#,
+    )?;
+
+    // Running `uv sync` should uninstall `hatchling`, then build `source-distribution`, then uninstall
+    // the existing `source-distribution`, and finally install the new one.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 6 packages in [TIME]
+    Installed 1 package in [TIME]
+     - hatchling==1.22.4
+     - packaging==24.0
+     - pathspec==0.12.1
+     - pluggy==1.4.0
+     - source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz)
+     - trove-classifiers==2024.3.3
+    ");
+
+    // Revert back.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "hatchling",
+            "source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        ]
+
+        [tool.uv]
+        no-build-isolation-package = ["source-distribution"]
+        "#,
+    )?;
+
+    // Running `uv sync` should install everything in a single phase, since the build is cached.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 6 packages in [TIME]
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     - source-distribution==0.0.3 (from https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz)
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + trove-classifiers==2024.3.3
     ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -1491,6 +1656,8 @@ fn sync_build_isolation_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
@@ -1500,30 +1667,41 @@ fn sync_build_isolation_extra() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
+          hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          source-distribution = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "#);
 
-    // Running `uv sync` with `--all-extras` should also fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r#"
-    success: false
-    exit_code: 1
+    // Running `uv sync` with `--all-extras` should succeed, because we install the build dependencies
+    // first.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+    Prepared [N] packages without build isolation in [TIME]
+    Installed [N] packages in [TIME]
+     + hatchling==1.22.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + pluggy==1.4.0
+     + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
+     + trove-classifiers==2024.3.3
+    ");
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+    // Clear the virtual environment.
+    context.venv().arg("--clear").assert().success();
 
-          hint: This usually indicates a problem with the package or the build environment.
-      help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
-    "#);
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir)?;
 
     // Install the build dependencies.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("build"), @r"
@@ -2154,7 +2332,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2173,7 +2351,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     ");
 
     // Ensure that we're resolving to `4.3.0`, the "latest" on PyPI.
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2208,7 +2386,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     // The child should be rebuilt with `3.5` on reinstall, the "latest" on Test PyPI.
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.3"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2228,7 +2406,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.5"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2323,6 +2501,176 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
           hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `project` (v0.1.0) depends on `child`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_build_dependencies_module_error_hints() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r"
+        import sys
+
+        from hatchling.build import *
+        import anyio
+    "})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+            File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
+              import anyio
+          ModuleNotFoundError: No module named 'anyio'
+
+          hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          child = ["anyio"]
+
+          or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    "#);
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Assert pipreqs module name to package name lookup works.
+    build_backend.write_str(indoc! {r"
+        import sys
+
+        from hatchling.build import *
+        import anyio
+        import sklearn
+    "})?;
+
+    context.venv().arg("--clear").assert().success();
+    // Running `uv sync` should fail due to missing build-dependencies
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+            File "[TEMP_DIR]/child/build_backend.py", line 5, in <module>
+              import sklearn
+          ModuleNotFoundError: No module named 'sklearn'
+
+          hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          child = ["scikit-learn"]
+
+          or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    "#);
+
+    // Adding `extra-build-dependencies` should solve the issue
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio", "scikit-learn"]
+    "#})?;
+
+    context.venv().arg("--clear").assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
     Ok(())
@@ -6549,7 +6897,7 @@ fn no_binary() -> Result<()> {
      ~ iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY_PACKAGE", "iniconfig"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY_PACKAGE, "iniconfig"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6562,7 +6910,7 @@ fn no_binary() -> Result<()> {
      ~ iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY", "1"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY, "1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6575,7 +6923,7 @@ fn no_binary() -> Result<()> {
      ~ iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BINARY", "iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BINARY, "iniconfig"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6652,7 +7000,7 @@ fn no_build() -> Result<()> {
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD_PACKAGE", "iniconfig"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "iniconfig"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6705,7 +7053,7 @@ fn no_build_error() -> Result<()> {
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "1"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD, "1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6715,7 +7063,7 @@ fn no_build_error() -> Result<()> {
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD_PACKAGE", "django-allauth"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "django-allauth"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6725,7 +7073,7 @@ fn no_build_error() -> Result<()> {
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "django-allauth"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD, "django-allauth"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -11518,7 +11866,7 @@ fn sync_required_environment_hint() -> Result<()> {
         packse_index_url()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r"
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11533,7 +11881,7 @@ fn sync_required_environment_hint() -> Result<()> {
         "You're on [PLATFORM] (`[TAG]`)",
     ));
 
-    uv_snapshot!(filters, context.sync().env_remove("UV_EXCLUDE_NEWER"), @r"
+    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12563,7 +12911,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12597,7 +12945,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12630,7 +12978,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.0"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12650,7 +12998,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12670,7 +13018,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features").arg("extra-build-dependencies")
         .arg("--reinstall-package").arg("child")
-        .env("EXPECTED_ANYIO_VERSION", "3.7"), @r"
+        .env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12713,7 +13061,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // This should fail
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env("EXPECTED_ANYIO_VERSION", "4.1"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.1"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12824,7 +13172,7 @@ fn sync_extra_build_variables() -> Result<()> {
     ");
 
     // Ensure our build backend is checking the version correctly.
-    uv_snapshot!(context.filters(), context.sync().env("EXPECTED_ANYIO_VERSION", "3.0"), @r"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12900,6 +13248,241 @@ fn sync_extra_build_variables() -> Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + parent==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn reject_unmatched_runtime() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+         [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["source-distribution", "iniconfig"]
+
+        [tool.uv.extra-build-dependencies]
+        source-distribution = [{ requirement = "iniconfig", match-runtime = true }]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+      × Failed to download and build `source-distribution==0.0.3`
+      ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
+      help: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_build_dependencies_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a test package.
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src/child/__init__.py")
+        .touch()?;
+
+    // Create a project that depends on the test package.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Running `uv sync` should build the child package.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Running `uv sync` again should be a no-op.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    ");
+
+    // Add a build dependency.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["iniconfig"]
+    "#})?;
+
+    // Running `uv sync` should rebuild the child package with the new build dependency.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Running `uv sync` again should be a no-op.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    ");
+
+    // Adding a version specifier is fine if match-runtime is false
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "iniconfig>0", match-runtime = false }]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Remove the build dependency.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Running `uv sync` should reinstall the child package, but not rebuild it (since it's already
+    // cached).
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Add a build variable.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-variables]
+        child = { INI_CONFIG_VERSION = "1.0.0" }
+    "#})?;
+
+    // Running `uv sync` should rebuild the child package with the new build dependency.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // Running `uv sync` again should be a no-op.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
     ");
 
     Ok(())

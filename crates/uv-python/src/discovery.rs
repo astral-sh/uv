@@ -342,7 +342,8 @@ fn python_executables_from_installed<'a>(
                     installed_installations.root().user_display()
                 );
                 let installations = installed_installations.find_matching_current_platform()?;
-                // Check that the Python version and platform satisfy the request to avoid unnecessary interpreter queries later
+                // Check that the Python version and platform satisfy the request to avoid
+                // unnecessary interpreter queries later
                 Ok(installations
                     .into_iter()
                     .filter(move |installation| {
@@ -350,8 +351,8 @@ fn python_executables_from_installed<'a>(
                             debug!("Skipping managed installation `{installation}`: does not satisfy `{version}`");
                             return false;
                         }
-                        if !platform.matches(installation.key()) {
-                            debug!("Skipping managed installation `{installation}`: does not satisfy `{platform}`");
+                        if !platform.matches(installation.platform()) {
+                            debug!("Skipping managed installation `{installation}`: does not satisfy requested platform `{platform}`");
                             return false;
                         }
                         true
@@ -1189,11 +1190,7 @@ pub fn find_python_installations<'a>(
                 cache,
                 preview,
             )
-            .filter_ok(|(_source, interpreter)| {
-                interpreter
-                    .implementation_name()
-                    .eq_ignore_ascii_case(implementation.into())
-            })
+            .filter_ok(|(_source, interpreter)| implementation.matches_interpreter(interpreter))
             .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
@@ -1211,11 +1208,7 @@ pub fn find_python_installations<'a>(
                     cache,
                     preview,
                 )
-                .filter_ok(|(_source, interpreter)| {
-                    interpreter
-                        .implementation_name()
-                        .eq_ignore_ascii_case(implementation.into())
-                })
+                .filter_ok(|(_source, interpreter)| implementation.matches_interpreter(interpreter))
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
@@ -1949,8 +1942,10 @@ impl PythonRequest {
             Self::Any => true,
             Self::Version(_) => false,
             Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
-            Self::Implementation(_) => true,
-            Self::ImplementationVersion(_, _) => true,
+            Self::Implementation(implementation)
+            | Self::ImplementationVersion(implementation, _) => {
+                !matches!(implementation, ImplementationName::CPython)
+            }
             Self::Key(request) => request.allows_alternative_implementations(),
         }
     }
@@ -3665,6 +3660,7 @@ mod tests {
             "any",
             &[
                 "python", "python3", "cpython", "cpython3", "pypy", "pypy3", "graalpy", "graalpy3",
+                "pyodide", "pyodide3",
             ],
         );
 

@@ -1372,7 +1372,7 @@ fn compile_python_312() -> Result<()> {
     // And `UV_PYTHON`
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env("UV_PYTHON", "3.12"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1614,7 +1614,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("-p")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1643,7 +1643,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("--python")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1672,7 +1672,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("--python-version")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1790,14 +1790,14 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("3.13")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 3.13 in [PYTHON SOURCES]
-    "###
+    "
     );
 
     // `UV_PYTHON` is ignored if `--python-version` is set
@@ -1892,7 +1892,7 @@ fn compile_fallback_interpreter_broken_in_path() -> Result<()> {
             .arg("--python-version")
             .arg("3.12")
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str()), @r###"
+            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

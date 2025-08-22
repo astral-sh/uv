@@ -821,15 +821,17 @@ impl TryFrom<ExtraBuildDependencyWire> for ExtraBuildDependency {
                 requirement,
                 match_runtime,
             } => match requirement.version_or_url {
-                None => Ok(Self {
+                // If `match-runtime = true`, reject additional constraints.
+                Some(VersionOrUrl::VersionSpecifier(..)) if match_runtime => {
+                    Err(ExtraBuildDependencyError::VersionSpecifiersNotAllowed)
+                }
+                Some(VersionOrUrl::Url(..)) if match_runtime => {
+                    Err(ExtraBuildDependencyError::UrlNotAllowed)
+                }
+                _ => Ok(Self {
                     requirement,
                     match_runtime,
                 }),
-                // If `match-runtime = true`, reject additional constraints.
-                Some(VersionOrUrl::VersionSpecifier(..)) => {
-                    Err(ExtraBuildDependencyError::VersionSpecifiersNotAllowed)
-                }
-                Some(VersionOrUrl::Url(..)) => Err(ExtraBuildDependencyError::UrlNotAllowed),
             },
         }
     }

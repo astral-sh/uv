@@ -10,7 +10,7 @@ use uv_client::RegistryClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, Preview, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
 use uv_normalize::DefaultGroups;
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
 use uv_scripts::Pep723Script;
@@ -201,8 +201,7 @@ pub(crate) async fn tree(
                 dependency_metadata: _,
                 config_setting: _,
                 config_settings_package: _,
-                no_build_isolation: _,
-                no_build_isolation_package: _,
+                build_isolation: _,
                 extra_build_dependencies: _,
                 extra_build_variables: _,
                 exclude_newer: _,

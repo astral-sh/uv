@@ -325,6 +325,89 @@ mod tests {
             Ok(())
         }
 
+        fn create_mock_pyodide_interpreter(path: &Path, version: &PythonVersion) -> Result<()> {
+            let json = indoc! {r##"
+                {
+                    "result": "success",
+                    "platform": {
+                        "os": {
+                            "name": "pyodide",
+                            "major": 2025,
+                            "minor": 0
+                        },
+                        "arch": "wasm32"
+                    },
+                    "manylinux_compatible": false,
+                    "standalone": false,
+                    "markers": {
+                        "implementation_name": "cpython",
+                        "implementation_version": "{FULL_VERSION}",
+                        "os_name": "posix",
+                        "platform_machine": "wasm32",
+                        "platform_python_implementation": "CPython",
+                        "platform_release": "4.0.9",
+                        "platform_system": "Emscripten",
+                        "platform_version": "#1",
+                        "python_full_version": "{FULL_VERSION}",
+                        "python_version": "{VERSION}",
+                        "sys_platform": "emscripten"
+                    },
+                    "sys_base_exec_prefix": "/",
+                    "sys_base_prefix": "/",
+                    "sys_prefix": "/",
+                    "sys_executable": "{PATH}",
+                    "sys_path": [
+                        "",
+                        "/lib/python313.zip",
+                        "/lib/python{VERSION}",
+                        "/lib/python{VERSION}/lib-dynload",
+                        "/lib/python{VERSION}/site-packages"
+                    ],
+                    "site_packages": [
+                        "/lib/python{VERSION}/site-packages"
+                    ],
+                    "stdlib": "//lib/python{VERSION}",
+                    "scheme": {
+                        "platlib": "//lib/python{VERSION}/site-packages",
+                        "purelib": "//lib/python{VERSION}/site-packages",
+                        "include": "//include/python{VERSION}",
+                        "scripts": "//bin",
+                        "data": "/"
+                    },
+                    "virtualenv": {
+                        "purelib": "lib/python{VERSION}/site-packages",
+                        "platlib": "lib/python{VERSION}/site-packages",
+                        "include": "include/site/python{VERSION}",
+                        "scripts": "bin",
+                        "data": ""
+                    },
+                    "pointer_size": "32",
+                    "gil_disabled": false
+                }
+            "##};
+
+            let json = json
+                .replace(
+                    "{PATH}",
+                    path.to_str().expect("Path can be represented as string"),
+                )
+                .replace("{FULL_VERSION}", &version.to_string())
+                .replace("{VERSION}", &version.without_patch().to_string());
+
+            fs_err::create_dir_all(path.parent().unwrap())?;
+            fs_err::write(
+                path,
+                formatdoc! {r"
+                #!/bin/sh
+                echo '{json}'
+                "},
+            )?;
+
+            fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
+
+            Ok(())
+        }
+
         /// Create a mock Python 2 interpreter executable which returns a fixed error message mocking
         /// invocation of Python 2 with the `-I` flag as done by our query script.
         fn create_mock_python2_interpreter(path: &Path) -> Result<()> {
@@ -370,6 +453,16 @@ mod tests {
                 true,
                 false,
             )
+        }
+
+        fn add_pyodide_version(&mut self, version: &'static str) -> Result<()> {
+            let path = self.new_search_path_directory(format!("pyodide-{version}"))?;
+            let python = format!("pyodide{}", env::consts::EXE_SUFFIX);
+            Self::create_mock_pyodide_interpreter(
+                &path.join(python),
+                &PythonVersion::from_str(version).unwrap(),
+            )?;
+            Ok(())
         }
 
         /// Create fake Python interpreters the given Python versions.
@@ -2602,6 +2695,62 @@ mod tests {
         assert!(
             !&python.interpreter().gil_disabled(),
             "We should prefer a python with the GIL"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_pyodide() -> Result<()> {
+        let mut context = TestContext::new()?;
+
+        context.add_pyodide_version("3.13.2")?;
+
+        // We should not find the Pyodide interpreter by default
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+                Preview::default(),
+            )
+        })?;
+        assert!(
+            result.is_err(),
+            "We should not find an python; got {result:?}"
+        );
+
+        // With `Any`, it should be discoverable
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Any,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+                Preview::default(),
+            )
+        })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.13.2"
+        );
+
+        // We should prefer the native Python to the Pyodide Python
+        context.add_python_versions(&["3.15.7"])?;
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+                Preview::default(),
+            )
+        })??;
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.15.7"
         );
 
         Ok(())

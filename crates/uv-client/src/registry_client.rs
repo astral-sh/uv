@@ -69,6 +69,12 @@ impl RegistryClientBuilder<'_> {
 
 impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
+    pub fn with_reqwest_client(mut self, client: reqwest::Client) -> Self {
+        self.base_client_builder = self.base_client_builder.with_custom_client(client);
+        self
+    }
+
+    #[must_use]
     pub fn index_locations(mut self, index_locations: &IndexLocations) -> Self {
         self.index_urls = index_locations.index_urls();
         self.base_client_builder = self

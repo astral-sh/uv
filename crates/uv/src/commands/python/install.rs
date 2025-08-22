@@ -96,7 +96,13 @@ impl InstallRequest {
 
 impl std::fmt::Display for InstallRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.request)
+        let request = self.request.to_canonical_string();
+        let download = self.download_request.to_string();
+        if request != download {
+            write!(f, "{request} ({download})")
+        } else {
+            write!(f, "{request}")
+        }
     }
 }
 
@@ -223,6 +229,12 @@ pub(crate) async fn install(
                     .with_preference(VersionFilePreference::Versions),
             )
             .await?
+            .inspect(|file| {
+                debug!(
+                    "Found Python version file at: {}",
+                    file.path().user_display()
+                );
+            })
             .map(PythonVersionFile::into_versions)
             .unwrap_or_else(|| {
                 // If no version file is found and no requests were made
@@ -237,14 +249,14 @@ pub(crate) async fn install(
                 }]
             })
             .into_iter()
-            .map(|a| InstallRequest::new(a, python_downloads_json_url.as_deref()))
+            .map(|request| InstallRequest::new(request, python_downloads_json_url.as_deref()))
             .collect::<Result<Vec<_>>>()?
         }
     } else {
         targets
             .iter()
             .map(|target| PythonRequest::parse(target.as_str()))
-            .map(|a| InstallRequest::new(a, python_downloads_json_url.as_deref()))
+            .map(|request| InstallRequest::new(request, python_downloads_json_url.as_deref()))
             .collect::<Result<Vec<_>>>()?
     };
 
@@ -565,10 +577,14 @@ pub(crate) async fn install(
 
     if !changelog.installed.is_empty() {
         for install_key in &changelog.installed {
-            // Make a note if the selected python is non-native for the architecture,
-            // if none of the matching user requests were explicit
+            // Make a note if the selected python is non-native for the architecture, if none of the
+            // matching user requests were explicit.
+            //
+            // Emscripten is exempted as it is always "emulated".
             let native_arch = Arch::from_env();
-            if install_key.arch().family() != native_arch.family() {
+            if install_key.arch().family() != native_arch.family()
+                && !install_key.os().is_emscripten()
+            {
                 let not_explicit =
                     requests_by_new_installation
                         .get(install_key)
