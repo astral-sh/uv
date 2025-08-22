@@ -23,7 +23,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{SatisfiesResult, SitePackages, SyncModel};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
@@ -2158,6 +2158,7 @@ pub(crate) async fn sync_environment(
     pip::operations::install(
         resolution,
         site_packages,
+        SyncModel::Stateless,
         modifications,
         reinstall,
         build_options,
@@ -2281,6 +2282,7 @@ pub(crate) async fn update_environment(
             &constraints,
             &overrides,
             &marker_env,
+            SyncModel::Stateless,
             config_setting,
             config_settings_package,
             &extra_build_requires,
@@ -2428,6 +2430,7 @@ pub(crate) async fn update_environment(
     let changelog = pip::operations::install(
         &resolution,
         site_packages,
+        SyncModel::Stateless,
         modifications,
         reinstall,
         build_options,

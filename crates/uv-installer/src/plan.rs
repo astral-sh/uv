@@ -25,6 +25,7 @@ use uv_types::HashStrategy;
 
 use crate::SitePackages;
 use crate::satisfies::RequirementSatisfaction;
+use crate::site_packages::SyncModel;
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]
@@ -56,6 +57,7 @@ impl<'a> Planner<'a> {
         build_options: &BuildOptions,
         hasher: &HashStrategy,
         index_locations: &IndexLocations,
+        model: SyncModel,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -125,6 +127,7 @@ impl<'a> Planner<'a> {
                             dist.name(),
                             installed,
                             &source,
+                            model,
                             config_settings,
                             config_settings_package,
                             extra_build_requires,

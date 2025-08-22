@@ -19,11 +19,10 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    BuiltDist, DirectorySourceDist, Dist, Index, Name, Requirement, Resolution, ResolvedDist,
-    SourceDist,
+    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::{PortablePathBuf, Simplified};
-use uv_installer::SitePackages;
+use uv_installer::{SitePackages, SyncModel};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
@@ -787,67 +786,13 @@ pub(super) async fn do_sync(
 
     let site_packages = SitePackages::from_environment(venv)?;
 
-    // When --no-sources is used, force reinstall only when the current install is editable/URL
-    // but the resolution selects a registry distribution for that package. This avoids
-    // unnecessary reinstalls for packages that are legitimately specified via direct URL.
-    let reinstall = if matches!(sources, uv_configuration::SourceStrategy::Disabled) {
-        tracing::debug!("Sources are disabled; evaluating packages to selectively reinstall");
-
-        // Collect package names which the resolution intends to install from a registry.
-        let resolved_registry_names = {
-            let mut names = std::collections::HashSet::new();
-            for resolved in resolution.distributions() {
-                if let ResolvedDist::Installable { dist, .. } = resolved {
-                    match dist.as_ref() {
-                        Dist::Built(BuiltDist::Registry(_))
-                        | Dist::Source(SourceDist::Registry(_)) => {
-                            names.insert(dist.name().clone());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            names
-        };
-
-        let mut updated_reinstall = reinstall.clone();
-        for dist in site_packages.iter() {
-            let is_url_like = matches!(
-                dist,
-                uv_distribution_types::InstalledDist::Url(_)
-                    | uv_distribution_types::InstalledDist::LegacyEditable(_)
-            );
-            if is_url_like && resolved_registry_names.contains(dist.name()) {
-                tracing::debug!(
-                    "Marking package for reinstall due to --no-sources registry preference: {}",
-                    dist.name()
-                );
-                updated_reinstall = match updated_reinstall {
-                    uv_configuration::Reinstall::None => {
-                        uv_configuration::Reinstall::Packages(vec![dist.name().clone()], Vec::new())
-                    }
-                    uv_configuration::Reinstall::All => updated_reinstall,
-                    uv_configuration::Reinstall::Packages(mut packages, paths) => {
-                        if !packages.contains(dist.name()) {
-                            packages.push(dist.name().clone());
-                        }
-                        uv_configuration::Reinstall::Packages(packages, paths)
-                    }
-                };
-            }
-        }
-
-        updated_reinstall
-    } else {
-        reinstall.clone()
-    };
-
     // Sync the environment.
     operations::install(
         &resolution,
         site_packages,
+        SyncModel::Stateless,
         modifications,
-        &reinstall,
+        reinstall,
         build_options,
         link_mode,
         compile_bytecode,

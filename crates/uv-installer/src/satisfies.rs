@@ -5,6 +5,7 @@ use same_file::is_same_file;
 use tracing::{debug, trace};
 use url::Url;
 
+use crate::site_packages::SyncModel;
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_distribution_types::{
@@ -32,6 +33,7 @@ impl RequirementSatisfaction {
         name: &PackageName,
         distribution: &InstalledDist,
         source: &RequirementSource,
+        model: SyncModel,
         config_settings: &ConfigSettings,
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
@@ -55,6 +57,7 @@ impl RequirementSatisfaction {
             );
             dist_build_info != &build_info
         }) {
+            // If the requirement came from a registry,
             debug!("Build info mismatch for {name}: {distribution:?}");
             return Self::OutOfDate;
         }
@@ -63,6 +66,25 @@ impl RequirementSatisfaction {
         match source {
             // If the requirement comes from a registry, check by name.
             RequirementSource::Registry { specifier, .. } => {
+                // If the installed distribution is _not_ from a registry, reject it if and only if
+                // we're in a stateless install.
+                //
+                // For example: the `uv pip` CLI is stateful, in that it "respects"
+                // already-installed packages in the virtual environment. So if you run `uv pip
+                // install ./path/to/idna`, and then `uv pip install anyio` (which depends on
+                // `idna`), we'll "accept" the already-installed `idna` even though it is implicitly
+                // being "required" as a registry package.
+                //
+                // The `uv sync` CLI is stateless, in that all requirements must be defined
+                // declaratively ahead-of-time. So if you `uv sync` to install `./path/to/idna` and
+                // later `uv sync` to install `anyio`, we'll know (during that second sync) if the
+                // already-installed `idna` should come from the registry or not.
+                if model == SyncModel::Stateless {
+                    if !matches!(distribution, InstalledDist::Registry { .. }) {
+                        debug!("Distribution type mismatch for {name}: {distribution:?}");
+                        return Self::Mismatch;
+                    }
+                }
                 if specifier.contains(distribution.version()) {
                     return Self::Satisfied;
                 }
