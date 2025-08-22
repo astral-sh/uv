@@ -215,11 +215,10 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 build_dispatch.workspace_cache(),
             )
             .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to read dependency groups from: {}\n{}",
-                    pyproject_path.display(),
-                    e
+            .with_context(|| {
+                format!(
+                    "Failed to read dependency groups from: {}",
+                    pyproject_path.display()
                 )
             })?;
 
